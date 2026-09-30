@@ -1,4 +1,4 @@
-# ExaConnect. Lab targets run on the Linux lab VM (Ubuntu 24.04 arm64 in Parallels), never on macOS.
+# ExaConnect. Lab targets run on the Linux lab host (Ubuntu 24.04, arm64 first), never on macOS.
 SHELL := bash
 NODE_IMAGE := exaconnect/node:dev
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
@@ -40,7 +40,7 @@ lint: ## Lint Go, Python and shell
 	cd controller && ruff check . && ruff format --check .
 	shellcheck -x lab/netem/*.sh lab/faults/*.sh lab/scripts/*.sh lab/host/*.sh
 
-# ---- lab (Linux lab VM only) ----
+# ---- lab (Linux lab host only) ----
 lab-image: ## Build the lab node image (FRR 10 + WireGuard + tools)
 	docker build -t $(NODE_IMAGE) lab/images/node
 

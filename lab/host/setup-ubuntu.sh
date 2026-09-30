@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Prepares the Ubuntu 24.04 lab VM (Parallels, arm64) to run the ExaConnect lab.
-# Run inside the VM, never on macOS:   sudo lab/host/setup-ubuntu.sh
+# Prepares an Ubuntu 24.04 lab host (a cloud VM with root, arm64 first) to run the ExaConnect lab.
+# Run on the host, never on macOS:   sudo lab/host/setup-ubuntu.sh
 # Installs Docker (Ubuntu's docker.io), containerlab, make and the kernel
 # modules the lab needs (WireGuard, netem). Safe to re-run.
 set -euo pipefail

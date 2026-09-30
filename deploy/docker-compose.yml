@@ -1,4 +1,4 @@
-# Controller stack for Phase A (runs on the lab VM next to containerlab).
+# Controller stack for Phase A (runs on the lab host next to containerlab).
 #   make controller-up      (after make lab-up, which creates the exaconnect-mgmt network)
 # Secrets come from ../.env (git-ignored); see ../.env.example.
 name: exaconnect
@@ -26,7 +26,8 @@ services:
       db:
         condition: service_healthy
     ports:
-      - "8000:8000"
+      # Loopback only: reach it from your laptop with an SSH tunnel (docs/lab.md).
+      - "127.0.0.1:8000:8000"
     networks:
       default: {}
       # The containerlab management network, so lab agents reach http://controller:8000.

@@ -1,4 +1,4 @@
-# ExaConnect lab (Phase A). Run inside the Ubuntu 24.04 arm64 lab VM:
+# ExaConnect lab (Phase A). Run on the Ubuntu 24.04 lab host (arm64 first):
 #   make lab-up        (builds the node image, deploys, applies netem profiles)
 #
 # Underlay addressing, one /24 per carrier segment:

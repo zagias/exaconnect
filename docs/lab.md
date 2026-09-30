@@ -1,7 +1,9 @@
 # Lab runbook (Phase A)
 
-One Ubuntu 24.04 arm64 VM in Parallels runs everything: containerlab for the
-network, Docker Compose for the controller and database.
+One Ubuntu 24.04 Linux host runs everything: containerlab for the network,
+Docker Compose for the controller and database. The host is a cloud VM with
+root access that you create yourself (CLAUDE.md §4.7); arm64 first, amd64 also
+works.
 
 ```
             carrier-a (25 ms)          carrier-a, carrier-b and sat are
@@ -26,16 +28,35 @@ Underlay interfaces on every site and the PoP: `eth1` carrier A, `eth2` carrier
 B, `eth3` satellite, `eth4` LAN. WireGuard (`wg-a`, `wg-b`, `wg-sat`), FRR BGP
 and BFD come in M1.
 
-## 1. Create the VM (once, in Parallels on the Mac)
+## 1. The lab host (once)
 
-Nothing is installed on macOS itself.
+You create the VM in your cloud account; nothing here creates cloud resources
+or costs money on its own.
 
-1. Download the Ubuntu Server 24.04 LTS **arm64** ISO from ubuntu.com.
-2. Parallels: File → New → Install from image → the ISO. Before starting,
-   Configure → Hardware: 4 CPUs, 8 GB RAM, 40 GB disk. Network: Shared.
-3. Install with OpenSSH enabled. Note the VM's IP (`ip -4 addr`).
-4. In the VM: `git clone https://github.com/zagias/exaconnect && cd exaconnect`
-5. `sudo lab/host/setup-ubuntu.sh`, then log out and in again.
+| | Minimum | Comfortable |
+|---|---|---|
+| CPU | 2 vCPU | 4 vCPU |
+| Memory | 8 GB | 16 GB |
+| Disk | 40 GB | 60 GB |
+| Image | Ubuntu 24.04 LTS, arm64 (amd64 also fine) | |
+| Access | root via sudo, SSH key login | |
+
+Any provider that gives you a full VM works (for example Oracle Cloud's free
+Ampere A1 shape, AWS Graviton, Hetzner Arm). It must be a real VM, not a
+container service, because the lab needs Docker in privileged mode and the
+WireGuard and netem kernel modules.
+
+Network: allow inbound SSH (22) only. Do not open 8000 or 5173; reach the
+controller and portal through an SSH tunnel (section 4).
+
+On the host:
+
+```bash
+git clone -b claude/exaconnect-mvp-lp3alu https://github.com/zagias/exaconnect
+cd exaconnect
+sudo lab/host/setup-ubuntu.sh     # Docker, containerlab, kernel modules
+exit                              # log out and back in for the docker group
+```
 
 ## 2. Bring the lab up
 
@@ -82,8 +103,13 @@ make controller-up
 curl http://localhost:8000/healthz
 ```
 
-API docs: `http://<vm-ip>:8000/api/v1/docs`. To run the portal against it from
-the Mac: `cd portal && EXA_CONTROLLER=http://<vm-ip>:8000 npm run dev`.
+The controller listens on the host's loopback only. From your laptop:
+
+```bash
+ssh -L 8000:127.0.0.1:8000 ubuntu@<host-ip>      # keep this open
+open http://localhost:8000/api/v1/docs
+cd portal && npm ci && npm run dev               # portal on http://localhost:5173, proxies to :8000
+```
 
 ## 5. Tear down
 

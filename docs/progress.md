@@ -10,7 +10,7 @@ Done in this milestone:
 * **Lab**: containerlab topology with site-a, site-b, pop-miami, carrier-a,
   carrier-b, sat and a LAN traffic-generator node per site and the PoP;
   netem profiles; fault scripts (`brownout`, `latency-creep`, `cut`,
-  `restore`, `storm`); smoke test; lab VM setup script and runbook.
+  `restore`, `storm`); smoke test; lab host setup script and runbook.
 * **Agent**: Go skeleton that builds for linux/arm64 and amd64, reports its
   version and polls the controller's health endpoint.
 * **Controller**: FastAPI app with `/healthz`, `/api/v1/version` and the
@@ -31,11 +31,15 @@ What runs, verified in the cloud session:
 * Fault scripts dry-run against a stub `docker`, producing the expected `tc`
   commands.
 
-Not yet verified (needs the Parallels lab VM; the cloud session has no Docker
+Not yet verified (needs the cloud lab host; this session has no Docker
 daemon or network namespaces):
 
 * `make lab-up` end to end, including the smoke test.
 * `make controller-up` with TimescaleDB.
+
+Change on 2026-09-30: the lab host is a cloud Linux VM Dudley sets up, not a
+Parallels VM (docs/lab.md §1 has the spec). The controller port is bound to
+loopback so it is never exposed on a public IP.
 
 Next: M1, tunnels and routing (WireGuard over three underlays, FRR BGP + BFD,
 site-to-site ping via the PoP).

@@ -11,8 +11,9 @@ committed and replaced it.
 ## Decision
 
 Follow the brief: Go agent, Python/FastAPI controller, PostgreSQL 16 with
-TimescaleDB, React/TypeScript/Vite portal, containerlab lab in one Ubuntu 24.04
-arm64 VM, Docker Compose for the controller.
+TimescaleDB, React/TypeScript/Vite portal, containerlab lab on one Ubuntu 24.04
+host, Docker Compose for the controller. The host is a cloud VM (the brief's
+alternative to Parallels, chosen by Dudley on 2026-09-30), arm64 first.
 
 Details chosen where the brief is silent:
 
