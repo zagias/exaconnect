@@ -1,0 +1,42 @@
+# Controller stack for Phase A (runs on the lab VM next to containerlab).
+#   make controller-up      (after make lab-up, which creates the exaconnect-mgmt network)
+# Secrets come from ../.env (git-ignored); see ../.env.example.
+name: exaconnect
+
+services:
+  db:
+    image: timescale/timescaledb:latest-pg16
+    environment:
+      POSTGRES_DB: exaconnect
+      POSTGRES_USER: exaconnect
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U exaconnect -d exaconnect"]
+      interval: 5s
+      retries: 20
+
+  controller:
+    build: ../controller
+    environment:
+      EXA_ENV: lab
+      EXA_DATABASE_URL: postgresql://exaconnect:${POSTGRES_PASSWORD}@db:5432/exaconnect
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    networks:
+      default: {}
+      # The containerlab management network, so lab agents reach http://controller:8000.
+      exaconnect-mgmt:
+        ipv4_address: 172.30.0.5
+        aliases: [controller]
+
+networks:
+  exaconnect-mgmt:
+    external: true
+
+volumes:
+  db-data:

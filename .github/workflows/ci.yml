@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  agent:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        arch: [arm64, amd64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: agent/go.mod
+      - name: gofmt
+        run: test -z "$(gofmt -l agent)" || (gofmt -l agent && exit 1)
+      - name: vet and test
+        run: make test-agent
+      - name: build linux/${{ matrix.arch }}
+        working-directory: agent
+        run: CGO_ENABLED=0 GOOS=linux GOARCH=${{ matrix.arch }} go build -trimpath -o exa-agent ./cmd/exa-agent
+
+  controller:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e 'controller[dev]'
+      - name: lint
+        working-directory: controller
+        run: ruff check . && ruff format --check .
+      - name: test
+        run: make test-controller
+
+  portal:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: portal/package-lock.json
+      - run: make build-portal
+
+  lab:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: shellcheck -x lab/netem/*.sh lab/faults/*.sh lab/scripts/*.sh lab/host/*.sh
+      - name: topology parses
+        run: python3 -c "import yaml,sys; t=yaml.safe_load(open('lab/exaconnect.clab.yml')); print(len(t['topology']['nodes']), 'nodes')"

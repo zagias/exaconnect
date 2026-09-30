@@ -1,0 +1,41 @@
+# Progress
+
+## M0: Lab and skeleton (2026-09-30)
+
+Done in this milestone:
+
+* `CLAUDE.md` is the brief, verbatim.
+* Repository layout from CLAUDE.md §6: `agent/`, `controller/`, `portal/`,
+  `lab/`, `deploy/`, `docs/`, CI.
+* **Lab**: containerlab topology with site-a, site-b, pop-miami, carrier-a,
+  carrier-b, sat and a LAN traffic-generator node per site and the PoP;
+  netem profiles; fault scripts (`brownout`, `latency-creep`, `cut`,
+  `restore`, `storm`); smoke test; lab VM setup script and runbook.
+* **Agent**: Go skeleton that builds for linux/arm64 and amd64, reports its
+  version and polls the controller's health endpoint.
+* **Controller**: FastAPI app with `/healthz`, `/api/v1/version` and the
+  published OpenAPI schema; Dockerfile; Compose file with TimescaleDB.
+* **Portal**: ExaCarib shell built to the brand brief (navy 64px top bar with
+  the reversed wordmark, Storm Mode switch placeholder, grey page and white
+  cards, light and dark themes, phone layout). Overview with labelled example
+  data; the other five screens from §4.6 are placeholders. See docs/brand.md.
+* **CI**: Go vet, test and arm64 + amd64 builds; ruff and pytest; portal build;
+  shellcheck and topology parse.
+* ADRs 0001 (stack) and 0002 (netem semantics).
+
+What runs, verified in the cloud session:
+
+* `make test`: Go tests, 3 controller tests, portal type check all pass.
+* `make build`: arm64 and amd64 agent binaries, portal bundle.
+* `make lint`: gofmt, ruff, shellcheck clean.
+* Fault scripts dry-run against a stub `docker`, producing the expected `tc`
+  commands.
+
+Not yet verified (needs the Parallels lab VM; the cloud session has no Docker
+daemon or network namespaces):
+
+* `make lab-up` end to end, including the smoke test.
+* `make controller-up` with TimescaleDB.
+
+Next: M1, tunnels and routing (WireGuard over three underlays, FRR BGP + BFD,
+site-to-site ping via the PoP).
