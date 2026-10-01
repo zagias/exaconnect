@@ -29,6 +29,19 @@ jobs:
 
   controller:
     runs-on: ubuntu-24.04
+    services:
+      # Same image as deploy/docker-compose.yml, so the hypertable path is tested too.
+      db:
+        image: timescale/timescaledb:latest-pg16
+        env:
+          POSTGRES_USER: exa
+          POSTGRES_PASSWORD: ci-only
+          POSTGRES_DB: exatest
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U exa" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      EXA_TEST_DATABASE_URL: postgresql://exa:ci-only@127.0.0.1:5432/exatest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

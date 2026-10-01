@@ -1,8 +1,9 @@
-"""REST API under /api/v1. Inventory, enrolment and desired state arrive in M2."""
+"""REST API under /api/v1."""
 
 from fastapi import APIRouter
 
 from .. import __version__
+from . import admin, agent, auth, views
 
 router = APIRouter()
 
@@ -10,3 +11,9 @@ router = APIRouter()
 @router.get("/version", tags=["ops"])
 def version() -> dict[str, str]:
     return {"service": "exaconnect-controller", "version": __version__}
+
+
+router.include_router(auth.router)
+router.include_router(admin.router)
+router.include_router(agent.router)
+router.include_router(views.router)

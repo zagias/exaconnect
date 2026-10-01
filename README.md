@@ -11,7 +11,7 @@ The build brief is [CLAUDE.md](CLAUDE.md); progress per milestone is in
 | `controller/` | FastAPI controller (API, routing, storm, metering, models) |
 | `portal/` | React + TypeScript + Vite portal |
 | `lab/` | containerlab topology, netem profiles, fault scripts, lab host setup |
-| `deploy/` | Docker Compose for the controller and database |
+| `deploy/` | Docker Compose for the controller, database and agent TLS proxy |
 | `docs/` | Lab runbook, ADRs, progress notes |
 
 ## Develop (any OS)
@@ -20,6 +20,7 @@ The build brief is [CLAUDE.md](CLAUDE.md); progress per milestone is in
 make test                               # Go tests, controller tests, portal type check
 make build                              # agent for linux/arm64 + amd64, portal bundle
 pip install -e 'controller[dev]'        # once, for the controller tests
+export EXA_TEST_DATABASE_URL=postgresql://user:pass@127.0.0.1/exatest   # optional: DB tests (the DB is wiped)
 cd portal && npm ci && npm run dev      # portal on http://localhost:5173
 ```
 
@@ -32,8 +33,9 @@ the host:
 ```bash
 sudo lab/host/setup-ubuntu.sh           # once: Docker, containerlab, kernel modules
 make lab-up                             # build node image, deploy, apply profiles, smoke test
-cp .env.example .env && $EDITOR .env    # once: set a local database password
-make controller-up                      # controller on 127.0.0.1:8000 (SSH tunnel)
+make controller-up                      # controller on 127.0.0.1:8000 (SSH tunnel); generates .env secrets
+make demo-seed                          # seed sites, enrol and start the agents
+make lab-routing                        # tunnels, BGP, BFD, site-to-site ping via the PoP
 lab/faults/brownout.sh carrier-a 3 180  # faults: brownout, latency-creep, cut, restore, storm
 make lab-down
 ```

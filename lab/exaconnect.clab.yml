@@ -6,6 +6,8 @@
 #   carrier-b 10.12.x.0/24, sat 10.13.x.0/24 (same pattern)
 #   The carrier router is .1 on each segment, the site or PoP is .2.
 # Site LANs: site-a 192.168.10.0/24, site-b 192.168.20.0/24, PoP 10.200.0.0/24.
+# Sites and the PoP run exa-agent (bin/lab/exa-agent, built by `make lab-agent`);
+# it owns WireGuard (wg-a, wg-b, wg-sat) and /etc/frr/frr.conf once enrolled.
 name: exaconnect
 
 mgmt:
@@ -43,9 +45,10 @@ topology:
     pop-miami:
       mgmt-ipv4: 172.30.0.20
       binds:
-        - configs/pop-miami/frr.conf:/etc/frr/frr.conf
+        - ../bin/lab/exa-agent:/usr/local/bin/exa-agent:ro
       exec:
         - sysctl -w net.ipv4.ip_forward=1
+        - sysctl -w net.ipv4.conf.all.rp_filter=2
         - ip addr add 10.11.0.2/24 dev eth1
         - ip addr add 10.12.0.2/24 dev eth2
         - ip addr add 10.13.0.2/24 dev eth3
@@ -57,9 +60,10 @@ topology:
     site-a:
       mgmt-ipv4: 172.30.0.31
       binds:
-        - configs/site-a/frr.conf:/etc/frr/frr.conf
+        - ../bin/lab/exa-agent:/usr/local/bin/exa-agent:ro
       exec:
         - sysctl -w net.ipv4.ip_forward=1
+        - sysctl -w net.ipv4.conf.all.rp_filter=2
         - ip addr add 10.11.1.2/24 dev eth1
         - ip addr add 10.12.1.2/24 dev eth2
         - ip addr add 10.13.1.2/24 dev eth3
@@ -70,9 +74,10 @@ topology:
     site-b:
       mgmt-ipv4: 172.30.0.32
       binds:
-        - configs/site-b/frr.conf:/etc/frr/frr.conf
+        - ../bin/lab/exa-agent:/usr/local/bin/exa-agent:ro
       exec:
         - sysctl -w net.ipv4.ip_forward=1
+        - sysctl -w net.ipv4.conf.all.rp_filter=2
         - ip addr add 10.11.2.2/24 dev eth1
         - ip addr add 10.12.2.2/24 dev eth2
         - ip addr add 10.13.2.2/24 dev eth3

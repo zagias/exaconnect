@@ -8,7 +8,8 @@ LDFLAGS := -s -w -X github.com/zagias/exaconnect/agent/internal/version.Version=
 PY ?= python3
 
 .PHONY: help build build-agent build-portal test test-agent test-controller test-portal lint \
-        lab-image lab-up lab-down lab-smoke controller-up controller-down demo-seed demo
+        lab-image lab-agent lab-up lab-down lab-smoke lab-routing controller-up controller-down \
+        controller-logs demo-seed agents-start agents-stop agents-status demo
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-16s %s\n", $$1, $$2}'
@@ -44,7 +45,16 @@ lint: ## Lint Go, Python and shell
 lab-image: ## Build the lab node image (FRR 10 + WireGuard + tools)
 	docker build -t $(NODE_IMAGE) lab/images/node
 
-lab-up: lab-image ## Deploy the containerlab topology, apply underlay profiles, smoke test
+lab-agent: ## Build exa-agent for this host into bin/lab/ (uses Docker if Go is not installed)
+	mkdir -p bin/lab
+	if command -v go >/dev/null; then \
+	  cd agent && CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o ../bin/lab/exa-agent ./cmd/exa-agent; \
+	else \
+	  docker run --rm -v "$(CURDIR)":/src -w /src/agent -e CGO_ENABLED=0 golang:1.24 \
+	    go build -buildvcs=false -trimpath -ldflags "$(LDFLAGS)" -o ../bin/lab/exa-agent ./cmd/exa-agent; \
+	fi
+
+lab-up: lab-image lab-agent ## Deploy the containerlab topology, apply underlay profiles, smoke test
 	cd lab && sudo containerlab deploy -t exaconnect.clab.yml --reconfigure
 	lab/netem/apply-profiles.sh
 	lab/scripts/smoke.sh
@@ -56,14 +66,33 @@ lab-down: ## Destroy the lab
 lab-smoke: ## Ping the PoP from every site over every underlay
 	lab/scripts/smoke.sh
 
-controller-up: ## Start controller + database (needs .env; run after lab-up)
-	docker compose -f deploy/docker-compose.yml --env-file .env up -d --build
+lab-routing: ## M1 check: WireGuard, BGP, BFD and site-to-site ping via the PoP
+	lab/scripts/check-routing.sh
 
-controller-down: ## Stop controller + database
+controller-up: ## Start database, controller and agent TLS proxy (run after lab-up)
+	lab/scripts/init-env.sh
+	docker compose -f deploy/docker-compose.yml --env-file .env up -d --build --wait
+
+controller-down: ## Stop controller, proxy and database (data is kept)
 	docker compose -f deploy/docker-compose.yml --env-file .env down
 
-demo-seed: ## Seed two sites, one PoP, three paths, three classes (arrives in M2)
-	@echo "demo-seed arrives in M2 (CLAUDE.md section 7)"; exit 1
+controller-logs: ## Follow controller and proxy logs
+	docker compose -f deploy/docker-compose.yml --env-file .env logs -f controller proxy
+
+demo-seed: ## Seed two sites, one PoP, three paths, three classes; enrol and start the agents
+	mkdir -p lab/.state
+	umask 077 && docker compose -f deploy/docker-compose.yml --env-file .env exec -T controller \
+	  python -m exaconnect_controller.seed --lab > lab/.state/seed.json
+	lab/scripts/agents.sh enrol lab/.state/seed.json
+
+agents-start: ## Start the agents (after demo-seed)
+	lab/scripts/agents.sh start
+
+agents-stop: ## Stop the agents (forwarding keeps running on the last state)
+	lab/scripts/agents.sh stop
+
+agents-status: ## Show whether each agent is running
+	lab/scripts/agents.sh status
 
 demo: ## Run the full acceptance demo (arrives in M7)
 	@echo "demo arrives in M7 (CLAUDE.md section 5)"; exit 1

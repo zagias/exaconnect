@@ -146,3 +146,52 @@ table.paths .num { text-align: right; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
 }
+
+/* ---- M3: sign-in, charts, events ---- */
+.small { font-size: 14px; line-height: 20px; }
+.signed-in { text-align: right; font-size: 14px; margin: calc(-1 * var(--space-4)) 0 var(--space-4); }
+button.link { background: none; border: none; padding: 0; font: inherit; color: var(--teal-strong); text-decoration: underline; cursor: pointer; }
+.signin { max-width: 420px; margin: var(--space-8) auto; }
+.signin h1 { margin-bottom: var(--space-4); }
+.signin form { display: grid; gap: var(--space-4); }
+.signin label { display: grid; gap: var(--space-1); font-weight: 600; font-size: 14px; }
+.signin input {
+  font: 400 16px/24px var(--font-body); padding: var(--space-2) var(--space-3); color: var(--ink);
+  background: var(--card); border: 1.5px solid var(--line); border-radius: var(--radius-md);
+}
+.button {
+  font: 600 16px/24px var(--font-body); padding: var(--space-2) var(--space-4); border: none; cursor: pointer;
+  border-radius: var(--radius-md); background: var(--navy); color: var(--on-navy);
+}
+.button:disabled { opacity: 0.7; cursor: wait; }
+.segmented { display: inline-flex; border: 1.5px solid var(--line); border-radius: var(--radius-md); overflow: hidden; }
+.segmented button { background: none; border: none; padding: 4px var(--space-3); font: 600 14px/20px var(--font-body); color: var(--ink-muted); cursor: pointer; }
+.segmented button[aria-pressed="true"] { background: var(--teal-tint); color: var(--teal-strong); }
+
+/* Path colours: Carrier A navy, Carrier B teal, Satellite coral dashed (backup). */
+:root { --path-a: var(--navy); --path-b: var(--teal); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --path-a: #9fc3ff; } }
+:root[data-theme="dark"] { --path-a: #9fc3ff; }
+.charts { display: grid; gap: var(--space-6); grid-template-columns: repeat(3, 1fr); margin-top: var(--space-4); }
+.chart { margin: 0; min-width: 0; }
+.chart figcaption { font: 600 14px/20px var(--font-body); margin-bottom: var(--space-1); }
+.chart svg { width: 100%; height: auto; display: block; }
+.chart .grid-line { stroke: var(--line); stroke-width: 1; }
+.chart .axis { fill: var(--ink-muted); font: 400 11px var(--font-mono); }
+.chart .sla-line { stroke: var(--danger); stroke-width: 1.5; stroke-dasharray: 6 4; }
+.chart .sla-label { fill: var(--danger); font: 600 11px var(--font-body); }
+.chart .series { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.series-carrier-a { stroke: var(--path-a); background: var(--path-a); }
+.series-carrier-b { stroke: var(--path-b); background: var(--path-b); }
+.series-sat { stroke: var(--coral); stroke-dasharray: 5 4; background: var(--coral); }
+.legend { list-style: none; padding: 0; margin: var(--space-1) 0 0; display: flex; flex-wrap: wrap; gap: var(--space-3); font-size: 13px; color: var(--ink-muted); }
+.legend li { display: inline-flex; align-items: center; gap: 6px; }
+.legend .swatch { width: 14px; height: 3px; display: inline-block; }
+.legend .swatch.series-sat { background: repeating-linear-gradient(90deg, var(--coral) 0 4px, transparent 4px 7px); }
+.events { list-style: none; padding: 0; margin: var(--space-3) 0 0; font-size: 14px; line-height: 22px; }
+.events li { padding: var(--space-1) 0; border-bottom: 1px solid var(--line); }
+.events li:last-child { border-bottom: none; }
+@media (max-width: 900px) { .charts { grid-template-columns: 1fr; } }
+/* Wide tables scroll inside their card on phones instead of widening the page. */
+.card { min-width: 0; overflow-x: auto; }
+.card-head { flex-wrap: wrap; }

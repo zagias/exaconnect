@@ -25,8 +25,19 @@ PoP 10.200.0.0/24 (`lan-pop` .10). Management network `exaconnect-mgmt`
 172.30.0.0/24; the controller joins it at 172.30.0.5 as `controller`.
 
 Underlay interfaces on every site and the PoP: `eth1` carrier A, `eth2` carrier
-B, `eth3` satellite, `eth4` LAN. WireGuard (`wg-a`, `wg-b`, `wg-sat`), FRR BGP
-and BFD come in M1.
+B, `eth3` satellite, `eth4` LAN.
+
+Overlay (M1): one WireGuard tunnel per underlay, hub and spoke through the PoP.
+
+| Tunnel | Overlay | PoP port | PoP / site-a / site-b | BGP local-pref | BFD |
+|---|---|---|---|---|---|
+| `wg-a` | 100.64.1.0/24 | 51820 | .1 / .11 / .12 | 200 | 200 ms × 3 |
+| `wg-b` | 100.64.2.0/24 | 51821 | .1 / .11 / .12 | 150 | 200 ms × 3 |
+| `wg-sat` | 100.64.3.0/24 | 51822 | .1 / .11 / .12 | 50 | 1 s × 3 |
+
+eBGP over every tunnel: PoP AS 65000, site-a AS 65001, site-b AS 65002. The
+agents write the WireGuard and FRR config from the controller's desired state
+([desired-state.md](desired-state.md)); nothing in `lab/` hard-codes it.
 
 ## 1. The lab host (once)
 
@@ -95,22 +106,70 @@ carrier (both sites).
 Profiles are in `lab/netem/profiles.env` and are round-trip figures; see
 [ADR 0002](adr/0002-netem-profile-semantics.md).
 
-## 4. Controller
+## 4. Controller, agents and routing (M1 to M3)
 
 ```bash
-cp .env.example .env     # set POSTGRES_PASSWORD locally; .env is git-ignored
-make controller-up
-curl http://localhost:8000/healthz
+make controller-up      # writes .env with generated secrets if missing, then
+                        # starts TimescaleDB, the controller and the agent TLS proxy
+make demo-seed          # inventory, enrolment tokens, enrols and starts the three agents
+make lab-routing        # M1 check: handshakes, BGP, BFD, site-to-site ping via the PoP
 ```
 
-The controller listens on the host's loopback only. From your laptop:
+`make controller-up` runs `lab/scripts/init-env.sh`, which adds any missing
+secret to `.env` (mode 600) without printing it: the database password, the
+proxy secret and the first admin's password. The admin email defaults to
+`admin@exacarib.local`. Read the password on the host when you need it:
+`grep EXA_ADMIN_PASSWORD .env`.
+
+`make demo-seed` writes `lab/.state/seed.json` (mode 600, git-ignored) with
+one-time tokens, valid for two hours, then runs `lab/scripts/agents.sh enrol`.
+Each agent generates its WireGuard key and a TLS key on the node, pins the
+controller's CA by fingerprint, and receives a client certificate. Only public
+keys leave the node.
+
+Agents:
+
+| Command | What it does |
+|---|---|
+| `make agents-status` | Is each agent running |
+| `lab/scripts/agents.sh logs site-a` | Agent log on one node |
+| `make agents-stop` / `make agents-start` | Stop or start all agents; forwarding keeps running |
+| `docker exec clab-exaconnect-site-a exa-agent apply -f <file>` | Apply a desired-state file by hand |
+
+Controller outage test (demo step 7, the M2 part):
 
 ```bash
-ssh -L 8000:127.0.0.1:8000 ubuntu@<host-ip>      # keep this open
-open http://localhost:8000/api/v1/docs
-cd portal && npm ci && npm run dev               # portal on http://localhost:5173, proxies to :8000
+docker compose -f deploy/docker-compose.yml --env-file .env stop controller proxy
+make lab-routing       # still passes: agents keep the last good state
+docker compose -f deploy/docker-compose.yml --env-file .env start controller proxy
 ```
 
-## 5. Tear down
+The agents log `controller_silent` after 60 s and `controller_back` when it
+returns, and the events show on the site page.
 
-`make controller-down && make lab-down`
+## 5. Portal
+
+The controller and portal listen on the host's loopback only. On the host, run
+the portal in a Node container:
+
+```bash
+docker run --rm -d --name exa-portal --network host -v "$PWD/portal":/app -w /app \
+  -e EXA_CONTROLLER=http://127.0.0.1:8000 node:22 \
+  sh -c "npm ci && npx vite --host 127.0.0.1 --port 5173"
+```
+
+From your laptop:
+
+```bash
+ssh -L 5173:127.0.0.1:5173 -L 8000:127.0.0.1:8000 root@<host-ip>    # keep this open
+```
+
+Browse to http://localhost:5173 and sign in as the admin. The API docs are at
+http://localhost:8000/api/v1/docs.
+
+## 6. Tear down
+
+`docker stop exa-portal; make agents-stop; make controller-down && make lab-down`
+
+`make lab-down` deletes the nodes and with them the agents' keys and
+certificates. After `make lab-up` again, run `make demo-seed` to enrol fresh.
