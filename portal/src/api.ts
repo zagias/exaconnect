@@ -166,6 +166,8 @@ export interface SiteDetail extends SiteSummary {
   apply_error: string | null;
   agent_version: string | null;
   tunnels: { tunnel: string; path: string; handshake_age_s: number; bfd: string | null; updated_at: string }[];
+  steering: SteeringRow[];
+  customer_id: string;
   slas: {
     class_name: string;
     max_latency_ms: number | null;
@@ -207,4 +209,59 @@ export interface User {
   email: string;
   role: "admin" | "customer" | "carrier";
   customer_id: string | null;
+}
+
+export interface MetricInput {
+  now: number;
+  ahead: number;
+  slope_per_min: number;
+  se: number;
+  limit: number;
+}
+
+export interface DecisionRow {
+  id: number;
+  time: string;
+  site_id: string;
+  site: string;
+  class_name: string;
+  kind: "move" | "move_back" | "failover" | "hold";
+  from_path: string | null;
+  from_label: string | null;
+  to_path: string | null;
+  to_label: string | null;
+  shadow: boolean;
+  engine: string;
+  reason: string;
+  inputs: {
+    policy?: { horizon_s: number; hold_s: number; return_after_s: number; confidence: number };
+    storm?: boolean;
+    paths?: Record<
+      string,
+      { up: boolean; known: boolean; over_commit: boolean; score_now: number; score_ahead: number; metrics: Record<string, MetricInput> }
+    >;
+  };
+}
+
+export interface SteeringRow {
+  class_name: string;
+  intended: string | null;
+  intended_label: string | null;
+  since: string | null;
+  actual: string | null;
+  actual_label: string | null;
+  paused: boolean | null;
+  failover: boolean | null;
+  reported_at: string | null;
+  last_reason: string | null;
+}
+
+export interface CustomerSettings {
+  id: string;
+  name: string;
+  shadow_mode: boolean;
+  storm_mode: boolean;
+  storm_since: string | null;
+  storm_by: string | null;
+  storm_allow_bulk_sat: boolean;
 }

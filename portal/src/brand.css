@@ -195,3 +195,17 @@ button.link { background: none; border: none; padding: 0; font: inherit; color: 
 /* Wide tables scroll inside their card on phones instead of widening the page. */
 .card { min-width: 0; overflow-x: auto; }
 .card-head { flex-wrap: wrap; }
+
+/* Decisions */
+.filters { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin-bottom: 16px; }
+.filters select { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.filters .check { display: inline-flex; gap: 6px; align-items: center; }
+.timeline { list-style: none; margin: 0; padding: 0; }
+.timeline .decision { border-left: 3px solid var(--line); padding: 8px 0 12px 16px; margin-left: 4px; }
+.timeline .decision.move, .timeline .decision.move_back { border-left-color: var(--teal); }
+.timeline .decision.failover { border-left-color: var(--danger); }
+.decision-head { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.decision .reason { margin: 6px 0 4px; }
+.pill.shadow { color: var(--ink-muted); }
+.pill.shadow::before { border-radius: 50%; background: transparent; border: 2px solid currentColor; }
+.inputs { margin-top: 8px; }

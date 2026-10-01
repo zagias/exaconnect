@@ -1,12 +1,12 @@
 import { NavLink, Route, Routes } from "react-router-dom";
 import { AuthGate, useAuth } from "./auth";
 import Admin from "./pages/Admin";
+import Decisions from "./pages/Decisions";
 import Overview from "./pages/Overview";
 import Placeholder from "./pages/Placeholder";
 import { SiteList, SitePage } from "./pages/Sites";
 
 const later = [
-  { path: "/decisions", label: "Decisions", milestone: "M4", about: "Every routing decision with its reason, filterable by site and class." },
   { path: "/metering", label: "Metering", milestone: "M6", about: "Usage per link, the 95th percentile, the commit line and burst." },
   { path: "/carrier", label: "Carrier view", milestone: "M6", about: "Read only: a carrier's own links and the exact samples used for settlement." },
 ];
@@ -24,6 +24,7 @@ export default function App() {
               Overview
             </NavLink>
             <NavLink to="/sites">Sites</NavLink>
+            <NavLink to="/decisions">Decisions</NavLink>
             {later.map((s) => (
               <NavLink key={s.path} to={s.path}>
                 {s.label}
@@ -45,6 +46,7 @@ export default function App() {
             <Route path="/" element={<Overview />} />
             <Route path="/sites" element={<SiteList />} />
             <Route path="/sites/:id" element={<SitePage />} />
+            <Route path="/decisions" element={<Decisions />} />
             <Route path="/admin" element={<Admin />} />
             {later.map((s) => (
               <Route key={s.path} path={s.path} element={<Placeholder title={s.label} milestone={s.milestone} about={s.about} />} />

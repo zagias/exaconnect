@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { num, useApi, type EventRow, type MetricPoint, type SiteDetail, type SiteSummary } from "../api";
+import { num, useApi, type EventRow, type MetricPoint, type SiteDetail, type SiteSummary, type SteeringRow } from "../api";
 import { ErrorNote, Eyebrow, LineChart, StatusPill, ago, clock, fmt, type Series } from "../components";
 import { NodeState } from "./Overview";
 
@@ -146,6 +146,40 @@ export function SitePage() {
             </div>
           </section>
         )}
+        {s.kind === "site" && (
+          <section className="card span-12">
+            <div className="card-head">
+              <div>
+                <Eyebrow>Steering</Eyebrow>
+                <h2>Where each class runs</h2>
+              </div>
+              <Link to="/decisions">All decisions</Link>
+            </div>
+            <table className="paths">
+              <thead>
+                <tr>
+                  <th scope="col">Class</th>
+                  <th scope="col">Controller wants</th>
+                  <th scope="col">Agent reports</th>
+                  <th scope="col">Last reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                {s.steering.map((c) => (
+                  <tr key={c.class_name}>
+                    <td className="mono">{c.class_name}</td>
+                    <td>
+                      {c.intended_label ?? <span className="muted">Default</span>}
+                      {c.since && <span className="muted small"> since {clock(c.since)}</span>}
+                    </td>
+                    <td>{actualCell(c)}</td>
+                    <td className="small">{c.last_reason ?? <span className="muted">No moves yet</span>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        )}
         <section className="card span-6">
           <Eyebrow>Tunnels</Eyebrow>
           <h2>WireGuard and BFD</h2>
@@ -203,6 +237,18 @@ export function SitePage() {
   );
 }
 
+function actualCell(c: SteeringRow) {
+  if (!c.reported_at) return <span className="muted">Not reported yet</span>;
+  if (c.paused) return <StatusPill health="bad">Paused, no allowed path</StatusPill>;
+  if (!c.actual) return <span className="muted">Following BGP</span>;
+  return (
+    <>
+      {c.actual_label}
+      {c.failover && <span className="pill warn"> Local failover</span>}
+    </>
+  );
+}
+
 function bfdPill(state: string | null) {
   if (!state) return <span className="muted">–</span>;
   return <StatusPill health={state === "up" ? "ok" : "bad"}>{state === "up" ? "Up" : state}</StatusPill>;
@@ -217,6 +263,9 @@ const EVENT_WORDS: Record<string, string> = {
   bfd_down: "BFD down",
   controller_silent: "Controller silent, holding last config",
   controller_back: "Controller back",
+  class_moved: "Class moved",
+  steering_failed: "Steering failed",
+  steering_rejected: "Steering map rejected",
 };
 
 function eventWord(kind: string) {
