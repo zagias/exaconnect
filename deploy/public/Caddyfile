@@ -1,0 +1,41 @@
+# connect.exacarib.com: the portal and its API, nothing else.
+# The controller and database stay on the private compose network; agent
+# endpoints are not served here (agents use the mTLS proxy).
+{
+	email {$EXA_ACME_EMAIL:}
+}
+
+{$EXA_PUBLIC_HOST} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+		-Server
+	}
+
+	# Agent-facing endpoints never leave the private networks.
+	@agent path /api/v1/agent/* /api/v1/enrol /api/v1/ca.pem
+	respond @agent 404
+
+	handle /api/* {
+		reverse_proxy controller-api:8000
+	}
+	handle /healthz {
+		reverse_proxy controller-api:8000
+	}
+	handle {
+		root * /srv/portal
+		try_files {path} /index.html
+		file_server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

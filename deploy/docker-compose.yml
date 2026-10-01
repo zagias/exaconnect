@@ -6,6 +6,7 @@ name: exaconnect
 services:
   db:
     image: timescale/timescaledb:latest-pg16
+    restart: unless-stopped
     environment:
       POSTGRES_DB: exaconnect
       POSTGRES_USER: exaconnect
@@ -19,6 +20,7 @@ services:
 
   controller:
     build: ../controller
+    restart: unless-stopped
     environment:
       EXA_ENV: lab
       EXA_DATABASE_URL: postgresql://exaconnect:${POSTGRES_PASSWORD}@db:5432/exaconnect
@@ -47,6 +49,7 @@ services:
   # mTLS terminator for agents, on the containerlab management network.
   proxy:
     image: nginx:1.27-alpine
+    restart: unless-stopped
     environment:
       EXA_PROXY_SECRET: ${EXA_PROXY_SECRET}
     volumes:

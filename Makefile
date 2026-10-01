@@ -9,7 +9,7 @@ PY ?= python3
 
 .PHONY: agents-upgrade help build build-agent build-portal test test-agent test-controller test-portal lint \
         lab-image lab-agent lab-up lab-down lab-smoke lab-routing controller-up controller-down \
-        controller-logs demo-seed agents-start agents-stop agents-status demo lab-ci
+        controller-logs demo-seed agents-start agents-stop agents-status demo lab-ci public-up public-down
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-16s %s\n", $$1, $$2}'
@@ -79,6 +79,16 @@ controller-up: ## Start database, controller and agent TLS proxy (run after lab-
 controller-down: ## Stop controller, proxy and database (data is kept)
 	docker compose -f deploy/docker-compose.yml --env-file .env down
 
+PUBLIC_COMPOSE := docker compose -f deploy/docker-compose.yml -f deploy/public/docker-compose.public.yml --env-file .env
+
+public-up: ## Serve the portal over HTTPS at EXA_PUBLIC_HOST (deploy/public/site.env); opens 80 and 443 only
+	set -a && . deploy/public/site.env && set +a && $(PUBLIC_COMPOSE) up -d --build --wait web
+	@if command -v ufw >/dev/null && sudo ufw status | grep -q "Status: active"; then \
+	  sudo ufw allow 80/tcp && sudo ufw allow 443/tcp && sudo ufw allow 443/udp; fi
+
+public-down: ## Stop serving the portal publicly
+	set -a && . deploy/public/site.env && set +a && $(PUBLIC_COMPOSE) rm -sf web
+
 controller-logs: ## Follow controller and proxy logs
 	docker compose -f deploy/docker-compose.yml --env-file .env logs -f controller proxy
 
@@ -103,5 +113,5 @@ agents-stop: ## Stop the agents (forwarding keeps running on the last state)
 agents-status: ## Show whether each agent is running
 	lab/scripts/agents.sh status
 
-demo: ## Run the full acceptance demo (arrives in M7)
-	@echo "demo arrives in M7 (CLAUDE.md section 5)"; exit 1
+demo: ## Run the acceptance demo end to end (CLAUDE.md section 5); DEMO_PAUSE=1 to step through
+	lab/demo.sh

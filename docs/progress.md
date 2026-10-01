@@ -148,3 +148,57 @@ Findings for M4:
   spike does not move a class.
 
 Next: M4, steering and AI SLA routing.
+
+## M4 to M7 and the AI features (2026-10-01)
+
+Scope widened on 2026-10-01: Dudley asked for the full platform (customer and
+admin sides) plus four AI features. Lab results for every push are on the
+`lab-results` branch (`latest.log`), written by the lab runner on the lab
+host (docs/lab-runner.md).
+
+**M4, steering and AI SLA routing.** The agent classifies with nftables marks
+and steers with `ip rule` per class (the PoP per class and site LAN), swapping
+paths on BFD down in about a second without the controller. The controller's
+engine scores every path per class every 10 s, forecasts 60 s ahead from a
+2-minute weighted trend, moves a class before its SLA breaks, holds 120 s and
+moves back after 5 good minutes, preferring paths within commit. Each
+decision is stored with its inputs and a plain-English reason; shadow mode
+logs without acting. Probing runs at 20 per second on terrestrial paths so a
+1% loss SLA can be judged in minutes (ADR 0005). Lab run d10f35e: 28 of 30
+checks, with voice moving at 1.22% measured loss, after the SLA broke,
+because the engine judged carrier B too noisy to trust. Fixed in 318f8d2: a
+destination needs to be within SLA and better than the current path, and the
+confidence margin is only used to decide to leave.
+
+**M5, Storm Mode.** Per site since 2026-10-01 (ADR 0004 revision): satellite
+joins the steering lists of voice and business at that site, its probes go to
+5 per second, the hold time drops to 60 s and the horizon rises to 120 s.
+Bulk pauses rather than use satellite unless an admin allows it. Who switched
+it and when is in the events and audit log; the portal shows a coral marker.
+
+**M6, metering.** 5-minute samples from interface counters, the 95th
+percentile per period (top 5% discarded, higher of in and out), commit and
+burst charges, a read-only carrier view and a CSV with exactly the samples
+behind each figure. Hand-worked tests cover 20 samples and a full month.
+
+**M7, portal and demo.** Admin screens for agents, customers, sites and links
+(with coordinates), enrolment tokens, classes and SLA policies, users with
+one-time passwords, settings and the audit log. An account page with password
+change. Sign-in throttling by account and address, with failed sign-ins and
+enrolments audited. `make demo` runs the seven demo steps (lab/demo.sh) and
+`make lab-ci` runs the same checks unattended, including the controller
+outage (step 7).
+
+**AI features** (ADR 0006). Hurricane watch from NHC's active-storms feed that
+suggests Storm Mode for the sites in a storm's path; a bill-shock forecast
+with a locked-in floor; carrier anomaly flags against the usual for the hour;
+and Ask your network, answered from the customer's own data through DeepInfra
+(off until `EXA_LLM_API_KEY` is set on the host). An example hurricane near
+Jamaica, labelled as example data, shows the watch without a real storm.
+
+**Public portal.** `make public-up` serves the portal and its API at
+connect.exacarib.com through Caddy with Let's Encrypt, opening only 80 and
+443. Agent endpoints are not served there; the controller API and database
+stay private. The lab host brings it up on every lab run.
+
+Unit tests: 103 controller tests, agent tests, portal type check and build.
