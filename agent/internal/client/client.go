@@ -16,6 +16,7 @@ import (
 
 	"github.com/zagias/exaconnect/agent/internal/desired"
 	"github.com/zagias/exaconnect/agent/internal/keys"
+	"github.com/zagias/exaconnect/agent/internal/steer"
 )
 
 type Client struct {
@@ -121,6 +122,29 @@ func (c *Client) DesiredState(ctx context.Context, have int64) (*desired.State, 
 	default:
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		return nil, fmt.Errorf("desired state: %s: %s", resp.Status, bytes.TrimSpace(b))
+	}
+}
+
+// Steering returns the controller's steering map, or nil if it is still `have`.
+func (c *Client) Steering(ctx context.Context, have int64) (*steer.Map, error) {
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, c.Base+"/api/v1/agent/steering?have="+strconv.FormatInt(have, 10), nil)
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	switch resp.StatusCode {
+	case http.StatusNoContent:
+		return nil, nil
+	case http.StatusOK:
+		var m steer.Map
+		if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&m); err != nil {
+			return nil, err
+		}
+		return &m, nil
+	default:
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return nil, fmt.Errorf("steering: %s: %s", resp.Status, bytes.TrimSpace(b))
 	}
 }
 

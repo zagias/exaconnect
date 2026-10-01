@@ -23,6 +23,7 @@ import (
 	"github.com/zagias/exaconnect/agent/internal/client"
 	"github.com/zagias/exaconnect/agent/internal/desired"
 	"github.com/zagias/exaconnect/agent/internal/keys"
+	"github.com/zagias/exaconnect/agent/internal/steer"
 	"github.com/zagias/exaconnect/agent/internal/system"
 	"github.com/zagias/exaconnect/agent/internal/version"
 )
@@ -136,6 +137,7 @@ func run(ctx context.Context, ks keys.Store, log *slog.Logger) error {
 		Sys:     sys,
 		Log:     log,
 		Applier: &apply.Applier{Sys: sys, StateDir: ks.Dir, PrivateKey: priv, Log: log},
+		Steerer: &steer.Steerer{Sys: sys, StateDir: ks.Dir},
 	}
 	return a.Run(ctx)
 }

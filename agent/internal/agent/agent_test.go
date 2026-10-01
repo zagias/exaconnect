@@ -16,6 +16,7 @@ import (
 	"github.com/zagias/exaconnect/agent/internal/apply"
 	"github.com/zagias/exaconnect/agent/internal/client"
 	"github.com/zagias/exaconnect/agent/internal/desired"
+	"github.com/zagias/exaconnect/agent/internal/steer"
 )
 
 // fakeSys records commands and keeps files in memory, like a node that never fails.
@@ -186,4 +187,107 @@ func TestBFDMapsPeersToTunnels(t *testing.T) {
 			t.Errorf("tunnelBFD(%s) = %q, want %q", tunnel, got, want)
 		}
 	}
+}
+
+// bfdSys reports BFD peers from a map the test can change.
+type bfdSys struct {
+	*fakeSys
+	mu   sync.Mutex
+	bfd  map[string]string // peer -> status
+	tuns map[string]string // peer -> interface
+}
+
+func (b *bfdSys) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
+	if name == "vtysh" {
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		var peers []map[string]string
+		for p, st := range b.bfd {
+			peers = append(peers, map[string]string{"peer": p, "interface": b.tuns[p], "status": st})
+		}
+		return json.Marshal(peers)
+	}
+	if name == "ip" && len(args) > 0 && args[0] == "-batch" {
+		b.fakeSys.mu.Lock()
+		body := b.fakeSys.files[args[1]]
+		b.fakeSys.mu.Unlock()
+		return b.fakeSys.Run(ctx, name, "-batch", body)
+	}
+	return b.fakeSys.Run(ctx, name, args...)
+}
+
+func TestAgentSteersAndFailsOverOnBFD(t *testing.T) {
+	ds := state(1)
+	ds.Tunnels = []desired.Tunnel{
+		{Name: "wg-a", Path: "carrier-a", Address: "100.64.1.11/24", Peers: ds.Tunnels[0].Peers, Neighbors: []desired.Neighbor{{Address: "100.64.1.1", ASN: 65000}}},
+		{Name: "wg-b", Path: "carrier-b", Address: "100.64.2.11/24", Peers: ds.Tunnels[0].Peers, Neighbors: []desired.Neighbor{{Address: "100.64.2.1", ASN: 65000}}},
+	}
+	m := steer.Map{
+		Version: 5,
+		Paths:   []steer.Path{{Name: "carrier-a", Tunnel: "wg-a", Table: 101}, {Name: "carrier-b", Tunnel: "wg-b", Table: 102}},
+		Classes: []steer.Class{{Name: "voice", Mark: 0x101, DSCP: []int{46}}},
+		Rules:   []steer.Rule{{Class: "voice", Paths: []string{"carrier-b", "carrier-a"}}},
+	}
+	var evMu sync.Mutex
+	var events []Event
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/agent/desired-state":
+			if r.URL.Query().Get("have") == "1" {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			json.NewEncoder(w).Encode(ds)
+		case "/api/v1/agent/steering":
+			if r.URL.Query().Get("have") == "5" {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			json.NewEncoder(w).Encode(m)
+		case "/api/v1/agent/telemetry":
+			var tel Telemetry
+			json.NewDecoder(r.Body).Decode(&tel)
+			evMu.Lock()
+			events = append(events, tel.Events...)
+			evMu.Unlock()
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			w.WriteHeader(http.StatusNoContent)
+		}
+	}))
+	defer srv.Close()
+
+	sys := &bfdSys{fakeSys: &fakeSys{files: map[string]string{}},
+		bfd:  map[string]string{"100.64.1.1": "up", "100.64.2.1": "up"},
+		tuns: map[string]string{"100.64.1.1": "wg-a", "100.64.2.1": "wg-b"}}
+	a := newAgent(srv.URL, sys.fakeSys)
+	a.Sys = sys
+	a.Applier.Sys = sys
+	a.Steerer = &steer.Steerer{Sys: sys, StateDir: "/state"}
+	a.Cfg.SteerInterval = 20 * time.Millisecond
+	a.Cfg.BFDInterval = 10 * time.Millisecond
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go a.Run(ctx)
+
+	waitFor(t, "voice on carrier-b", func() bool { return sys.count("fwmark 0x101 lookup 102") > 0 })
+	if !sys.Exists("/state/steering.json") {
+		t.Fatal("steering map not saved for restarts")
+	}
+
+	sys.mu.Lock()
+	sys.bfd["100.64.2.1"] = "down"
+	sys.mu.Unlock()
+	waitFor(t, "voice failover to carrier-a", func() bool { return sys.count("fwmark 0x101 lookup 101") > 0 })
+
+	waitFor(t, "class_moved event reported", func() bool {
+		evMu.Lock()
+		defer evMu.Unlock()
+		for _, e := range events {
+			if e.Kind == "class_moved" && e.Detail["to"] == "carrier-a" && e.Detail["why"] == "bfd" && e.Detail["failover"] == "true" {
+				return true
+			}
+		}
+		return false
+	})
 }

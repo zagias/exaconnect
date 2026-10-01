@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -19,6 +20,7 @@ import (
 	"github.com/zagias/exaconnect/agent/internal/desired"
 	"github.com/zagias/exaconnect/agent/internal/frrstate"
 	"github.com/zagias/exaconnect/agent/internal/probe"
+	"github.com/zagias/exaconnect/agent/internal/steer"
 	"github.com/zagias/exaconnect/agent/internal/system"
 	"github.com/zagias/exaconnect/agent/internal/version"
 )
@@ -28,6 +30,8 @@ type Config struct {
 	TelemetryInterval time.Duration // probe aggregates, default 10 s
 	CounterInterval   time.Duration // byte counters, default 60 s
 	SilentAfter       time.Duration // controller considered silent, default 60 s
+	SteerInterval     time.Duration // steering map poll, default 5 s
+	BFDInterval       time.Duration // BFD state check, default 500 ms
 	ProbeTimeout      time.Duration // default 2 s
 	MaxBuffered       int           // telemetry windows kept while the controller is away
 }
@@ -44,6 +48,12 @@ func (c *Config) defaults() {
 	}
 	if c.SilentAfter == 0 {
 		c.SilentAfter = 60 * time.Second
+	}
+	if c.SteerInterval == 0 {
+		c.SteerInterval = 5 * time.Second
+	}
+	if c.BFDInterval == 0 {
+		c.BFDInterval = 500 * time.Millisecond
 	}
 	if c.ProbeTimeout == 0 {
 		c.ProbeTimeout = 2 * time.Second
@@ -72,12 +82,16 @@ type Telemetry struct {
 	Counters []counters.Sample `json:"counters"`
 	Events   []Event           `json:"events"`
 	Tunnels  []TunnelState     `json:"tunnels"`
+	// Steering is where each class is right now, against SteeringVersion.
+	Steering        []steer.Choice `json:"steering,omitempty"`
+	SteeringVersion int64          `json:"steering_version,omitempty"`
 }
 
 type Agent struct {
 	Cfg     Config
 	Client  *client.Client
 	Applier *apply.Applier
+	Steerer *steer.Steerer // nil disables steering
 	Sys     system.Runner
 	Log     *slog.Logger
 
@@ -92,6 +106,9 @@ type Agent struct {
 	lastContact time.Time
 	silent      bool
 	lastFailure string // version+error of the last failed apply, to avoid repeating events
+	steerMap    *steer.Map
+	choices     []steer.Choice
+	steerErr    string
 }
 
 func (a *Agent) Run(ctx context.Context) error {
@@ -109,17 +126,30 @@ func (a *Agent) Run(ctx context.Context) error {
 		}
 		a.setCurrent(ctx, lg)
 	}
+	if a.Steerer != nil {
+		if m, err := steer.Load(a.steerPath()); err == nil {
+			a.mu.Lock()
+			a.steerMap = m
+			a.mu.Unlock()
+			a.Log.Info("loaded last steering map", "version", m.Version)
+		}
+		a.checkBFD(ctx)
+		a.steer(ctx, "start")
+	}
 
 	poll := time.NewTicker(a.Cfg.PollInterval)
 	tele := time.NewTicker(a.Cfg.TelemetryInterval)
 	cnt := time.NewTicker(a.Cfg.CounterInterval)
-	bfd := time.NewTicker(2 * time.Second)
+	bfd := time.NewTicker(a.Cfg.BFDInterval)
+	str := time.NewTicker(a.Cfg.SteerInterval)
+	defer str.Stop()
 	defer poll.Stop()
 	defer tele.Stop()
 	defer cnt.Stop()
 	defer bfd.Stop()
 
 	a.poll(ctx)
+	a.pollSteering(ctx)
 	for {
 		select {
 		case <-ctx.Done():
@@ -133,7 +163,11 @@ func (a *Agent) Run(ctx context.Context) error {
 		case <-cnt.C:
 			a.collectCounters()
 		case <-bfd.C:
-			a.checkBFD(ctx)
+			if a.checkBFD(ctx) {
+				a.steer(ctx, "bfd")
+			}
+		case <-str.C:
+			a.pollSteering(ctx)
 		}
 	}
 }
@@ -215,6 +249,9 @@ func (a *Agent) setCurrent(ctx context.Context, s *desired.State) {
 	}
 	if (prev == nil || reflKey(prev) != reflKey(s)) && s.Reflector != nil {
 		a.startReflector(ctx, s.Reflector.Listen)
+	}
+	if prev != nil {
+		a.steer(ctx, "config")
 	}
 }
 
@@ -340,28 +377,33 @@ type bfdPeer struct {
 	Status string
 }
 
-func (a *Agent) checkBFD(ctx context.Context) {
+func (a *Agent) checkBFD(ctx context.Context) (changed bool) {
 	peers, err := frrstate.BFDPeers(ctx, a.Sys)
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if err != nil {
-		// Log each distinct failure once; this runs every 2 seconds.
+		// Log each distinct failure once; this runs twice a second.
 		if msg := err.Error(); msg != a.bfdErr {
 			a.bfdErr = msg
 			a.Log.Warn("cannot read BFD state", "err", err)
 		}
-		return
+		return false
 	}
 	a.bfdErr = ""
 	for _, p := range peers {
 		tunnel := tunnelOf(a.current, p.Peer, p.Interface)
-		if old, ok := a.bfd[p.Peer]; ok && old.Status != p.Status {
+		old, ok := a.bfd[p.Peer]
+		if ok && old.Status != p.Status {
 			a.buf.Events = append(a.buf.Events, Event{At: time.Now(), Kind: "bfd_" + p.Status,
 				Detail: map[string]string{"peer": p.Peer, "tunnel": tunnel}})
 			a.Log.Info("bfd change", "peer", p.Peer, "tunnel", tunnel, "status", p.Status)
 		}
+		if !ok || old.Status != p.Status || old.Tunnel != tunnel {
+			changed = true
+		}
 		a.bfd[p.Peer] = bfdPeer{Tunnel: tunnel, Status: p.Status}
 	}
+	return changed
 }
 
 // tunnelOf names the tunnel a BFD peer runs over. FRR leaves the interface
@@ -409,6 +451,9 @@ func (a *Agent) flush(ctx context.Context) {
 			t.Tunnels = append(t.Tunnels, ts)
 		}
 	}
+	if a.steerMap != nil {
+		t.Steering, t.SteeringVersion = a.choices, a.steerMap.Version
+	}
 	a.mu.Unlock()
 	for i := range t.Tunnels {
 		if age, err := frrstate.HandshakeAge(ctx, a.Sys, t.Tunnels[i].Name, now); err == nil {
@@ -435,3 +480,138 @@ func (a *Agent) event(kind string, detail map[string]string) {
 }
 
 func itoa(n int64) string { b, _ := json.Marshal(n); return string(b) }
+
+func (a *Agent) steerPath() string { return filepath.Join(a.Applier.StateDir, "steering.json") }
+
+// pollSteering fetches a new steering map, keeps it on disk for restarts and
+// controller outages, and applies it.
+func (a *Agent) pollSteering(ctx context.Context) {
+	if a.Steerer == nil {
+		return
+	}
+	a.mu.Lock()
+	var have int64
+	if a.steerMap != nil {
+		have = a.steerMap.Version
+	}
+	a.mu.Unlock()
+	m, err := a.Client.Steering(ctx, have)
+	if err != nil {
+		a.controllerError(err)
+		return
+	}
+	a.controllerOK()
+	if m == nil {
+		return
+	}
+	if err := m.Validate(); err != nil {
+		a.Log.Error("rejected steering map", "version", m.Version, "err", err)
+		a.event("steering_rejected", map[string]string{"version": itoa(m.Version), "error": err.Error()})
+		return
+	}
+	if b, err := json.Marshal(m); err == nil {
+		if err := a.Sys.WriteFile(a.steerPath(), b, 0o600); err != nil {
+			a.Log.Warn("save steering map", "err", err)
+		}
+	}
+	a.mu.Lock()
+	a.steerMap = m
+	a.mu.Unlock()
+	a.Log.Info("new steering map", "version", m.Version, "storm", m.Storm)
+	a.steer(ctx, "controller")
+}
+
+// usable reports whether a path can carry traffic: its tunnel exists and BFD
+// does not say it is down. Unknown BFD state counts as up, so a fresh start
+// steers as told until BFD has an opinion.
+func (a *Agent) usable(m *steer.Map) func(string) bool {
+	tunnels := map[string]bool{}
+	if a.current != nil {
+		for _, t := range a.current.Tunnels {
+			tunnels[t.Name] = true
+		}
+	}
+	tunnelOfPath := map[string]string{}
+	for _, p := range m.Paths {
+		tunnelOfPath[p.Name] = p.Tunnel
+	}
+	return func(path string) bool {
+		tn := tunnelOfPath[path]
+		if !tunnels[tn] {
+			return false
+		}
+		st := tunnelBFD(a.bfd, tn)
+		return st == "" || st == "up"
+	}
+}
+
+// steer re-evaluates every class against path health and applies the result.
+func (a *Agent) steer(ctx context.Context, why string) {
+	if a.Steerer == nil {
+		return
+	}
+	a.mu.Lock()
+	m := a.steerMap
+	if m == nil {
+		a.mu.Unlock()
+		return
+	}
+	choices := steer.Choose(m, a.usable(m))
+	prev := a.choices
+	a.mu.Unlock()
+
+	if err := a.Steerer.Apply(ctx, m, choices); err != nil {
+		if msg := err.Error(); msg != a.steerErr {
+			a.steerErr = msg
+			a.Log.Error("apply steering", "why", why, "err", err)
+			a.event("steering_failed", map[string]string{"error": msg})
+		}
+		return
+	}
+	a.steerErr = ""
+	a.mu.Lock()
+	a.choices = choices
+	for _, ev := range moves(prev, choices, why) {
+		a.buf.Events = append(a.buf.Events, ev)
+		a.Log.Info("class moved", "class", ev.Detail["class"], "dst", ev.Detail["dst"], "from", ev.Detail["from"], "to", ev.Detail["to"], "why", why)
+	}
+	a.mu.Unlock()
+}
+
+// moves lists the classes whose path changed between two evaluations.
+func moves(prev, next []steer.Choice, why string) []Event {
+	where := func(c steer.Choice) string {
+		switch {
+		case c.Path != "":
+			return c.Path
+		case c.Paused:
+			return "paused"
+		default:
+			return "bgp"
+		}
+	}
+	old := map[string]string{}
+	for _, c := range prev {
+		old[c.Class+"|"+c.Dst] = where(c)
+	}
+	var out []Event
+	for _, c := range next {
+		from, ok := old[c.Class+"|"+c.Dst]
+		to := where(c)
+		if ok && from == to {
+			continue
+		}
+		if !ok {
+			from = "none"
+		}
+		d := map[string]string{"class": c.Class, "from": from, "to": to, "why": why}
+		if c.Dst != "" {
+			d["dst"] = c.Dst
+		}
+		if c.Failover {
+			d["failover"] = "true"
+		}
+		out = append(out, Event{At: time.Now(), Kind: "class_moved", Detail: d})
+	}
+	return out
+}
