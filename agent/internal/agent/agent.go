@@ -523,7 +523,8 @@ func (a *Agent) pollSteering(ctx context.Context) {
 
 // usable reports whether a path can carry traffic: its tunnel exists and BFD
 // does not say it is down. Unknown BFD state counts as up, so a fresh start
-// steers as told until BFD has an opinion.
+// steers as told until BFD has an opinion; so does "init", the brief handshake
+// state a session passes through on its way up.
 func (a *Agent) usable(m *steer.Map) func(string) bool {
 	tunnels := map[string]bool{}
 	if a.current != nil {
@@ -541,7 +542,7 @@ func (a *Agent) usable(m *steer.Map) func(string) bool {
 			return false
 		}
 		st := tunnelBFD(a.bfd, tn)
-		return st == "" || st == "up"
+		return st == "" || st == "up" || st == "init"
 	}
 }
 
@@ -552,7 +553,9 @@ func (a *Agent) steer(ctx context.Context, why string) {
 	}
 	a.mu.Lock()
 	m := a.steerMap
-	if m == nil {
+	// Until desired state is loaded no tunnel is known, and every class would
+	// look pathless (bulk would pause). Wait for it.
+	if m == nil || a.current == nil {
 		a.mu.Unlock()
 		return
 	}

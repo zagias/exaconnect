@@ -40,6 +40,20 @@ class EnrolOut(BaseModel):
 
 @router.post("/enrol")
 def enrol(body: EnrolIn, request: Request) -> EnrolOut:
+    try:
+        return _enrol(body, request)
+    except _BadToken:
+        # Recorded in its own transaction so it survives the error response.
+        with db.tx() as conn:
+            audit.record(conn, f"node:{body.node_name}", "enrol_failed", body.node_name, detail={"reason": "bad token"})
+        raise HTTPException(401, "This enrolment token is unknown, used or expired.") from None
+
+
+class _BadToken(Exception):
+    pass
+
+
+def _enrol(body: EnrolIn, request: Request) -> EnrolOut:
     ca: pki.CA = request.app.state.ca
     with db.tx() as conn:
         tok = conn.execute(
@@ -50,8 +64,7 @@ def enrol(body: EnrolIn, request: Request) -> EnrolOut:
             (token_hash(body.token),),
         ).fetchone()
         if tok is None:
-            audit.record(conn, f"node:{body.node_name}", "enrol_failed", body.node_name, detail={"reason": "bad token"})
-            raise HTTPException(401, "This enrolment token is unknown, used or expired.")
+            raise _BadToken()
         if tok["site_name"] != body.node_name:
             raise HTTPException(400, f"This token is for {tok['site_name']}, not {body.node_name}.")
         try:

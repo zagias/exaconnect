@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import datetime as dt
 import ipaddress
+import re
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 
-from .. import db, inventory
+from .. import audit, db, inventory
+from ..security import hash_password, new_token
 from .deps import AdminDep, ViewerDep, customer_scope
 
 router = APIRouter(tags=["admin"])
@@ -133,3 +135,226 @@ def list_audit(user: AdminDep, limit: int = 100) -> list[dict]:
             "SELECT at, actor, action, target, detail FROM audit_log ORDER BY id DESC LIMIT %s",
             (min(limit, 1000),),
         ).fetchall()
+
+
+@router.get("/carriers")
+def list_carriers(user: AdminDep) -> list[dict]:
+    with db.tx() as conn:
+        return conn.execute("SELECT id, name FROM carriers ORDER BY name").fetchall()
+
+
+@router.get("/inventory")
+def inventory_view(user: AdminDep, customer_id: str) -> dict:
+    """Sites with their links, for the admin screens."""
+    with db.tx() as conn:
+        sites = conn.execute(
+            """SELECT s.id, s.name, s.kind, s.location, s.timezone, s.asn, s.lan_prefixes::text[] AS lan_prefixes,
+                      s.overlay_host, n.name AS node, n.last_seen
+               FROM sites s LEFT JOIN nodes n ON n.site_id = s.id
+               WHERE s.customer_id = %s ORDER BY s.kind DESC, s.name""",
+            (customer_id,),
+        ).fetchall()
+        links = conn.execute(
+            """SELECT l.id, l.site_id, l.path, c.name AS carrier, l.underlay_type, l.underlay_interface,
+                      host(l.underlay_ip) || '/' || masklen(l.underlay_ip) AS underlay_ip,
+                      l.commit_mbps, l.cost_per_mbps, l.burst_price
+               FROM links l JOIN carriers c ON c.id = l.carrier_id JOIN paths p ON p.name = l.path
+               WHERE l.customer_id = %s ORDER BY p.ordinal""",
+            (customer_id,),
+        ).fetchall()
+    for s in sites:
+        s["links"] = [lk for lk in links if lk["site_id"] == s["id"]]
+    return {"sites": sites}
+
+
+class SlaIn(BaseModel):
+    max_latency_ms: float | None = Field(default=None, gt=0, le=10_000)
+    max_jitter_ms: float | None = Field(default=None, gt=0, le=10_000)
+    max_loss_pct: float | None = Field(default=None, gt=0, le=100)
+    allow_satellite: bool = True
+
+
+class ClassIn(BaseModel):
+    description: str = Field(default="", max_length=200)
+    dscp: list[int] = Field(default=[], max_length=64)
+    ports: str = Field(default="", max_length=500)
+    subnets: list[str] = Field(default=[], max_length=64)
+    ordinal: int = Field(default=100, ge=1, le=1000)
+    sla: SlaIn
+
+    @field_validator("dscp")
+    @classmethod
+    def _dscp(cls, v: list[int]) -> list[int]:
+        if any(d < 0 or d > 63 for d in v):
+            raise ValueError("DSCP values are 0 to 63")
+        return sorted(set(v))
+
+    @field_validator("subnets")
+    @classmethod
+    def _subnets(cls, v: list[str]) -> list[str]:
+        return [str(ipaddress.ip_network(p, strict=False)) for p in v]
+
+    @field_validator("ports")
+    @classmethod
+    def _ports(cls, v: str) -> str:
+        from ..routing.maps import parse_ports
+
+        parse_ports(v)
+        return v
+
+
+@router.get("/classes")
+def list_classes(user: ViewerDep, customer_id: str | None = None) -> list[dict]:
+    scope = customer_scope(user) or customer_id
+    with db.tx() as conn:
+        return conn.execute(
+            """SELECT c.customer_id, c.name, c.description, c.dscp, c.ports, c.subnets::text[] AS subnets, c.ordinal,
+                      s.max_latency_ms, s.max_jitter_ms, s.max_loss_pct, coalesce(s.allow_satellite, true)
+                        AS allow_satellite
+               FROM app_classes c LEFT JOIN sla_policies s ON s.customer_id = c.customer_id AND s.class_name = c.name
+               WHERE %(c)s::uuid IS NULL OR c.customer_id = %(c)s ORDER BY c.ordinal, c.name""",
+            {"c": scope},
+        ).fetchall()
+
+
+@router.put("/customers/{customer_id}/classes/{name}")
+def put_class(customer_id: str, name: str, body: ClassIn, user: AdminDep) -> dict:
+    """Create or update an application class and its SLA policy. Agents get the
+    new classifier and steering map on their next poll."""
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,19}", name):
+        raise HTTPException(400, "Class names are lower case letters, digits and dashes, up to 20 characters.")
+    from .. import desired
+
+    with db.tx() as conn:
+        if conn.execute("SELECT 1 FROM customers WHERE id = %s", (customer_id,)).fetchone() is None:
+            raise HTTPException(404, "Customer not found.")
+        conn.execute(
+            """INSERT INTO app_classes (customer_id, name, description, dscp, ports, subnets, ordinal)
+               VALUES (%s, %s, %s, %s, %s, %s::cidr[], %s)
+               ON CONFLICT (customer_id, name) DO UPDATE SET description = EXCLUDED.description,
+                 dscp = EXCLUDED.dscp, ports = EXCLUDED.ports, subnets = EXCLUDED.subnets,
+                 ordinal = EXCLUDED.ordinal""",
+            (customer_id, name, body.description, body.dscp, body.ports, body.subnets, body.ordinal),
+        )
+        conn.execute(
+            """INSERT INTO sla_policies (customer_id, class_name, max_latency_ms, max_jitter_ms, max_loss_pct,
+                                        allow_satellite)
+               VALUES (%s, %s, %s, %s, %s, %s)
+               ON CONFLICT (customer_id, class_name) DO UPDATE SET max_latency_ms = EXCLUDED.max_latency_ms,
+                 max_jitter_ms = EXCLUDED.max_jitter_ms, max_loss_pct = EXCLUDED.max_loss_pct,
+                 allow_satellite = EXCLUDED.allow_satellite""",
+            (
+                customer_id,
+                name,
+                body.sla.max_latency_ms,
+                body.sla.max_jitter_ms,
+                body.sla.max_loss_pct,
+                body.sla.allow_satellite,
+            ),
+        )
+        audit.record(conn, user.actor, "class.upsert", name, customer_id, body.model_dump(mode="json"))
+        desired.refresh(conn, customer_id)
+    return {"name": name}
+
+
+@router.delete("/customers/{customer_id}/classes/{name}", status_code=204)
+def delete_class(customer_id: str, name: str, user: AdminDep) -> None:
+    from .. import desired
+
+    with db.tx() as conn:
+        n = conn.execute("DELETE FROM app_classes WHERE customer_id = %s AND name = %s", (customer_id, name)).rowcount
+        if not n:
+            raise HTTPException(404, "Class not found.")
+        conn.execute("DELETE FROM sla_policies WHERE customer_id = %s AND class_name = %s", (customer_id, name))
+        conn.execute("DELETE FROM steering WHERE customer_id = %s AND class_name = %s", (customer_id, name))
+        audit.record(conn, user.actor, "class.delete", name, customer_id)
+        desired.refresh(conn, customer_id)
+
+
+# ---- Users ----
+
+ROLES = ("admin", "customer", "carrier")
+
+
+class UserIn(BaseModel):
+    email: str = Field(pattern=r"^[^@\s]{1,64}@[^@\s]{1,190}$")
+    role: Literal["admin", "customer", "carrier"]
+    customer_id: str | None = None
+    carrier_id: str | None = None
+
+
+@router.get("/users")
+def list_users(user: AdminDep) -> list[dict]:
+    with db.tx() as conn:
+        return conn.execute(
+            """SELECT u.id, u.email, u.role, u.customer_id, cu.name AS customer, u.carrier_id, ca.name AS carrier,
+                      u.created_at,
+                      (SELECT max(at) FROM audit_log a WHERE a.actor = 'user:' || u.email AND a.action = 'login')
+                        AS last_login
+               FROM users u
+               LEFT JOIN customers cu ON cu.id = u.customer_id
+               LEFT JOIN carriers ca ON ca.id = u.carrier_id
+               ORDER BY u.role, u.email"""
+        ).fetchall()
+
+
+def _one_time_password() -> str:
+    return new_token()[:20]
+
+
+@router.post("/users", status_code=201)
+def create_user(body: UserIn, user: AdminDep) -> dict:
+    """Creates an account with a one-time password, shown once. The user
+    should change it after signing in."""
+    if body.role == "customer" and not body.customer_id:
+        raise HTTPException(400, "A customer account needs a customer.")
+    if body.role == "carrier" and not body.carrier_id:
+        raise HTTPException(400, "A carrier account needs a carrier.")
+    password = _one_time_password()
+    with db.tx() as conn:
+        if conn.execute("SELECT 1 FROM users WHERE lower(email) = lower(%s)", (body.email,)).fetchone():
+            raise HTTPException(409, "There is already an account with that email.")
+        row = conn.execute(
+            """INSERT INTO users (email, password_hash, role, customer_id, carrier_id)
+               VALUES (%s, %s, %s, %s, %s) RETURNING id""",
+            (
+                body.email,
+                hash_password(password),
+                body.role,
+                body.customer_id if body.role == "customer" else None,
+                body.carrier_id if body.role == "carrier" else None,
+            ),
+        ).fetchone()
+        audit.record(conn, user.actor, "user.create", body.email, body.customer_id, {"role": body.role})
+    return {"id": row["id"], "email": body.email, "password": password}
+
+
+@router.post("/users/{user_id}/reset-password")
+def reset_password(user_id: str, user: AdminDep) -> dict:
+    password = _one_time_password()
+    with db.tx() as conn:
+        row = conn.execute(
+            "UPDATE users SET password_hash = %s WHERE id = %s RETURNING email", (hash_password(password), user_id)
+        ).fetchone()
+        if row is None:
+            raise HTTPException(404, "User not found.")
+        conn.execute("DELETE FROM sessions WHERE user_id = %s", (user_id,))
+        audit.record(conn, user.actor, "user.reset_password", row["email"])
+    return {"email": row["email"], "password": password}
+
+
+@router.delete("/users/{user_id}", status_code=204)
+def delete_user(user_id: str, user: AdminDep) -> None:
+    with db.tx() as conn:
+        row = conn.execute("SELECT email, role FROM users WHERE id = %s", (user_id,)).fetchone()
+        if row is None:
+            raise HTTPException(404, "User not found.")
+        if row["email"] == user.email:
+            raise HTTPException(400, "You can't delete your own account.")
+        if (
+            row["role"] == "admin"
+            and conn.execute("SELECT count(*) AS n FROM users WHERE role = 'admin'").fetchone()["n"] <= 1
+        ):
+            raise HTTPException(400, "This is the last admin account.")
+        conn.execute("DELETE FROM users WHERE id = %s", (user_id,))
+        audit.record(conn, user.actor, "user.delete", row["email"])

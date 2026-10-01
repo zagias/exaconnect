@@ -278,3 +278,18 @@ def test_no_flapping_on_noisy_healthy_paths(seed, background):
         if d is not None and d.kind != "hold":
             moves.append(d)
     assert len(moves) <= (0 if background < 0.5 else 1), moves
+
+
+def test_noisy_but_good_alternative_is_still_a_place_to_go():
+    # Carrier B's jitter swings 16..34 ms around 25 against a 30 ms SLA: too noisy
+    # to be "confidently safe", but within SLA and far better than A in breach.
+    now = 1000.0
+    ps = _paths(now, a_loss=2.0)
+    b = ps["carrier-b"].windows
+    for i, w in enumerate(b):
+        b[i] = Window(t=w.t, sent=w.sent, received=w.received, rtt_ms=w.rtt_ms, jitter_ms=16.0 if i % 2 else 34.0)
+    ev = _eval(ps, VOICE, now)
+    assert not all(m.safe_ahead for m in ev["carrier-b"].metrics.values())
+    st = State("carrier-a", since=0, breach_streak=1)
+    st, d = decide("voice", ev, ["carrier-a", "carrier-b"], st, POLICY, now)
+    assert d.kind == "move" and d.to_path == "carrier-b"

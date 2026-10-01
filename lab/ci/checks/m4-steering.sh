@@ -43,6 +43,9 @@ if wait_for 330 voice_moved; then
     ok "moved before the 1% SLA was breached (measured ${measured}%)"
   else
     bad "moved at measured loss ${measured:-?}%, not before the 1% SLA"
+    # Why it waited: the first hold note and how each path looked then.
+    note "$(sql "SELECT reason || ' | ' || coalesce(inputs->'paths'::text, '') FROM decisions
+                 WHERE class_name = 'voice' AND kind = 'hold' AND time > to_timestamp($t0) ORDER BY time LIMIT 1" | cut -c1-1500)"
   fi
   if wait_for 15 voice_on_b; then
     ok "site-a kernel sends voice on wg-b"
@@ -67,6 +70,9 @@ sleep 5
 t1=$(date +%s)
 lab/faults/cut.sh carrier-b >/dev/null
 sleep 25
+# The stream runs 30 s; wait for ping's summary line before reading it.
+ping_done() { docker exec "$(node lan-a)" grep -q ' received' /tmp/voice.txt; }
+wait_for 30 ping_done || true
 lost=$(docker exec "$(node lan-a)" sh -c "grep -o '[0-9]* received' /tmp/voice.txt" | cut -d' ' -f1)
 note "voice probe stream: ${lost:-?} of 1500 received at 50 packets/s"
 if [[ -n $lost ]] && ((1500 - lost < 150)); then ok "voice lost $(( (1500 - lost) * 20 )) ms of packets (< 3 s)"; else bad "voice lost too much: received ${lost:-?}/1500"; fi

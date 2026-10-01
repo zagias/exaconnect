@@ -118,8 +118,10 @@ class PathEval:
 
     @property
     def healthy(self) -> bool:
-        """Usable, within SLA now and confidently forecast to stay within it."""
-        return self.up and self.known and all(m.score_now > 0 and m.safe_ahead for m in self.metrics.values())
+        """Usable, within SLA now and forecast to stay within it. The confidence
+        margin is for deciding to leave a path, not for choosing where to go:
+        a noisy but good path is still a better place than one in breach."""
+        return self.up and self.known and all(m.score_now > 0 and m.score_ahead > 0 for m in self.metrics.values())
 
     def worst(self) -> tuple[str, MetricView] | None:
         if not self.metrics:
@@ -297,8 +299,12 @@ def decide(
     if state is None or not state.path:
         state = State(path=home.name, since=now - policy.hold_s)
 
-    def best_alternative(exclude: str, need_healthy: bool) -> PathEval | None:
-        alts = [p for p in cands if p.name != exclude and p.up and (p.healthy if need_healthy else True)]
+    def best_alternative(exclude: str, need_healthy: bool, better_than: float = -1.0) -> PathEval | None:
+        alts = [
+            p
+            for p in cands
+            if p.name != exclude and p.up and (p.healthy and p.score_ahead > better_than if need_healthy else True)
+        ]
         if not alts:
             return None
         return min(alts, key=lambda p: (cost_rank(p), -p.score_ahead, p.ordinal))
@@ -339,7 +345,8 @@ def decide(
                 f"Kept {cls} on {cur.label}: {explain_breach(cur, policy.horizon_s)}, "
                 f"but it moved here {int(now - state.since)} s ago (hold time {policy.hold_s:g} s)."
             )
-        to = best_alternative(cur.name, True)
+        # Somewhere within SLA now and at the horizon, and better than here.
+        to = best_alternative(cur.name, True, better_than=cur.score_ahead)
         if to is None:
             return note(
                 f"Kept {cls} on {cur.label}: {explain_breach(cur, policy.horizon_s)}, "
