@@ -119,7 +119,10 @@ def site_storm(site_id: str, body: SiteStormIn, user: UserDep) -> dict:
 
 @router.get("/customers/mine")
 def my_customers(user: UserDep) -> list[dict]:
-    """The customers this account can act for: all for admins, its own otherwise."""
+    """The customers this account can act for: all for admins, its own for
+    customer users, none for carrier users."""
+    if user.role == "carrier":
+        return []
     with db.tx() as conn:
         rows = conn.execute(
             """SELECT id, name, shadow_mode, storm_mode, storm_since, storm_by, storm_allow_bulk_sat

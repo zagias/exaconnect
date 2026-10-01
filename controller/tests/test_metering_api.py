@@ -82,6 +82,7 @@ def test_metering_settlement_carrier_view_and_csv(client, admin_headers):
     text = client.get(f"/api/v1/metering/settlement.csv?{q}", headers=c_h).text
     assert "Carrier A" not in text
     assert client.get("/api/v1/overview", headers=c_h).status_code == 403
+    assert client.get("/api/v1/customers/mine", headers=c_h).json() == []
     assert client.get("/api/v1/metering/usage", headers=c_h).status_code == 403
 
     # Customer usage view: data per path and the share above commit.
