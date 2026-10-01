@@ -9,7 +9,7 @@ PY ?= python3
 
 .PHONY: agents-upgrade help build build-agent build-portal test test-agent test-controller test-portal lint \
         lab-image lab-agent lab-up lab-down lab-smoke lab-routing controller-up controller-down \
-        controller-logs demo-seed agents-start agents-stop agents-status demo
+        controller-logs demo-seed agents-start agents-stop agents-status demo lab-ci
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-16s %s\n", $$1, $$2}'
@@ -87,6 +87,9 @@ demo-seed: ## Seed two sites, one PoP, three paths, three classes; enrol and sta
 	umask 077 && docker compose -f deploy/docker-compose.yml --env-file .env exec -T controller \
 	  python -m exaconnect_controller.seed --lab > lab/.state/seed.json
 	lab/scripts/agents.sh enrol lab/.state/seed.json
+
+lab-ci: ## Bring the lab to this commit and run every lab check (used by the lab runner)
+	lab/ci/run.sh
 
 agents-upgrade: lab-agent ## Rebuild exa-agent and restart the agents on it (state and keys are kept)
 	lab/scripts/agents.sh restart
