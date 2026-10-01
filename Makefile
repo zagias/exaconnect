@@ -72,6 +72,9 @@ lab-routing: ## M1 check: WireGuard, BGP, BFD and site-to-site ping via the PoP
 controller-up: ## Start database, controller and agent TLS proxy (run after lab-up)
 	lab/scripts/init-env.sh
 	docker compose -f deploy/docker-compose.yml --env-file .env up -d --build --wait
+	@# Recreate the proxy every time: it re-renders the nginx templates and rejoins
+	@# exaconnect-mgmt, which lab-down/lab-up replace without compose noticing.
+	docker compose -f deploy/docker-compose.yml --env-file .env up -d --force-recreate --no-deps --wait proxy
 
 controller-down: ## Stop controller, proxy and database (data is kept)
 	docker compose -f deploy/docker-compose.yml --env-file .env down

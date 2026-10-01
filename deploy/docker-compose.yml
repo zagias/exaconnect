@@ -31,6 +31,11 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    networks:
+      default:
+        # The proxy answers to "controller" on the lab's management network (the
+        # name agents use), so it reaches the API by this name instead.
+        aliases: [controller-api]
     ports:
       # Loopback only: reach it from your laptop with an SSH tunnel (docs/lab.md).
       - "127.0.0.1:8000:8000"
