@@ -31,21 +31,24 @@ LAB_LINKS = [
     ("carrier-b", "Carrier B", "broadband", "eth2", "12", 50, 2.5, 4.0),
     ("sat", "Satellite", "leo", "eth3", "13", 20, 12.0, 20.0),
 ]
+# Bulk matches CS1 only: unmarked traffic is not classified and follows BGP.
+# Bulk's 5% loss threshold is its "own threshold" in demo step 2.
 CLASSES = [
     ("voice", "SIP/RTP, Teams and Zoom media", [46, 34], "udp:5060,10000-20000", 150, 30, 1, True),
     ("business", "ERP, core banking, VDI", [26, 18], "tcp:443,3389,1521", 250, None, 2, True),
-    ("bulk", "Backups and updates", [8, 0], "", None, None, None, False),
+    ("bulk", "Backups and updates", [8], "", None, None, 5, False),
 ]
 
 
 def seed_lab(conn) -> dict:
     cid = inventory.ensure_customer(conn, CUSTOMER, ACTOR)
-    for name, desc, dscp, ports, lat, jit, loss, sat in CLASSES:
+    for ordinal, (name, desc, dscp, ports, lat, jit, loss, sat) in enumerate(CLASSES, 1):
         conn.execute(
-            """INSERT INTO app_classes (customer_id, name, description, dscp, ports) VALUES (%s, %s, %s, %s, %s)
+            """INSERT INTO app_classes (customer_id, name, description, dscp, ports, ordinal)
+               VALUES (%s, %s, %s, %s, %s, %s)
                ON CONFLICT (customer_id, name) DO UPDATE SET description = EXCLUDED.description,
-                 dscp = EXCLUDED.dscp, ports = EXCLUDED.ports""",
-            (cid, name, desc, dscp, ports),
+                 dscp = EXCLUDED.dscp, ports = EXCLUDED.ports, ordinal = EXCLUDED.ordinal""",
+            (cid, name, desc, dscp, ports, ordinal),
         )
         conn.execute(
             """INSERT INTO sla_policies (customer_id, class_name, max_latency_ms, max_jitter_ms, max_loss_pct,

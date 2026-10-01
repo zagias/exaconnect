@@ -24,6 +24,8 @@ class Settings:
     admin_email: str = field(default_factory=lambda: _env("EXA_ADMIN_EMAIL"))
     admin_password: str = field(default_factory=lambda: _env("EXA_ADMIN_PASSWORD"))
     session_hours: int = field(default_factory=lambda: int(_env("EXA_SESSION_HOURS", "12")))
+    # Seconds between routing engine passes; 0 turns the background loop off (tests).
+    routing_interval_s: float = field(default_factory=lambda: float(_env("EXA_ROUTING_INTERVAL_S", "10")))
 
 
 def get_settings() -> Settings:

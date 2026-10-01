@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
 from contextlib import asynccontextmanager
 
@@ -37,10 +39,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        tasks: list[asyncio.Task] = []
         if settings.database_url:
             db.init(settings.database_url)
             bootstrap_admin(settings)
+            if settings.routing_interval_s > 0:
+                from .routing import runner
+
+                tasks.append(asyncio.create_task(runner.loop(settings.routing_interval_s)))
         yield
+        for t in tasks:
+            t.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await t
         db.close()
 
     app = FastAPI(

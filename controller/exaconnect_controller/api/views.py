@@ -139,6 +139,7 @@ def site_detail(site_id: str, user: ViewerDep) -> dict:
             if s["node_id"]
             else []
         )
+        s["steering"] = steering_view(conn, s["id"]) if s["kind"] == "site" else []
         s["slas"] = conn.execute(
             "SELECT class_name, max_latency_ms, max_jitter_ms, max_loss_pct, allow_satellite FROM sla_policies"
             " WHERE customer_id = %s ORDER BY class_name",
@@ -186,3 +187,48 @@ def list_events(
                ORDER BY e.time DESC LIMIT %(l)s""",
             {"c": scope, "s": site_id, "l": limit},
         ).fetchall()
+
+
+@router.get("/decisions")
+def list_decisions(
+    user: ViewerDep,
+    site_id: str | None = None,
+    class_name: str | None = None,
+    include_holds: bool = True,
+    limit: int = Query(default=100, ge=1, le=1000),
+) -> list[dict]:
+    """Routing decisions, newest first, each with its reason and inputs."""
+    scope = customer_scope(user)
+    with db.tx() as conn:
+        return conn.execute(
+            """SELECT d.id, d.time, d.customer_id, d.site_id, s.name AS site, d.class_name, d.kind,
+                      d.from_path, fp.label AS from_label, d.to_path, tp.label AS to_label,
+                      d.shadow, d.engine, d.reason, d.inputs
+               FROM decisions d JOIN sites s ON s.id = d.site_id
+               LEFT JOIN paths fp ON fp.name = d.from_path LEFT JOIN paths tp ON tp.name = d.to_path
+               WHERE (%(c)s::uuid IS NULL OR d.customer_id = %(c)s)
+                 AND (%(s)s::uuid IS NULL OR d.site_id = %(s)s)
+                 AND (%(k)s::text IS NULL OR d.class_name = %(k)s)
+                 AND (%(h)s OR d.kind <> 'hold')
+               ORDER BY d.time DESC, d.id DESC LIMIT %(l)s""",
+            {"c": scope, "s": site_id, "k": class_name, "h": include_holds, "l": limit},
+        ).fetchall()
+
+
+def steering_view(conn, site_id) -> list[dict]:
+    """Per class: where the engine wants it, where the agent says it is, and why."""
+    return conn.execute(
+        """SELECT c.name AS class_name, st.path AS intended, ip.label AS intended_label, st.since,
+                  a.path AS actual, ap.label AS actual_label, a.paused, a.failover, a.updated_at AS reported_at,
+                  (SELECT d.reason FROM decisions d WHERE d.site_id = s.id AND d.class_name = c.name
+                   ORDER BY d.time DESC, d.id DESC LIMIT 1) AS last_reason
+           FROM sites s
+           JOIN app_classes c ON c.customer_id = s.customer_id
+           LEFT JOIN steering st ON st.site_id = s.id AND st.class_name = c.name
+           LEFT JOIN paths ip ON ip.name = st.path
+           LEFT JOIN nodes n ON n.site_id = s.id
+           LEFT JOIN steering_actual a ON a.node_id = n.id AND a.class_name = c.name AND a.dst = ''
+           LEFT JOIN paths ap ON ap.name = a.path
+           WHERE s.id = %s ORDER BY c.ordinal, c.name""",
+        (site_id,),
+    ).fetchall()

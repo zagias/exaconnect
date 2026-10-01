@@ -27,6 +27,7 @@ def settings(tmp_path) -> Settings:
         proxy_secret=PROXY_SECRET,
         admin_email=ADMIN[0],
         admin_password=ADMIN[1],
+        routing_interval_s=0,
     )
 
 

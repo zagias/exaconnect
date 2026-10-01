@@ -147,6 +147,72 @@ CREATE TABLE IF NOT EXISTS tunnel_state (
   PRIMARY KEY (node_id, tunnel)
 );
 
+-- M4/M5 additions. ALTER ... IF NOT EXISTS keeps existing databases upgradable.
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS shadow_mode boolean NOT NULL DEFAULT false;
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS storm_mode boolean NOT NULL DEFAULT false;
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS storm_since timestamptz;
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS storm_by text;
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS storm_allow_bulk_sat boolean NOT NULL DEFAULT false;
+ALTER TABLE app_classes ADD COLUMN IF NOT EXISTS subnets cidr[] NOT NULL DEFAULT '{}';
+ALTER TABLE app_classes ADD COLUMN IF NOT EXISTS ordinal int NOT NULL DEFAULT 100;
+
+-- The routing engine's state per site and class: where the class should be,
+-- since when, and the hysteresis memory (CLAUDE.md §4.3).
+CREATE TABLE IF NOT EXISTS steering (
+  site_id        uuid NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+  class_name     text NOT NULL,
+  customer_id    uuid NOT NULL REFERENCES customers(id),
+  path           text NOT NULL,
+  since          timestamptz NOT NULL,
+  return_path    text,                 -- a better path being watched for a move back
+  return_since   timestamptz,          -- since when it has scored well
+  breach_streak  int NOT NULL DEFAULT 0,
+  note           text,
+  updated_at     timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (site_id, class_name)
+);
+
+-- Steering maps sent to agents, versioned like desired_states.
+CREATE TABLE IF NOT EXISTS steering_maps (
+  node_id     uuid NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+  version     bigint NOT NULL,
+  body        jsonb NOT NULL,
+  body_hash   text NOT NULL,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (node_id, version)
+);
+
+-- Where each agent says each class is right now.
+CREATE TABLE IF NOT EXISTS steering_actual (
+  node_id     uuid NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+  class_name  text NOT NULL,
+  dst         text NOT NULL DEFAULT '',
+  path        text,
+  paused      boolean NOT NULL DEFAULT false,
+  failover    boolean NOT NULL DEFAULT false,
+  version     bigint NOT NULL DEFAULT 0,
+  updated_at  timestamptz NOT NULL,
+  PRIMARY KEY (node_id, class_name, dst)
+);
+
+-- Every routing decision with its inputs and a plain-English reason.
+CREATE TABLE IF NOT EXISTS decisions (
+  id           bigserial PRIMARY KEY,
+  time         timestamptz NOT NULL,
+  customer_id  uuid NOT NULL REFERENCES customers(id),
+  site_id      uuid NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+  class_name   text NOT NULL,
+  kind         text NOT NULL,          -- move, move_back, failover, hold, storm
+  from_path    text,
+  to_path      text,
+  shadow       boolean NOT NULL DEFAULT false,
+  engine       text NOT NULL,
+  reason       text NOT NULL,
+  inputs       jsonb NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS decisions_customer_time ON decisions (customer_id, time DESC);
+CREATE INDEX IF NOT EXISTS decisions_site_time ON decisions (site_id, time DESC);
+
 -- Time series (TimescaleDB hypertables when the extension is available).
 CREATE TABLE IF NOT EXISTS path_metrics (
   time         timestamptz NOT NULL,

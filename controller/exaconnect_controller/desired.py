@@ -14,9 +14,15 @@ from typing import Any
 import psycopg
 from psycopg.types.json import Jsonb
 
+from .routing import maps
+
 SCHEMA = 1
 PROBE_PORT = 7000
-PROBE_INTERVAL_MS = 1000
+# Probe rate per underlay type (ADR 0005): a 1% loss SLA needs thousands of
+# probes per SLA window, so terrestrial paths are probed 20 times a second
+# (about 35 kbit/s with tunnel overhead). Metered LTE is probed less, and
+# satellite once a second.
+PROBE_INTERVAL_MS = {"fibre": 50, "broadband": 50, "lte": 200, "leo": 1000, "geo": 1000}
 KEEPALIVE_S = 10
 BFD_PROFILES = [
     # Detects a dead terrestrial path in 3 x 200 ms = 600 ms (demo step 3 needs < 1 s).
@@ -114,7 +120,10 @@ def build(inv: dict[str, Any], site: dict[str, Any]) -> dict[str, Any]:
                         "local_pref": link["local_pref"],
                     }
                 )
-                t["probe"] = {"target": f"{pop_addr}:{PROBE_PORT}", "interval_ms": PROBE_INTERVAL_MS}
+                t["probe"] = {
+                    "target": f"{pop_addr}:{PROBE_PORT}",
+                    "interval_ms": PROBE_INTERVAL_MS.get(link["underlay_type"], 1000),
+                }
         tunnels.append(t)
 
     body: dict[str, Any] = {
@@ -161,6 +170,7 @@ def refresh(conn: psycopg.Connection, customer_id: Any) -> dict[str, int]:
                 (node["id"], version, Jsonb(body), h),
             )
         out[node["name"]] = version
+    maps.refresh(conn, customer_id)
     return out
 
 

@@ -13,6 +13,7 @@ from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field
 
 from .. import audit, db, desired, pki
+from ..routing import maps
 from ..security import token_hash
 from .deps import NodeDep
 
@@ -84,6 +85,18 @@ def desired_state(node: NodeDep, have: int = 0) -> Any:
     return state
 
 
+@router.get("/agent/steering")
+def steering(node: NodeDep, have: int = 0) -> Any:
+    """The steering map: classes, paths and the ordered path list per class."""
+    with db.tx() as conn:
+        m = maps.latest(conn, node.id)
+    if m is None:
+        raise HTTPException(404, "No steering map yet.")
+    if m["version"] == have:
+        return Response(status_code=204)
+    return m
+
+
 class StatusIn(BaseModel):
     applied_version: int
     ok: bool
@@ -141,12 +154,22 @@ class TunnelIn(BaseModel):
     bfd: str | None = None
 
 
+class ChoiceIn(BaseModel):
+    class_: str = Field(alias="class", max_length=32)
+    dst: str = Field(default="", max_length=64)
+    path: str = Field(default="", max_length=16)
+    paused: bool = False
+    failover: bool = False
+
+
 class TelemetryIn(BaseModel):
     at: dt.datetime
     probes: list[ProbeWindow] | None = Field(default=None, max_length=5000)
     counters: list[Counter] | None = Field(default=None, max_length=5000)
     events: list[EventIn] | None = Field(default=None, max_length=1000)
     tunnels: list[TunnelIn] | None = Field(default=None, max_length=16)
+    steering: list[ChoiceIn] | None = Field(default=None, max_length=1000)
+    steering_version: int = 0
 
 
 @router.post("/agent/telemetry", status_code=204)
@@ -192,6 +215,16 @@ def telemetry(body: TelemetryIn, node: NodeDep) -> None:
                      handshake_age_s = EXCLUDED.handshake_age_s, bfd = EXCLUDED.bfd,
                      updated_at = EXCLUDED.updated_at""",
                 (node.id, t.name, t.path, t.handshake_age_s, t.bfd, body.at),
+            )
+        if body.steering is not None:
+            conn.execute("DELETE FROM steering_actual WHERE node_id = %s", (node.id,))
+            cur.executemany(
+                """INSERT INTO steering_actual (node_id, class_name, dst, path, paused, failover, version, updated_at)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING""",
+                [
+                    (node.id, c.class_, c.dst, c.path or None, c.paused, c.failover, body.steering_version, body.at)
+                    for c in body.steering
+                ],
             )
 
 
