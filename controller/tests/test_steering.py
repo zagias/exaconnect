@@ -4,7 +4,9 @@ routing pass reacting to telemetry, decisions in the API, shadow mode."""
 import datetime as dt
 import random
 
+from exaconnect_controller import db
 from exaconnect_controller.routing import runner
+from exaconnect_controller.security import hash_password
 
 from .test_flow import _enrol, _seed
 
@@ -135,3 +137,71 @@ def test_shadow_mode_logs_but_does_not_steer(client, admin_headers):
     # The switch is audited.
     actions = [a["action"] for a in client.get("/api/v1/audit", headers=admin_headers).json()]
     assert "settings.shadow_mode" in actions
+
+
+def test_storm_mode(client, admin_headers):
+    seed = _seed()
+    tokens, cid = seed["tokens"], seed["customer_id"]
+    _enrol(client, tokens, "pop-miami")
+    _, a_h = _enrol(client, tokens, "site-a")
+    m0 = client.get("/api/v1/agent/steering", headers=a_h).json()
+
+    r = client.post(f"/api/v1/customers/{cid}/storm", headers=admin_headers, json={"on": True})
+    assert r.status_code == 200 and r.json()["storm_mode"] is True
+    assert r.json()["storm_by"] == "user:admin@example.org"
+
+    # Satellite joins voice and business, last; bulk stays off it and pauses.
+    m = client.get(f"/api/v1/agent/steering?have={m0['version']}", headers=a_h).json()
+    rules = {r["class"]: r for r in m["rules"]}
+    assert m["storm"] is True
+    assert rules["voice"]["paths"] == ["carrier-a", "carrier-b", "sat"]
+    assert rules["business"]["paths"] == ["carrier-a", "carrier-b", "sat"]
+    assert rules["bulk"]["paths"] == ["carrier-a", "carrier-b"] and rules["bulk"]["pause_if_none"] is True
+    ds = client.get("/api/v1/agent/desired-state", headers=a_h).json()
+    assert next(t for t in ds["tunnels"] if t["name"] == "wg-sat")["probe"]["interval_ms"] == 200
+
+    # Both terrestrial paths down: voice fails over to satellite with the Storm Mode hold time.
+    now = dt.datetime.now(dt.UTC).replace(microsecond=0)
+    body = {
+        "at": now.isoformat(),
+        "probes": _windows(now, "wg-a", lambda i: 0.0, 25.0)
+        + _windows(now, "wg-b", lambda i: 0.0, 35.0)
+        + _windows(now, "wg-sat", lambda i: 0.5, 45.0),
+        "tunnels": [
+            {"name": "wg-a", "path": "carrier-a", "handshake_age_s": 3, "bfd": "down"},
+            {"name": "wg-b", "path": "carrier-b", "handshake_age_s": 3, "bfd": "down"},
+            {"name": "wg-sat", "path": "sat", "handshake_age_s": 3, "bfd": "up"},
+        ],
+    }
+    assert client.post("/api/v1/agent/telemetry", headers=a_h, json=body).status_code == 204
+    made = runner.run_once(now)
+    assert {(d["class"], d["kind"], d["to_path"]) for d in made} == {
+        ("voice", "failover", "sat"),
+        ("business", "failover", "sat"),
+        ("bulk", "hold", "carrier-a"),
+    }
+    dec = client.get("/api/v1/decisions", headers=admin_headers).json()
+    assert next(d for d in dec if d["class_name"] == "voice")["inputs"]["policy"]["hold_s"] == 60
+
+    # A customer user can switch it off; an admin-only option is refused.
+    with db.tx() as conn:
+        conn.execute(
+            "INSERT INTO users (email, password_hash, role, customer_id)"
+            " VALUES ('ops@example.org', %s, 'customer', %s)",
+            (hash_password("another long password"), cid),
+        )
+    tok = client.post("/api/v1/auth/login", json={"email": "ops@example.org", "password": "another long password"})
+    c_h = {"Authorization": f"Bearer {tok.json()['token']}"}
+    bad = client.post(f"/api/v1/customers/{cid}/storm", headers=c_h, json={"on": False, "allow_bulk_satellite": True})
+    assert bad.status_code == 403
+    r = client.post(f"/api/v1/customers/{cid}/storm", headers=c_h, json={"on": False})
+    assert r.json()["storm_mode"] is False and r.json()["storm_by"] == "user:ops@example.org"
+
+    # Off: satellite leaves the lists and the engine moves voice off it.
+    m2 = client.get("/api/v1/agent/steering", headers=a_h).json()
+    assert "sat" not in {p for r in m2["rules"] for p in r["paths"]}
+    made = runner.run_once(now + dt.timedelta(seconds=10))
+    voice = next(d for d in made if d["class"] == "voice")
+    assert voice["from_path"] == "sat" and "no longer allowed" in voice["reason"]
+    kinds = [e["kind"] for e in client.get("/api/v1/events", headers=admin_headers).json()]
+    assert "storm_on" in kinds and "storm_off" in kinds

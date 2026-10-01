@@ -41,3 +41,17 @@ moves_since() {
        WHERE s.name = 'site-a' AND d.class_name = '$1' AND d.kind <> 'hold'
          AND d.time > to_timestamp($2)"
 }
+
+# api <method> <path> [json]: calls the controller API as the lab admin. The
+# password is read from .env on this host and never printed.
+api() {
+  local email pass token
+  email=$(grep '^EXA_ADMIN_EMAIL=' "$REPO/.env" | cut -d= -f2-)
+  pass=$(grep '^EXA_ADMIN_PASSWORD=' "$REPO/.env" | cut -d= -f2-)
+  token=$(jq -n --arg e "$email" --arg p "$pass" '{email:$e, password:$p}' |
+    curl -fsS -H 'Content-Type: application/json' -d @- http://127.0.0.1:8000/api/v1/auth/login | jq -r .token)
+  curl -fsS -X "$1" -H "Authorization: Bearer $token" -H 'Content-Type: application/json' \
+    ${3:+-d "$3"} "http://127.0.0.1:8000/api/v1$2"
+}
+
+customer_id() { sql "SELECT id FROM customers ORDER BY name LIMIT 1"; }

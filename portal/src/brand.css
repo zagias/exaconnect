@@ -209,3 +209,9 @@ button.link { background: none; border: none; padding: 0; font: inherit; color: 
 .pill.shadow { color: var(--ink-muted); }
 .pill.shadow::before { border-radius: 50%; background: transparent; border: 2px solid currentColor; }
 .inputs { margin-top: 8px; }
+
+/* Storm Mode: coral means backup and Storm Mode only. */
+.storm-banner {
+  background: #fff1ec; border-bottom: 3px solid var(--coral); color: var(--ink);
+  padding: var(--space-3) var(--space-6); text-align: center;
+}

@@ -23,6 +23,8 @@ PROBE_PORT = 7000
 # (about 35 kbit/s with tunnel overhead). Metered LTE is probed less, and
 # satellite once a second.
 PROBE_INTERVAL_MS = {"fibre": 50, "broadband": 50, "lte": 200, "leo": 1000, "geo": 1000}
+# Storm Mode keeps the satellite warm: probed 5 times a second (ADR 0004).
+STORM_SAT_PROBE_MS = 200
 KEEPALIVE_S = 10
 BFD_PROFILES = [
     # Detects a dead terrestrial path in 3 x 200 ms = 600 ms (demo step 3 needs < 1 s).
@@ -37,6 +39,13 @@ def _host(cidr: Any, host: int) -> ipaddress.IPv4Address:
     return net.network_address + host
 
 
+def probe_interval(underlay_type: str, storm: bool) -> int:
+    ms = PROBE_INTERVAL_MS.get(underlay_type, 1000)
+    if storm and underlay_type in ("leo", "geo"):
+        ms = min(ms, STORM_SAT_PROBE_MS)
+    return ms
+
+
 def _load(conn: psycopg.Connection, customer_id: Any) -> dict[str, Any]:
     sites = conn.execute("SELECT * FROM sites WHERE customer_id = %s ORDER BY overlay_host", (customer_id,)).fetchall()
     links = conn.execute(
@@ -45,7 +54,9 @@ def _load(conn: psycopg.Connection, customer_id: Any) -> dict[str, Any]:
         (customer_id,),
     ).fetchall()
     nodes = conn.execute("SELECT * FROM nodes WHERE customer_id = %s", (customer_id,)).fetchall()
+    customer = conn.execute("SELECT storm_mode FROM customers WHERE id = %s", (customer_id,)).fetchone()
     return {
+        "storm": bool(customer and customer["storm_mode"]),
         "sites": sites,
         "links": links,
         "nodes": {n["site_id"]: n for n in nodes},
@@ -122,7 +133,7 @@ def build(inv: dict[str, Any], site: dict[str, Any]) -> dict[str, Any]:
                 )
                 t["probe"] = {
                     "target": f"{pop_addr}:{PROBE_PORT}",
-                    "interval_ms": PROBE_INTERVAL_MS.get(link["underlay_type"], 1000),
+                    "interval_ms": probe_interval(link["underlay_type"], inv.get("storm", False)),
                 }
         tunnels.append(t)
 

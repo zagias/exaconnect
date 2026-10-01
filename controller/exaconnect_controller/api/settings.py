@@ -1,4 +1,4 @@
-"""Customer settings: shadow mode (and, from M5, Storm Mode)."""
+"""Customer settings: shadow mode and Storm Mode."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from .. import audit, db
 from ..routing import maps
+from ..storm.service import set_storm
 from .deps import UserDep
 
 router = APIRouter(tags=["settings"])
@@ -53,3 +54,33 @@ def update_settings(customer_id: str, body: SettingsIn, user: UserDep) -> dict:
             audit.record(conn, user.actor, "settings.shadow_mode", str(body.shadow_mode), customer_id)
             maps.refresh(conn, customer_id)
     return get_settings(customer_id, user)
+
+
+class StormIn(BaseModel):
+    on: bool
+    allow_bulk_satellite: bool | None = None
+
+
+@router.post("/customers/{customer_id}/storm")
+def storm(customer_id: str, body: StormIn, user: UserDep) -> dict:
+    """Switch Storm Mode on or off. Who switched it and when is recorded."""
+    _check(user, customer_id)
+    if body.allow_bulk_satellite is not None and user.role != "admin":
+        raise HTTPException(403, "Only an admin can allow bulk traffic on satellite.")
+    with db.tx() as conn:
+        try:
+            set_storm(conn, customer_id, body.on, user.actor, body.allow_bulk_satellite)
+        except LookupError:
+            raise HTTPException(404, "Customer not found.") from None
+    return get_settings(customer_id, user)
+
+
+@router.get("/customers/mine")
+def my_customers(user: UserDep) -> list[dict]:
+    """The customers this account can act for: all for admins, its own otherwise."""
+    with db.tx() as conn:
+        return conn.execute(
+            """SELECT id, name, shadow_mode, storm_mode, storm_since, storm_by, storm_allow_bulk_sat
+               FROM customers WHERE %(c)s::uuid IS NULL OR id = %(c)s ORDER BY name""",
+            {"c": None if user.role == "admin" else user.customer_id},
+        ).fetchall()

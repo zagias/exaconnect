@@ -37,8 +37,17 @@ export function AuthGate({ children }: { children: ReactNode }) {
     setToken(null);
   };
 
-  if (checking) return <p className="muted">Checking your session…</p>;
-  if (!user) return <SignIn />;
+  if (checking || !user)
+    return (
+      <>
+        <header className="topbar">
+          <div className="topbar-inner">
+            <img src="/brand/exacarib-wordmark-reversed.png" alt="ExaCarib" width={140} height={26} />
+          </div>
+        </header>
+        <main className="page">{checking ? <p className="muted">Checking your session…</p> : <SignIn />}</main>
+      </>
+    );
   return <AuthContext.Provider value={{ user, signOut }}>{children}</AuthContext.Provider>;
 }
 

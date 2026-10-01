@@ -1,5 +1,6 @@
 import { NavLink, Route, Routes } from "react-router-dom";
 import { AuthGate, useAuth } from "./auth";
+import { CustomerProvider, StormBanner, StormSwitch } from "./customer";
 import Admin from "./pages/Admin";
 import Decisions from "./pages/Decisions";
 import Overview from "./pages/Overview";
@@ -12,6 +13,16 @@ const later = [
 ];
 
 export default function App() {
+  return (
+    <AuthGate>
+      <CustomerProvider>
+        <Layout />
+      </CustomerProvider>
+    </AuthGate>
+  );
+}
+
+function Layout() {
   return (
     <>
       <header className="topbar">
@@ -32,15 +43,13 @@ export default function App() {
             ))}
             <NavLink to="/admin">Admin</NavLink>
           </nav>
-          {/* Storm Mode switch: in the bar on every screen, off by default. Wired up in M5. */}
-          <button className="storm-switch" aria-pressed={false} disabled title="Storm Mode arrives in M5">
-            <span className="dot" aria-hidden="true" />
-            Storm Mode off
-          </button>
+          {/* Storm Mode switch: in the bar on every screen. */}
+          <StormSwitch />
         </div>
       </header>
+      <StormBanner />
       <main className="page">
-        <AuthGate>
+        <>
           <SignedInBar />
           <Routes>
             <Route path="/" element={<Overview />} />
@@ -52,7 +61,7 @@ export default function App() {
               <Route key={s.path} path={s.path} element={<Placeholder title={s.label} milestone={s.milestone} about={s.about} />} />
             ))}
           </Routes>
-        </AuthGate>
+        </>
       </main>
     </>
   );
