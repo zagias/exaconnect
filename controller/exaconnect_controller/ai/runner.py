@@ -1,5 +1,5 @@
 """Background passes for the AI features: anomalies every 2 minutes, the
-bill-shock forecast every 5 and the hurricane watch every 15 (configurable).
+bill-shock forecast and application detection every 5, and the hurricane watch every 15 (configurable).
 A Postgres advisory lock keeps it to one controller at a time."""
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ import time
 
 from .. import db
 from ..settings import Settings
-from . import anomaly, billshock, storms
+from . import anomaly, billshock, detect, storms
 
 log = logging.getLogger("exaconnect.ai")
 LOCK_ID = 4245
@@ -46,6 +46,7 @@ async def loop(settings: Settings) -> None:
     while True:
         await every("anomaly", 120, _locked, anomaly.run_once)
         await every("billshock", 300, _locked, billshock.run_once)
+        await every("detect", 300, _locked, detect.run_once)
         if settings.nhc_url:
             await every("storms", settings.nhc_interval_s, storm_pass, settings.nhc_url)
         await asyncio.sleep(15)

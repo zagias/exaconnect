@@ -8,17 +8,12 @@ from pydantic import BaseModel
 from .. import audit, db
 from ..routing import maps
 from ..storm.service import set_storm
-from .deps import UserDep
+from .deps import UserDep, check_customer
 
 router = APIRouter(tags=["settings"])
 
 
-def _check(user, customer_id: str) -> None:
-    if user.role == "admin":
-        return
-    if user.role == "customer" and str(user.customer_id) == customer_id:
-        return
-    raise HTTPException(403, "Not available for this account.")
+_check = check_customer
 
 
 SITES_SQL = """SELECT id, name, location, storm_mode, storm_since, storm_by FROM sites
@@ -37,7 +32,8 @@ def get_settings(customer_id: str, user: UserDep) -> dict:
     _check(user, customer_id)
     with db.tx() as conn:
         row = conn.execute(
-            """SELECT id, name, shadow_mode, storm_mode, storm_since, storm_by, storm_allow_bulk_sat
+            """SELECT id, name, shadow_mode, storm_mode, storm_since, storm_by, storm_allow_bulk_sat,
+                      auto_prioritise
                FROM customers WHERE id = %s""",
             (customer_id,),
         ).fetchone()
@@ -49,6 +45,8 @@ def get_settings(customer_id: str, user: UserDep) -> dict:
 class SettingsIn(BaseModel):
     shadow_mode: bool | None = None
     storm_allow_bulk_sat: bool | None = None
+    # Apply confident application detections as traffic rules without asking (ADR 0007).
+    auto_prioritise: bool | None = None
 
 
 @router.patch("/customers/{customer_id}/settings")
@@ -70,6 +68,9 @@ def update_settings(customer_id: str, body: SettingsIn, user: UserDep) -> dict:
             )
             audit.record(conn, user.actor, "settings.storm_allow_bulk_sat", str(body.storm_allow_bulk_sat), customer_id)
             maps.refresh(conn, customer_id)
+        if body.auto_prioritise is not None:
+            conn.execute("UPDATE customers SET auto_prioritise = %s WHERE id = %s", (body.auto_prioritise, customer_id))
+            audit.record(conn, user.actor, "settings.auto_prioritise", str(body.auto_prioritise), customer_id)
         if body.shadow_mode is not None and body.shadow_mode != row["shadow_mode"]:
             conn.execute("UPDATE customers SET shadow_mode = %s WHERE id = %s", (body.shadow_mode, customer_id))
             conn.execute("DELETE FROM steering WHERE customer_id = %s", (customer_id,))
@@ -125,7 +126,8 @@ def my_customers(user: UserDep) -> list[dict]:
         return []
     with db.tx() as conn:
         rows = conn.execute(
-            """SELECT id, name, shadow_mode, storm_mode, storm_since, storm_by, storm_allow_bulk_sat
+            """SELECT id, name, shadow_mode, storm_mode, storm_since, storm_by, storm_allow_bulk_sat,
+                      auto_prioritise
                FROM customers WHERE %(c)s::uuid IS NULL OR id = %(c)s ORDER BY name""",
             {"c": None if user.role == "admin" else user.customer_id},
         ).fetchall()

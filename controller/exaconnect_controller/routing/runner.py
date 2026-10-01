@@ -12,7 +12,7 @@ import asyncio
 import datetime as dt
 import logging
 import time
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from typing import Any
 
 import psycopg
@@ -137,7 +137,12 @@ def run_customer(
                 jitter_ms=_f(cls["max_jitter_ms"]),
                 loss_pct=_f(cls["max_loss_pct"]),
             )
-            evals = {k: evaluate(p, sla, forecaster, policy, t) for k, p in inputs.items()}
+            # The class's preferred path comes first among equals (ADR 0007).
+            pref = cls["preferred_path"]
+            evals = {
+                k: evaluate(replace(p, ordinal=-1) if k == pref else p, sla, forecaster, policy, t)
+                for k, p in inputs.items()
+            }
             cands = maps.candidates(cls, customer, site, links)
             row = states.get((site["id"], cls["name"]))
             state = (

@@ -82,16 +82,17 @@ func TestChooseFailsOverInOrder(t *testing.T) {
 }
 
 func TestNFT(t *testing.T) {
-	nft := NFT(siteMap())
+	nft := NFT(siteMap(), nil)
 	for _, want := range []string{
 		"table ip exaconnect {}\ndelete table ip exaconnect\n",
 		"elements = { 192.168.10.0/24 }",
 		"ip daddr @local return",
-		"ip dscp { 46, 34 } meta mark set 0x101 return",
-		"udp dport { 5060, 10000-20000 } meta mark set 0x101 return",
-		"tcp dport { 443 } meta mark set 0x102 return",
-		"ip daddr { 10.50.0.0/16 } meta mark set 0x102 return",
-		"ip dscp { 8, 0 } meta mark set 0x103 return",
+		"ip dscp { 46, 34 } meta mark set 0x101 ct mark set 0x101 return",
+		"udp dport { 5060, 10000-20000 } meta mark set 0x101 ct mark set 0x101 return",
+		"tcp dport { 443 } meta mark set 0x102 ct mark set 0x102 return",
+		"ip daddr { 10.50.0.0/16 } meta mark set 0x102 ct mark set 0x102 return",
+		"ip saddr { 10.50.0.0/16 } meta mark set 0x102 ct mark set 0x102 return",
+		"ip dscp { 8, 0 } meta mark set 0x103 ct mark set 0x103 return",
 	} {
 		if !strings.Contains(nft, want) {
 			t.Errorf("missing %q in\n%s", want, nft)
@@ -135,7 +136,8 @@ func TestIPRulesAndRoutes(t *testing.T) {
 type fakeSys struct {
 	cmds  []string
 	files map[string]string
-	rules string // output of ip -j rule show
+	rules string                 // output of ip -j rule show
+	fail  func(cmd string) error // optional: make a command fail
 }
 
 func (f *fakeSys) Run(_ context.Context, name string, args ...string) ([]byte, error) {
@@ -144,6 +146,11 @@ func (f *fakeSys) Run(_ context.Context, name string, args ...string) ([]byte, e
 		cmd += "\n" + f.files[args[1]]
 	}
 	f.cmds = append(f.cmds, cmd)
+	if f.fail != nil {
+		if err := f.fail(cmd); err != nil {
+			return nil, err
+		}
+	}
 	if cmd == "ip -j rule show" {
 		return []byte(f.rules), nil
 	}

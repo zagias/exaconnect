@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from .. import audit, db, inventory
 from ..security import hash_password, new_token
-from .deps import AdminDep, ViewerDep, customer_scope
+from .deps import AdminDep, UserDep, ViewerDep, check_customer, customer_scope
 
 router = APIRouter(tags=["admin"])
 
@@ -182,6 +182,8 @@ class ClassIn(BaseModel):
     ports: str = Field(default="", max_length=500)
     subnets: list[str] = Field(default=[], max_length=64)
     ordinal: int = Field(default=100, ge=1, le=1000)
+    priority: Literal["realtime", "interactive", "normal", "bulk"] = "normal"
+    preferred_path: str | None = Field(default=None, max_length=16)
     sla: SlaIn
 
     @field_validator("dscp")
@@ -199,7 +201,7 @@ class ClassIn(BaseModel):
     @field_validator("ports")
     @classmethod
     def _ports(cls, v: str) -> str:
-        from ..routing.maps import parse_ports
+        from ..ports import parse_ports
 
         parse_ports(v)
         return v
@@ -211,18 +213,23 @@ def list_classes(user: ViewerDep, customer_id: str | None = None) -> list[dict]:
     with db.tx() as conn:
         return conn.execute(
             """SELECT c.customer_id, c.name, c.description, c.dscp, c.ports, c.subnets::text[] AS subnets, c.ordinal,
-                      s.max_latency_ms, s.max_jitter_ms, s.max_loss_pct, coalesce(s.allow_satellite, true)
-                        AS allow_satellite
+                      c.priority, c.preferred_path, c.builtin, s.max_latency_ms, s.max_jitter_ms, s.max_loss_pct,
+                      coalesce(s.allow_satellite, true) AS allow_satellite
                FROM app_classes c LEFT JOIN sla_policies s ON s.customer_id = c.customer_id AND s.class_name = c.name
                WHERE %(c)s::uuid IS NULL OR c.customer_id = %(c)s ORDER BY c.ordinal, c.name""",
             {"c": scope},
         ).fetchall()
 
 
+MAX_CLASSES = 12
+
+
 @router.put("/customers/{customer_id}/classes/{name}")
-def put_class(customer_id: str, name: str, body: ClassIn, user: AdminDep) -> dict:
-    """Create or update an application class and its SLA policy. Agents get the
-    new classifier and steering map on their next poll."""
+def put_class(customer_id: str, name: str, body: ClassIn, user: UserDep) -> dict:
+    """Create or update an application class and its SLA policy. Customers
+    manage their own classes. Agents get the new classifier and steering map
+    on their next poll."""
+    check_customer(user, customer_id)
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,19}", name):
         raise HTTPException(400, "Class names are lower case letters, digits and dashes, up to 20 characters.")
     from .. import desired
@@ -230,13 +237,38 @@ def put_class(customer_id: str, name: str, body: ClassIn, user: AdminDep) -> dic
     with db.tx() as conn:
         if conn.execute("SELECT 1 FROM customers WHERE id = %s", (customer_id,)).fetchone() is None:
             raise HTTPException(404, "Customer not found.")
+        if (
+            body.preferred_path
+            and not conn.execute(
+                "SELECT 1 FROM links WHERE customer_id = %s AND path = %s LIMIT 1", (customer_id, body.preferred_path)
+            ).fetchone()
+        ):
+            raise HTTPException(400, f"There is no path called '{body.preferred_path}'.")
+        count = conn.execute(
+            "SELECT count(*) FILTER (WHERE name <> %s) AS n FROM app_classes WHERE customer_id = %s",
+            (name, customer_id),
+        ).fetchone()["n"]
+        if count >= MAX_CLASSES:
+            raise HTTPException(400, f"An organisation can have up to {MAX_CLASSES} classes.")
         conn.execute(
-            """INSERT INTO app_classes (customer_id, name, description, dscp, ports, subnets, ordinal)
-               VALUES (%s, %s, %s, %s, %s, %s::cidr[], %s)
+            """INSERT INTO app_classes (customer_id, name, description, dscp, ports, subnets, ordinal, priority,
+                                        preferred_path)
+               VALUES (%s, %s, %s, %s, %s, %s::cidr[], %s, %s, %s)
                ON CONFLICT (customer_id, name) DO UPDATE SET description = EXCLUDED.description,
                  dscp = EXCLUDED.dscp, ports = EXCLUDED.ports, subnets = EXCLUDED.subnets,
-                 ordinal = EXCLUDED.ordinal""",
-            (customer_id, name, body.description, body.dscp, body.ports, body.subnets, body.ordinal),
+                 ordinal = EXCLUDED.ordinal, priority = EXCLUDED.priority,
+                 preferred_path = EXCLUDED.preferred_path""",
+            (
+                customer_id,
+                name,
+                body.description,
+                body.dscp,
+                body.ports,
+                body.subnets,
+                body.ordinal,
+                body.priority,
+                body.preferred_path or None,
+            ),
         )
         conn.execute(
             """INSERT INTO sla_policies (customer_id, class_name, max_latency_ms, max_jitter_ms, max_loss_pct,
@@ -260,13 +292,24 @@ def put_class(customer_id: str, name: str, body: ClassIn, user: AdminDep) -> dic
 
 
 @router.delete("/customers/{customer_id}/classes/{name}", status_code=204)
-def delete_class(customer_id: str, name: str, user: AdminDep) -> None:
+def delete_class(customer_id: str, name: str, user: UserDep) -> None:
+    check_customer(user, customer_id)
     from .. import desired
 
     with db.tx() as conn:
-        n = conn.execute("DELETE FROM app_classes WHERE customer_id = %s AND name = %s", (customer_id, name)).rowcount
-        if not n:
+        row = conn.execute(
+            "SELECT builtin FROM app_classes WHERE customer_id = %s AND name = %s", (customer_id, name)
+        ).fetchone()
+        if row is None:
             raise HTTPException(404, "Class not found.")
+        if row["builtin"]:
+            raise HTTPException(400, "The built-in classes can be changed but not deleted.")
+        rules = conn.execute(
+            "SELECT count(*) AS n FROM traffic_rules WHERE customer_id = %s AND class_name = %s", (customer_id, name)
+        ).fetchone()["n"]
+        if rules:
+            raise HTTPException(400, f"{rules} traffic rule(s) use this class. Change or delete them first.")
+        conn.execute("DELETE FROM app_classes WHERE customer_id = %s AND name = %s", (customer_id, name))
         conn.execute("DELETE FROM sla_policies WHERE customer_id = %s AND class_name = %s", (customer_id, name))
         conn.execute("DELETE FROM steering WHERE customer_id = %s AND class_name = %s", (customer_id, name))
         audit.record(conn, user.actor, "class.delete", name, customer_id)

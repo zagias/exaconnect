@@ -15,29 +15,12 @@ from typing import Any
 import psycopg
 from psycopg.types.json import Jsonb
 
+from .. import traffic
+from ..ports import parse_ports
+
 TABLE_BASE = 100
 MARK_BASE = 0x100
 SATELLITE_TYPES = ("leo", "geo")
-
-
-def parse_ports(spec: str) -> list[dict[str, Any]]:
-    """'udp:5060,10000-20000 tcp:443' or 'udp:5060,tcp:443' -> port ranges."""
-    out: list[dict[str, Any]] = []
-    proto = None
-    for tok in spec.replace(" ", ",").split(","):
-        tok = tok.strip().lower()
-        if not tok:
-            continue
-        if ":" in tok:
-            proto, tok = tok.split(":", 1)
-        if proto not in ("tcp", "udp"):
-            raise ValueError(f"port '{tok}' needs a protocol, like udp:5060")
-        lo, _, hi = tok.partition("-")
-        a, b = int(lo), int(hi or lo)
-        if not 1 <= a <= b <= 65535:
-            raise ValueError(f"bad port range {tok}")
-        out.append({"proto": proto, "from": a, "to": b})
-    return out
 
 
 def class_allows_sat(cls: dict, customer: dict, site: dict) -> bool:
@@ -50,8 +33,11 @@ def class_allows_sat(cls: dict, customer: dict, site: dict) -> bool:
 
 
 def candidates(cls: dict, customer: dict, site: dict, site_paths: list[dict]) -> list[str]:
+    """The paths a class may use, in preference order: terrestrial first, the
+    class's preferred path (if any) first among equals, then the configured order."""
+    pref = cls.get("preferred_path")
     out = []
-    for p in sorted(site_paths, key=lambda p: (p["satellite"], p["ordinal"])):
+    for p in sorted(site_paths, key=lambda p: (p["satellite"], p["name"] != pref, p["ordinal"])):
         if p["satellite"] and not class_allows_sat(cls, customer, site):
             continue
         out.append(p["name"])
@@ -73,14 +59,14 @@ def load(conn: psycopg.Connection, customer_id: Any) -> dict[str, Any]:
     ).fetchall()
     links = conn.execute(
         """SELECT l.site_id, l.path AS name, p.label, p.tunnel, p.ordinal, l.underlay_type, l.commit_mbps,
-                  c.name AS carrier, (l.underlay_type = ANY(%s)) AS satellite
+                  l.shape_mbps, c.name AS carrier, (l.underlay_type = ANY(%s)) AS satellite
            FROM links l JOIN paths p ON p.name = l.path JOIN carriers c ON c.id = l.carrier_id
            WHERE l.customer_id = %s ORDER BY p.ordinal""",
         (list(SATELLITE_TYPES), customer_id),
     ).fetchall()
     classes = conn.execute(
         """SELECT c.name, c.dscp, c.ports, c.subnets::text[] AS subnets, c.ordinal,
-                  coalesce(s.allow_satellite, true) AS allow_satellite,
+                  c.priority, c.preferred_path, coalesce(s.allow_satellite, true) AS allow_satellite,
                   s.max_latency_ms, s.max_jitter_ms, s.max_loss_pct
            FROM app_classes c LEFT JOIN sla_policies s
              ON s.customer_id = c.customer_id AND s.class_name = c.name
@@ -89,6 +75,9 @@ def load(conn: psycopg.Connection, customer_id: Any) -> dict[str, Any]:
     ).fetchall()
     steering = conn.execute(
         "SELECT site_id, class_name, path FROM steering WHERE customer_id = %s", (customer_id,)
+    ).fetchall()
+    rules = conn.execute(
+        """SELECT * FROM traffic_rules WHERE customer_id = %s ORDER BY ordinal, id""", (customer_id,)
     ).fetchall()
     by_site: dict[Any, list[dict]] = {}
     for link in links:
@@ -99,6 +88,7 @@ def load(conn: psycopg.Connection, customer_id: Any) -> dict[str, Any]:
         "links": by_site,
         "classes": classes,
         "steering": {(r["site_id"], r["class_name"]): r["path"] for r in steering},
+        "rules": rules,
     }
 
 
@@ -133,16 +123,19 @@ def build(inv: dict[str, Any], site: dict) -> dict[str, Any]:
     storm = bool(site["storm_mode"])
     if site["kind"] == "pop":
         rules = []
+        served = []
         for other in inv["sites"]:
             if other["kind"] != "site" or other["node_id"] is None:
                 continue
+            served.append(other["id"])
             storm = storm or bool(other["storm_mode"])
             for r in site_rules(inv, other):
                 for prefix in other["lan_prefixes"]:
                     rules.append({**r, "dst": str(prefix)})
     else:
+        served = [site["id"]]
         rules = site_rules(inv, site)
-    return {
+    out: dict[str, Any] = {
         # At the PoP: true while any site it serves is in Storm Mode.
         "storm": storm,
         "paths": paths,
@@ -150,6 +143,15 @@ def build(inv: dict[str, Any], site: dict) -> dict[str, Any]:
         "rules": rules,
         "local_prefixes": [str(p) for p in site["lan_prefixes"]],
     }
+    # Traffic rules (ADR 0007). The PoP gets the rules of every site it serves
+    # so return traffic is classified the same way.
+    matches = traffic.fit(traffic.compile_matches(inv["rules"], served))
+    if matches:
+        out["matches"] = matches
+    q = traffic.qos(inv["classes"], inv["links"].get(site["id"], []))
+    if q:
+        out["qos"] = q
+    return out
 
 
 def _hash(body: dict[str, Any]) -> str:

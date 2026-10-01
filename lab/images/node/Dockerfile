@@ -4,7 +4,7 @@ FROM quay.io/frrouting/frr:10.2.1
 
 RUN apk add --no-cache \
       bash iproute2 iproute2-tc nftables wireguard-tools \
-      iperf3 tcpdump iputils curl jq ethtool
+      iperf3 tcpdump iputils curl jq ethtool conntrack-tools
 
 # bgpd and bfdd only; zebra, staticd and watchfrr start by default.
 RUN sed -i -e 's/^bgpd=no/bgpd=yes/' -e 's/^bfdd=no/bfdd=yes/' /etc/frr/daemons

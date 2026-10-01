@@ -51,16 +51,17 @@ def upsert_site(conn: psycopg.Connection, customer_id: Any, actor: str, **f: Any
 def upsert_link(conn: psycopg.Connection, customer_id: Any, site_id: Any, actor: str, **f: Any) -> Any:
     row = conn.execute(
         """INSERT INTO links (customer_id, site_id, carrier_id, path, underlay_type, underlay_interface,
-                              underlay_ip, commit_mbps, cost_per_mbps, burst_price)
+                              underlay_ip, commit_mbps, cost_per_mbps, burst_price, shape_mbps)
            VALUES (%(customer_id)s, %(site_id)s, %(carrier_id)s, %(path)s, %(underlay_type)s,
-                   %(underlay_interface)s, %(underlay_ip)s, %(commit_mbps)s, %(cost_per_mbps)s, %(burst_price)s)
+                   %(underlay_interface)s, %(underlay_ip)s, %(commit_mbps)s, %(cost_per_mbps)s, %(burst_price)s,
+                   %(shape_mbps)s)
            ON CONFLICT (site_id, path) DO UPDATE SET
              carrier_id = EXCLUDED.carrier_id, underlay_type = EXCLUDED.underlay_type,
              underlay_interface = EXCLUDED.underlay_interface, underlay_ip = EXCLUDED.underlay_ip,
              commit_mbps = EXCLUDED.commit_mbps, cost_per_mbps = EXCLUDED.cost_per_mbps,
-             burst_price = EXCLUDED.burst_price
+             burst_price = EXCLUDED.burst_price, shape_mbps = EXCLUDED.shape_mbps
            RETURNING id""",
-        {"customer_id": customer_id, "site_id": site_id, **f},
+        {"customer_id": customer_id, "site_id": site_id, "shape_mbps": None, **f},
     ).fetchone()
     audit.record(conn, actor, "link.upsert", f["path"], customer_id, {k: str(v) for k, v in f.items()})
     desired.refresh(conn, customer_id)

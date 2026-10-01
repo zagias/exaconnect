@@ -9,6 +9,7 @@ import Decisions from "./pages/Decisions";
 import Metering from "./pages/Metering";
 import Overview from "./pages/Overview";
 import { SiteList, SitePage } from "./pages/Sites";
+import Traffic from "./pages/Traffic";
 
 export default function App() {
   return (
@@ -42,6 +43,7 @@ function Layout() {
                   Overview
                 </NavLink>
                 <NavLink to="/sites">Sites</NavLink>
+                <NavLink to="/traffic">Traffic</NavLink>
                 <NavLink to="/decisions">Decisions</NavLink>
                 <NavLink to="/metering">Metering</NavLink>
                 <NavLink to="/insights">Insights</NavLink>
@@ -68,6 +70,7 @@ function Layout() {
             <Route path="/" element={<Overview />} />
             <Route path="/sites" element={<SiteList />} />
             <Route path="/sites/:id" element={<SitePage />} />
+            <Route path="/traffic/*" element={<Traffic />} />
             <Route path="/decisions" element={<Decisions />} />
             <Route path="/metering" element={<Metering />} />
             <Route path="/insights" element={<Insights />} />

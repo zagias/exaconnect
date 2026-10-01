@@ -5,12 +5,12 @@ enrolment, checked by the TLS proxy (deploy/nginx)."""
 from __future__ import annotations
 
 import datetime as dt
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import PlainTextResponse
 from psycopg.types.json import Jsonb
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, IPvAnyAddress
 
 from .. import audit, db, desired, pki
 from ..routing import maps
@@ -175,6 +175,22 @@ class ChoiceIn(BaseModel):
     failover: bool = False
 
 
+class FlowIn(BaseModel):
+    """Traffic leaving the site in the last minute, per destination and port
+    (from connection tracking), for application detection (ADR 0007)."""
+
+    at: dt.datetime
+    proto: Literal["tcp", "udp"]
+    dst: IPvAnyAddress
+    dport: int = Field(ge=0, le=65535)
+    class_: str = Field(default="", alias="class", max_length=32)
+    flows: int = Field(ge=0)
+    bytes_out: int = Field(ge=0)
+    bytes_in: int = Field(ge=0)
+    pkts_out: int = Field(ge=0)
+    pkts_in: int = Field(ge=0)
+
+
 class TelemetryIn(BaseModel):
     at: dt.datetime
     probes: list[ProbeWindow] | None = Field(default=None, max_length=5000)
@@ -183,6 +199,7 @@ class TelemetryIn(BaseModel):
     tunnels: list[TunnelIn] | None = Field(default=None, max_length=16)
     steering: list[ChoiceIn] | None = Field(default=None, max_length=1000)
     steering_version: int = 0
+    flows: list[FlowIn] | None = Field(default=None, max_length=2000)
 
 
 @router.post("/agent/telemetry", status_code=204)
@@ -228,6 +245,29 @@ def telemetry(body: TelemetryIn, node: NodeDep) -> None:
                      handshake_age_s = EXCLUDED.handshake_age_s, bfd = EXCLUDED.bfd,
                      updated_at = EXCLUDED.updated_at""",
                 (node.id, t.name, t.path, t.handshake_age_s, t.bfd, body.at),
+            )
+        if body.flows:
+            cur.executemany(
+                """INSERT INTO flow_stats (time, customer_id, node_id, proto, dst, dport, class_name, flows,
+                                           bytes_out, bytes_in, pkts_out, pkts_in)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                [
+                    (
+                        f.at,
+                        node.customer_id,
+                        node.id,
+                        f.proto,
+                        str(f.dst),
+                        f.dport,
+                        f.class_,
+                        f.flows,
+                        f.bytes_out,
+                        f.bytes_in,
+                        f.pkts_out,
+                        f.pkts_in,
+                    )
+                    for f in body.flows
+                ],
             )
         if body.steering is not None:
             conn.execute("DELETE FROM steering_actual WHERE node_id = %s", (node.id,))

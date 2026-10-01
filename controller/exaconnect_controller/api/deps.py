@@ -53,6 +53,15 @@ def require_viewer(user: Annotated[User, Depends(current_user)]) -> User:
     return user
 
 
+def check_customer(user: User, customer_id: Any) -> None:
+    """Admins act for any customer; customer users only for their own."""
+    if user.role == "admin":
+        return
+    if user.role == "customer" and str(user.customer_id) == str(customer_id):
+        return
+    raise HTTPException(status.HTTP_403_FORBIDDEN, "Not available for this account.")
+
+
 def customer_scope(user: User) -> Any | None:
     """None means all customers (admin)."""
     return None if user.role == "admin" else user.customer_id

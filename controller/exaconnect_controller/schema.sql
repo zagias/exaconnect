@@ -260,6 +260,76 @@ CREATE TABLE IF NOT EXISTS insights (
 CREATE UNIQUE INDEX IF NOT EXISTS insights_open_key ON insights (customer_id, key) WHERE resolved_at IS NULL;
 CREATE INDEX IF NOT EXISTS insights_customer_time ON insights (customer_id, last_seen DESC);
 
+-- Traffic rules and priorities (ADR 0007). A class says how traffic is treated
+-- (priority, SLA, preferred path); a rule says which traffic belongs to it.
+ALTER TABLE app_classes ADD COLUMN IF NOT EXISTS priority text NOT NULL DEFAULT 'normal';
+ALTER TABLE app_classes ADD COLUMN IF NOT EXISTS preferred_path text;
+ALTER TABLE app_classes ADD COLUMN IF NOT EXISTS builtin boolean NOT NULL DEFAULT false;
+ALTER TABLE links ADD COLUMN IF NOT EXISTS shape_mbps numeric;
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS auto_prioritise boolean NOT NULL DEFAULT false;
+
+CREATE TABLE IF NOT EXISTS traffic_rules (
+  id             bigserial PRIMARY KEY,
+  customer_id    uuid NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  name           text NOT NULL,
+  class_name     text NOT NULL,
+  site_ids       uuid[] NOT NULL DEFAULT '{}',
+  apps           text[] NOT NULL DEFAULT '{}',
+  ports          text NOT NULL DEFAULT '',
+  dst_subnets    cidr[] NOT NULL DEFAULT '{}',
+  src_subnets    cidr[] NOT NULL DEFAULT '{}',
+  vlans          int[] NOT NULL DEFAULT '{}',
+  domains        text[] NOT NULL DEFAULT '{}',
+  dscp           int[] NOT NULL DEFAULT '{}',
+  enabled        boolean NOT NULL DEFAULT true,
+  ordinal        int NOT NULL DEFAULT 100,
+  source         text NOT NULL DEFAULT 'customer' CHECK (source IN ('customer', 'admin', 'detected')),
+  created_by     text NOT NULL,
+  created_at     timestamptz NOT NULL DEFAULT now(),
+  updated_at     timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS traffic_rules_customer ON traffic_rules (customer_id, ordinal, id);
+
+-- Application detection: what the agents see leaving each site, and what it looks like.
+CREATE TABLE IF NOT EXISTS flow_stats (
+  time         timestamptz NOT NULL,
+  customer_id  uuid NOT NULL,
+  node_id      uuid NOT NULL,
+  proto        text NOT NULL,
+  dst          inet NOT NULL,
+  dport        int NOT NULL,
+  class_name   text NOT NULL DEFAULT '',
+  flows        int NOT NULL,
+  bytes_out    bigint NOT NULL,
+  bytes_in     bigint NOT NULL,
+  pkts_out     bigint NOT NULL,
+  pkts_in      bigint NOT NULL
+);
+CREATE INDEX IF NOT EXISTS flow_stats_node_time ON flow_stats (node_id, time DESC);
+
+CREATE TABLE IF NOT EXISTS app_detections (
+  id               bigserial PRIMARY KEY,
+  customer_id      uuid NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  site_id          uuid NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+  key              text NOT NULL,
+  app_id           text,
+  label            text NOT NULL,
+  proto            text NOT NULL,
+  dport            int NOT NULL,
+  dst_subnet       cidr,
+  current_class    text NOT NULL DEFAULT '',
+  suggested_class  text NOT NULL,
+  profile          text NOT NULL,
+  confidence       double precision NOT NULL,
+  reason           text NOT NULL,
+  stats            jsonb NOT NULL DEFAULT '{}',
+  status           text NOT NULL DEFAULT 'suggested' CHECK (status IN ('suggested', 'applied', 'dismissed')),
+  rule_id          bigint REFERENCES traffic_rules(id) ON DELETE SET NULL,
+  first_seen       timestamptz NOT NULL DEFAULT now(),
+  last_seen        timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (customer_id, site_id, key)
+);
+
 -- Time series (TimescaleDB hypertables when the extension is available).
 CREATE TABLE IF NOT EXISTS path_metrics (
   time         timestamptz NOT NULL,
@@ -302,6 +372,7 @@ BEGIN
     PERFORM create_hypertable('path_metrics', 'time', if_not_exists => TRUE, migrate_data => TRUE);
     PERFORM create_hypertable('iface_counters', 'time', if_not_exists => TRUE, migrate_data => TRUE);
     PERFORM create_hypertable('events', 'time', if_not_exists => TRUE, migrate_data => TRUE);
+    PERFORM create_hypertable('flow_stats', 'time', if_not_exists => TRUE, migrate_data => TRUE);
   END IF;
 END
 $$;

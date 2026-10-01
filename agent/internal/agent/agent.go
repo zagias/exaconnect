@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net"
+	"net/netip"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -18,6 +20,7 @@ import (
 	"github.com/zagias/exaconnect/agent/internal/client"
 	"github.com/zagias/exaconnect/agent/internal/counters"
 	"github.com/zagias/exaconnect/agent/internal/desired"
+	"github.com/zagias/exaconnect/agent/internal/flows"
 	"github.com/zagias/exaconnect/agent/internal/frrstate"
 	"github.com/zagias/exaconnect/agent/internal/probe"
 	"github.com/zagias/exaconnect/agent/internal/steer"
@@ -28,13 +31,22 @@ import (
 type Config struct {
 	PollInterval      time.Duration // desired state, default 10 s
 	TelemetryInterval time.Duration // probe aggregates, default 10 s
-	CounterInterval   time.Duration // byte counters, default 60 s
+	CounterInterval   time.Duration // byte counters and flows, default 60 s
 	SilentAfter       time.Duration // controller considered silent, default 60 s
 	SteerInterval     time.Duration // steering map poll, default 5 s
 	BFDInterval       time.Duration // BFD state check, default 500 ms
 	ProbeTimeout      time.Duration // default 2 s
+	ResolveInterval   time.Duration // re-resolve match domains, retry failed QoS; default 5 min
 	MaxBuffered       int           // telemetry windows kept while the controller is away
 }
+
+// MaxFlows is how many flow aggregates one conntrack read reports.
+const MaxFlows = 100
+
+const (
+	conntrackProc = "/proc/net/nf_conntrack"
+	conntrackAcct = "/proc/sys/net/netfilter/nf_conntrack_acct"
+)
 
 func (c *Config) defaults() {
 	if c.PollInterval == 0 {
@@ -58,6 +70,9 @@ func (c *Config) defaults() {
 	if c.ProbeTimeout == 0 {
 		c.ProbeTimeout = 2 * time.Second
 	}
+	if c.ResolveInterval == 0 {
+		c.ResolveInterval = 5 * time.Minute
+	}
 	if c.MaxBuffered == 0 {
 		c.MaxBuffered = 2000
 	}
@@ -80,6 +95,7 @@ type Telemetry struct {
 	At       time.Time         `json:"at"`
 	Probes   []probe.Window    `json:"probes"`
 	Counters []counters.Sample `json:"counters"`
+	Flows    []flows.Flow      `json:"flows,omitempty"`
 	Events   []Event           `json:"events"`
 	Tunnels  []TunnelState     `json:"tunnels"`
 	// Steering is where each class is right now, against SteeringVersion.
@@ -109,6 +125,14 @@ type Agent struct {
 	steerMap    *steer.Map
 	choices     []steer.Choice
 	steerErr    string
+	qosErr      string
+	resolveErr  string
+	kick        chan struct{} // new steering map: look up its domains
+	refreshed   chan struct{} // lookups changed: re-apply the classifier
+	flows       flows.Tracker
+	flowErr     string
+	// writeProc writes a /proc/sys file; nil uses os.WriteFile (tests stub it).
+	writeProc func(path string, data []byte) error
 }
 
 func (a *Agent) Run(ctx context.Context) error {
@@ -116,6 +140,16 @@ func (a *Agent) Run(ctx context.Context) error {
 	a.stats = map[string]*probe.Stats{}
 	a.bfd = map[string]bfdPeer{}
 	a.lastContact = time.Now()
+	a.kick = make(chan struct{}, 1)
+	a.refreshed = make(chan struct{}, 1)
+
+	// Flow telemetry needs per-flow byte counters; best effort.
+	if a.writeProc == nil {
+		a.writeProc = func(p string, d []byte) error { return os.WriteFile(p, d, 0o644) }
+	}
+	if err := a.writeProc(conntrackAcct, []byte("1\n")); err != nil {
+		a.Log.Debug("cannot enable conntrack accounting", "err", err)
+	}
 
 	// Survive restarts while the controller is away: bring back the last good state first.
 	if lg := a.Applier.LastGood(); lg != nil {
@@ -127,11 +161,13 @@ func (a *Agent) Run(ctx context.Context) error {
 		a.setCurrent(ctx, lg)
 	}
 	if a.Steerer != nil {
+		go a.lookupLoop(ctx)
 		if m, err := steer.Load(a.steerPath()); err == nil {
 			a.mu.Lock()
 			a.steerMap = m
 			a.mu.Unlock()
 			a.Log.Info("loaded last steering map", "version", m.Version)
+			a.kickLookups()
 		}
 		a.checkBFD(ctx)
 		a.steer(ctx, "start")
@@ -142,7 +178,9 @@ func (a *Agent) Run(ctx context.Context) error {
 	cnt := time.NewTicker(a.Cfg.CounterInterval)
 	bfd := time.NewTicker(a.Cfg.BFDInterval)
 	str := time.NewTicker(a.Cfg.SteerInterval)
+	qos := time.NewTicker(a.Cfg.ResolveInterval)
 	defer str.Stop()
+	defer qos.Stop()
 	defer poll.Stop()
 	defer tele.Stop()
 	defer cnt.Stop()
@@ -162,12 +200,19 @@ func (a *Agent) Run(ctx context.Context) error {
 			a.flush(ctx)
 		case <-cnt.C:
 			a.collectCounters()
+			a.collectFlows(ctx)
 		case <-bfd.C:
 			if a.checkBFD(ctx) {
 				a.steer(ctx, "bfd")
 			}
 		case <-str.C:
 			a.pollSteering(ctx)
+		case <-a.refreshed:
+			a.steer(ctx, "resolve")
+		case <-qos.C:
+			if a.Steerer != nil && a.Steerer.RetryQoS() {
+				a.steer(ctx, "qos")
+			}
 		}
 	}
 }
@@ -251,6 +296,9 @@ func (a *Agent) setCurrent(ctx context.Context, s *desired.State) {
 		a.startReflector(ctx, s.Reflector.Listen)
 	}
 	if prev != nil {
+		if a.Steerer != nil {
+			a.Steerer.RetryQoS() // a tunnel tc failed on may exist now
+		}
 		a.steer(ctx, "config")
 	}
 }
@@ -469,6 +517,7 @@ func (a *Agent) flush(ctx context.Context) {
 	// Drop only what was sent; new items may have arrived meanwhile.
 	a.buf.Probes = a.buf.Probes[len(t.Probes):]
 	a.buf.Counters = a.buf.Counters[len(t.Counters):]
+	a.buf.Flows = a.buf.Flows[len(t.Flows):]
 	a.buf.Events = a.buf.Events[len(t.Events):]
 	a.mu.Unlock()
 }
@@ -518,7 +567,103 @@ func (a *Agent) pollSteering(ctx context.Context) {
 	a.steerMap = m
 	a.mu.Unlock()
 	a.Log.Info("new steering map", "version", m.Version, "storm", m.Storm)
+	a.kickLookups()
 	a.steer(ctx, "controller")
+}
+
+func (a *Agent) kickLookups() {
+	select {
+	case a.kick <- struct{}{}:
+	default: // one is already pending; it reads the latest map
+	}
+}
+
+// lookupLoop resolves match domains and re-reads VLAN subinterfaces off the
+// main loop, so a slow resolver never delays a BFD failover: new domains as
+// soon as a map arrives, all of them every ResolveInterval. A change wakes
+// the main loop to re-apply the classifier.
+func (a *Agent) lookupLoop(ctx context.Context) {
+	t := time.NewTicker(a.Cfg.ResolveInterval)
+	defer t.Stop()
+	for {
+		all := false
+		select {
+		case <-ctx.Done():
+			return
+		case <-a.kick:
+		case <-t.C:
+			all = true
+		}
+		a.mu.Lock()
+		m := a.steerMap
+		a.mu.Unlock()
+		if m == nil {
+			continue
+		}
+		changed, err := a.Steerer.Refresh(ctx, m, all)
+		msg := ""
+		if err != nil {
+			msg = err.Error()
+		}
+		a.mu.Lock()
+		if msg != a.resolveErr && msg != "" {
+			a.Log.Warn("match lookups", "err", msg)
+		}
+		a.resolveErr = msg
+		a.mu.Unlock()
+		if changed {
+			select {
+			case a.refreshed <- struct{}{}:
+			default:
+			}
+		}
+	}
+}
+
+// collectFlows reads conntrack on a site and buffers what its LAN sent to
+// each destination since the last read, by class.
+func (a *Agent) collectFlows(ctx context.Context) {
+	a.mu.Lock()
+	cur, m := a.current, a.steerMap
+	a.mu.Unlock()
+	if cur == nil || cur.Role != desired.RoleSite || m == nil {
+		return
+	}
+	var out []byte
+	var err error
+	if a.Sys.Exists(conntrackProc) {
+		out, err = a.Sys.ReadFile(conntrackProc)
+	} else {
+		out, err = a.Sys.Run(ctx, "conntrack", "-L", "-o", "extended")
+	}
+	if err != nil {
+		if msg := err.Error(); msg != a.flowErr {
+			a.flowErr = msg
+			a.Log.Warn("cannot read conntrack", "err", err)
+		}
+		return
+	}
+	a.flowErr = ""
+	var local []netip.Prefix
+	for _, s := range m.LocalPrefixes {
+		if p, err := netip.ParsePrefix(s); err == nil {
+			local = append(local, p)
+		}
+	}
+	classOf := map[uint32]string{}
+	for _, c := range m.Classes {
+		classOf[uint32(c.Mark)] = c.Name
+	}
+	fl := a.flows.Update(flows.Parse(out), local, classOf, time.Now(), MaxFlows)
+	if len(fl) == 0 {
+		return
+	}
+	a.mu.Lock()
+	a.buf.Flows = append(a.buf.Flows, fl...)
+	if n := len(a.buf.Flows); n > a.Cfg.MaxBuffered {
+		a.buf.Flows = a.buf.Flows[n-a.Cfg.MaxBuffered:]
+	}
+	a.mu.Unlock()
 }
 
 // usable reports whether a path can carry traffic: its tunnel exists and BFD
@@ -572,6 +717,13 @@ func (a *Agent) steer(ctx context.Context, why string) {
 		return
 	}
 	a.steerErr = ""
+	if msg := a.Steerer.QoSError(); msg != a.qosErr {
+		a.qosErr = msg
+		if msg != "" {
+			a.Log.Warn("qos not applied; steering continues without it", "err", msg)
+			a.event("qos_failed", map[string]string{"error": msg})
+		}
+	}
 	a.mu.Lock()
 	a.choices = choices
 	for _, ev := range moves(prev, choices, why) {

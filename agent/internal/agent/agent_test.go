@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"os"
 	"strings"
 	"sync"
@@ -83,6 +84,8 @@ func newAgent(base string, sys *fakeSys) *Agent {
 		Sys:     sys,
 		Log:     log,
 		Applier: &apply.Applier{Sys: sys, StateDir: "/state", PrivateKey: "PRIV", FRRConf: "/frr.conf", Log: log},
+		// Never touch the test host's sysctls.
+		writeProc: func(string, []byte) error { return nil },
 	}
 }
 
@@ -290,4 +293,53 @@ func TestAgentSteersAndFailsOverOnBFD(t *testing.T) {
 		}
 		return false
 	})
+}
+
+func TestAgentResolvesMatchDomains(t *testing.T) {
+	m := steer.Map{
+		Version: 3,
+		Paths:   []steer.Path{{Name: "carrier-a", Tunnel: "wg-a", Table: 101}},
+		Classes: []steer.Class{{Name: "voice", Mark: 0x101}},
+		Rules:   []steer.Rule{{Class: "voice", Paths: []string{"carrier-a"}}},
+		Matches: []steer.Match{{Class: "voice", Domains: []string{"teams.microsoft.com"}}},
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api/v1/agent/desired-state" && r.URL.Query().Get("have") != "1":
+			json.NewEncoder(w).Encode(state(1))
+		case r.URL.Path == "/api/v1/agent/steering" && r.URL.Query().Get("have") != "3":
+			json.NewEncoder(w).Encode(m)
+		default:
+			w.WriteHeader(http.StatusNoContent)
+		}
+	}))
+	defer srv.Close()
+
+	var mu sync.Mutex
+	addr := "52.113.1.1"
+	sys := &bfdSys{fakeSys: &fakeSys{files: map[string]string{}}}
+	a := newAgent(srv.URL, sys.fakeSys)
+	a.Sys, a.Applier.Sys = sys, sys
+	a.Steerer = &steer.Steerer{Sys: sys, StateDir: "/state", Interfaces: func() ([]string, error) { return nil, nil },
+		Resolve: func(context.Context, string) ([]netip.Addr, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			return []netip.Addr{netip.MustParseAddr(addr)}, nil
+		}}
+	a.Cfg.SteerInterval = 20 * time.Millisecond
+	a.Cfg.ResolveInterval = 50 * time.Millisecond
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go a.Run(ctx)
+
+	nft := func() string {
+		sys.fakeSys.mu.Lock()
+		defer sys.fakeSys.mu.Unlock()
+		return sys.fakeSys.files["/state/steer.nft"]
+	}
+	waitFor(t, "resolved domain in the ruleset", func() bool { return strings.Contains(nft(), "elements = { 52.113.1.1 }") })
+	mu.Lock()
+	addr = "52.114.2.2"
+	mu.Unlock()
+	waitFor(t, "re-resolved domain in the ruleset", func() bool { return strings.Contains(nft(), "elements = { 52.114.2.2 }") })
 }

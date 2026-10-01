@@ -4,6 +4,8 @@ import { api, useApi, type NodeRow } from "../api";
 import { useAuth } from "../auth";
 import { ErrorNote, Eyebrow, StatusPill, ago } from "../components";
 import { useCustomer, who } from "../customer";
+import { Card, useAction } from "../ui";
+import { Classes } from "./Classes";
 
 // Admin screens (CLAUDE.md §4.6, screen 6): agents, customers, sites and links,
 // enrolment tokens, classes and SLA policies, users, settings and the audit log.
@@ -26,42 +28,12 @@ export default function Admin() {
         <Route index element={<Navigate to="agents" replace />} />
         <Route path="agents" element={<Agents />} />
         <Route path="sites" element={<SitesAdmin />} />
-        <Route path="classes" element={<ClassesAdmin />} />
+        <Route path="classes" element={<Classes />} />
         <Route path="users" element={<UsersAdmin />} />
         <Route path="settings" element={<SettingsAdmin />} />
         <Route path="audit" element={<AuditLog />} />
       </Routes>
     </>
-  );
-}
-
-/** Runs a form action with a busy flag and an error message. */
-function useAction() {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const run = async (fn: () => Promise<void>) => {
-    setBusy(true);
-    setError(null);
-    try {
-      await fn();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-  return { busy, error, run, setError };
-}
-
-function Card({ title, children, note }: { title: string; children: ReactNode; note?: ReactNode }) {
-  return (
-    <section className="card" style={{ marginBottom: 24 }}>
-      <div className="card-head">
-        <h2>{title}</h2>
-        {note}
-      </div>
-      {children}
-    </section>
   );
 }
 
@@ -487,201 +459,6 @@ function LinkForm({ site, link, onDone }: { site: SiteRow; link: LinkRow | null;
       <div className="actions wide">
         <button className="button" disabled={act.busy}>
           Save link
-        </button>
-        <button type="button" className="button secondary" onClick={onDone}>
-          Cancel
-        </button>
-        <ErrorNote error={act.error} />
-      </div>
-    </form>
-  );
-}
-
-// ---- Application classes and SLA policies ----
-
-interface ClassRow {
-  customer_id: string;
-  name: string;
-  description: string;
-  dscp: number[];
-  ports: string;
-  subnets: string[];
-  ordinal: number;
-  max_latency_ms: string | number | null;
-  max_jitter_ms: string | number | null;
-  max_loss_pct: string | number | null;
-  allow_satellite: boolean;
-}
-
-function ClassesAdmin() {
-  const { current } = useCustomer();
-  const list = useApi<ClassRow[]>(current ? `/classes?customer_id=${current.id}` : null, 0);
-  const [editing, setEditing] = useState<ClassRow | "new" | null>(null);
-  const act = useAction();
-  if (!current) return null;
-  const remove = (c: ClassRow) => {
-    if (!window.confirm(`Delete the ${c.name} class? Its traffic falls back to normal routing.`)) return;
-    act.run(async () => {
-      await api(`/customers/${current.id}/classes/${c.name}`, { method: "DELETE" });
-      list.reload();
-    });
-  };
-  const val = (v: string | number | null, unit: string) => (v == null ? "–" : `${Number(v)} ${unit}`);
-  return (
-    <Card
-      title={`Application classes for ${current.name}`}
-      note={
-        <button className="button small" onClick={() => setEditing("new")}>
-          Add a class
-        </button>
-      }
-    >
-      <p className="muted small">
-        Traffic is matched on DSCP, then ports and subnets. Agents get changes on their next poll. Lower order is matched
-        first.
-      </p>
-      <ErrorNote error={list.error ?? act.error} />
-      {editing && (
-        <ClassForm
-          customerId={current.id}
-          cls={editing === "new" ? null : editing}
-          onDone={() => {
-            setEditing(null);
-            list.reload();
-          }}
-        />
-      )}
-      <div className="table-wrap">
-        <table className="paths">
-          <thead>
-            <tr>
-              <th scope="col">Class</th>
-              <th scope="col">Match</th>
-              <th scope="col">Latency</th>
-              <th scope="col">Jitter</th>
-              <th scope="col">Loss</th>
-              <th scope="col">Satellite</th>
-              <th scope="col">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(list.data ?? []).map((c) => (
-              <tr key={c.name}>
-                <td>
-                  <strong className="mono">{c.name}</strong>
-                  <div className="small muted">{c.description}</div>
-                </td>
-                <td className="small">
-                  {c.dscp.length > 0 && <div>DSCP {c.dscp.join(", ")}</div>}
-                  {c.ports && <div className="mono">{c.ports}</div>}
-                  {c.subnets.length > 0 && <div className="mono">{c.subnets.join(", ")}</div>}
-                </td>
-                <td className="mono">{val(c.max_latency_ms, "ms")}</td>
-                <td className="mono">{val(c.max_jitter_ms, "ms")}</td>
-                <td className="mono">{val(c.max_loss_pct, "%")}</td>
-                <td>{c.allow_satellite ? "In Storm Mode" : "Never"}</td>
-                <td>
-                  <button className="button secondary small" onClick={() => setEditing(c)}>
-                    Edit
-                  </button>{" "}
-                  <button className="button secondary small" onClick={() => remove(c)}>
-                    Delete
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </Card>
-  );
-}
-
-function ClassForm({ customerId, cls, onDone }: { customerId: string; cls: ClassRow | null; onDone: () => void }) {
-  const num = (v: string | number | null | undefined) => (v == null ? "" : String(Number(v)));
-  const [f, setF] = useState({
-    name: cls?.name ?? "",
-    description: cls?.description ?? "",
-    dscp: cls?.dscp.join(", ") ?? "",
-    ports: cls?.ports ?? "",
-    subnets: cls?.subnets.join(", ") ?? "",
-    ordinal: String(cls?.ordinal ?? 10),
-    latency: num(cls?.max_latency_ms),
-    jitter: num(cls?.max_jitter_ms),
-    loss: num(cls?.max_loss_pct),
-    allow_satellite: cls?.allow_satellite ?? true,
-  });
-  const act = useAction();
-  const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
-  const list = (s: string) =>
-    s
-      .split(",")
-      .map((x) => x.trim())
-      .filter(Boolean);
-  const opt = (s: string) => (s.trim() === "" ? null : Number(s));
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    act.run(async () => {
-      await api(`/customers/${customerId}/classes/${encodeURIComponent(f.name)}`, {
-        method: "PUT",
-        body: JSON.stringify({
-          description: f.description,
-          dscp: list(f.dscp).map(Number),
-          ports: f.ports.trim(),
-          subnets: list(f.subnets),
-          ordinal: Number(f.ordinal),
-          sla: { max_latency_ms: opt(f.latency), max_jitter_ms: opt(f.jitter), max_loss_pct: opt(f.loss), allow_satellite: f.allow_satellite },
-        }),
-      });
-      onDone();
-    });
-  };
-  return (
-    <form className="form card-inset" onSubmit={submit} style={{ marginBottom: 16 }}>
-      <h3 className="wide">{cls ? `Edit ${cls.name}` : "New class"}</h3>
-      <label>
-        Name
-        <input value={f.name} onChange={set("name")} required pattern="[a-z0-9][a-z0-9-]{0,19}" readOnly={!!cls} title="Lower case letters, digits and dashes" />
-      </label>
-      <label>
-        Description
-        <input value={f.description} onChange={set("description")} maxLength={200} />
-      </label>
-      <label>
-        Order
-        <input value={f.ordinal} onChange={set("ordinal")} inputMode="numeric" pattern="[0-9]+" />
-      </label>
-      <label>
-        DSCP values
-        <input value={f.dscp} onChange={set("dscp")} placeholder="46, 34" />
-      </label>
-      <label>
-        Ports
-        <input value={f.ports} onChange={set("ports")} placeholder="udp:5060, udp:10000-20000" />
-      </label>
-      <label>
-        Subnets
-        <input value={f.subnets} onChange={set("subnets")} placeholder="52.112.0.0/14" />
-      </label>
-      <label>
-        Latency limit, ms
-        <input value={f.latency} onChange={set("latency")} inputMode="decimal" placeholder="Best effort" />
-      </label>
-      <label>
-        Jitter limit, ms
-        <input value={f.jitter} onChange={set("jitter")} inputMode="decimal" placeholder="Best effort" />
-      </label>
-      <label>
-        Loss limit, %
-        <input value={f.loss} onChange={set("loss")} inputMode="decimal" placeholder="Best effort" />
-      </label>
-      <label className="check wide">
-        <input type="checkbox" checked={f.allow_satellite} onChange={(e) => setF({ ...f, allow_satellite: e.target.checked })} />
-        May use satellite in Storm Mode when both terrestrial paths fail
-      </label>
-      <div className="actions wide">
-        <button className="button" disabled={act.busy}>
-          Save class
         </button>
         <button type="button" className="button secondary" onClick={onDone}>
           Cancel

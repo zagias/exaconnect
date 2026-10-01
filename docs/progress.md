@@ -201,4 +201,13 @@ connect.exacarib.com through Caddy with Let's Encrypt, opening only 80 and
 443. Agent endpoints are not served there; the controller API and database
 stay private. The lab host brings it up on every lab run.
 
-Unit tests: 103 controller tests, agent tests, portal type check and build.
+**Traffic rules and priorities** (ADR 0007). Customers create their own
+classes (queue priority, SLA, preferred path) and rules that put
+applications, addresses, VLANs, websites and DSCP marks into them, per site
+or everywhere. Each tunnel has a CAKE priority queue shaped under the link
+speed. Agents report flows from connection tracking; the controller
+recognises known applications and real-time or bulk behaviour and suggests
+a class, applied with one click or automatically for known applications. A
+new Traffic screen covers all three. Lab check `m9-traffic.sh`.
+
+Unit tests: 111 controller tests, agent tests, portal type check and build.

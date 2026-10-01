@@ -274,6 +274,8 @@ export interface CustomerSettings {
   storm_since: string | null;
   storm_by: string | null;
   storm_allow_bulk_sat: boolean;
+  /** Apply confident application detections as rules without asking. */
+  auto_prioritise: boolean;
   sites: StormSite[];
 }
 

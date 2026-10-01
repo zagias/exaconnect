@@ -25,30 +25,32 @@ LAB_SITES = [
     ("site-a", "site", "Kingston", "America/Jamaica", 65001, ["192.168.10.0/24"], 11, "1", 17.97, -76.79),
     ("site-b", "site", "Port of Spain", "America/Port_of_Spain", 65002, ["192.168.20.0/24"], 12, "2", 10.66, -61.51),
 ]
-# (path, carrier, underlay type, interface, second octet, commit Mbps, cost per Mbps, burst price)
+# (path, carrier, underlay type, interface, second octet, commit Mbps, cost per Mbps, burst price, speed Mbps)
 LAB_LINKS = [
-    ("carrier-a", "Carrier A", "fibre", "eth1", "11", 100, 4.0, 6.0),
-    ("carrier-b", "Carrier B", "broadband", "eth2", "12", 50, 2.5, 4.0),
-    ("sat", "Satellite", "leo", "eth3", "13", 20, 12.0, 20.0),
+    ("carrier-a", "Carrier A", "fibre", "eth1", "11", 100, 4.0, 6.0, 200),
+    ("carrier-b", "Carrier B", "broadband", "eth2", "12", 50, 2.5, 4.0, 100),
+    ("sat", "Satellite", "leo", "eth3", "13", 20, 12.0, 20.0, 50),
 ]
 # Bulk matches CS1 only: unmarked traffic is not classified and follows BGP.
 # Bulk's 5% loss threshold is its "own threshold" in demo step 2.
+# The three built-in classes carry the three queue priorities (ADR 0007).
 CLASSES = [
-    ("voice", "SIP/RTP, Teams and Zoom media", [46, 34], "udp:5060,10000-20000", 150, 30, 1, True),
-    ("business", "ERP, core banking, VDI", [26, 18], "tcp:443,3389,1521", 250, None, 2, True),
-    ("bulk", "Backups and updates", [8], "", None, None, 5, False),
+    ("voice", "SIP/RTP, Teams and Zoom media", [46, 34], "udp:5060,10000-20000", 150, 30, 1, True, "realtime"),
+    ("business", "ERP, core banking, VDI", [26, 18], "tcp:443,3389,1521", 250, None, 2, True, "interactive"),
+    ("bulk", "Backups and updates", [8], "", None, None, 5, False, "bulk"),
 ]
 
 
 def seed_lab(conn) -> dict:
     cid = inventory.ensure_customer(conn, CUSTOMER, ACTOR)
-    for ordinal, (name, desc, dscp, ports, lat, jit, loss, sat) in enumerate(CLASSES, 1):
+    for ordinal, (name, desc, dscp, ports, lat, jit, loss, sat, prio) in enumerate(CLASSES, 1):
         conn.execute(
-            """INSERT INTO app_classes (customer_id, name, description, dscp, ports, ordinal)
-               VALUES (%s, %s, %s, %s, %s, %s)
+            """INSERT INTO app_classes (customer_id, name, description, dscp, ports, ordinal, priority, builtin)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, true)
                ON CONFLICT (customer_id, name) DO UPDATE SET description = EXCLUDED.description,
-                 dscp = EXCLUDED.dscp, ports = EXCLUDED.ports, ordinal = EXCLUDED.ordinal""",
-            (cid, name, desc, dscp, ports, ordinal),
+                 dscp = EXCLUDED.dscp, ports = EXCLUDED.ports, ordinal = EXCLUDED.ordinal,
+                 priority = EXCLUDED.priority, builtin = true""",
+            (cid, name, desc, dscp, ports, ordinal, prio),
         )
         conn.execute(
             """INSERT INTO sla_policies (customer_id, class_name, max_latency_ms, max_jitter_ms, max_loss_pct,
@@ -75,7 +77,7 @@ def seed_lab(conn) -> dict:
             latitude=lat,
             longitude=lon,
         )
-        for path, carrier, utype, iface, second, commit, cost, burst in LAB_LINKS:
+        for path, carrier, utype, iface, second, commit, cost, burst, speed in LAB_LINKS:
             carrier_id = inventory.ensure_carrier(conn, carrier, ACTOR)
             inventory.upsert_link(
                 conn,
@@ -90,6 +92,7 @@ def seed_lab(conn) -> dict:
                 commit_mbps=commit,
                 cost_per_mbps=cost,
                 burst_price=burst,
+                shape_mbps=speed,
             )
         tokens[name], _ = inventory.issue_token(conn, sid, ACTOR, ttl_hours=2)
     desired.refresh(conn, cid)

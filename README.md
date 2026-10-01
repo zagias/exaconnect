@@ -1,7 +1,8 @@
 # ExaConnect
 
 ExaCarib's connectivity platform: a Go edge agent (WireGuard + FRR), a FastAPI
-controller, AI SLA routing, per-site Storm Mode, carrier metering and
+controller, AI SLA routing, customer traffic rules with priority queues and
+application detection, per-site Storm Mode, carrier metering and
 settlement, AI insights (hurricane watch, bill forecast, carrier anomalies,
 "Ask your network") and an ExaCarib-branded portal for customers, carriers
 and admins.
