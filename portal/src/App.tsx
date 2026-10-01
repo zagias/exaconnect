@@ -3,14 +3,9 @@ import { AuthGate, useAuth } from "./auth";
 import { CustomerProvider, StormBanner, StormSwitch } from "./customer";
 import Admin from "./pages/Admin";
 import Decisions from "./pages/Decisions";
+import Metering from "./pages/Metering";
 import Overview from "./pages/Overview";
-import Placeholder from "./pages/Placeholder";
 import { SiteList, SitePage } from "./pages/Sites";
-
-const later = [
-  { path: "/metering", label: "Metering", milestone: "M6", about: "Usage per link, the 95th percentile, the commit line and burst." },
-  { path: "/carrier", label: "Carrier view", milestone: "M6", about: "Read only: a carrier's own links and the exact samples used for settlement." },
-];
 
 export default function App() {
   return (
@@ -23,47 +18,68 @@ export default function App() {
 }
 
 function Layout() {
+  const { user } = useAuth();
+  const carrier = user?.role === "carrier";
+  const admin = user?.role === "admin";
   return (
     <>
       <header className="topbar">
         <div className="topbar-inner">
-          <NavLink to="/" aria-label="ExaCarib, overview">
+          <NavLink to="/" aria-label="ExaCarib, home">
             <img src="/brand/exacarib-wordmark-reversed.png" alt="ExaCarib" width={140} height={26} />
           </NavLink>
           <nav aria-label="Main">
-            <NavLink to="/" end>
-              Overview
-            </NavLink>
-            <NavLink to="/sites">Sites</NavLink>
-            <NavLink to="/decisions">Decisions</NavLink>
-            {later.map((s) => (
-              <NavLink key={s.path} to={s.path}>
-                {s.label}
+            {carrier ? (
+              <NavLink to="/" end>
+                Carrier view
               </NavLink>
-            ))}
-            <NavLink to="/admin">Admin</NavLink>
+            ) : (
+              <>
+                <NavLink to="/" end>
+                  Overview
+                </NavLink>
+                <NavLink to="/sites">Sites</NavLink>
+                <NavLink to="/decisions">Decisions</NavLink>
+                <NavLink to="/metering">Metering</NavLink>
+                {admin && <NavLink to="/carrier">Carrier view</NavLink>}
+                {admin && <NavLink to="/admin">Admin</NavLink>}
+              </>
+            )}
           </nav>
-          {/* Storm Mode switch: in the bar on every screen. */}
-          <StormSwitch />
+          {/* Storm Mode switch: in the bar on every screen (not for carriers). */}
+          {!carrier && <StormSwitch />}
         </div>
       </header>
-      <StormBanner />
+      {!carrier && <StormBanner />}
       <main className="page">
-        <>
-          <SignedInBar />
+        <SignedInBar />
+        {carrier ? (
+          <Routes>
+            <Route path="*" element={<Metering carrierView />} />
+          </Routes>
+        ) : (
           <Routes>
             <Route path="/" element={<Overview />} />
             <Route path="/sites" element={<SiteList />} />
             <Route path="/sites/:id" element={<SitePage />} />
             <Route path="/decisions" element={<Decisions />} />
-            <Route path="/admin" element={<Admin />} />
-            {later.map((s) => (
-              <Route key={s.path} path={s.path} element={<Placeholder title={s.label} milestone={s.milestone} about={s.about} />} />
-            ))}
+            <Route path="/metering" element={<Metering />} />
+            <Route path="/carrier" element={<Metering carrierView />} />
+            {admin && <Route path="/admin/*" element={<Admin />} />}
+            <Route path="*" element={<NotFound />} />
           </Routes>
-        </>
+        )}
       </main>
     </>
+  );
+}
+
+function NotFound() {
+  return (
+    <div className="page-head">
+      <h1>Page not found</h1>
+      <p className="muted">That address doesn't match a page in the portal.</p>
+    </div>
   );
 }
 

@@ -265,3 +265,62 @@ export interface CustomerSettings {
   storm_by: string | null;
   storm_allow_bulk_sat: boolean;
 }
+
+export interface LinkSettlement {
+  id: string;
+  customer: string;
+  site: string;
+  site_kind: "site" | "pop";
+  path: string;
+  path_label: string;
+  carrier: string;
+  underlay_type: string;
+  commit_mbps: number | string;
+  cost_per_mbps: number | string;
+  burst_price: number | string;
+  samples: number;
+  discarded: number;
+  p95_in_mbps: number | null;
+  p95_out_mbps: number | null;
+  billable_mbps: number | null;
+  commit_charge: string;
+  burst_mbps: string;
+  burst_charge: string;
+  total: string;
+}
+
+export interface UsagePoint {
+  bucket: string;
+  in_mbps: number;
+  out_mbps: number;
+  seconds: number;
+}
+
+export interface UsageRow {
+  site: string;
+  site_id: string;
+  path: string;
+  path_label: string;
+  carrier: string;
+  satellite: boolean;
+  commit_mbps: number;
+  gb: number;
+  over_commit_gb: number;
+  p95_mbps: number | null;
+  reasons: { time: string; class_name: string; reason: string }[];
+}
+
+/** Downloads a file from the API with the session token (a plain link can't send it). */
+export async function download(path: string, filename: string) {
+  const token = getToken();
+  const r = await fetch(`/api/v1${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!r.ok) throw new ApiError(r.status, `The controller answered ${r.status}.`);
+  const url = URL.createObjectURL(await r.blob());
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}

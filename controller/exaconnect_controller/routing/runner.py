@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import logging
+import time
 from dataclasses import asdict
 from typing import Any
 
@@ -240,7 +241,11 @@ def run_once(now: dt.datetime | None = None, forecaster: Forecaster | None = Non
 
 
 async def loop(interval_s: float) -> None:
-    """Background task started by the app. Errors are logged, never fatal."""
+    """Background task started by the app: a routing pass every interval and a
+    metering rollup about once a minute. Errors are logged, never fatal."""
+    from ..metering import rollup
+
+    last_rollup = 0.0
     while True:
         try:
             await asyncio.to_thread(run_once)
@@ -248,4 +253,12 @@ async def loop(interval_s: float) -> None:
             raise
         except Exception:
             log.exception("routing pass failed")
+        if time.monotonic() - last_rollup >= 60:
+            last_rollup = time.monotonic()
+            try:
+                await asyncio.to_thread(rollup.run_once)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                log.exception("metering rollup failed")
         await asyncio.sleep(interval_s)

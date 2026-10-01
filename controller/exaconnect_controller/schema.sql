@@ -213,6 +213,20 @@ CREATE TABLE IF NOT EXISTS decisions (
 CREATE INDEX IF NOT EXISTS decisions_customer_time ON decisions (customer_id, time DESC);
 CREATE INDEX IF NOT EXISTS decisions_site_time ON decisions (site_id, time DESC);
 
+-- Metering (CLAUDE.md §4.5): 5-minute average Mbps per link, the exact
+-- samples settlement uses. Rebuilt from iface_counters, so re-running is safe.
+CREATE TABLE IF NOT EXISTS usage_5m (
+  link_id      uuid NOT NULL REFERENCES links(id) ON DELETE CASCADE,
+  bucket       timestamptz NOT NULL,
+  customer_id  uuid NOT NULL,
+  carrier_id   uuid NOT NULL,
+  in_mbps      double precision NOT NULL,
+  out_mbps     double precision NOT NULL,
+  seconds      double precision NOT NULL,
+  PRIMARY KEY (link_id, bucket)
+);
+CREATE INDEX IF NOT EXISTS usage_5m_carrier ON usage_5m (carrier_id, bucket);
+
 -- Time series (TimescaleDB hypertables when the extension is available).
 CREATE TABLE IF NOT EXISTS path_metrics (
   time         timestamptz NOT NULL,

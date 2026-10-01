@@ -79,6 +79,7 @@ export function LineChart({
   to,
   unit,
   sla,
+  refs = [],
   title,
 }: {
   series: Series[];
@@ -86,10 +87,12 @@ export function LineChart({
   to: number;
   unit: string;
   sla?: number | null;
+  /** Extra horizontal reference lines, such as a 95th percentile or a commit. */
+  refs?: { value: number; label: string; kind: "p95" | "commit" }[];
   title: string;
 }) {
   const values = series.flatMap((s) => s.points.map((p) => p.v)).filter((v): v is number => v !== null);
-  const top = niceMax(Math.max(sla ?? 0, ...values, 0) * 1.1 || 1);
+  const top = niceMax(Math.max(sla ?? 0, ...refs.map((r) => r.value), ...values, 0) * 1.1 || 1);
   const x = (t: number) => PAD.l + ((t - from) / Math.max(1, to - from)) * (W - PAD.l - PAD.r);
   const y = (v: number) => PAD.t + (1 - v / top) * (H - PAD.t - PAD.b);
   const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => f * top);
@@ -122,6 +125,15 @@ export function LineChart({
             </text>
           </g>
         )}
+        {refs.map((r) => (
+          <g key={r.kind}>
+            <line className={`ref-line ref-${r.kind}`} x1={PAD.l} x2={W - PAD.r} y1={y(r.value)} y2={y(r.value)} />
+            <text className={`ref-label ref-${r.kind}`} x={r.kind === "commit" ? PAD.l + 4 : W - PAD.r} y={y(r.value) - 4} textAnchor={r.kind === "commit" ? "start" : "end"}>
+              {r.label} {formatTick(r.value)}
+              {unit}
+            </text>
+          </g>
+        ))}
         {series.map((s) => (
           <path key={s.key} className={`series series-${s.key}`} d={pathD(s.points, x, y)} />
         ))}
