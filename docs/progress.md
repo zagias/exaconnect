@@ -106,8 +106,45 @@ What runs, verified in the cloud session (no Docker or WireGuard there):
 * Portal pages checked in a browser against that controller, with sample
   probe rows written to the database.
 
-Not yet verified, needs the lab host: WireGuard and FRR actually coming up
-from desired state, BGP and BFD state, real probe numbers, and the controller
-outage test. The steps are in docs/lab.md §4.
+Verified on the lab host (2026-10-01, Dudley's VPS, run through the Remote
+Control session on his Mac):
+
+* `make controller-up`, `make demo-seed`: all three agents enrol over mTLS
+  and apply their desired state.
+* `make lab-routing`: WireGuard handshakes on all six tunnels, BGP 6/6 and
+  BFD 6/6 on the PoP (3/3 on each site), lan-a ↔ lan-b and lan-a → lan-pop.
+  Site-to-site traffic goes through the PoP over carrier A, the preferred path
+  (traceroute 192.168.10.1 → 100.64.1.1 → 100.64.1.12 → 192.168.20.10).
+* Controller outage: with the controller and proxy stopped, `make lab-routing`
+  still passes; the agents log "controller silent; holding the last good
+  state" after about 60 s and reconcile within seconds of the restart.
+* Probe telemetry lands in TimescaleDB (`path_metrics`, `iface_counters` and
+  `events` are hypertables). A steady 3% loss on carrier A for two minutes
+  measured 3.57% at site-a and 2.86% at site-b; other paths 0 to 0.7%.
+
+Fixed on the way:
+
+* The agent proxy returned 502: on the management network it carries the
+  alias `controller`, so nginx proxied to itself. It now reaches the API as
+  `controller-api` and resolves it per request.
+* BFD state was missing from telemetry: vtysh prints a warning to stderr on
+  every call and the agent parsed stdout and stderr together. The agent now
+  parses stdout only; the node image ships an empty `vtysh.conf`.
+* The lab mounted the agent binary as a single file, so a rebuild never
+  reached running nodes. It now mounts `bin/lab`; `make agents-upgrade`
+  rebuilds and restarts the agents.
+
+Findings for M4:
+
+* At one probe a second, loss resolution is coarse: a 10 s window moves in 10%
+  steps and a minute in 1.7% steps, so a 1% voice SLA can only be judged over
+  minutes. The forecaster will work on 2 to 5 minute trends as the brief says;
+  if that is too slow for demo step 2, the proposal is to raise the probe rate
+  (the desired state already carries `interval_ms` per path).
+* On this VPS, jitter reads 9 to 20 ms against 2 to 10 ms of netem jitter, and
+  ping through the tunnels shows 140 to 195 ms spikes that the raw underlay
+  does not (load average 3 on 4 vCPU). It looks like host noise, likely CPU
+  steal; being checked. M4 scoring should use robust statistics so a single
+  spike does not move a class.
 
 Next: M4, steering and AI SLA routing.
