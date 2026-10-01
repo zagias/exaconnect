@@ -6,7 +6,8 @@
 services:
   web:
     build:
-      context: ../..
+      # Relative paths resolve from the first compose file's directory (deploy/).
+      context: ..
       dockerfile: deploy/public/Dockerfile
     environment:
       EXA_PUBLIC_HOST: ${EXA_PUBLIC_HOST:?set EXA_PUBLIC_HOST}

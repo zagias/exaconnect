@@ -10,10 +10,12 @@
 source "$(dirname "$0")/../lib.sh"
 lab/faults/restore.sh >/dev/null
 
-echo "-- traffic: 20 Mbit/s bulk (CS1) from lan-a to lan-b for 11 minutes"
+echo "-- traffic: 20 Mbit/s bulk (CS1, TCP) from lan-a to lan-b for 11 minutes"
+docker exec "$(node lan-b)" pkill iperf3 2>/dev/null
+docker exec "$(node lan-a)" pkill iperf3 2>/dev/null
 docker exec -d "$(node lan-b)" iperf3 -s -1 -p 5201
 sleep 1
-docker exec -d "$(node lan-a)" sh -c 'iperf3 -c 192.168.20.10 -p 5201 -u -b 20M -S 32 -t 660 > /tmp/iperf-bulk.txt 2>&1'
+docker exec -d "$(node lan-a)" sh -c 'iperf3 -c 192.168.20.10 -p 5201 -b 20M -S 32 -t 660 > /tmp/iperf-bulk.txt 2>&1'
 start=$(date -u +%FT%TZ)
 bulk_path=$(path_of site-a 0x103 192.168.20.10)
 note "bulk leaves site-a on ${bulk_path:-?}"

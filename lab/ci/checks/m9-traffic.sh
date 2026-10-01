@@ -19,9 +19,10 @@ for t in wg-a wg-b; do
 done
 
 echo "-- application detection: Zoom-like traffic on UDP 8801 for 4 minutes"
-docker exec -d "$(node lan-b)" iperf3 -s -1 -p 8801
-sleep 1
-docker exec -d "$(node lan-a)" sh -c "iperf3 -c $DST -p 8801 -u -l 160 -b 64K -t 240 > /tmp/iperf-zoom.txt 2>&1"
+# 160-byte datagrams from one socket, about 50 a second (iperf3's UDP mode
+# stalled in this lab, so plain bash).
+docker exec -d "$(node lan-b)" sh -c 'nc -u -l -p 8801 > /dev/null 2>&1'
+docker exec -d "$(node lan-a)" bash -c "exec 3>/dev/udp/$DST/8801; for i in \$(seq 12000); do printf '%0160d' 0 >&3 2>/dev/null; sleep 0.02; done"
 reported() { [[ $(sql "SELECT count(*) FROM flow_stats WHERE dport = 8801 AND time > now() - interval '5 minutes'") -gt 0 ]]; }
 if wait_for 200 reported; then ok "site-a reported its flows to UDP 8801"; else bad "no flow telemetry for UDP 8801"; fi
 detected() {
@@ -51,7 +52,6 @@ if [[ -n ${det:-} ]]; then
   fi
   api DELETE "/customers/$cid/rules/$rule" >/dev/null
 fi
-note "iperf: $(docker exec "$(node lan-a)" sh -c 'tail -n 3 /tmp/iperf-zoom.txt' 2>&1 | tr '\n' ' ' | cut -c1-200)"
 
 echo "-- a customer rule: a subnet and port into business"
 body=$(jq -n '{name: "Lab ERP", class_name: "business", dst_subnets: ["192.168.20.0/24"], ports: "tcp:5201"}')
