@@ -30,3 +30,16 @@ terrestrial paths fail.
 Outside Storm Mode, voice survives a double terrestrial failure through BGP,
 a little slower to converge than steering. Storm Mode makes the satellite an
 explicit, pre-warmed backup and lets the agent fail over to it locally.
+
+## Revision, 2026-10-01: Storm Mode is per site
+
+The brief has one Storm Mode switch per customer. Dudley decided it should be
+per site: a customer with branches in Jamaica and Trinidad should only switch
+the sites in a storm's path. Each site now has its own switch (`POST
+/api/v1/sites/{id}/storm`), and only that site's satellite joins its steering
+lists, gets the faster satellite probes and the Storm Mode hold time and
+horizon. The PoP sends return traffic to a site over satellite only while
+that site is in Storm Mode. `POST /customers/{id}/storm` still switches every
+site (or the `site_ids` given) at once, and the customer row keeps a summary
+(on while any site is on). Whether bulk may use satellite stays a customer
+setting for admins.

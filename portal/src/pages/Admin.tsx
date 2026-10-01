@@ -1,20 +1,98 @@
-import { useApi, type NodeRow } from "../api";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { NavLink, Navigate, Route, Routes } from "react-router-dom";
+import { api, useApi, type NodeRow } from "../api";
+import { useAuth } from "../auth";
 import { ErrorNote, Eyebrow, StatusPill, ago } from "../components";
+import { useCustomer, who } from "../customer";
 
-// M2 view: enrolled agents and the config version each has applied. Inventory
-// editing and enrolment tokens are in the API today (/api/v1/docs) and come to
-// this screen in M7.
+// Admin screens (CLAUDE.md §4.6, screen 6): agents, customers, sites and links,
+// enrolment tokens, classes and SLA policies, users, settings and the audit log.
 export default function Admin() {
-  const { data, error } = useApi<NodeRow[]>("/nodes", 10_000);
   return (
     <>
       <div className="page-head">
         <Eyebrow>Admin</Eyebrow>
-        <h1>Agents</h1>
-        <p className="muted">Each agent polls for its desired state every 10 seconds and reports the version it applied.</p>
-        <ErrorNote error={error} />
+        <h1>Administration</h1>
       </div>
-      <section className="card">
+      <nav className="tabs" aria-label="Admin sections">
+        <NavLink to="/admin/agents">Agents</NavLink>
+        <NavLink to="/admin/sites">Sites and links</NavLink>
+        <NavLink to="/admin/classes">Classes and SLA</NavLink>
+        <NavLink to="/admin/users">Users</NavLink>
+        <NavLink to="/admin/settings">Settings</NavLink>
+        <NavLink to="/admin/audit">Audit log</NavLink>
+      </nav>
+      <Routes>
+        <Route index element={<Navigate to="agents" replace />} />
+        <Route path="agents" element={<Agents />} />
+        <Route path="sites" element={<SitesAdmin />} />
+        <Route path="classes" element={<ClassesAdmin />} />
+        <Route path="users" element={<UsersAdmin />} />
+        <Route path="settings" element={<SettingsAdmin />} />
+        <Route path="audit" element={<AuditLog />} />
+      </Routes>
+    </>
+  );
+}
+
+/** Runs a form action with a busy flag and an error message. */
+function useAction() {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const run = async (fn: () => Promise<void>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await fn();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return { busy, error, run, setError };
+}
+
+function Card({ title, children, note }: { title: string; children: ReactNode; note?: ReactNode }) {
+  return (
+    <section className="card" style={{ marginBottom: 24 }}>
+      <div className="card-head">
+        <h2>{title}</h2>
+        {note}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/** A value shown once (a token or password), with a copy button. */
+function Secret({ label, value, children }: { label: string; value: string; children?: ReactNode }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () =>
+    navigator.clipboard
+      ?.writeText(value)
+      .then(() => setCopied(true))
+      .catch(() => {});
+  return (
+    <div className="secret" role="status">
+      <div className="small muted">{label}. It is shown once; copy it now.</div>
+      <code>{value}</code>{" "}
+      <button type="button" className="button secondary small" onClick={copy}>
+        {copied ? "Copied" : "Copy"}
+      </button>
+      {children}
+    </div>
+  );
+}
+
+// ---- Agents ----
+
+function Agents() {
+  const { data, error } = useApi<NodeRow[]>("/nodes", 10_000);
+  return (
+    <Card title="Agents" note={<span className="muted small">Each agent polls for its desired state every 10 seconds.</span>}>
+      <ErrorNote error={error} />
+      <div className="table-wrap">
         <table className="paths">
           <thead>
             <tr>
@@ -49,13 +127,823 @@ export default function Admin() {
             {data?.length === 0 && (
               <tr>
                 <td colSpan={5} className="muted">
-                  No agents yet. Run make demo-seed on the lab host.
+                  No agents yet. Add a site, issue an enrolment token and install the agent.
                 </td>
               </tr>
             )}
           </tbody>
         </table>
-      </section>
+      </div>
+    </Card>
+  );
+}
+
+// ---- Customers, sites, links and enrolment tokens ----
+
+interface LinkRow {
+  id: string;
+  path: "carrier-a" | "carrier-b" | "sat";
+  carrier: string;
+  underlay_type: string;
+  underlay_interface: string;
+  underlay_ip: string | null;
+  commit_mbps: string | number;
+  cost_per_mbps: string | number;
+  burst_price: string | number;
+}
+
+interface SiteRow {
+  id: string;
+  name: string;
+  kind: "site" | "pop";
+  location: string;
+  timezone: string;
+  asn: number;
+  lan_prefixes: string[];
+  overlay_host: number;
+  latitude: number | null;
+  longitude: number | null;
+  node: string | null;
+  last_seen: string | null;
+  links: LinkRow[];
+}
+
+function SitesAdmin() {
+  const { current, reload: reloadCustomers } = useCustomer();
+  const inv = useApi<{ sites: SiteRow[] }>(current ? `/inventory?customer_id=${current.id}` : null, 0);
+  const [editing, setEditing] = useState<SiteRow | "new" | null>(null);
+  const [linkFor, setLinkFor] = useState<{ site: SiteRow; link: LinkRow | null } | null>(null);
+  const [token, setToken] = useState<{ site: string; token: string; expires_at: string; ca_fingerprint: string; agent_url: string } | null>(null);
+  const act = useAction();
+
+  const issue = (s: SiteRow) =>
+    act.run(async () => {
+      const t = await api<{ token: string; expires_at: string; ca_fingerprint: string; agent_url: string }>("/enrolment-tokens", {
+        method: "POST",
+        body: JSON.stringify({ site_id: s.id, ttl_hours: 24 }),
+      });
+      setToken({ site: s.name, ...t });
+    });
+
+  return (
+    <>
+      <NewCustomer onDone={reloadCustomers} />
+      {current && (
+        <Card
+          title={`Sites for ${current.name}`}
+          note={
+            <button className="button small" onClick={() => setEditing("new")}>
+              Add a site
+            </button>
+          }
+        >
+          <ErrorNote error={inv.error ?? act.error} />
+          {token && (
+            <Secret label={`Enrolment token for ${token.site}, valid until ${new Date(token.expires_at).toLocaleString()}`} value={token.token}>
+              <p className="small muted" style={{ marginBottom: 0 }}>
+                Install with the controller URL <span className="mono">{token.agent_url}</span> and CA fingerprint{" "}
+                <span className="mono">{token.ca_fingerprint}</span>. The agent generates its own WireGuard keys and
+                sends only the public key.
+              </p>
+            </Secret>
+          )}
+          {editing && (
+            <SiteForm
+              customerId={current.id}
+              site={editing === "new" ? null : editing}
+              onDone={() => {
+                setEditing(null);
+                inv.reload();
+              }}
+            />
+          )}
+          {linkFor && (
+            <LinkForm
+              site={linkFor.site}
+              link={linkFor.link}
+              onDone={() => {
+                setLinkFor(null);
+                inv.reload();
+              }}
+            />
+          )}
+          <div className="table-wrap">
+            <table className="paths">
+              <thead>
+                <tr>
+                  <th scope="col">Site</th>
+                  <th scope="col">Agent</th>
+                  <th scope="col">Links</th>
+                  <th scope="col">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(inv.data?.sites ?? []).map((s) => (
+                  <tr key={s.id}>
+                    <td>
+                      <strong className="mono">{s.name}</strong> {s.kind === "pop" && <span className="tag">PoP</span>}
+                      <div className="small muted">
+                        {s.location || "No location"} · AS{s.asn} · {s.lan_prefixes.join(", ") || "no LAN prefixes"}
+                      </div>
+                    </td>
+                    <td>{s.node ? <span title={`Last seen ${ago(s.last_seen)}`}>{s.node}</span> : <span className="muted">Not enrolled</span>}</td>
+                    <td>
+                      {s.links.map((l) => (
+                        <div key={l.id} className="small">
+                          <button className="link" onClick={() => setLinkFor({ site: s, link: l })}>
+                            {l.path}
+                          </button>{" "}
+                          {l.carrier}, {l.underlay_type}, <span className="mono">{l.underlay_interface}</span>, commit{" "}
+                          <span className="mono">{Number(l.commit_mbps)}</span> Mbps
+                        </div>
+                      ))}
+                      {s.links.length === 0 && <span className="muted small">No links</span>}
+                    </td>
+                    <td>
+                      <div className="form-actions">
+                        <button className="button secondary small" onClick={() => setEditing(s)}>
+                          Edit
+                        </button>{" "}
+                        <button className="button secondary small" onClick={() => setLinkFor({ site: s, link: null })}>
+                          Add link
+                        </button>{" "}
+                        <button className="button secondary small" disabled={act.busy} onClick={() => issue(s)}>
+                          Enrolment token
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
     </>
+  );
+}
+
+function NewCustomer({ onDone }: { onDone: () => void }) {
+  const [name, setName] = useState("");
+  const act = useAction();
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    act.run(async () => {
+      await api("/customers", { method: "POST", body: JSON.stringify({ name }) });
+      setName("");
+      onDone();
+    });
+  };
+  return (
+    <Card title="Customers" note={<span className="muted small">Pick the customer to work on at the top of the page.</span>}>
+      <form className="form" onSubmit={submit}>
+        <label>
+          New customer organisation
+          <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={120} />
+        </label>
+        <div className="actions">
+          <button className="button" disabled={act.busy}>
+            Add customer
+          </button>
+        </div>
+      </form>
+      <ErrorNote error={act.error} />
+    </Card>
+  );
+}
+
+function SiteForm({ customerId, site, onDone }: { customerId: string; site: SiteRow | null; onDone: () => void }) {
+  const [f, setF] = useState({
+    name: site?.name ?? "",
+    kind: site?.kind ?? "site",
+    location: site?.location ?? "",
+    timezone: site?.timezone ?? "America/Port_of_Spain",
+    asn: String(site?.asn ?? ""),
+    lan_prefixes: site?.lan_prefixes.join(", ") ?? "",
+    overlay_host: String(site?.overlay_host ?? ""),
+    latitude: site?.latitude == null ? "" : String(site.latitude),
+    longitude: site?.longitude == null ? "" : String(site.longitude),
+  });
+  const act = useAction();
+  const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    act.run(async () => {
+      await api("/sites", {
+        method: "POST",
+        body: JSON.stringify({
+          customer_id: customerId,
+          name: f.name,
+          kind: f.kind,
+          location: f.location,
+          timezone: f.timezone,
+          asn: Number(f.asn),
+          lan_prefixes: f.lan_prefixes
+            .split(",")
+            .map((p) => p.trim())
+            .filter(Boolean),
+          overlay_host: Number(f.overlay_host),
+          latitude: f.latitude.trim() === "" ? null : Number(f.latitude),
+          longitude: f.longitude.trim() === "" ? null : Number(f.longitude),
+        }),
+      });
+      onDone();
+    });
+  };
+  return (
+    <form className="form card-inset" onSubmit={submit} style={{ marginBottom: 16 }}>
+      <h3 className="wide">{site ? `Edit ${site.name}` : "New site"}</h3>
+      <label>
+        Name
+        <input value={f.name} onChange={set("name")} required pattern="[a-z0-9][a-z0-9-]{0,30}" readOnly={!!site} title="Lower case letters, digits and dashes" />
+      </label>
+      <label>
+        Kind
+        <select value={f.kind} onChange={set("kind")}>
+          <option value="site">Customer site</option>
+          <option value="pop">PoP</option>
+        </select>
+      </label>
+      <label>
+        Location
+        <input value={f.location} onChange={set("location")} maxLength={120} />
+      </label>
+      <label>
+        Time zone
+        <input value={f.timezone} onChange={set("timezone")} />
+      </label>
+      <label>
+        BGP ASN
+        <input value={f.asn} onChange={set("asn")} required inputMode="numeric" pattern="[0-9]+" />
+      </label>
+      <label>
+        Overlay host number (1 to 254)
+        <input value={f.overlay_host} onChange={set("overlay_host")} required inputMode="numeric" pattern="[0-9]+" />
+      </label>
+      <label>
+        Latitude (north +)
+        <input value={f.latitude} onChange={set("latitude")} inputMode="decimal" placeholder="17.97" />
+      </label>
+      <label>
+        Longitude (east +)
+        <input value={f.longitude} onChange={set("longitude")} inputMode="decimal" placeholder="-76.79" />
+      </label>
+      <p className="small muted wide" style={{ margin: 0 }}>
+        Coordinates let the hurricane watch warn this site when a storm is forecast to pass close.
+      </p>
+      <label className="wide">
+        LAN prefixes, comma separated
+        <input value={f.lan_prefixes} onChange={set("lan_prefixes")} placeholder="192.168.10.0/24" />
+      </label>
+      <div className="actions wide">
+        <button className="button" disabled={act.busy}>
+          Save site
+        </button>
+        <button type="button" className="button secondary" onClick={onDone}>
+          Cancel
+        </button>
+        <ErrorNote error={act.error} />
+      </div>
+    </form>
+  );
+}
+
+function LinkForm({ site, link, onDone }: { site: SiteRow; link: LinkRow | null; onDone: () => void }) {
+  const [f, setF] = useState({
+    path: link?.path ?? "carrier-a",
+    carrier: link?.carrier ?? "",
+    underlay_type: link?.underlay_type ?? "fibre",
+    underlay_interface: link?.underlay_interface ?? "",
+    underlay_ip: link?.underlay_ip ?? "",
+    commit_mbps: String(link ? Number(link.commit_mbps) : ""),
+    cost_per_mbps: String(link ? Number(link.cost_per_mbps) : ""),
+    burst_price: String(link ? Number(link.burst_price) : ""),
+  });
+  const act = useAction();
+  const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    act.run(async () => {
+      await api(`/sites/${site.id}/links`, {
+        method: "POST",
+        body: JSON.stringify({
+          ...f,
+          underlay_ip: f.underlay_ip || null,
+          commit_mbps: Number(f.commit_mbps || 0),
+          cost_per_mbps: Number(f.cost_per_mbps || 0),
+          burst_price: Number(f.burst_price || 0),
+        }),
+      });
+      onDone();
+    });
+  };
+  return (
+    <form className="form card-inset" onSubmit={submit} style={{ marginBottom: 16 }}>
+      <h3 className="wide">
+        {link ? "Edit" : "New"} link at {site.name}
+      </h3>
+      <label>
+        Path
+        <select value={f.path} onChange={set("path")} disabled={!!link}>
+          <option value="carrier-a">carrier-a</option>
+          <option value="carrier-b">carrier-b</option>
+          <option value="sat">sat (satellite)</option>
+        </select>
+      </label>
+      <label>
+        Carrier
+        <input value={f.carrier} onChange={set("carrier")} required maxLength={120} />
+      </label>
+      <label>
+        Underlay
+        <select value={f.underlay_type} onChange={set("underlay_type")}>
+          {["fibre", "broadband", "lte", "leo", "geo"].map((t) => (
+            <option key={t} value={t}>
+              {t === "leo" ? "LEO satellite" : t === "geo" ? "GEO satellite" : t === "lte" ? "LTE" : t}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Interface
+        <input value={f.underlay_interface} onChange={set("underlay_interface")} required pattern="[a-zA-Z0-9._-]{1,15}" />
+      </label>
+      <label>
+        Underlay address (optional)
+        <input value={f.underlay_ip} onChange={set("underlay_ip")} placeholder="10.11.1.2/24" />
+      </label>
+      <label>
+        Commit, Mbps
+        <input value={f.commit_mbps} onChange={set("commit_mbps")} inputMode="decimal" />
+      </label>
+      <label>
+        Cost per Mbps
+        <input value={f.cost_per_mbps} onChange={set("cost_per_mbps")} inputMode="decimal" />
+      </label>
+      <label>
+        Burst price per Mbps
+        <input value={f.burst_price} onChange={set("burst_price")} inputMode="decimal" />
+      </label>
+      <div className="actions wide">
+        <button className="button" disabled={act.busy}>
+          Save link
+        </button>
+        <button type="button" className="button secondary" onClick={onDone}>
+          Cancel
+        </button>
+        <ErrorNote error={act.error} />
+      </div>
+    </form>
+  );
+}
+
+// ---- Application classes and SLA policies ----
+
+interface ClassRow {
+  customer_id: string;
+  name: string;
+  description: string;
+  dscp: number[];
+  ports: string;
+  subnets: string[];
+  ordinal: number;
+  max_latency_ms: string | number | null;
+  max_jitter_ms: string | number | null;
+  max_loss_pct: string | number | null;
+  allow_satellite: boolean;
+}
+
+function ClassesAdmin() {
+  const { current } = useCustomer();
+  const list = useApi<ClassRow[]>(current ? `/classes?customer_id=${current.id}` : null, 0);
+  const [editing, setEditing] = useState<ClassRow | "new" | null>(null);
+  const act = useAction();
+  if (!current) return null;
+  const remove = (c: ClassRow) => {
+    if (!window.confirm(`Delete the ${c.name} class? Its traffic falls back to normal routing.`)) return;
+    act.run(async () => {
+      await api(`/customers/${current.id}/classes/${c.name}`, { method: "DELETE" });
+      list.reload();
+    });
+  };
+  const val = (v: string | number | null, unit: string) => (v == null ? "–" : `${Number(v)} ${unit}`);
+  return (
+    <Card
+      title={`Application classes for ${current.name}`}
+      note={
+        <button className="button small" onClick={() => setEditing("new")}>
+          Add a class
+        </button>
+      }
+    >
+      <p className="muted small">
+        Traffic is matched on DSCP, then ports and subnets. Agents get changes on their next poll. Lower order is matched
+        first.
+      </p>
+      <ErrorNote error={list.error ?? act.error} />
+      {editing && (
+        <ClassForm
+          customerId={current.id}
+          cls={editing === "new" ? null : editing}
+          onDone={() => {
+            setEditing(null);
+            list.reload();
+          }}
+        />
+      )}
+      <div className="table-wrap">
+        <table className="paths">
+          <thead>
+            <tr>
+              <th scope="col">Class</th>
+              <th scope="col">Match</th>
+              <th scope="col">Latency</th>
+              <th scope="col">Jitter</th>
+              <th scope="col">Loss</th>
+              <th scope="col">Satellite</th>
+              <th scope="col">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(list.data ?? []).map((c) => (
+              <tr key={c.name}>
+                <td>
+                  <strong className="mono">{c.name}</strong>
+                  <div className="small muted">{c.description}</div>
+                </td>
+                <td className="small">
+                  {c.dscp.length > 0 && <div>DSCP {c.dscp.join(", ")}</div>}
+                  {c.ports && <div className="mono">{c.ports}</div>}
+                  {c.subnets.length > 0 && <div className="mono">{c.subnets.join(", ")}</div>}
+                </td>
+                <td className="mono">{val(c.max_latency_ms, "ms")}</td>
+                <td className="mono">{val(c.max_jitter_ms, "ms")}</td>
+                <td className="mono">{val(c.max_loss_pct, "%")}</td>
+                <td>{c.allow_satellite ? "In Storm Mode" : "Never"}</td>
+                <td>
+                  <button className="button secondary small" onClick={() => setEditing(c)}>
+                    Edit
+                  </button>{" "}
+                  <button className="button secondary small" onClick={() => remove(c)}>
+                    Delete
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
+function ClassForm({ customerId, cls, onDone }: { customerId: string; cls: ClassRow | null; onDone: () => void }) {
+  const num = (v: string | number | null | undefined) => (v == null ? "" : String(Number(v)));
+  const [f, setF] = useState({
+    name: cls?.name ?? "",
+    description: cls?.description ?? "",
+    dscp: cls?.dscp.join(", ") ?? "",
+    ports: cls?.ports ?? "",
+    subnets: cls?.subnets.join(", ") ?? "",
+    ordinal: String(cls?.ordinal ?? 10),
+    latency: num(cls?.max_latency_ms),
+    jitter: num(cls?.max_jitter_ms),
+    loss: num(cls?.max_loss_pct),
+    allow_satellite: cls?.allow_satellite ?? true,
+  });
+  const act = useAction();
+  const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
+  const list = (s: string) =>
+    s
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean);
+  const opt = (s: string) => (s.trim() === "" ? null : Number(s));
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    act.run(async () => {
+      await api(`/customers/${customerId}/classes/${encodeURIComponent(f.name)}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          description: f.description,
+          dscp: list(f.dscp).map(Number),
+          ports: f.ports.trim(),
+          subnets: list(f.subnets),
+          ordinal: Number(f.ordinal),
+          sla: { max_latency_ms: opt(f.latency), max_jitter_ms: opt(f.jitter), max_loss_pct: opt(f.loss), allow_satellite: f.allow_satellite },
+        }),
+      });
+      onDone();
+    });
+  };
+  return (
+    <form className="form card-inset" onSubmit={submit} style={{ marginBottom: 16 }}>
+      <h3 className="wide">{cls ? `Edit ${cls.name}` : "New class"}</h3>
+      <label>
+        Name
+        <input value={f.name} onChange={set("name")} required pattern="[a-z0-9][a-z0-9-]{0,19}" readOnly={!!cls} title="Lower case letters, digits and dashes" />
+      </label>
+      <label>
+        Description
+        <input value={f.description} onChange={set("description")} maxLength={200} />
+      </label>
+      <label>
+        Order
+        <input value={f.ordinal} onChange={set("ordinal")} inputMode="numeric" pattern="[0-9]+" />
+      </label>
+      <label>
+        DSCP values
+        <input value={f.dscp} onChange={set("dscp")} placeholder="46, 34" />
+      </label>
+      <label>
+        Ports
+        <input value={f.ports} onChange={set("ports")} placeholder="udp:5060, udp:10000-20000" />
+      </label>
+      <label>
+        Subnets
+        <input value={f.subnets} onChange={set("subnets")} placeholder="52.112.0.0/14" />
+      </label>
+      <label>
+        Latency limit, ms
+        <input value={f.latency} onChange={set("latency")} inputMode="decimal" placeholder="Best effort" />
+      </label>
+      <label>
+        Jitter limit, ms
+        <input value={f.jitter} onChange={set("jitter")} inputMode="decimal" placeholder="Best effort" />
+      </label>
+      <label>
+        Loss limit, %
+        <input value={f.loss} onChange={set("loss")} inputMode="decimal" placeholder="Best effort" />
+      </label>
+      <label className="check wide">
+        <input type="checkbox" checked={f.allow_satellite} onChange={(e) => setF({ ...f, allow_satellite: e.target.checked })} />
+        May use satellite in Storm Mode when both terrestrial paths fail
+      </label>
+      <div className="actions wide">
+        <button className="button" disabled={act.busy}>
+          Save class
+        </button>
+        <button type="button" className="button secondary" onClick={onDone}>
+          Cancel
+        </button>
+        <ErrorNote error={act.error} />
+      </div>
+    </form>
+  );
+}
+
+// ---- Users ----
+
+interface UserRow {
+  id: string;
+  email: string;
+  role: "admin" | "customer" | "carrier";
+  customer: string | null;
+  carrier: string | null;
+  created_at: string;
+  last_login: string | null;
+}
+
+function UsersAdmin() {
+  const { user } = useAuth();
+  const { customers } = useCustomer();
+  const users = useApi<UserRow[]>("/users", 0);
+  const carriers = useApi<{ id: string; name: string }[]>("/carriers", 0);
+  const [f, setF] = useState({ email: "", role: "customer", customer_id: "", carrier_id: "" });
+  const [shown, setShown] = useState<{ email: string; password: string } | null>(null);
+  const act = useAction();
+
+  useEffect(() => {
+    if (!f.customer_id && customers[0]) setF((x) => ({ ...x, customer_id: customers[0].id }));
+    if (!f.carrier_id && carriers.data?.[0]) setF((x) => ({ ...x, carrier_id: carriers.data![0].id }));
+  }, [customers, carriers.data, f.customer_id, f.carrier_id]);
+
+  const create = (e: FormEvent) => {
+    e.preventDefault();
+    act.run(async () => {
+      const out = await api<{ email: string; password: string }>("/users", { method: "POST", body: JSON.stringify(f) });
+      setShown(out);
+      setF({ ...f, email: "" });
+      users.reload();
+    });
+  };
+  const reset = (u: UserRow) => {
+    if (!window.confirm(`Reset the password for ${u.email}? Their sessions are signed out.`)) return;
+    act.run(async () => {
+      setShown(await api<{ email: string; password: string }>(`/users/${u.id}/reset-password`, { method: "POST" }));
+    });
+  };
+  const remove = (u: UserRow) => {
+    if (!window.confirm(`Delete the account ${u.email}?`)) return;
+    act.run(async () => {
+      await api(`/users/${u.id}`, { method: "DELETE" });
+      users.reload();
+    });
+  };
+
+  return (
+    <Card title="Users">
+      <p className="muted small">
+        Admins see everything. Customer users see their own organisation. Carrier users see only their own links on a
+        read-only metering page.
+      </p>
+      <form className="form" onSubmit={create}>
+        <label>
+          Email
+          <input type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} required />
+        </label>
+        <label>
+          Role
+          <select value={f.role} onChange={(e) => setF({ ...f, role: e.target.value })}>
+            <option value="customer">Customer</option>
+            <option value="carrier">Carrier (read only)</option>
+            <option value="admin">Admin</option>
+          </select>
+        </label>
+        {f.role === "customer" && (
+          <label>
+            Customer
+            <select value={f.customer_id} onChange={(e) => setF({ ...f, customer_id: e.target.value })}>
+              {customers.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {f.role === "carrier" && (
+          <label>
+            Carrier
+            <select value={f.carrier_id} onChange={(e) => setF({ ...f, carrier_id: e.target.value })}>
+              {(carriers.data ?? []).map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <div className="actions">
+          <button className="button" disabled={act.busy}>
+            Add user
+          </button>
+        </div>
+      </form>
+      <ErrorNote error={users.error ?? act.error} />
+      {shown && <Secret label={`One-time password for ${shown.email}. Ask them to change it after signing in`} value={shown.password} />}
+      <div className="table-wrap">
+        <table className="paths">
+          <thead>
+            <tr>
+              <th scope="col">Email</th>
+              <th scope="col">Role</th>
+              <th scope="col">For</th>
+              <th scope="col">Last sign-in</th>
+              <th scope="col">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(users.data ?? []).map((u) => (
+              <tr key={u.id}>
+                <td>{u.email}</td>
+                <td>{u.role}</td>
+                <td>{u.customer ?? u.carrier ?? "All"}</td>
+                <td>{u.last_login ? ago(u.last_login) : "Never"}</td>
+                <td>
+                  <button className="button secondary small" onClick={() => reset(u)}>
+                    Reset password
+                  </button>{" "}
+                  {u.email !== user?.email && (
+                    <button className="button secondary small" onClick={() => remove(u)}>
+                      Delete
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
+// ---- Customer settings ----
+
+function SettingsAdmin() {
+  const { current, reload } = useCustomer();
+  const act = useAction();
+  if (!current) return null;
+  const patch = (body: object, question: string) => {
+    if (!window.confirm(question)) return;
+    act.run(async () => {
+      await api(`/customers/${current.id}/settings`, { method: "PATCH", body: JSON.stringify(body) });
+      reload();
+    });
+  };
+  return (
+    <Card title={`Settings for ${current.name}`}>
+      <ErrorNote error={act.error} />
+      <div className="form">
+        <div className="wide">
+          <h3>Shadow mode {current.shadow_mode ? <StatusPill health="warn">On</StatusPill> : <StatusPill health="ok">Off</StatusPill>}</h3>
+          <p className="muted small">
+            In shadow mode the routing engine logs every decision it would make, marked “Shadow”, but traffic stays on the
+            default paths. BFD failover on the agents still works. Use it to build trust before letting the engine act.
+          </p>
+          <button
+            className="button secondary"
+            disabled={act.busy}
+            onClick={() =>
+              patch(
+                { shadow_mode: !current.shadow_mode },
+                current.shadow_mode
+                  ? "Switch shadow mode off? The engine starts moving traffic."
+                  : "Switch shadow mode on? Every class returns to its default path and the engine only logs.",
+              )
+            }
+          >
+            {current.shadow_mode ? "Switch shadow mode off" : "Switch shadow mode on"}
+          </button>
+        </div>
+        <div className="wide">
+          <h3>Bulk traffic on satellite in Storm Mode</h3>
+          <p className="muted small">
+            By default bulk traffic pauses rather than use satellite when both terrestrial paths fail. Currently:{" "}
+            <strong>{current.storm_allow_bulk_sat ? "allowed" : "paused"}</strong>.
+          </p>
+          <button
+            className="button secondary"
+            disabled={act.busy}
+            onClick={() =>
+              patch(
+                { storm_allow_bulk_sat: !current.storm_allow_bulk_sat },
+                current.storm_allow_bulk_sat ? "Keep bulk off satellite?" : "Allow bulk traffic on satellite in Storm Mode? Satellite capacity costs more.",
+              )
+            }
+          >
+            {current.storm_allow_bulk_sat ? "Keep bulk off satellite" : "Allow bulk on satellite"}
+          </button>
+        </div>
+        <div className="wide">
+          <h3>Storm Mode</h3>
+          <p className="muted small">Storm Mode is set per site, from the switch at the top of the page or on each site's page.</p>
+          <ul className="small">
+            {current.sites.map((s) => (
+              <li key={s.id}>
+                {s.name}:{" "}
+                {s.storm_mode
+                  ? `on since ${new Date(s.storm_since ?? "").toLocaleString()}, switched on by ${who(s.storm_by)}`
+                  : "off"}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+// ---- Audit log ----
+
+interface AuditRow {
+  at: string;
+  actor: string;
+  action: string;
+  target: string | null;
+  detail: Record<string, unknown> | null;
+}
+
+function AuditLog() {
+  const { data, error } = useApi<AuditRow[]>("/audit?limit=300", 30_000);
+  return (
+    <Card title="Audit log" note={<span className="muted small">Every write, sign-in and enrolment, newest first.</span>}>
+      <ErrorNote error={error} />
+      <div className="table-wrap">
+        <table className="paths">
+          <thead>
+            <tr>
+              <th scope="col">When</th>
+              <th scope="col">Who</th>
+              <th scope="col">Action</th>
+              <th scope="col">Target</th>
+              <th scope="col">Detail</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(data ?? []).map((a, i) => (
+              <tr key={i}>
+                <td className="small">{new Date(a.at).toLocaleString()}</td>
+                <td className="small">{who(a.actor)}</td>
+                <td className="mono small">{a.action}</td>
+                <td className="small">{a.target}</td>
+                <td className="mono small muted">{a.detail ? JSON.stringify(a.detail).slice(0, 160) : ""}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
   );
 }

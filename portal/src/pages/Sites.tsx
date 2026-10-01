@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useStormToggle } from "../customer";
 import { Link, useParams } from "react-router-dom";
 import { num, useApi, type EventRow, type MetricPoint, type SiteDetail, type SiteSummary, type SteeringRow } from "../api";
 import { ErrorNote, Eyebrow, LineChart, StatusPill, ago, clock, fmt, type Series } from "../components";
@@ -94,6 +95,7 @@ export function SitePage() {
           {s.node_id ? `agent seen ${ago(s.last_seen)}, config v${s.applied_version ?? 0}` : "agent not enrolled"}
         </p>
         {s.apply_error && <p className="pill bad">Last config failed: {s.apply_error}</p>}
+        {s.kind === "site" && <SiteStorm name={s.name} />}
       </div>
       <div className="grid">
         {s.kind === "site" && (
@@ -281,4 +283,28 @@ function withGaps(points: { t: number; v: number | null }[], gap: number) {
     out.push(p);
   }
   return out;
+}
+
+/** This site's Storm Mode state and switch. */
+function SiteStorm({ name }: { name: string }) {
+  const { current, busy, error, toggle } = useStormToggle();
+  const site = current?.sites.find((x) => x.name === name);
+  if (!site) return null;
+  return (
+    <div className="form-actions" style={{ alignItems: "center", marginTop: 8 }}>
+      {site.storm_mode ? (
+        <span className="pill storm">Storm Mode on since {new Date(site.storm_since ?? "").toLocaleString()}</span>
+      ) : (
+        <span className="muted small">Storm Mode off at this site.</span>
+      )}
+      <button
+        className={site.storm_mode ? "button secondary small" : "button small storm-on"}
+        disabled={busy}
+        onClick={() => toggle(site, !site.storm_mode)}
+      >
+        {site.storm_mode ? "Switch Storm Mode off" : "Switch Storm Mode on"}
+      </button>
+      {error && <span className="small" style={{ color: "var(--danger)" }}>{error}</span>}
+    </div>
+  );
 }

@@ -19,11 +19,11 @@ from .settings import get_settings
 ACTOR = "system:seed"
 CUSTOMER = "Demo Organisation"
 
-# (name, kind, location, timezone, asn, lan, overlay host, site octet)
+# (name, kind, location, timezone, asn, lan, overlay host, site octet, latitude, longitude)
 LAB_SITES = [
-    ("pop-miami", "pop", "Miami", "America/New_York", 65000, ["10.200.0.0/24"], 1, "0"),
-    ("site-a", "site", "Kingston", "America/Jamaica", 65001, ["192.168.10.0/24"], 11, "1"),
-    ("site-b", "site", "Port of Spain", "America/Port_of_Spain", 65002, ["192.168.20.0/24"], 12, "2"),
+    ("pop-miami", "pop", "Miami", "America/New_York", 65000, ["10.200.0.0/24"], 1, "0", 25.76, -80.19),
+    ("site-a", "site", "Kingston", "America/Jamaica", 65001, ["192.168.10.0/24"], 11, "1", 17.97, -76.79),
+    ("site-b", "site", "Port of Spain", "America/Port_of_Spain", 65002, ["192.168.20.0/24"], 12, "2", 10.66, -61.51),
 ]
 # (path, carrier, underlay type, interface, second octet, commit Mbps, cost per Mbps, burst price)
 LAB_LINKS = [
@@ -60,7 +60,7 @@ def seed_lab(conn) -> dict:
             (cid, name, lat, jit, loss, sat),
         )
     tokens = {}
-    for name, kind, loc, tz, asn, lan, host, octet in LAB_SITES:
+    for name, kind, loc, tz, asn, lan, host, octet, lat, lon in LAB_SITES:
         sid = inventory.upsert_site(
             conn,
             cid,
@@ -72,6 +72,8 @@ def seed_lab(conn) -> dict:
             asn=asn,
             lan_prefixes=lan,
             overlay_host=host,
+            latitude=lat,
+            longitude=lon,
         )
         for path, carrier, utype, iface, second, commit, cost, burst in LAB_LINKS:
             carrier_id = inventory.ensure_carrier(conn, carrier, ACTOR)

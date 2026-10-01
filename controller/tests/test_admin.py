@@ -36,6 +36,10 @@ def test_classes_and_sla(client, admin_headers):
     assert [lk["path"] for lk in site_a["links"]] == ["carrier-a", "carrier-b", "sat"]
     assert site_a["links"][0]["underlay_ip"] == "10.11.1.2/24"
 
+    # Bulk on satellite in Storm Mode is an admin setting.
+    r = client.patch(f"/api/v1/customers/{cid}/settings", headers=admin_headers, json={"storm_allow_bulk_sat": True})
+    assert r.status_code == 200 and r.json()["storm_allow_bulk_sat"] is True
+
 
 def test_users_passwords_and_throttle(client, admin_headers):
     seed = _seed()

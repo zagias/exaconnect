@@ -26,6 +26,10 @@ services:
       EXA_ADMIN_EMAIL: ${EXA_ADMIN_EMAIL:-}
       EXA_ADMIN_PASSWORD: ${EXA_ADMIN_PASSWORD:-}
       EXA_AGENT_URL: https://172.30.0.5:8443
+      # AI features (ADR 0006). Ask your network stays off until the key is set in .env.
+      EXA_LLM_API_KEY: ${EXA_LLM_API_KEY:-}
+      EXA_LLM_MODEL: ${EXA_LLM_MODEL:-deepseek-ai/DeepSeek-V4-Flash}
+      EXA_NHC_URL: ${EXA_NHC_URL-https://www.nhc.noaa.gov/CurrentStorms.json}
     volumes:
       - controller-data:/data
     depends_on:

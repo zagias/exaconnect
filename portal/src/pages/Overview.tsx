@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { useApi, useControllerStatus, type Overview as OverviewData, type SiteSummary } from "../api";
 import { ErrorNote, Eyebrow, StatTile, StatusPill, ago, fmt } from "../components";
+import { InsightSummary } from "./Insights";
 
 export default function Overview() {
   const controller = useControllerStatus();
@@ -33,6 +34,7 @@ export default function Overview() {
         <ErrorNote error={error} />
       </div>
       <div className="grid">
+        <InsightSummary />
         <StatTile label="Sites online" figure={`${online.length} of ${enrolled.length}`} change="Heard from in the last 30 s" />
         <StatTile label="Paths within voice SLA" figure={`${healthy.length} of ${paths.length}`} change="Last 30 s of probes" />
         <StatTile label="Config applied" figure={`${applied.length} of ${enrolled.length}`} change="Agents on the latest version" />

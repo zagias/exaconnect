@@ -256,14 +256,50 @@ export interface SteeringRow {
   last_reason: string | null;
 }
 
+export interface StormSite {
+  id: string;
+  name: string;
+  location: string;
+  storm_mode: boolean;
+  storm_since: string | null;
+  storm_by: string | null;
+}
+
 export interface CustomerSettings {
   id: string;
   name: string;
   shadow_mode: boolean;
+  /** True while any site is in Storm Mode. */
   storm_mode: boolean;
   storm_since: string | null;
   storm_by: string | null;
   storm_allow_bulk_sat: boolean;
+  sites: StormSite[];
+}
+
+export interface Insight {
+  id: number;
+  customer_id: string;
+  kind: "storm_warning" | "bill_shock" | "anomaly";
+  severity: "info" | "warning" | "critical";
+  title: string;
+  detail: string;
+  data: Record<string, unknown>;
+  example: boolean;
+  first_seen: string;
+  last_seen: string;
+  resolved_at: string | null;
+  acknowledged_by: string | null;
+  acknowledged_at: string | null;
+  site: string | null;
+  path: string | null;
+  carrier: string | null;
+}
+
+export interface AiStatus {
+  ask_enabled: boolean;
+  model: string | null;
+  storm_watch: boolean;
 }
 
 export interface LinkSettlement {

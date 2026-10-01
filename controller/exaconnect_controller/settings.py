@@ -26,6 +26,16 @@ class Settings:
     session_hours: int = field(default_factory=lambda: int(_env("EXA_SESSION_HOURS", "12")))
     # Seconds between routing engine passes; 0 turns the background loop off (tests).
     routing_interval_s: float = field(default_factory=lambda: float(_env("EXA_ROUTING_INTERVAL_S", "10")))
+    # Hurricane watch: NHC's active storms feed, checked every interval; "" turns it off.
+    nhc_url: str = field(default_factory=lambda: _env("EXA_NHC_URL", "https://www.nhc.noaa.gov/CurrentStorms.json"))
+    nhc_interval_s: float = field(default_factory=lambda: float(_env("EXA_NHC_INTERVAL_S", "900")))
+    # "Ask your network": any OpenAI-compatible endpoint. Off until a key is set.
+    llm_api_key: str = field(default_factory=lambda: _env("EXA_LLM_API_KEY"), repr=False)
+    llm_base_url: str = field(
+        default_factory=lambda: _env("EXA_LLM_BASE_URL", "https://api.deepinfra.com/v1/openai").rstrip("/")
+    )
+    llm_model: str = field(default_factory=lambda: _env("EXA_LLM_MODEL", "deepseek-ai/DeepSeek-V4-Flash"))
+    llm_questions_per_hour: int = field(default_factory=lambda: int(_env("EXA_LLM_QUESTIONS_PER_HOUR", "30")))
 
 
 def get_settings() -> Settings:

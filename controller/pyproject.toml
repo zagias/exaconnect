@@ -23,7 +23,7 @@ build-backend = "setuptools.build_meta"
 include = ["exaconnect_controller*"]
 
 [tool.setuptools.package-data]
-exaconnect_controller = ["schema.sql"]
+exaconnect_controller = ["schema.sql", "ai/fixtures/*.json"]
 
 [tool.ruff]
 line-length = 120

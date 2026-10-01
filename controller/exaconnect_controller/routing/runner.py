@@ -30,8 +30,8 @@ ONLINE_S = 30
 BFD_FRESH_S = 60
 
 
-def policy_for(customer: dict) -> Policy:
-    return STORM_POLICY if customer["storm_mode"] else Policy()
+def policy_for(site: dict) -> Policy:
+    return STORM_POLICY if site.get("storm_mode") else Policy()
 
 
 def _epoch(t: dt.datetime) -> float:
@@ -103,7 +103,6 @@ def run_customer(
     forecaster = forecaster or TrendForecaster()
     inv = maps.load(conn, customer_id)
     customer = inv["customer"]
-    policy = policy_for(customer)
     t = _epoch(now)
     states = {
         (r["site_id"], r["class_name"]): r
@@ -127,6 +126,7 @@ def run_customer(
     for site in inv["sites"]:
         if site["kind"] != "site" or site["id"] not in online:
             continue
+        policy = policy_for(site)
         links = [
             {**lk, "underlay_interface": underlays[(site["id"], lk["name"])]} for lk in inv["links"].get(site["id"], [])
         ]
@@ -138,7 +138,7 @@ def run_customer(
                 loss_pct=_f(cls["max_loss_pct"]),
             )
             evals = {k: evaluate(p, sla, forecaster, policy, t) for k, p in inputs.items()}
-            cands = maps.candidates(cls, customer, links)
+            cands = maps.candidates(cls, customer, site, links)
             row = states.get((site["id"], cls["name"]))
             state = (
                 State(
@@ -204,7 +204,7 @@ def _record(
 ) -> dict:
     inputs = {
         "policy": {k: getattr(policy, k) for k in ("horizon_s", "hold_s", "return_after_s", "confidence")},
-        "storm": bool(customer["storm_mode"]),
+        "storm": bool(site.get("storm_mode")),
         "paths": {k: e.summary() for k, e in evals.items()},
     }
     row = conn.execute(

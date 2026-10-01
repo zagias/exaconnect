@@ -54,9 +54,7 @@ def _load(conn: psycopg.Connection, customer_id: Any) -> dict[str, Any]:
         (customer_id,),
     ).fetchall()
     nodes = conn.execute("SELECT * FROM nodes WHERE customer_id = %s", (customer_id,)).fetchall()
-    customer = conn.execute("SELECT storm_mode FROM customers WHERE id = %s", (customer_id,)).fetchone()
     return {
-        "storm": bool(customer and customer["storm_mode"]),
         "sites": sites,
         "links": links,
         "nodes": {n["site_id"]: n for n in nodes},
@@ -133,7 +131,7 @@ def build(inv: dict[str, Any], site: dict[str, Any]) -> dict[str, Any]:
                 )
                 t["probe"] = {
                     "target": f"{pop_addr}:{PROBE_PORT}",
-                    "interval_ms": probe_interval(link["underlay_type"], inv.get("storm", False)),
+                    "interval_ms": probe_interval(link["underlay_type"], bool(site["storm_mode"])),
                 }
         tunnels.append(t)
 

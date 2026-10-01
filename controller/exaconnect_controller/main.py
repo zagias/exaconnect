@@ -47,6 +47,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 from .routing import runner
 
                 tasks.append(asyncio.create_task(runner.loop(settings.routing_interval_s)))
+                from .ai import runner as ai_runner
+
+                tasks.append(asyncio.create_task(ai_runner.loop(settings)))
         yield
         for t in tasks:
             t.cancel()

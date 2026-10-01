@@ -153,6 +153,11 @@ ALTER TABLE customers ADD COLUMN IF NOT EXISTS storm_mode boolean NOT NULL DEFAU
 ALTER TABLE customers ADD COLUMN IF NOT EXISTS storm_since timestamptz;
 ALTER TABLE customers ADD COLUMN IF NOT EXISTS storm_by text;
 ALTER TABLE customers ADD COLUMN IF NOT EXISTS storm_allow_bulk_sat boolean NOT NULL DEFAULT false;
+-- Storm Mode is per site (ADR 0004, revised 2026-10-01). customers.storm_* is kept as a
+-- summary: on when any site is on, with the latest switch's time and actor.
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS storm_mode boolean NOT NULL DEFAULT false;
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS storm_since timestamptz;
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS storm_by text;
 ALTER TABLE app_classes ADD COLUMN IF NOT EXISTS subnets cidr[] NOT NULL DEFAULT '{}';
 ALTER TABLE app_classes ADD COLUMN IF NOT EXISTS ordinal int NOT NULL DEFAULT 100;
 
@@ -226,6 +231,34 @@ CREATE TABLE IF NOT EXISTS usage_5m (
   PRIMARY KEY (link_id, bucket)
 );
 CREATE INDEX IF NOT EXISTS usage_5m_carrier ON usage_5m (carrier_id, bucket);
+
+-- Site coordinates, for the hurricane watch (decimal degrees, north and east positive).
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS latitude double precision;
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS longitude double precision;
+
+-- Insights from the AI features: storm warnings, bill-shock forecasts and
+-- carrier anomalies. One open row per key; it is resolved when the condition clears.
+CREATE TABLE IF NOT EXISTS insights (
+  id               bigserial PRIMARY KEY,
+  customer_id      uuid NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  kind             text NOT NULL CHECK (kind IN ('storm_warning', 'bill_shock', 'anomaly')),
+  key              text NOT NULL,
+  severity         text NOT NULL CHECK (severity IN ('info', 'warning', 'critical')),
+  site_id          uuid REFERENCES sites(id) ON DELETE CASCADE,
+  link_id          uuid REFERENCES links(id) ON DELETE CASCADE,
+  carrier_id       uuid REFERENCES carriers(id),
+  title            text NOT NULL,
+  detail           text NOT NULL,
+  data             jsonb NOT NULL DEFAULT '{}',
+  example          boolean NOT NULL DEFAULT false,
+  first_seen       timestamptz NOT NULL DEFAULT now(),
+  last_seen        timestamptz NOT NULL DEFAULT now(),
+  resolved_at      timestamptz,
+  acknowledged_by  text,
+  acknowledged_at  timestamptz
+);
+CREATE UNIQUE INDEX IF NOT EXISTS insights_open_key ON insights (customer_id, key) WHERE resolved_at IS NULL;
+CREATE INDEX IF NOT EXISTS insights_customer_time ON insights (customer_id, last_seen DESC);
 
 -- Time series (TimescaleDB hypertables when the extension is available).
 CREATE TABLE IF NOT EXISTS path_metrics (

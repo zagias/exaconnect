@@ -40,27 +40,28 @@ def parse_ports(spec: str) -> list[dict[str, Any]]:
     return out
 
 
-def class_allows_sat(cls: dict, customer: dict) -> bool:
-    """Satellite is a candidate only in Storm Mode, and bulk-like classes
-    (allow_satellite false) only if the admin allowed it (CLAUDE.md §4.4)."""
-    if not customer["storm_mode"]:
+def class_allows_sat(cls: dict, customer: dict, site: dict) -> bool:
+    """Satellite is a candidate only while the site is in Storm Mode, and
+    bulk-like classes (allow_satellite false) only if the admin allowed it
+    (CLAUDE.md §4.4)."""
+    if not site.get("storm_mode"):
         return False
     return bool(cls["allow_satellite"]) or bool(customer["storm_allow_bulk_sat"])
 
 
-def candidates(cls: dict, customer: dict, site_paths: list[dict]) -> list[str]:
+def candidates(cls: dict, customer: dict, site: dict, site_paths: list[dict]) -> list[str]:
     out = []
     for p in sorted(site_paths, key=lambda p: (p["satellite"], p["ordinal"])):
-        if p["satellite"] and not class_allows_sat(cls, customer):
+        if p["satellite"] and not class_allows_sat(cls, customer, site):
             continue
         out.append(p["name"])
     return out
 
 
-def pause_if_none(cls: dict, customer: dict) -> bool:
+def pause_if_none(cls: dict, customer: dict, site: dict) -> bool:
     """A class that may never use satellite pauses when only satellite is
     left, instead of falling back to BGP (which would put it there)."""
-    return not cls["allow_satellite"] and not (customer["storm_mode"] and customer["storm_allow_bulk_sat"])
+    return not cls["allow_satellite"] and not (site.get("storm_mode") and customer["storm_allow_bulk_sat"])
 
 
 def load(conn: psycopg.Connection, customer_id: Any) -> dict[str, Any]:
@@ -106,10 +107,10 @@ def site_rules(inv: dict[str, Any], site: dict) -> list[dict[str, Any]]:
     customer = inv["customer"]
     rules = []
     for cls in inv["classes"]:
-        cands = candidates(cls, customer, inv["links"].get(site["id"], []))
+        cands = candidates(cls, customer, site, inv["links"].get(site["id"], []))
         chosen = None if customer["shadow_mode"] else inv["steering"].get((site["id"], cls["name"]))
         order = ([chosen] if chosen in cands else []) + [c for c in cands if c != chosen]
-        rules.append({"class": cls["name"], "paths": order, "pause_if_none": pause_if_none(cls, customer)})
+        rules.append({"class": cls["name"], "paths": order, "pause_if_none": pause_if_none(cls, customer, site)})
     return rules
 
 
@@ -129,18 +130,21 @@ def build(inv: dict[str, Any], site: dict) -> dict[str, Any]:
                 "subnets": [str(s) for s in (c["subnets"] or [])],
             }
         )
+    storm = bool(site["storm_mode"])
     if site["kind"] == "pop":
         rules = []
         for other in inv["sites"]:
             if other["kind"] != "site" or other["node_id"] is None:
                 continue
+            storm = storm or bool(other["storm_mode"])
             for r in site_rules(inv, other):
                 for prefix in other["lan_prefixes"]:
                     rules.append({**r, "dst": str(prefix)})
     else:
         rules = site_rules(inv, site)
     return {
-        "storm": bool(inv["customer"]["storm_mode"]),
+        # At the PoP: true while any site it serves is in Storm Mode.
+        "storm": storm,
         "paths": paths,
         "classes": classes,
         "rules": rules,

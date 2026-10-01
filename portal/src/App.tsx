@@ -1,6 +1,9 @@
 import { NavLink, Route, Routes } from "react-router-dom";
 import { AuthGate, useAuth } from "./auth";
-import { CustomerProvider, StormBanner, StormSwitch } from "./customer";
+import { CustomerPicker, CustomerProvider, StormBanner, StormSwitch } from "./customer";
+import Account from "./pages/Account";
+import Ask from "./pages/Ask";
+import Insights from "./pages/Insights";
 import Admin from "./pages/Admin";
 import Decisions from "./pages/Decisions";
 import Metering from "./pages/Metering";
@@ -41,6 +44,8 @@ function Layout() {
                 <NavLink to="/sites">Sites</NavLink>
                 <NavLink to="/decisions">Decisions</NavLink>
                 <NavLink to="/metering">Metering</NavLink>
+                <NavLink to="/insights">Insights</NavLink>
+                <NavLink to="/ask">Ask</NavLink>
                 {admin && <NavLink to="/carrier">Carrier view</NavLink>}
                 {admin && <NavLink to="/admin">Admin</NavLink>}
               </>
@@ -55,6 +60,7 @@ function Layout() {
         <SignedInBar />
         {carrier ? (
           <Routes>
+            <Route path="/account" element={<Account />} />
             <Route path="*" element={<Metering carrierView />} />
           </Routes>
         ) : (
@@ -64,7 +70,10 @@ function Layout() {
             <Route path="/sites/:id" element={<SitePage />} />
             <Route path="/decisions" element={<Decisions />} />
             <Route path="/metering" element={<Metering />} />
+            <Route path="/insights" element={<Insights />} />
+            <Route path="/ask" element={<Ask />} />
             <Route path="/carrier" element={<Metering carrierView />} />
+            <Route path="/account" element={<Account />} />
             {admin && <Route path="/admin/*" element={<Admin />} />}
             <Route path="*" element={<NotFound />} />
           </Routes>
@@ -87,10 +96,11 @@ function SignedInBar() {
   const { user, signOut } = useAuth();
   return (
     <div className="signed-in muted">
-      Signed in as {user?.email} ({user?.role}) ·{" "}
+      Signed in as {user?.email} ({user?.role}) · <NavLink to="/account">Account</NavLink> ·{" "}
       <button className="link" onClick={signOut}>
         Sign out
       </button>
+      {user?.role === "admin" && <CustomerPicker />}
     </div>
   );
 }

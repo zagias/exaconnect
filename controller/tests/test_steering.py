@@ -205,3 +205,36 @@ def test_storm_mode(client, admin_headers):
     assert voice["from_path"] == "sat" and "no longer allowed" in voice["reason"]
     kinds = [e["kind"] for e in client.get("/api/v1/events", headers=admin_headers).json()]
     assert "storm_on" in kinds and "storm_off" in kinds
+
+
+def test_storm_mode_is_per_site(client, admin_headers):
+    seed = _seed()
+    tokens, cid = seed["tokens"], seed["customer_id"]
+    _, p_h = _enrol(client, tokens, "pop-miami")
+    _, a_h = _enrol(client, tokens, "site-a")
+    _, b_h = _enrol(client, tokens, "site-b")
+    sites = {
+        s["name"]: s for s in client.get(f"/api/v1/customers/{cid}/settings", headers=admin_headers).json()["sites"]
+    }
+    assert set(sites) == {"site-a", "site-b"} and not any(s["storm_mode"] for s in sites.values())
+
+    # A storm heading for Kingston: only site-a switches over.
+    r = client.post(f"/api/v1/sites/{sites['site-a']['id']}/storm", headers=admin_headers, json={"on": True})
+    assert r.status_code == 200 and r.json()["storm_mode"] is True
+    state = {s["name"]: s["storm_mode"] for s in r.json()["sites"]}
+    assert state == {"site-a": True, "site-b": False}
+
+    a = client.get("/api/v1/agent/steering", headers=a_h).json()
+    b = client.get("/api/v1/agent/steering", headers=b_h).json()
+    assert a["storm"] is True and "sat" in next(r for r in a["rules"] if r["class"] == "voice")["paths"]
+    assert b["storm"] is False and "sat" not in {p for r in b["rules"] for p in r["paths"]}
+    ds_b = client.get("/api/v1/agent/desired-state", headers=b_h).json()
+    assert next(t for t in ds_b["tunnels"] if t["name"] == "wg-sat")["probe"]["interval_ms"] == 1000
+
+    # The PoP sends return traffic to site-a over satellite too, but not to site-b.
+    pop = client.get("/api/v1/agent/steering", headers=p_h).json()
+    voice = {r["dst"]: r["paths"] for r in pop["rules"] if r["class"] == "voice"}
+    assert "sat" in voice["192.168.10.0/24"] and "sat" not in voice["192.168.20.0/24"]
+
+    r = client.post(f"/api/v1/sites/{sites['site-a']['id']}/storm", headers=admin_headers, json={"on": False})
+    assert r.json()["storm_mode"] is False

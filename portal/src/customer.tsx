@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import { api, type CustomerSettings } from "./api";
+import { api, type CustomerSettings, type StormSite } from "./api";
 
 const KEY = "exa.customer";
 
@@ -54,22 +54,20 @@ export function CustomerProvider({ children }: { children: ReactNode }) {
   return <Ctx.Provider value={{ customers, current, select, reload }}>{children}</Ctx.Provider>;
 }
 
-/** The Storm Mode switch: coral when on, with who switched it and when. */
-export function StormSwitch() {
+/** Switches Storm Mode for one site, after a confirmation. */
+export function useStormToggle() {
   const { current, reload } = useCustomer();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  if (!current) return null;
-  const on = current.storm_mode;
-  const toggle = async () => {
+  const toggle = async (site: StormSite, on: boolean) => {
     const question = on
-      ? `Switch Storm Mode off for ${current.name}? Classes on satellite move back to terrestrial paths.`
-      : `Switch Storm Mode on for ${current.name}? The satellite path is kept warm and voice and business may use it if both terrestrial paths fail.`;
+      ? `Switch Storm Mode on for ${site.name}? Its satellite path is kept warm, and voice and business may use it if both terrestrial paths fail. Other sites are not affected.`
+      : `Switch Storm Mode off for ${site.name}? Classes on satellite there move back to terrestrial paths.`;
     if (!window.confirm(question)) return;
     setBusy(true);
     setError(null);
     try {
-      await api(`/customers/${current.id}/storm`, { method: "POST", body: JSON.stringify({ on: !on }) });
+      await api(`/sites/${site.id}/storm`, { method: "POST", body: JSON.stringify({ on }) });
       reload();
     } catch (e) {
       setError((e as Error).message);
@@ -77,17 +75,51 @@ export function StormSwitch() {
       setBusy(false);
     }
   };
+  return { current, busy, error, toggle };
+}
+
+/** The Storm Mode control in the bar: coral while any site is on; opens a per-site list. */
+export function StormSwitch() {
+  const { current, busy, error, toggle } = useStormToggle();
+  const [open, setOpen] = useState(false);
+  if (!current) return null;
+  const on = current.sites.filter((s) => s.storm_mode);
   return (
-    <button
-      className="storm-switch"
-      aria-pressed={on}
-      disabled={busy}
-      onClick={toggle}
-      title={error ?? (on ? `On since ${new Date(current.storm_since ?? "").toLocaleString()} by ${who(current.storm_by)}` : "Off")}
-    >
-      <span className="dot" aria-hidden="true" />
-      {busy ? "Switching…" : on ? "Storm Mode on" : "Storm Mode off"}
-    </button>
+    <div className="storm-control">
+      <button className="storm-switch" aria-pressed={on.length > 0} aria-expanded={open} onClick={() => setOpen(!open)}>
+        <span className="dot" aria-hidden="true" />
+        {on.length === 0 ? "Storm Mode off" : on.length === 1 ? `Storm Mode: ${on[0].name}` : `Storm Mode: ${on.length} sites`}
+      </button>
+      {open && (
+        <div className="storm-panel card" role="dialog" aria-label="Storm Mode per site">
+          <p className="small muted" style={{ marginTop: 0 }}>
+            Storm Mode is set per site, so only the sites in a storm's path switch to their satellite backup.
+          </p>
+          <ul>
+            {current.sites.map((s) => (
+              <li key={s.id}>
+                <span>
+                  <strong>{s.name}</strong> <span className="muted small">{s.location}</span>
+                  {s.storm_mode && (
+                    <div className="small muted">
+                      On since {new Date(s.storm_since ?? "").toLocaleString()} by {who(s.storm_by)}
+                    </div>
+                  )}
+                </span>
+                <button
+                  className={s.storm_mode ? "button small storm-on" : "button secondary small"}
+                  disabled={busy}
+                  onClick={() => toggle(s, !s.storm_mode)}
+                >
+                  {s.storm_mode ? "Switch off" : "Switch on"}
+                </button>
+              </li>
+            ))}
+          </ul>
+          {error && <p className="small" style={{ color: "var(--danger)" }}>{error}</p>}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -96,16 +128,40 @@ export function who(actor: string | null): string {
   return actor.replace(/^user:/, "");
 }
 
-/** A coral band under the header while Storm Mode is on. */
+/** A coral band under the header while any site is in Storm Mode. */
 export function StormBanner() {
   const { current } = useCustomer();
-  if (!current?.storm_mode) return null;
+  const on = current?.sites.filter((s) => s.storm_mode) ?? [];
+  if (!current || on.length === 0) return null;
   return (
     <div className="storm-banner" role="status">
-      <strong>Storm Mode is on</strong> for {current.name} since{" "}
-      {new Date(current.storm_since ?? "").toLocaleString()}, switched on by {who(current.storm_by)}. The satellite path
-      is warm; voice and business may use it if both terrestrial paths fail.
+      <strong>Storm Mode is on</strong> at{" "}
+      {on.map((s, i) => (
+        <span key={s.id}>
+          {i > 0 && (i === on.length - 1 ? " and " : ", ")}
+          {s.name} (since {new Date(s.storm_since ?? "").toLocaleTimeString()}, by {who(s.storm_by)})
+        </span>
+      ))}
+      . The satellite path there is warm; voice and business may use it if both terrestrial paths fail.
       {current.storm_allow_bulk_sat ? " Bulk may use it too." : " Bulk pauses rather than use it."}
     </div>
+  );
+}
+
+/** Lets an admin choose which customer the switch and admin screens act for. */
+export function CustomerPicker() {
+  const { customers, current, select } = useCustomer();
+  if (customers.length < 2 || !current) return null;
+  return (
+    <label className="picker">
+      Customer{" "}
+      <select value={current.id} onChange={(e) => select(e.target.value)}>
+        {customers.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.name}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }

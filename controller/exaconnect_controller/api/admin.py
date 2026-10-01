@@ -42,6 +42,8 @@ class SiteIn(BaseModel):
     asn: int = Field(ge=1, le=4294967294)
     lan_prefixes: list[str] = []
     overlay_host: int = Field(ge=1, le=254)
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
 
     @field_validator("lan_prefixes")
     @classmethod
@@ -149,7 +151,7 @@ def inventory_view(user: AdminDep, customer_id: str) -> dict:
     with db.tx() as conn:
         sites = conn.execute(
             """SELECT s.id, s.name, s.kind, s.location, s.timezone, s.asn, s.lan_prefixes::text[] AS lan_prefixes,
-                      s.overlay_host, n.name AS node, n.last_seen
+                      s.overlay_host, s.latitude, s.longitude, n.name AS node, n.last_seen
                FROM sites s LEFT JOIN nodes n ON n.site_id = s.id
                WHERE s.customer_id = %s ORDER BY s.kind DESC, s.name""",
             (customer_id,),

@@ -32,14 +32,16 @@ def ensure_carrier(conn: psycopg.Connection, name: str, actor: str) -> Any:
 
 def upsert_site(conn: psycopg.Connection, customer_id: Any, actor: str, **f: Any) -> Any:
     row = conn.execute(
-        """INSERT INTO sites (customer_id, name, kind, location, timezone, asn, lan_prefixes, overlay_host)
+        """INSERT INTO sites (customer_id, name, kind, location, timezone, asn, lan_prefixes, overlay_host,
+                              latitude, longitude)
            VALUES (%(customer_id)s, %(name)s, %(kind)s, %(location)s, %(timezone)s, %(asn)s,
-                   %(lan_prefixes)s::cidr[], %(overlay_host)s)
+                   %(lan_prefixes)s::cidr[], %(overlay_host)s, %(latitude)s, %(longitude)s)
            ON CONFLICT (customer_id, name) DO UPDATE SET
              kind = EXCLUDED.kind, location = EXCLUDED.location, timezone = EXCLUDED.timezone,
-             asn = EXCLUDED.asn, lan_prefixes = EXCLUDED.lan_prefixes, overlay_host = EXCLUDED.overlay_host
+             asn = EXCLUDED.asn, lan_prefixes = EXCLUDED.lan_prefixes, overlay_host = EXCLUDED.overlay_host,
+             latitude = EXCLUDED.latitude, longitude = EXCLUDED.longitude
            RETURNING id""",
-        {"customer_id": customer_id, **f},
+        {"customer_id": customer_id, "latitude": None, "longitude": None, **f},
     ).fetchone()
     audit.record(conn, actor, "site.upsert", f["name"], customer_id, {k: str(v) for k, v in f.items()})
     desired.refresh(conn, customer_id)

@@ -1,7 +1,8 @@
 import { useState } from "react";
+import { InsightList } from "./Insights";
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth";
-import { download, num, useApi, type LinkSettlement, type UsagePoint, type UsageRow } from "../api";
+import { download, num, useApi, type Insight, type LinkSettlement, type UsagePoint, type UsageRow } from "../api";
 import { ErrorNote, Eyebrow, LineChart, clock } from "../components";
 
 const PERIODS = [
@@ -57,6 +58,7 @@ export default function Metering({ carrierView = false }: { carrierView?: boolea
         <ErrorNote error={error ?? dlError} />
       </div>
       <div className="grid">
+        {carrierView && <CarrierAnomalies />}
         <section className="card span-12">
           <div className="card-head">
             <div className="segmented" role="group" aria-label="Period">
@@ -225,6 +227,20 @@ function UsageCard({ data }: { data: { totals: { gb: number; over_commit_gb: num
           ))}
         </tbody>
       </table>
+    </section>
+  );
+}
+
+/** Carrier anomalies on the links this view covers (read only). */
+function CarrierAnomalies() {
+  const list = useApi<Insight[]>("/insights?kind=anomaly", 60_000);
+  return (
+    <section className="card span-12">
+      <div className="card-head">
+        <h2>Anomalies on these links</h2>
+        <span className="muted small">Paths behaving worse than usual for the hour, measured by ExaConnect probes.</span>
+      </div>
+      <InsightList items={list.data ?? []} reload={list.reload} readOnly />
     </section>
   );
 }
