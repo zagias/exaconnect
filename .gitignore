@@ -1,0 +1,11 @@
+.env
+bin/
+dist/
+node_modules/
+__pycache__/
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.tsbuildinfo
+lab/.state/

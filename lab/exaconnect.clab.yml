@@ -1,0 +1,121 @@
+# ExaConnect lab (Phase A). Run on the Ubuntu 24.04 lab host (arm64 first):
+#   make lab-up        (builds the node image, deploys, applies netem profiles)
+#
+# Underlay addressing, one /24 per carrier segment:
+#   carrier-a 10.11.0.0/24 PoP side, 10.11.1.0/24 site-a side, 10.11.2.0/24 site-b side
+#   carrier-b 10.12.x.0/24, sat 10.13.x.0/24 (same pattern)
+#   The carrier router is .1 on each segment, the site or PoP is .2.
+# Site LANs: site-a 192.168.10.0/24, site-b 192.168.20.0/24, PoP 10.200.0.0/24.
+# Sites and the PoP run exa-agent from bin/lab (built by `make lab-agent`, mounted as a
+# directory so a rebuild reaches running nodes; `make agents-upgrade` restarts them);
+# it owns WireGuard (wg-a, wg-b, wg-sat) and /etc/frr/frr.conf once enrolled.
+name: exaconnect
+
+mgmt:
+  network: exaconnect-mgmt
+  ipv4-subnet: 172.30.0.0/24
+
+topology:
+  defaults:
+    kind: linux
+    image: exaconnect/node:dev
+
+  nodes:
+    carrier-a:
+      mgmt-ipv4: 172.30.0.11
+      exec:
+        - sysctl -w net.ipv4.ip_forward=1
+        - ip addr add 10.11.0.1/24 dev eth1
+        - ip addr add 10.11.1.1/24 dev eth2
+        - ip addr add 10.11.2.1/24 dev eth3
+    carrier-b:
+      mgmt-ipv4: 172.30.0.12
+      exec:
+        - sysctl -w net.ipv4.ip_forward=1
+        - ip addr add 10.12.0.1/24 dev eth1
+        - ip addr add 10.12.1.1/24 dev eth2
+        - ip addr add 10.12.2.1/24 dev eth3
+    sat:
+      mgmt-ipv4: 172.30.0.13
+      exec:
+        - sysctl -w net.ipv4.ip_forward=1
+        - ip addr add 10.13.0.1/24 dev eth1
+        - ip addr add 10.13.1.1/24 dev eth2
+        - ip addr add 10.13.2.1/24 dev eth3
+
+    pop-miami:
+      mgmt-ipv4: 172.30.0.20
+      binds:
+        - ../bin/lab:/opt/exaconnect/bin:ro
+      exec:
+        - sysctl -w net.ipv4.ip_forward=1
+        - sysctl -w net.ipv4.conf.all.rp_filter=2
+        - ip addr add 10.11.0.2/24 dev eth1
+        - ip addr add 10.12.0.2/24 dev eth2
+        - ip addr add 10.13.0.2/24 dev eth3
+        - ip addr add 10.200.0.1/24 dev eth4
+        # Underlay: reach each carrier's site segments through that carrier.
+        - ip route add 10.11.0.0/16 via 10.11.0.1
+        - ip route add 10.12.0.0/16 via 10.12.0.1
+        - ip route add 10.13.0.0/16 via 10.13.0.1
+    site-a:
+      mgmt-ipv4: 172.30.0.31
+      binds:
+        - ../bin/lab:/opt/exaconnect/bin:ro
+      exec:
+        - sysctl -w net.ipv4.ip_forward=1
+        - sysctl -w net.ipv4.conf.all.rp_filter=2
+        - ip addr add 10.11.1.2/24 dev eth1
+        - ip addr add 10.12.1.2/24 dev eth2
+        - ip addr add 10.13.1.2/24 dev eth3
+        - ip addr add 192.168.10.1/24 dev eth4
+        - ip route add 10.11.0.0/24 via 10.11.1.1
+        - ip route add 10.12.0.0/24 via 10.12.1.1
+        - ip route add 10.13.0.0/24 via 10.13.1.1
+    site-b:
+      mgmt-ipv4: 172.30.0.32
+      binds:
+        - ../bin/lab:/opt/exaconnect/bin:ro
+      exec:
+        - sysctl -w net.ipv4.ip_forward=1
+        - sysctl -w net.ipv4.conf.all.rp_filter=2
+        - ip addr add 10.11.2.2/24 dev eth1
+        - ip addr add 10.12.2.2/24 dev eth2
+        - ip addr add 10.13.2.2/24 dev eth3
+        - ip addr add 192.168.20.1/24 dev eth4
+        - ip route add 10.11.0.0/24 via 10.11.2.1
+        - ip route add 10.12.0.0/24 via 10.12.2.1
+        - ip route add 10.13.0.0/24 via 10.13.2.1
+
+    # Traffic generators behind each site and the PoP.
+    lan-a:
+      mgmt-ipv4: 172.30.0.41
+      exec:
+        - ip addr add 192.168.10.10/24 dev eth1
+        - ip route replace 192.168.0.0/16 via 192.168.10.1
+        - ip route replace 10.200.0.0/24 via 192.168.10.1
+    lan-b:
+      mgmt-ipv4: 172.30.0.42
+      exec:
+        - ip addr add 192.168.20.10/24 dev eth1
+        - ip route replace 192.168.0.0/16 via 192.168.20.1
+        - ip route replace 10.200.0.0/24 via 192.168.20.1
+    lan-pop:
+      mgmt-ipv4: 172.30.0.43
+      exec:
+        - ip addr add 10.200.0.10/24 dev eth1
+        - ip route replace 192.168.0.0/16 via 10.200.0.1
+
+  links:
+    - endpoints: ["carrier-a:eth1", "pop-miami:eth1"]
+    - endpoints: ["carrier-a:eth2", "site-a:eth1"]
+    - endpoints: ["carrier-a:eth3", "site-b:eth1"]
+    - endpoints: ["carrier-b:eth1", "pop-miami:eth2"]
+    - endpoints: ["carrier-b:eth2", "site-a:eth2"]
+    - endpoints: ["carrier-b:eth3", "site-b:eth2"]
+    - endpoints: ["sat:eth1", "pop-miami:eth3"]
+    - endpoints: ["sat:eth2", "site-a:eth3"]
+    - endpoints: ["sat:eth3", "site-b:eth3"]
+    - endpoints: ["site-a:eth4", "lan-a:eth1"]
+    - endpoints: ["site-b:eth4", "lan-b:eth1"]
+    - endpoints: ["pop-miami:eth4", "lan-pop:eth1"]

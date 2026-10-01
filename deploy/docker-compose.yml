@@ -1,0 +1,66 @@
+# Controller stack for Phase A (runs on the lab host next to containerlab).
+#   make controller-up      (after make lab-up, which creates the exaconnect-mgmt network)
+# Secrets come from ../.env (git-ignored); see ../.env.example and lab/scripts/init-env.sh.
+name: exaconnect
+
+services:
+  db:
+    image: timescale/timescaledb:latest-pg16
+    environment:
+      POSTGRES_DB: exaconnect
+      POSTGRES_USER: exaconnect
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U exaconnect -d exaconnect"]
+      interval: 5s
+      retries: 20
+
+  controller:
+    build: ../controller
+    environment:
+      EXA_ENV: lab
+      EXA_DATABASE_URL: postgresql://exaconnect:${POSTGRES_PASSWORD}@db:5432/exaconnect
+      EXA_PROXY_SECRET: ${EXA_PROXY_SECRET:?set EXA_PROXY_SECRET in .env}
+      EXA_ADMIN_EMAIL: ${EXA_ADMIN_EMAIL:-}
+      EXA_ADMIN_PASSWORD: ${EXA_ADMIN_PASSWORD:-}
+      EXA_AGENT_URL: https://172.30.0.5:8443
+    volumes:
+      - controller-data:/data
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      default:
+        # The proxy answers to "controller" on the lab's management network (the
+        # name agents use), so it reaches the API by this name instead.
+        aliases: [controller-api]
+    ports:
+      # Loopback only: reach it from your laptop with an SSH tunnel (docs/lab.md).
+      - "127.0.0.1:8000:8000"
+
+  # mTLS terminator for agents, on the containerlab management network.
+  proxy:
+    image: nginx:1.27-alpine
+    environment:
+      EXA_PROXY_SECRET: ${EXA_PROXY_SECRET}
+    volumes:
+      - ./nginx/templates:/etc/nginx/templates:ro
+      - controller-data:/data:ro
+    depends_on:
+      controller:
+        condition: service_healthy
+    networks:
+      default: {}
+      exaconnect-mgmt:
+        ipv4_address: 172.30.0.5
+        aliases: [controller]
+
+networks:
+  exaconnect-mgmt:
+    external: true
+
+volumes:
+  db-data:
+  controller-data:

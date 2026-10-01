@@ -1,0 +1,16 @@
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+
+// In dev the portal proxies /api and /healthz to the controller.
+// EXA_CONTROLLER defaults to the lab VM's compose port.
+const controller = process.env.EXA_CONTROLLER ?? "http://localhost:8000";
+
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    proxy: {
+      "/api": controller,
+      "/healthz": controller,
+    },
+  },
+});
