@@ -31,11 +31,18 @@ What runs, verified in the cloud session:
 * Fault scripts dry-run against a stub `docker`, producing the expected `tc`
   commands.
 
-Not yet verified (needs the cloud lab host; this session has no Docker
-daemon or network namespaces):
+Verified on the lab host (2026-10-01, Dudley's VPS: Ubuntu 24.04, 4 vCPU,
+8 GB):
 
-* `make lab-up` end to end, including the smoke test.
-* `make controller-up` with TimescaleDB.
+* `make lab-up`: all six smoke-test paths ok. Measured average RTT against
+  the profile: carrier-a 31/30 ms (25), carrier-b 43/41 ms (35), sat 48/55 ms
+  (45 LEO), site-a/site-b. The extra 5 to 10 ms is container and host
+  overhead plus netem jitter; M3 probes will measure it, and the profiles
+  can be trimmed if the demo needs exact figures.
+* `make controller-up`: controller and TimescaleDB up, `/healthz` ok, port
+  bound to loopback only.
+
+M0 is done.
 
 Change on 2026-09-30: the lab host is a cloud Linux VM Dudley sets up, not a
 Parallels VM (docs/lab.md §1 has the spec). The controller port is bound to
