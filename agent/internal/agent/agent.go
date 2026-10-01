@@ -87,7 +87,7 @@ type Agent struct {
 	probeCancel context.CancelFunc
 	reflCancel  context.CancelFunc
 	buf         Telemetry
-	bfd         map[string]string
+	bfd         map[string]bfdPeer // by peer address
 	lastContact time.Time
 	silent      bool
 	lastFailure string // version+error of the last failed apply, to avoid repeating events
@@ -96,7 +96,7 @@ type Agent struct {
 func (a *Agent) Run(ctx context.Context) error {
 	a.Cfg.defaults()
 	a.stats = map[string]*probe.Stats{}
-	a.bfd = map[string]string{}
+	a.bfd = map[string]bfdPeer{}
 	a.lastContact = time.Now()
 
 	// Survive restarts while the controller is away: bring back the last good state first.
@@ -333,6 +333,12 @@ func (a *Agent) collectCounters() {
 	}
 }
 
+// bfdPeer is the last BFD state seen for one peer, and the tunnel it runs over.
+type bfdPeer struct {
+	Tunnel string
+	Status string
+}
+
 func (a *Agent) checkBFD(ctx context.Context) {
 	peers, err := frrstate.BFDPeers(ctx, a.Sys)
 	if err != nil {
@@ -341,14 +347,47 @@ func (a *Agent) checkBFD(ctx context.Context) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	for _, p := range peers {
-		key := p.Peer + "%" + p.Interface
-		if old, ok := a.bfd[key]; ok && old != p.Status {
+		tunnel := tunnelOf(a.current, p.Peer, p.Interface)
+		if old, ok := a.bfd[p.Peer]; ok && old.Status != p.Status {
 			a.buf.Events = append(a.buf.Events, Event{At: time.Now(), Kind: "bfd_" + p.Status,
-				Detail: map[string]string{"peer": p.Peer, "tunnel": p.Interface}})
-			a.Log.Info("bfd change", "peer", p.Peer, "tunnel", p.Interface, "status", p.Status)
+				Detail: map[string]string{"peer": p.Peer, "tunnel": tunnel}})
+			a.Log.Info("bfd change", "peer", p.Peer, "tunnel", tunnel, "status", p.Status)
 		}
-		a.bfd[key] = p.Status
+		a.bfd[p.Peer] = bfdPeer{Tunnel: tunnel, Status: p.Status}
 	}
+}
+
+// tunnelOf names the tunnel a BFD peer runs over. FRR leaves the interface
+// out of single-hop sessions that BGP creates, so fall back to the tunnel
+// whose BGP neighbour has that address.
+func tunnelOf(s *desired.State, peer, iface string) string {
+	if iface != "" || s == nil {
+		return iface
+	}
+	for _, t := range s.Tunnels {
+		for _, n := range t.Neighbors {
+			if n.Address == peer {
+				return t.Name
+			}
+		}
+	}
+	return ""
+}
+
+// tunnelBFD is "up" when every BFD peer on the tunnel is up, otherwise the
+// state of the first peer that is not; "" when the tunnel has no BFD peers.
+func tunnelBFD(peers map[string]bfdPeer, tunnel string) string {
+	state := ""
+	for _, p := range peers {
+		if p.Tunnel != tunnel {
+			continue
+		}
+		if p.Status != "up" {
+			return p.Status
+		}
+		state = "up"
+	}
+	return state
 }
 
 func (a *Agent) flush(ctx context.Context) {
@@ -359,11 +398,7 @@ func (a *Agent) flush(ctx context.Context) {
 	if a.current != nil {
 		for _, tn := range a.current.Tunnels {
 			ts := TunnelState{Name: tn.Name, Path: tn.Path, HandshakeAgeS: -1}
-			for k, v := range a.bfd {
-				if strings.HasSuffix(k, "%"+tn.Name) {
-					ts.BFD = v
-				}
-			}
+			ts.BFD = tunnelBFD(a.bfd, tn.Name)
 			t.Tunnels = append(t.Tunnels, ts)
 		}
 	}

@@ -8,3 +8,6 @@ RUN apk add --no-cache \
 
 # bgpd and bfdd only; zebra, staticd and watchfrr start by default.
 RUN sed -i -e 's/^bgpd=no/bgpd=yes/' -e 's/^bfdd=no/bfdd=yes/' /etc/frr/daemons
+
+# exa-agent is bind-mounted from the host's bin/lab directory (lab/exaconnect.clab.yml).
+RUN ln -s /opt/exaconnect/bin/exa-agent /usr/local/bin/exa-agent

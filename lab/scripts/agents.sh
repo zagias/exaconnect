@@ -14,7 +14,7 @@ start() {
   local n
   for n in "${NODES[@]}"; do
     if running "$n"; then echo "$n: agent already running"; continue; fi
-    docker exec -d "$(node "$n")" sh -c 'exec exa-agent run >>/var/log/exa-agent.log 2>&1'
+    docker exec -d "$(node "$n")" sh -c 'exec /opt/exaconnect/bin/exa-agent run >>/var/log/exa-agent.log 2>&1'
     echo "$n: agent started"
   done
 }
@@ -34,7 +34,7 @@ case "${1:-}" in
     stop
     for n in "${NODES[@]}"; do
       tok=$(jq -r --arg n "$n" '.tokens[$n]' "$seed")
-      docker exec "$(node "$n")" exa-agent enrol --controller "$url" --token "$tok" \
+      docker exec "$(node "$n")" /opt/exaconnect/bin/exa-agent enrol --controller "$url" --token "$tok" \
         --ca-fingerprint "$fp" --name "$n"
     done
     start ;;

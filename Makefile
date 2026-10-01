@@ -7,7 +7,7 @@ LDFLAGS := -s -w -X github.com/zagias/exaconnect/agent/internal/version.Version=
            -X github.com/zagias/exaconnect/agent/internal/version.Commit=$(COMMIT)
 PY ?= python3
 
-.PHONY: help build build-agent build-portal test test-agent test-controller test-portal lint \
+.PHONY: agents-upgrade help build build-agent build-portal test test-agent test-controller test-portal lint \
         lab-image lab-agent lab-up lab-down lab-smoke lab-routing controller-up controller-down \
         controller-logs demo-seed agents-start agents-stop agents-status demo
 
@@ -87,6 +87,9 @@ demo-seed: ## Seed two sites, one PoP, three paths, three classes; enrol and sta
 	umask 077 && docker compose -f deploy/docker-compose.yml --env-file .env exec -T controller \
 	  python -m exaconnect_controller.seed --lab > lab/.state/seed.json
 	lab/scripts/agents.sh enrol lab/.state/seed.json
+
+agents-upgrade: lab-agent ## Rebuild exa-agent and restart the agents on it (state and keys are kept)
+	lab/scripts/agents.sh restart
 
 agents-start: ## Start the agents (after demo-seed)
 	lab/scripts/agents.sh start

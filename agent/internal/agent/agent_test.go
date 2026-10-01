@@ -161,3 +161,29 @@ func TestAgentAppliesAndSurvivesControllerLoss(t *testing.T) {
 		t.Fatalf("restarted agent holds version %d, want 1", got)
 	}
 }
+
+func TestBFDMapsPeersToTunnels(t *testing.T) {
+	s := state(1)
+	s.Tunnels = append(s.Tunnels, desired.Tunnel{Name: "wg-b"})
+	s.Tunnels[0].Neighbors = []desired.Neighbor{{Address: "100.64.1.1"}}
+	s.Tunnels[1].Neighbors = []desired.Neighbor{{Address: "100.64.2.11"}, {Address: "100.64.2.12"}}
+
+	// FRR omits the interface for BGP-created single-hop sessions.
+	if got := tunnelOf(&s, "100.64.1.1", ""); got != "wg-a" {
+		t.Fatalf("tunnelOf = %q, want wg-a", got)
+	}
+	if got := tunnelOf(&s, "100.64.9.9", "wg-x"); got != "wg-x" {
+		t.Fatalf("interface from FRR should win, got %q", got)
+	}
+
+	peers := map[string]bfdPeer{
+		"100.64.1.1":  {Tunnel: "wg-a", Status: "up"},
+		"100.64.2.11": {Tunnel: "wg-b", Status: "up"},
+		"100.64.2.12": {Tunnel: "wg-b", Status: "down"},
+	}
+	for tunnel, want := range map[string]string{"wg-a": "up", "wg-b": "down", "wg-sat": ""} {
+		if got := tunnelBFD(peers, tunnel); got != want {
+			t.Errorf("tunnelBFD(%s) = %q, want %q", tunnel, got, want)
+		}
+	}
+}
