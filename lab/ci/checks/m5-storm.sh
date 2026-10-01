@@ -28,7 +28,9 @@ fi
 sleep 20
 sat_rate=$(sql "SELECT round(avg(sent)) FROM path_metrics pm JOIN nodes n ON n.id = pm.node_id
                 WHERE n.name = 'site-a' AND pm.path = 'sat' AND pm.time > now() - interval '15 seconds'")
-if [[ -n $sat_rate ]] && ((sat_rate >= 40)); then ok "satellite warm: $sat_rate probes per 10 s"; else bad "satellite probes per 10 s: ${sat_rate:-none}"; fi
+# Storm Mode probes satellite 5 times a second (50 per 10 s window) against
+# once a second normally; partial windows read lower, so 30 is the bar.
+if [[ -n $sat_rate ]] && ((sat_rate >= 30)); then ok "satellite warm: $sat_rate probes per 10 s"; else bad "satellite probes per 10 s: ${sat_rate:-none}"; fi
 bgp_sat=$(docker exec "$(node site-a)" vtysh -c 'show bgp summary json' | jq '[.ipv4Unicast.peers | to_entries[] | select(.key | startswith("100.64.3.")) | select(.value.state == "Established")] | length')
 if ((bgp_sat >= 1)); then ok "satellite BGP established"; else bad "satellite BGP not established"; fi
 

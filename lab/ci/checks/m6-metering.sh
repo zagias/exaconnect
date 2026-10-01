@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# M6: metering and the carrier view (demo step 6). Runs bulk traffic over
-# carrier A for two full 5-minute buckets, then checks the samples, the 95th
+# M6: metering and the carrier view (demo step 6). Runs bulk traffic from
+# site A for two full 5-minute buckets, then checks the samples, the 95th
 # percentile and burst on screen (API), the carrier user's scope, and that
-# the CSV matches the screen.
+# the CSV matches the screen. Bulk may still be on carrier B after the
+# earlier steps (it moves back only after 5 good minutes), so the check
+# follows whichever link carries it.
 # shellcheck disable=SC2329  # helpers are called through wait_for
 # shellcheck source=lab/ci/lib.sh
 source "$(dirname "$0")/../lib.sh"
@@ -13,16 +15,19 @@ docker exec -d "$(node lan-b)" iperf3 -s -1 -p 5201
 sleep 1
 docker exec -d "$(node lan-a)" sh -c 'iperf3 -c 192.168.20.10 -p 5201 -u -b 20M -S 32 -t 660 > /tmp/iperf-bulk.txt 2>&1'
 start=$(date -u +%FT%TZ)
+bulk_path=$(path_of site-a 0x103 192.168.20.10)
+note "bulk leaves site-a on ${bulk_path:-?}"
 sample_ready() {
   (($(sql "SELECT count(*) FROM usage_5m u JOIN links l ON l.id = u.link_id JOIN sites s ON s.id = l.site_id
-           WHERE s.name = 'site-a' AND l.path = 'carrier-a' AND u.bucket >= '$start'::timestamptz - interval '5 minutes'
+           WHERE s.name = 'site-a' AND u.bucket >= '$start'::timestamptz - interval '5 minutes'
              AND u.out_mbps > 5") >= 2))
 }
-if wait_for 900 sample_ready; then ok "5-minute samples for site-a carrier A"; else bad "no 5-minute samples with traffic after 15 minutes"; fi
+if wait_for 900 sample_ready; then ok "5-minute samples with traffic for site-a"; else bad "no 5-minute samples with traffic after 15 minutes"; fi
+note "iperf: $(docker exec "$(node lan-a)" sh -c 'tail -n 4 /tmp/iperf-bulk.txt' 2>&1 | tr '\n' ' ' | cut -c1-300)"
 
 links=$(api GET "/metering/links?hours=1")
-a=$(jq -c '.links[] | select(.site == "site-a" and .path == "carrier-a")' <<<"$links")
-note "site-a carrier A: $(jq -r '"samples \(.samples), 95th in \(.p95_in_mbps) out \(.p95_out_mbps), billable \(.billable_mbps), commit \(.commit_mbps), burst \(.burst_mbps), total \(.total)"' <<<"$a")"
+a=$(jq -c '[.links[] | select(.site == "site-a")] | max_by(.billable_mbps // 0)' <<<"$links")
+note "site-a $(jq -r .path <<<"$a"): $(jq -r '"samples \(.samples), 95th in \(.p95_in_mbps) out \(.p95_out_mbps), billable \(.billable_mbps), commit \(.commit_mbps), burst \(.burst_mbps), total \(.total)"' <<<"$a")"
 billable=$(jq -r .billable_mbps <<<"$a")
 if awk -v b="$billable" 'BEGIN { exit !(b > 10 && b < 30) }'; then ok "billable rate ${billable} Mbps matches the ~20 Mbit/s offered"; else bad "billable rate ${billable}"; fi
 
