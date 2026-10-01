@@ -13,7 +13,9 @@ import (
 )
 
 type Runner interface {
-	// Run executes a command and returns its combined output.
+	// Run executes a command and returns its stdout. Stderr goes into the
+	// error only: tools such as vtysh print warnings there even on success,
+	// which would corrupt output the agent parses.
 	Run(ctx context.Context, name string, args ...string) ([]byte, error)
 	// WriteFile atomically replaces a file.
 	WriteFile(path string, data []byte, perm os.FileMode) error
@@ -25,10 +27,11 @@ type Host struct{}
 
 func (Host) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
-	var out bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &out, &out
+	var out, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &out, &stderr
 	if err := cmd.Run(); err != nil {
-		return out.Bytes(), fmt.Errorf("%s %s: %w: %s", name, strings.Join(args, " "), err, strings.TrimSpace(out.String()))
+		msg := strings.TrimSpace(stderr.String() + "\n" + out.String())
+		return out.Bytes(), fmt.Errorf("%s %s: %w: %s", name, strings.Join(args, " "), err, msg)
 	}
 	return out.Bytes(), nil
 }

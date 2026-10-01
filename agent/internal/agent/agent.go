@@ -88,6 +88,7 @@ type Agent struct {
 	reflCancel  context.CancelFunc
 	buf         Telemetry
 	bfd         map[string]bfdPeer // by peer address
+	bfdErr      string
 	lastContact time.Time
 	silent      bool
 	lastFailure string // version+error of the last failed apply, to avoid repeating events
@@ -341,11 +342,17 @@ type bfdPeer struct {
 
 func (a *Agent) checkBFD(ctx context.Context) {
 	peers, err := frrstate.BFDPeers(ctx, a.Sys)
-	if err != nil {
-		return
-	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if err != nil {
+		// Log each distinct failure once; this runs every 2 seconds.
+		if msg := err.Error(); msg != a.bfdErr {
+			a.bfdErr = msg
+			a.Log.Warn("cannot read BFD state", "err", err)
+		}
+		return
+	}
+	a.bfdErr = ""
 	for _, p := range peers {
 		tunnel := tunnelOf(a.current, p.Peer, p.Interface)
 		if old, ok := a.bfd[p.Peer]; ok && old.Status != p.Status {

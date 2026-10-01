@@ -8,6 +8,8 @@ RUN apk add --no-cache \
 
 # bgpd and bfdd only; zebra, staticd and watchfrr start by default.
 RUN sed -i -e 's/^bgpd=no/bgpd=yes/' -e 's/^bfdd=no/bfdd=yes/' /etc/frr/daemons
+# An empty vtysh.conf stops vtysh warning on every call.
+RUN touch /etc/frr/vtysh.conf
 
 # exa-agent is bind-mounted from the host's bin/lab directory (lab/exaconnect.clab.yml).
 RUN ln -s /opt/exaconnect/bin/exa-agent /usr/local/bin/exa-agent
