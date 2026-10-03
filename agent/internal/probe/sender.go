@@ -11,6 +11,7 @@ import (
 type Sender struct {
 	Path     string
 	Device   string // "" = no binding (tests)
+	Source   string // local address to send from, "" = the kernel's choice
 	Target   string
 	Interval time.Duration
 	Stats    *Stats
@@ -18,6 +19,13 @@ type Sender struct {
 
 func (s *Sender) Run(ctx context.Context) error {
 	d := net.Dialer{Control: bindControl(s.Device)}
+	if s.Source != "" {
+		ip := net.ParseIP(s.Source)
+		if ip == nil {
+			return &net.AddrError{Err: "bad source address", Addr: s.Source}
+		}
+		d.LocalAddr = &net.UDPAddr{IP: ip}
+	}
 	conn, err := d.DialContext(ctx, "udp", s.Target)
 	if err != nil {
 		return err

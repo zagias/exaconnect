@@ -65,3 +65,19 @@ func (Host) Exists(path string) bool {
 }
 
 func (Host) ReadFile(path string) ([]byte, error) { return os.ReadFile(path) }
+
+// Files lists and removes files. Host implements it; a Runner that does not
+// (an older test fake) simply has no files to list.
+type Files interface {
+	Glob(pattern string) ([]string, error)
+	Remove(path string) error
+}
+
+func (Host) Glob(pattern string) ([]string, error) { return filepath.Glob(pattern) }
+
+func (Host) Remove(path string) error {
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}

@@ -6,6 +6,7 @@ import Ask from "./pages/Ask";
 import Insights from "./pages/Insights";
 import Admin from "./pages/Admin";
 import Decisions from "./pages/Decisions";
+import Fabric from "./pages/Fabric";
 import Metering from "./pages/Metering";
 import Overview from "./pages/Overview";
 import { SiteList, SitePage } from "./pages/Sites";
@@ -45,6 +46,7 @@ function Layout() {
                 <NavLink to="/sites">Sites</NavLink>
                 <NavLink to="/traffic">Traffic</NavLink>
                 <NavLink to="/decisions">Decisions</NavLink>
+                <NavLink to="/fabric">Fabric</NavLink>
                 <NavLink to="/metering">Metering</NavLink>
                 <NavLink to="/insights">Insights</NavLink>
                 <NavLink to="/ask">Ask</NavLink>
@@ -72,6 +74,7 @@ function Layout() {
             <Route path="/sites/:id" element={<SitePage />} />
             <Route path="/traffic/*" element={<Traffic />} />
             <Route path="/decisions" element={<Decisions />} />
+            <Route path="/fabric" element={<Fabric />} />
             <Route path="/metering" element={<Metering />} />
             <Route path="/insights" element={<Insights />} />
             <Route path="/ask" element={<Ask />} />

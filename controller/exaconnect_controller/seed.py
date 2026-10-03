@@ -76,6 +76,9 @@ def seed_lab(conn) -> dict:
             overlay_host=host,
             latitude=lat,
             longitude=lon,
+            # The PoP reaches the lab's simulated clouds through the "ix" router.
+            cloud_interface="eth5" if kind == "pop" else None,
+            cloud_address="100.64.0.2/24" if kind == "pop" else None,
         )
         for path, carrier, utype, iface, second, commit, cost, burst, speed in LAB_LINKS:
             carrier_id = inventory.ensure_carrier(conn, carrier, ACTOR)

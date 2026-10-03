@@ -6,6 +6,11 @@
 #   carrier-b 10.12.x.0/24, sat 10.13.x.0/24 (same pattern)
 #   The carrier router is .1 on each segment, the site or PoP is .2.
 # Site LANs: site-a 192.168.10.0/24, site-b 192.168.20.0/24, PoP 10.200.0.0/24.
+# Simulated clouds (ADR 0009): the PoP's eth5 (100.64.0.2) reaches an "ix" router
+# and behind it two cloud VPN gateways, cloud-aws (100.64.10.2, VPC 10.100.0.0/16)
+# and cloud-azure (100.64.11.2, VNet 10.101.0.0/16). Lab check m9-fabric sets
+# their IPsec and BGP up with a key it makes for each run.
+# Layer 2 circuits: lan-a tags VLAN 100 (172.16.100.10/24), lan-b VLAN 200 (.20).
 # Sites and the PoP run exa-agent from bin/lab (built by `make lab-agent`, mounted as a
 # directory so a rebuild reaches running nodes; `make agents-upgrade` restarts them);
 # it owns WireGuard (wg-a, wg-b, wg-sat) and /etc/frr/frr.conf once enrolled.
@@ -54,6 +59,9 @@ topology:
         - ip addr add 10.12.0.2/24 dev eth2
         - ip addr add 10.13.0.2/24 dev eth3
         - ip addr add 10.200.0.1/24 dev eth4
+        - ip addr add 100.64.0.2/24 dev eth5
+        - ip route add 100.64.10.0/24 via 100.64.0.1
+        - ip route add 100.64.11.0/24 via 100.64.0.1
         # Underlay: reach each carrier's site segments through that carrier.
         - ip route add 10.11.0.0/16 via 10.11.0.1
         - ip route add 10.12.0.0/16 via 10.12.0.1
@@ -87,6 +95,33 @@ topology:
         - ip route add 10.12.0.0/24 via 10.12.2.1
         - ip route add 10.13.0.0/24 via 10.13.2.1
 
+    # The exchange the PoP reaches clouds through, and two simulated cloud VPN gateways.
+    ix:
+      mgmt-ipv4: 172.30.0.14
+      exec:
+        - sysctl -w net.ipv4.ip_forward=1
+        - ip addr add 100.64.0.1/24 dev eth1
+        - ip addr add 100.64.10.1/24 dev eth2
+        - ip addr add 100.64.11.1/24 dev eth3
+    cloud-aws:
+      mgmt-ipv4: 172.30.0.51
+      exec:
+        - sysctl -w net.ipv4.ip_forward=1
+        - ip addr add 100.64.10.2/24 dev eth1
+        - ip route add 100.64.0.0/24 via 100.64.10.1
+        - ip link add vpc type dummy
+        - ip addr add 10.100.0.1/16 dev vpc
+        - ip link set vpc up
+    cloud-azure:
+      mgmt-ipv4: 172.30.0.52
+      exec:
+        - sysctl -w net.ipv4.ip_forward=1
+        - ip addr add 100.64.11.2/24 dev eth1
+        - ip route add 100.64.0.0/24 via 100.64.11.1
+        - ip link add vpc type dummy
+        - ip addr add 10.101.0.1/16 dev vpc
+        - ip link set vpc up
+
     # Traffic generators behind each site and the PoP.
     lan-a:
       mgmt-ipv4: 172.30.0.41
@@ -94,12 +129,20 @@ topology:
         - ip addr add 192.168.10.10/24 dev eth1
         - ip route replace 192.168.0.0/16 via 192.168.10.1
         - ip route replace 10.200.0.0/24 via 192.168.10.1
+        - ip route replace 10.100.0.0/15 via 192.168.10.1
+        - ip link add link eth1 name eth1.100 type vlan id 100
+        - ip addr add 172.16.100.10/24 dev eth1.100
+        - ip link set eth1.100 mtu 1370 up
     lan-b:
       mgmt-ipv4: 172.30.0.42
       exec:
         - ip addr add 192.168.20.10/24 dev eth1
         - ip route replace 192.168.0.0/16 via 192.168.20.1
         - ip route replace 10.200.0.0/24 via 192.168.20.1
+        - ip route replace 10.100.0.0/15 via 192.168.20.1
+        - ip link add link eth1 name eth1.200 type vlan id 200
+        - ip addr add 172.16.100.20/24 dev eth1.200
+        - ip link set eth1.200 mtu 1370 up
     lan-pop:
       mgmt-ipv4: 172.30.0.43
       exec:
@@ -119,3 +162,6 @@ topology:
     - endpoints: ["site-a:eth4", "lan-a:eth1"]
     - endpoints: ["site-b:eth4", "lan-b:eth1"]
     - endpoints: ["pop-miami:eth4", "lan-pop:eth1"]
+    - endpoints: ["pop-miami:eth5", "ix:eth1"]
+    - endpoints: ["ix:eth2", "cloud-aws:eth1"]
+    - endpoints: ["ix:eth3", "cloud-azure:eth1"]

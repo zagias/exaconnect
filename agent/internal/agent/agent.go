@@ -102,6 +102,8 @@ type Telemetry struct {
 	// Steering is where each class is right now, against SteeringVersion.
 	Steering        []steer.Choice `json:"steering,omitempty"`
 	SteeringVersion int64          `json:"steering_version,omitempty"`
+	// Circuits is every circuit's state at this flush (ADR 0009).
+	Circuits []CircuitState `json:"circuits,omitempty"`
 }
 
 type Agent struct {
@@ -117,6 +119,8 @@ type Agent struct {
 	stats       map[string]*probe.Stats // by tunnel name
 	probeCancel context.CancelFunc
 	reflCancel  context.CancelFunc
+	circStats   map[string]*probe.Stats // layer 2 circuit probes, by circuit name
+	circCancel  context.CancelFunc
 	buf         Telemetry
 	bfd         map[string]bfdPeer // by peer address
 	bfdErr      string
@@ -210,6 +214,7 @@ func (a *Agent) Run(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			a.stopProbes()
+			a.stopCircuitProbes()
 			return nil
 		case <-poll.C:
 			a.poll(ctx)
@@ -389,8 +394,15 @@ func (a *Agent) setCurrent(ctx context.Context, s *desired.State) {
 	if prev == nil || probeKey(prev) != probeKey(s) {
 		a.startProbes(ctx, s)
 	}
-	if (prev == nil || reflKey(prev) != reflKey(s)) && s.Reflector != nil {
-		a.startReflector(ctx, s.Reflector.Listen)
+	if prev == nil || circuitProbeKey(prev) != circuitProbeKey(s) {
+		a.startCircuitProbes(ctx, s)
+	}
+	if prev == nil || reflKey(prev) != reflKey(s) {
+		if s.Reflector != nil {
+			a.startReflector(ctx, s.Reflector.Listen)
+		} else {
+			a.stopReflector()
+		}
 	}
 	if prev != nil {
 		if a.Steerer != nil {
@@ -459,10 +471,15 @@ func (a *Agent) stopProbes() {
 	}
 }
 
-func (a *Agent) startReflector(ctx context.Context, listen string) {
+func (a *Agent) stopReflector() {
 	if a.reflCancel != nil {
 		a.reflCancel()
+		a.reflCancel = nil
 	}
+}
+
+func (a *Agent) startReflector(ctx context.Context, listen string) {
+	a.stopReflector()
 	rctx, cancel := context.WithCancel(ctx)
 	a.reflCancel = cancel
 	go func() {
@@ -599,7 +616,9 @@ func (a *Agent) flush(ctx context.Context) {
 	if a.steerMap != nil {
 		t.Steering, t.SteeringVersion = a.choices, a.steerMap.Version
 	}
+	cur := a.current
 	a.mu.Unlock()
+	t.Circuits = a.circuitStates(ctx, cur, now)
 	for i := range t.Tunnels {
 		if age, err := frrstate.HandshakeAge(ctx, a.Sys, t.Tunnels[i].Name, now); err == nil {
 			t.Tunnels[i].HandshakeAgeS = age

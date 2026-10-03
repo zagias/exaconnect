@@ -9,6 +9,10 @@ set +e
 COMPOSE=(docker compose -f deploy/docker-compose.yml --env-file .env)
 step() { printf '\n== %s (%s)\n' "$*" "$(date -u +%T)"; }
 
+# Kernel modules the containers can't load themselves: XFRM interfaces for
+# cloud circuits, VXLAN for layer 2 circuits (ADR 0009).
+modprobe -a xfrm_interface vxlan 2>/dev/null || echo "note: could not load xfrm_interface/vxlan"
+
 want=$(cat lab/exaconnect.clab.yml lab/images/node/* lab/netem/profiles.env 2>/dev/null | sha256sum | cut -c1-16)
 have=$(cat lab/.state/lab.hash 2>/dev/null)
 fresh=0

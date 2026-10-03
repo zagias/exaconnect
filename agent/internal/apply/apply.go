@@ -1,5 +1,6 @@
-// Package apply makes the node match a desired state: WireGuard interfaces and
-// peers, then FRR. It is idempotent, keeps the last good state on disk, and
+// Package apply makes the node match a desired state: the loopback, WireGuard
+// interfaces and peers, cloud (IPsec) and layer 2 (VXLAN) circuits, then FRR.
+// It is idempotent, keeps the last good state on disk, and
 // rolls back to it if applying a new version fails.
 package apply
 
@@ -11,6 +12,7 @@ import (
 	"log/slog"
 	"path/filepath"
 	"strconv"
+	"time"
 
 	"github.com/zagias/exaconnect/agent/internal/desired"
 	"github.com/zagias/exaconnect/agent/internal/render"
@@ -28,6 +30,14 @@ type Applier struct {
 	PrivateKey string
 	Log        *slog.Logger
 	FRRConf    string // defaults to FRRConf
+	// SwanctlDir and StrongSwanConf default to the constants of the same names.
+	SwanctlDir     string
+	StrongSwanConf string
+	// Sleep waits while strongSwan starts; nil uses time.Sleep (tests stub it).
+	Sleep func(time.Duration)
+
+	shaped   map[string]string // circuit interface -> shaping last applied
+	shapeErr map[string]string // circuit interface -> last shaping error logged
 }
 
 func (a *Applier) lastGoodPath() string { return filepath.Join(a.StateDir, "last-good.json") }
@@ -81,6 +91,9 @@ func (r *RolledBack) Unwrap() error { return r.Err }
 func IsRolledBack(err error) bool { var r *RolledBack; return errors.As(err, &r) }
 
 func (a *Applier) apply(ctx context.Context, s *desired.State) error {
+	if err := a.loopback(ctx, s); err != nil {
+		return fmt.Errorf("loopback: %w", err)
+	}
 	want := map[string]bool{}
 	for _, t := range s.Tunnels {
 		want[t.Name] = true
@@ -90,6 +103,9 @@ func (a *Applier) apply(ctx context.Context, s *desired.State) error {
 	}
 	if err := a.removeStale(ctx, want); err != nil {
 		return err
+	}
+	if err := a.circuits(ctx, s); err != nil {
+		return fmt.Errorf("circuits: %w", err)
 	}
 	return a.frr(ctx, s)
 }

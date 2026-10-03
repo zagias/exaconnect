@@ -44,6 +44,16 @@ class SiteIn(BaseModel):
     overlay_host: int = Field(ge=1, le=254)
     latitude: float | None = Field(default=None, ge=-90, le=90)
     longitude: float | None = Field(default=None, ge=-180, le=180)
+    # PoP only: the interface and address that reach cloud VPN gateways (ADR 0009).
+    cloud_interface: str | None = Field(default=None, pattern=r"^[a-zA-Z0-9._-]{1,15}$")
+    cloud_address: str | None = None
+    # The LAN-facing interface, where layer 2 circuits take their VLANs (default eth4).
+    lan_interface: str | None = Field(default=None, pattern=r"^[a-zA-Z0-9._-]{1,15}$")
+
+    @field_validator("cloud_address")
+    @classmethod
+    def _cloud_address(cls, v: str | None) -> str | None:
+        return None if not v else str(ipaddress.ip_interface(v))
 
     @field_validator("lan_prefixes")
     @classmethod
@@ -151,7 +161,10 @@ def inventory_view(user: AdminDep, customer_id: str) -> dict:
     with db.tx() as conn:
         sites = conn.execute(
             """SELECT s.id, s.name, s.kind, s.location, s.timezone, s.asn, s.lan_prefixes::text[] AS lan_prefixes,
-                      s.overlay_host, s.latitude, s.longitude, n.name AS node, n.last_seen
+                      s.overlay_host, s.latitude, s.longitude, s.cloud_interface,
+                      s.cloud_address::text AS cloud_address,
+                      s.lan_interface,
+                      n.name AS node, n.last_seen
                FROM sites s LEFT JOIN nodes n ON n.site_id = s.id
                WHERE s.customer_id = %s ORDER BY s.kind DESC, s.name""",
             (customer_id,),

@@ -25,6 +25,8 @@ sch_netem
 MODS
 modprobe wireguard
 modprobe sch_netem
+modprobe xfrm_interface
+modprobe vxlan
 
 if ! command -v containerlab >/dev/null; then
   # Official installer; adds the containerlab apt repository.

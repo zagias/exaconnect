@@ -6,6 +6,8 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -13,10 +15,14 @@ import (
 )
 
 type fake struct {
-	cmds   []string
-	files  map[string]string
-	failOn string // fail any command containing this
-	links  string // json for ip -j link show type wireguard
+	cmds    []string
+	files   map[string]string
+	perms   map[string]os.FileMode
+	failOn  string // fail any command containing this
+	links   string // json for ip -j link show type wireguard
+	ipLinks string // json for ip -d -j link show
+	loAddrs string // json for the labelled loopback addresses
+	charon  bool   // strongSwan is running; `ipsec start` starts it
 }
 
 func (f *fake) Run(_ context.Context, name string, args ...string) ([]byte, error) {
@@ -25,13 +31,39 @@ func (f *fake) Run(_ context.Context, name string, args ...string) ([]byte, erro
 	if f.failOn != "" && strings.Contains(c, f.failOn) {
 		return nil, fmt.Errorf("boom: %s", c)
 	}
-	if strings.HasPrefix(c, "ip -j link show type wireguard") {
+	switch {
+	case strings.HasPrefix(c, "ip -j link show type wireguard"):
 		return []byte(f.links), nil
+	case c == "ip -d -j link show":
+		return []byte(f.ipLinks), nil
+	case strings.HasPrefix(c, "ip -j -4 address show dev lo"):
+		return []byte(f.loAddrs), nil
+	case c == "swanctl --stats" && !f.charon:
+		return nil, fmt.Errorf("swanctl: connecting to 'unix:///var/run/charon.vici' failed")
+	case c == "ipsec start":
+		f.charon = true
 	}
 	return nil, nil
 }
-func (f *fake) WriteFile(p string, d []byte, _ os.FileMode) error { f.files[p] = string(d); return nil }
-func (f *fake) Exists(p string) bool                              { _, ok := f.files[p]; return ok }
+func (f *fake) WriteFile(p string, d []byte, m os.FileMode) error {
+	f.files[p] = string(d)
+	if f.perms != nil {
+		f.perms[p] = m
+	}
+	return nil
+}
+func (f *fake) Glob(pattern string) ([]string, error) {
+	var out []string
+	for p := range f.files {
+		if ok, _ := filepath.Match(pattern, p); ok {
+			out = append(out, p)
+		}
+	}
+	sort.Strings(out)
+	return out, nil
+}
+func (f *fake) Remove(p string) error { delete(f.files, p); return nil }
+func (f *fake) Exists(p string) bool  { _, ok := f.files[p]; return ok }
 func (f *fake) ReadFile(p string) ([]byte, error) {
 	if d, ok := f.files[p]; ok {
 		return []byte(d), nil

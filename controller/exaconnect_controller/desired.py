@@ -14,6 +14,7 @@ from typing import Any
 import psycopg
 from psycopg.types.json import Jsonb
 
+from . import fabric
 from .routing import maps
 
 SCHEMA = 1
@@ -26,6 +27,8 @@ PROBE_INTERVAL_MS = {"fibre": 50, "broadband": 50, "lte": 200, "leo": 1000, "geo
 # Storm Mode keeps the satellite warm: probed 5 times a second (ADR 0004).
 STORM_SAT_PROBE_MS = 200
 KEEPALIVE_S = 10
+# The interface facing the site's LAN, where layer 2 circuits take their VLANs.
+LAN_INTERFACE = "eth4"
 BFD_PROFILES = [
     # Detects a dead terrestrial path in 3 x 200 ms = 600 ms (demo step 3 needs < 1 s).
     {"name": "terrestrial", "tx_ms": 200, "rx_ms": 200, "multiplier": 3},
@@ -54,11 +57,84 @@ def _load(conn: psycopg.Connection, customer_id: Any) -> dict[str, Any]:
         (customer_id,),
     ).fetchall()
     nodes = conn.execute("SELECT * FROM nodes WHERE customer_id = %s", (customer_id,)).fetchall()
+    customer = conn.execute("SELECT cloud_to_cloud FROM customers WHERE id = %s", (customer_id,)).fetchone()
+    circuits = conn.execute(
+        "SELECT * FROM circuits WHERE customer_id = %s AND deleted_at IS NULL ORDER BY id", (customer_id,)
+    ).fetchall()
     return {
         "sites": sites,
         "links": links,
         "nodes": {n["site_id"]: n for n in nodes},
+        "cloud_to_cloud": bool(customer and customer["cloud_to_cloud"]),
+        "circuits": circuits,
     }
+
+
+def _export_prefixes(inv: dict[str, Any], c: dict) -> list[str]:
+    """What a cloud may reach: the circuit's chosen subnets, else its site's
+    networks, else every site's."""
+    if c["a_prefixes"]:
+        return [str(p) for p in c["a_prefixes"]]
+    sites = [s for s in inv["sites"] if s["kind"] == "site" and (c["a_site_id"] is None or s["id"] == c["a_site_id"])]
+    return sorted({str(p) for s in sites for p in s["lan_prefixes"]})
+
+
+def cloud_circuits(inv: dict[str, Any], pop: dict) -> list[dict[str, Any]]:
+    """The PoP's IPsec circuits to cloud gateways (ADR 0009)."""
+    if not pop.get("cloud_interface") or pop.get("cloud_address") is None:
+        return []
+    clouds = [c for c in inv["circuits"] if c["kind"] == "cloud" and c["enabled"]]
+    out = []
+    for c in clouds:
+        ours, theirs = fabric.inside_pair(c["inside_cidr"])
+        out.append(
+            {
+                "id": c["id"],
+                "name": fabric.ifname(c),
+                "if_id": c["id"],
+                "underlay_interface": pop["cloud_interface"],
+                "local_address": str(ipaddress.ip_interface(str(pop["cloud_address"])).ip),
+                "remote_address": str(c["peer_address"]),
+                "psk": c["psk"],
+                "ike_proposals": fabric.IKE_PROPOSALS,
+                "esp_proposals": fabric.ESP_PROPOSALS,
+                "inside_address": ours,
+                "peer_inside": theirs,
+                "peer_asn": c["peer_asn"],
+                "import_prefixes": [str(p) for p in c["cloud_prefixes"]],
+                "max_prefixes": fabric.MAX_PREFIXES,
+                "export_prefixes": _export_prefixes(inv, c),
+                # The cloud router: each cloud also learns the other clouds' routes.
+                "export_circuits": [o["id"] for o in clouds if o["id"] != c["id"]] if inv["cloud_to_cloud"] else [],
+                "shape_kbit": c["bandwidth_mbps"] * 1000,
+            }
+        )
+    return out
+
+
+def l2_circuits(inv: dict[str, Any], site: dict) -> list[dict[str, Any]]:
+    """The site's layer 2 circuits: a VLAN bridged over VXLAN to the other end."""
+    by_id = {s["id"]: s for s in inv["sites"]}
+    out = []
+    for c in inv["circuits"]:
+        if c["kind"] != "site" or not c["enabled"] or site["id"] not in (c["a_site_id"], c["b_site_id"]):
+            continue
+        a_end = site["id"] == c["a_site_id"]
+        other = by_id[c["b_site_id"] if a_end else c["a_site_id"]]
+        out.append(
+            {
+                "id": c["id"],
+                "name": fabric.ifname(c),
+                "vni": fabric.VNI_BASE + c["id"],
+                "vlan": c["a_vlan"] if a_end else c["b_vlan"],
+                "parent": site.get("lan_interface") or LAN_INTERFACE,
+                "remote": fabric.loopback(other).split("/")[0],
+                "shape_kbit": c["bandwidth_mbps"] * 1000,
+                "mtu": fabric.L2_MTU,
+                "probe": {"target": f"{fabric.loopback(other).split('/')[0]}:{PROBE_PORT}", "interval_ms": 1000},
+            }
+        )
+    return out
 
 
 def build(inv: dict[str, Any], site: dict[str, Any]) -> dict[str, Any]:
@@ -95,7 +171,11 @@ def build(inv: dict[str, Any], site: dict[str, Any]) -> dict[str, Any]:
                     {
                         "name": other["name"],
                         "public_key": inv["nodes"][other["id"]]["wg_public_key"],
-                        "allowed_ips": [f"{o_addr}/32", *[str(p) for p in other["lan_prefixes"]]],
+                        "allowed_ips": [
+                            f"{o_addr}/32",
+                            fabric.loopback(other),
+                            *[str(p) for p in other["lan_prefixes"]],
+                        ],
                     }
                 )
                 # Same preference as the sites use, so return traffic takes the same path.
@@ -147,8 +227,18 @@ def build(inv: dict[str, Any], site: dict[str, Any]) -> dict[str, Any]:
         "tunnels": tunnels,
         "bfd_profiles": BFD_PROFILES,
     }
+    body["loopback"] = fabric.loopback(site)
     if site["kind"] == "pop":
         body["reflector"] = {"listen": f":{PROBE_PORT}"}
+        circuits = cloud_circuits(inv, site)
+        if circuits:
+            body["circuits"] = circuits
+    else:
+        l2 = l2_circuits(inv, site)
+        if l2:
+            body["l2_circuits"] = l2
+            # The far end probes this site's loopback to measure the circuit.
+            body["reflector"] = {"listen": f"{fabric.loopback(site).split('/')[0]}:{PROBE_PORT}"}
     return body
 
 

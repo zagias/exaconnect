@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from .. import audit, db
+from .. import audit, db, desired
 from ..routing import maps
 from ..storm.service import set_storm
 from .deps import UserDep, check_customer
@@ -33,7 +33,7 @@ def get_settings(customer_id: str, user: UserDep) -> dict:
     with db.tx() as conn:
         row = conn.execute(
             """SELECT id, name, shadow_mode, storm_mode, storm_since, storm_by, storm_allow_bulk_sat,
-                      auto_prioritise
+                      auto_prioritise, cloud_to_cloud
                FROM customers WHERE id = %s""",
             (customer_id,),
         ).fetchone()
@@ -47,6 +47,8 @@ class SettingsIn(BaseModel):
     storm_allow_bulk_sat: bool | None = None
     # Apply confident application detections as traffic rules without asking (ADR 0007).
     auto_prioritise: bool | None = None
+    # The cloud router: clouds on this customer's circuits reach each other through the PoP (ADR 0009).
+    cloud_to_cloud: bool | None = None
 
 
 @router.patch("/customers/{customer_id}/settings")
@@ -71,6 +73,10 @@ def update_settings(customer_id: str, body: SettingsIn, user: UserDep) -> dict:
         if body.auto_prioritise is not None:
             conn.execute("UPDATE customers SET auto_prioritise = %s WHERE id = %s", (body.auto_prioritise, customer_id))
             audit.record(conn, user.actor, "settings.auto_prioritise", str(body.auto_prioritise), customer_id)
+        if body.cloud_to_cloud is not None:
+            conn.execute("UPDATE customers SET cloud_to_cloud = %s WHERE id = %s", (body.cloud_to_cloud, customer_id))
+            audit.record(conn, user.actor, "settings.cloud_to_cloud", str(body.cloud_to_cloud), customer_id)
+            desired.refresh(conn, customer_id)
         if body.shadow_mode is not None and body.shadow_mode != row["shadow_mode"]:
             conn.execute("UPDATE customers SET shadow_mode = %s WHERE id = %s", (body.shadow_mode, customer_id))
             conn.execute("DELETE FROM steering WHERE customer_id = %s", (customer_id,))

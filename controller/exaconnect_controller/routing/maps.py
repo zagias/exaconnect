@@ -79,6 +79,28 @@ def load(conn: psycopg.Connection, customer_id: Any) -> dict[str, Any]:
     rules = conn.execute(
         """SELECT * FROM traffic_rules WHERE customer_id = %s ORDER BY ordinal, id""", (customer_id,)
     ).fetchall()
+    # A cloud circuit can put everything bound for its cloud in a class (ADR 0009).
+    for c in conn.execute(
+        """SELECT id, name, class_name, a_site_id, cloud_prefixes FROM circuits
+           WHERE customer_id = %s AND kind = 'cloud' AND enabled AND deleted_at IS NULL
+             AND class_name IS NOT NULL AND cardinality(cloud_prefixes) > 0 ORDER BY id""",
+        (customer_id,),
+    ).fetchall():
+        rules.append(
+            {
+                "name": f"Circuit {c['name']}",
+                "class_name": c["class_name"],
+                "site_ids": [c["a_site_id"]] if c["a_site_id"] else [],
+                "apps": [],
+                "ports": "",
+                "dst_subnets": c["cloud_prefixes"],
+                "src_subnets": [],
+                "vlans": [],
+                "domains": [],
+                "dscp": [],
+                "enabled": True,
+            }
+        )
     by_site: dict[Any, list[dict]] = {}
     for link in links:
         by_site.setdefault(link["site_id"], []).append(link)

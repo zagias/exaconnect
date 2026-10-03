@@ -191,6 +191,22 @@ class FlowIn(BaseModel):
     pkts_in: int = Field(ge=0)
 
 
+class CircuitIn(BaseModel):
+    """One virtual circuit's state on this node (ADR 0009)."""
+
+    id: int
+    name: str = Field(default="", max_length=16)
+    ike: str = Field(default="", max_length=16)
+    bgp: str = Field(default="", max_length=32)
+    prefixes_received: int = Field(default=0, ge=0)
+    routes: list[str] = Field(default=[], max_length=20)
+    sent: int = Field(default=0, ge=0)
+    received: int = Field(default=0, ge=0)
+    rtt_ms: float | None = None
+    bytes_in: int = Field(default=0, ge=0)
+    bytes_out: int = Field(default=0, ge=0)
+
+
 class TelemetryIn(BaseModel):
     at: dt.datetime
     probes: list[ProbeWindow] | None = Field(default=None, max_length=5000)
@@ -200,6 +216,7 @@ class TelemetryIn(BaseModel):
     steering: list[ChoiceIn] | None = Field(default=None, max_length=1000)
     steering_version: int = 0
     flows: list[FlowIn] | None = Field(default=None, max_length=2000)
+    circuits: list[CircuitIn] | None = Field(default=None, max_length=200)
 
 
 @router.post("/agent/telemetry", status_code=204)
@@ -269,6 +286,8 @@ def telemetry(body: TelemetryIn, node: NodeDep) -> None:
                     for f in body.flows
                 ],
             )
+        if body.circuits:
+            _circuits(conn, node, body)
         if body.steering is not None:
             conn.execute("DELETE FROM steering_actual WHERE node_id = %s", (node.id,))
             cur.executemany(
@@ -286,3 +305,31 @@ def _event(conn, customer_id, node_id, kind: str, detail: dict, at: dt.datetime 
         "INSERT INTO events (time, customer_id, node_id, kind, detail) VALUES (%s, %s, %s, %s, %s)",
         (at or dt.datetime.now(dt.UTC), customer_id, node_id, kind, Jsonb(detail)),
     )
+
+
+def _circuits(conn, node, body: TelemetryIn) -> None:
+    """Circuit state and metrics, for this customer's own circuits only."""
+    own = {
+        r["id"]
+        for r in conn.execute(
+            "SELECT id FROM circuits WHERE customer_id = %s AND id = ANY(%s)",
+            (node.customer_id, [c.id for c in body.circuits or []]),
+        )
+    }
+    for c in body.circuits or []:
+        if c.id not in own:
+            continue
+        conn.execute(
+            """INSERT INTO circuit_state (circuit_id, node_id, ike, bgp, prefixes_received, routes, updated_at)
+               VALUES (%s, %s, %s, %s, %s, %s, %s)
+               ON CONFLICT (circuit_id, node_id) DO UPDATE SET ike = EXCLUDED.ike, bgp = EXCLUDED.bgp,
+                 prefixes_received = EXCLUDED.prefixes_received, routes = EXCLUDED.routes,
+                 updated_at = EXCLUDED.updated_at""",
+            (c.id, node.id, c.ike, c.bgp, c.prefixes_received, [r[:64] for r in c.routes], body.at),
+        )
+        conn.execute(
+            """INSERT INTO circuit_metrics (time, customer_id, circuit_id, node_id, sent, received, rtt_avg_ms,
+                                            bytes_in, bytes_out)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            (body.at, node.customer_id, c.id, node.id, c.sent, c.received, c.rtt_ms, c.bytes_in, c.bytes_out),
+        )

@@ -228,4 +228,19 @@ failover for up to the 15-second client timeout (lab check m7 saw 5 to
 bare `respond` ran after `handle /api/*`, so enrol reached the
 controller). Lab checks m4 and m9 no longer assume a fresh database.
 
-Unit tests: 123 controller tests, agent tests, portal type check and build.
+**Fabric step 2: virtual circuits** (ADR 0009, 2026-10-03). A new Fabric
+screen creates circuits to a cloud's site-to-site VPN gateway (AWS, Azure,
+Google, Oracle or any IKEv2 gateway) and layer 2 circuits between two
+sites, with a different VLAN at each end if needed. The PoP terminates each
+cloud circuit (route-based IPsec with strongSwan, BGP over the tunnel) and
+acts as the customer's cloud router: sites learn the cloud's routes, and
+clouds reach each other through the PoP unless the customer turns that
+off. Each circuit's speed can be changed at any time and is billed by the
+hour; the screen shows status, round trip, loss, traffic and charges this
+month. The pre-shared key is never shown again after it is entered. The
+lab gains an exchange router and two simulated cloud gateways; lab check
+`m9-fabric.sh` brings both clouds up, reaches the AWS VPC from lan-a and
+Azure from AWS, changes a speed, and bridges VLAN 100 at site A to VLAN 200
+at site B.
+
+Unit tests: 131 controller tests, agent tests, portal type check and build.

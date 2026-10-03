@@ -108,7 +108,11 @@ def test_enrolment_and_desired_state(client, admin_headers):
     pop_ds = client.get("/api/v1/agent/desired-state", headers=pop_h).json()
     pop_a = next(t for t in pop_ds["tunnels"] if t["name"] == "wg-a")
     assert pop_a["listen_port"] == 51820
-    assert pop_a["peers"][0]["allowed_ips"] == ["100.64.1.11/32", "192.168.10.0/24"]
+    assert pop_a["peers"][0]["allowed_ips"] == [
+        "100.64.1.11/32",
+        "10.254.0.11/32",
+        "192.168.10.0/24",
+    ]  # overlay, loopback, LAN
     assert pop_ds["reflector"] == {"listen": ":7000"}
     _enrol(client, tokens, "site-b")
     assert client.get(f"/api/v1/agent/desired-state?have={ds['version']}", headers=a_h).status_code == 204

@@ -335,6 +335,80 @@ CREATE TABLE IF NOT EXISTS app_detections (
   UNIQUE (customer_id, site_id, key)
 );
 
+-- ExaConnect Fabric: virtual circuits and the cloud router (ADR 0009).
+-- A PoP reaches cloud VPN gateways from one interface and address.
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS cloud_interface text;
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS cloud_address inet;
+-- A site's LAN-facing interface, where layer 2 circuits take their VLANs (default eth4).
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS lan_interface text;
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS cloud_to_cloud boolean NOT NULL DEFAULT true;
+
+CREATE TABLE IF NOT EXISTS circuits (
+  id                    bigserial PRIMARY KEY,
+  customer_id           uuid NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  name                  text NOT NULL,
+  kind                  text NOT NULL CHECK (kind IN ('cloud', 'site')),
+  -- cloud: the sites whose subnets the cloud may reach (NULL = all sites);
+  -- site: the two ends of a layer 2 circuit and the VLAN at each.
+  a_site_id             uuid REFERENCES sites(id) ON DELETE CASCADE,
+  a_prefixes            cidr[] NOT NULL DEFAULT '{}',
+  a_vlan                int,
+  b_site_id             uuid REFERENCES sites(id) ON DELETE CASCADE,
+  b_vlan                int,
+  -- cloud end: the provider's VPN gateway.
+  provider              text,
+  region                text NOT NULL DEFAULT '',
+  peer_address          inet,
+  peer_asn              bigint,
+  inside_cidr           cidr,
+  psk                   text,
+  cloud_prefixes        cidr[] NOT NULL DEFAULT '{}',
+  class_name            text,
+  bandwidth_mbps        int NOT NULL CHECK (bandwidth_mbps BETWEEN 1 AND 10000),
+  price_per_mbps_month  numeric NOT NULL DEFAULT 2.0,
+  enabled               boolean NOT NULL DEFAULT true,
+  created_by            text NOT NULL,
+  created_at            timestamptz NOT NULL DEFAULT now(),
+  updated_at            timestamptz NOT NULL DEFAULT now(),
+  deleted_at            timestamptz
+);
+CREATE INDEX IF NOT EXISTS circuits_customer ON circuits (customer_id, id);
+
+-- Elastic bandwidth: one row per speed a circuit has had, for hourly billing.
+CREATE TABLE IF NOT EXISTS circuit_bandwidth (
+  circuit_id  bigint NOT NULL REFERENCES circuits(id) ON DELETE CASCADE,
+  mbps        int NOT NULL,
+  valid_from  timestamptz NOT NULL,
+  valid_to    timestamptz,
+  changed_by  text NOT NULL
+);
+CREATE INDEX IF NOT EXISTS circuit_bandwidth_circuit ON circuit_bandwidth (circuit_id, valid_from);
+
+CREATE TABLE IF NOT EXISTS circuit_state (
+  circuit_id         bigint NOT NULL REFERENCES circuits(id) ON DELETE CASCADE,
+  node_id            uuid NOT NULL,
+  ike                text NOT NULL DEFAULT '',
+  bgp                text NOT NULL DEFAULT '',
+  prefixes_received  int NOT NULL DEFAULT 0,
+  routes             text[] NOT NULL DEFAULT '{}',
+  updated_at         timestamptz NOT NULL,
+  PRIMARY KEY (circuit_id, node_id)
+);
+
+CREATE TABLE IF NOT EXISTS circuit_metrics (
+  time         timestamptz NOT NULL,
+  customer_id  uuid NOT NULL,
+  circuit_id   bigint NOT NULL,
+  node_id      uuid NOT NULL,
+  sent         int NOT NULL,
+  received     int NOT NULL,
+  rtt_avg_ms   double precision,
+  -- the circuit interface's cumulative counters on this node
+  bytes_in     bigint NOT NULL DEFAULT 0,
+  bytes_out    bigint NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS circuit_metrics_circuit_time ON circuit_metrics (circuit_id, time DESC);
+
 -- Time series (TimescaleDB hypertables when the extension is available).
 CREATE TABLE IF NOT EXISTS path_metrics (
   time         timestamptz NOT NULL,
@@ -378,6 +452,7 @@ BEGIN
     PERFORM create_hypertable('iface_counters', 'time', if_not_exists => TRUE, migrate_data => TRUE);
     PERFORM create_hypertable('events', 'time', if_not_exists => TRUE, migrate_data => TRUE);
     PERFORM create_hypertable('flow_stats', 'time', if_not_exists => TRUE, migrate_data => TRUE);
+    PERFORM create_hypertable('circuit_metrics', 'time', if_not_exists => TRUE, migrate_data => TRUE);
   END IF;
 END
 $$;

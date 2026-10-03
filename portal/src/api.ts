@@ -276,6 +276,8 @@ export interface CustomerSettings {
   storm_allow_bulk_sat: boolean;
   /** Apply confident application detections as rules without asking. */
   auto_prioritise: boolean;
+  /** Clouds reach each other through the PoP (ExaConnect Fabric). */
+  cloud_to_cloud?: boolean;
   sites: StormSite[];
 }
 
@@ -347,6 +349,125 @@ export interface UsageRow {
   p95_mbps: number | null;
   reasons: { time: string; class_name: string; reason: string }[];
 }
+
+// ---- ExaConnect Fabric: virtual circuits (docs/fabric-contract.md) ----
+
+export type CircuitKind = "cloud" | "site";
+export type CircuitStatus = "provisioning" | "up" | "down" | "off";
+
+export interface Circuit {
+  id: number;
+  name: string;
+  kind: CircuitKind;
+  a_site_id: string | null;
+  a_site: string | null;
+  b_site_id: string | null;
+  b_site: string | null;
+  a_vlan: number | null;
+  b_vlan: number | null;
+  provider: string | null;
+  region: string | null;
+  peer_address: string | null;
+  peer_asn: number | null;
+  inside_cidr: string | null;
+  our_inside: string | null;
+  cloud_inside: string | null;
+  cloud_prefixes: string[];
+  a_prefixes: string[];
+  class_name: string | null;
+  bandwidth_mbps: number;
+  price_per_mbps_month: number | string;
+  enabled: boolean;
+  /** The pre-shared key is write-only; this says whether one is set. */
+  has_psk: boolean;
+  status: CircuitStatus;
+  ike: string | null;
+  bgp: string | null;
+  prefixes_received: number | null;
+  routes: string[] | null;
+  rtt_ms: number | string | null;
+  loss_pct: number | string | null;
+  mbps_in: number | string | null;
+  mbps_out: number | string | null;
+  month_to_date: number | string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/** What the portal sends to create or change a circuit. `psk` is never read back. */
+export interface CircuitIn {
+  name?: string;
+  kind?: CircuitKind;
+  bandwidth_mbps?: number;
+  enabled?: boolean;
+  a_site_id?: string;
+  a_prefixes?: string[];
+  a_vlan?: number;
+  b_site_id?: string;
+  b_vlan?: number;
+  provider?: string;
+  region?: string;
+  peer_address?: string;
+  peer_asn?: number;
+  inside_cidr?: string;
+  psk?: string;
+  cloud_prefixes?: string[];
+  class_name?: string;
+}
+
+export interface CloudProvider {
+  name: string;
+  asn: number;
+  /** Where in the provider's console the tunnel details are. */
+  where: string;
+}
+
+export type CloudProviders = Record<string, CloudProvider>;
+
+export interface ChargeSegment {
+  mbps: number;
+  from: string;
+  to: string;
+  hours: number;
+  amount: number | string;
+}
+
+export interface CircuitCharges {
+  price_per_mbps_month: number | string;
+  segments: ChargeSegment[];
+  total: number | string;
+}
+
+export interface CircuitMetric {
+  time: string;
+  sent: number | null;
+  received: number | null;
+  rtt_ms: number | string | null;
+  mbps_in: number | string | null;
+  mbps_out: number | string | null;
+}
+
+export const circuitPaths = {
+  providers: "/circuits/providers",
+  list: (cid: string) => `/customers/${cid}/circuits`,
+  one: (cid: string, id: number) => `/customers/${cid}/circuits/${id}`,
+  charges: (cid: string, id: number, month: string) => `/customers/${cid}/circuits/${id}/charges?month=${month}`,
+  metrics: (cid: string, id: number, minutes = 60) => `/customers/${cid}/circuits/${id}/metrics?minutes=${minutes}`,
+  settings: (cid: string) => `/customers/${cid}/settings`,
+};
+
+export const createCircuit = (cid: string, body: CircuitIn) =>
+  api<Circuit>(circuitPaths.list(cid), { method: "POST", body: JSON.stringify(body) });
+
+/** Any of the create fields; `psk` rotates the key, `bandwidth_mbps` is billed from now. */
+export const updateCircuit = (cid: string, id: number, body: CircuitIn) =>
+  api<Circuit>(circuitPaths.one(cid, id), { method: "PATCH", body: JSON.stringify(body) });
+
+export const deleteCircuit = (cid: string, id: number) => api<void>(circuitPaths.one(cid, id), { method: "DELETE" });
+
+export const setCloudToCloud = (cid: string, on: boolean) =>
+  api<CustomerSettings>(circuitPaths.settings(cid), { method: "PATCH", body: JSON.stringify({ cloud_to_cloud: on }) });
 
 /** Downloads a file from the API with the session token (a plain link can't send it). */
 export async function download(path: string, filename: string) {
