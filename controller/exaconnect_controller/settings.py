@@ -37,7 +37,7 @@ class Settings:
         )
     )
     gdacs_url: str = field(
-        default_factory=lambda: _env("EXA_GDACS_URL", "https://www.gdacs.org/gdacsapi/api/events/geteventlist/MAP")
+        default_factory=lambda: _env("EXA_GDACS_URL", "https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH")
     )
     tsunami_urls: str = field(
         default_factory=lambda: _env(

@@ -21,13 +21,22 @@ done
 # carrier B returns to A only after A has scored well for 5 minutes and the
 # hold time has passed (demo step 4's rule). Wait for that rather than fail.
 lab/faults/restore.sh >/dev/null
-voice_on_a() { [[ $(path_of site-a "$VOICE" "$DST") == wg-a ]]; }
+# Both the controller's choice and the kernel: an agent can sit on A for a
+# moment while tunnels settle even though the controller still says B.
+voice_state() {
+  sql "SELECT st.path FROM steering st JOIN sites s ON s.id = st.site_id
+       WHERE s.name = 'site-a' AND st.class_name = 'voice'"
+}
+voice_on_a() { [[ $(voice_state) == carrier-a && $(path_of site-a "$VOICE" "$DST") == wg-a ]]; }
+note "$(sql "SELECT 'voice state at start: ' || string_agg(s.name || ' ' || st.path || ' since ' || st.since
+             || ' return ' || coalesce(st.return_path, '-') || ' ' || coalesce(st.return_since::text, '-'), '; ')
+             FROM steering st JOIN sites s ON s.id = st.site_id WHERE st.class_name = 'voice'")"
 t_start=$(date +%s)
 if wait_for 480 voice_on_a; then
   waited=$(($(date +%s) - t_start))
   ok "site-a voice on wg-a at start$( ((waited > 5)) && echo " (moved back after $waited s; an earlier run left it on B)")"
 else
-  bad "site-a voice on '$(path_of site-a $VOICE $DST)' at start, want wg-a"
+  bad "site-a voice on '$(path_of site-a $VOICE $DST)' (controller: $(voice_state)) at start, want wg-a"
   note "$(sql "SELECT 'state: ' || st.path || ' since ' || st.since || ' return ' || coalesce(st.return_path, '-') || ' '
                || coalesce(st.return_since::text, '-') || ' note ' || coalesce(st.note, '-') || ' updated ' || st.updated_at
                FROM steering st JOIN sites s ON s.id = st.site_id WHERE s.name = 'site-a' AND st.class_name = 'voice'")"

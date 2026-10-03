@@ -32,6 +32,7 @@ import datetime as dt
 import json
 import logging
 import re
+import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
@@ -272,6 +273,42 @@ def fetch(url: str, timeout_s: float = 30) -> bytes:
 last_errors: dict[str, str] = {}
 
 
+GDACS_DAYS = 14
+GDACS_PAGE = 100
+GDACS_PAGES = 5
+
+
+def gdacs_url(base: str, page: int, now: dt.datetime | None = None) -> str:
+    """GDACS's event search for the last two weeks, one page. A URL that
+    already has a query is used as it is."""
+    if "?" in base:
+        return base
+    now = now or dt.datetime.now(dt.UTC)
+    q = urllib.parse.urlencode(
+        {
+            "eventlist": ";".join(GDACS_KINDS),
+            "alertlevel": "Green;Orange;Red",
+            "fromDate": (now - dt.timedelta(days=GDACS_DAYS)).date().isoformat(),
+            "toDate": (now + dt.timedelta(days=1)).date().isoformat(),
+            "pageSize": GDACS_PAGE,
+            "pageNumber": page,
+        },
+        safe=";",
+    )
+    return f"{base}?{q}"
+
+
+def read_gdacs(base: str) -> list[Report]:
+    features: list[dict] = []
+    for page in range(1, GDACS_PAGES + 1):
+        body = fetch(gdacs_url(base, page))
+        got = (json.loads(body) if body.strip() else {}).get("features") or []
+        features += got
+        if "?" in base or len(got) < GDACS_PAGE:
+            break
+    return parse_gdacs({"features": features})
+
+
 def read_feeds(usgs_url: str, gdacs_url: str, tsunami_urls: list[str]) -> tuple[list[Report], set[str]]:
     """Every configured feed's reports, and the sources that could not be read
     (whose open insights then stay as they are rather than clearing)."""
@@ -281,12 +318,12 @@ def read_feeds(usgs_url: str, gdacs_url: str, tsunami_urls: list[str]) -> tuple[
     if usgs_url:
         jobs.append(("usgs", usgs_url, lambda b: parse_usgs(json.loads(b))))
     if gdacs_url:
-        jobs.append(("gdacs", gdacs_url, lambda b: parse_gdacs(json.loads(b))))
+        jobs.append(("gdacs", gdacs_url, None))
     for i, u in enumerate(tsunami_urls):
         jobs.append(("ptwc", u, lambda b, i=i: parse_tsunami(b.decode("utf-8", "replace"), f"ptwc{i}")))
     for source, url, parse in jobs:
         try:
-            reports += parse(fetch(url))
+            reports += read_gdacs(url) if parse is None else parse(fetch(url))
         except Exception as e:  # one feed down must not hide the others
             log.warning("%s feed %s: %s", source, url, e)
             last_errors[source] = f"{type(e).__name__}: {e}"[:300]

@@ -148,6 +148,15 @@ def test_feed_parsers_read_the_examples():
         hazards.parse_tsunami('<!DOCTYPE x [<!ENTITY a "b">]><feed/>')
 
 
+def test_gdacs_search_url():
+    u = hazards.gdacs_url("https://gdacs.example/SEARCH", 2, NOW)
+    assert u == (
+        "https://gdacs.example/SEARCH?eventlist=EQ;TC;FL;VO;WF;TS&alertlevel=Green;Orange;Red"
+        "&fromDate=2026-09-07&toDate=2026-09-22&pageSize=100&pageNumber=2"
+    )
+    assert hazards.gdacs_url("https://gdacs.example/x?a=1", 1, NOW) == "https://gdacs.example/x?a=1"
+
+
 def test_gdacs_shape_centre():
     square = {"type": "Polygon", "coordinates": [[[-62.0, 10.0], [-60.0, 10.0], [-60.0, 12.0], [-62.0, 12.0]]]}
     assert hazards._centre(square) == (11.0, -61.0)
