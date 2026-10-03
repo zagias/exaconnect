@@ -30,8 +30,14 @@ for n in pop-miami site-a site-b; do
 done
 echo "-- controller log"
 "${COMPOSE[@]}" logs --no-color --tail 60 controller 2>&1
+echo "-- controller containers"
+"${COMPOSE[@]}" ps --format '{{.Name}} {{.Status}}' 2>&1
+for c in $("${COMPOSE[@]}" ps -q 2>/dev/null); do
+  docker inspect -f '{{.Name}} restarts {{.RestartCount}}, started {{.State.StartedAt}}, OOM killed {{.State.OOMKilled}}' "$c"
+done
 echo "-- host"
 uptime
+free -m
 vmstat 1 3
 
 exit "$fail"

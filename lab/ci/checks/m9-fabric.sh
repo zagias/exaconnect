@@ -135,11 +135,15 @@ else
   bad "layer 2 circuit: lan-a cannot reach 172.16.100.20"
   docker exec "$(node site-a)" ip -d link show "vx${l2:-0}" 2>&1 | head -3 | sed 's/^/      /'
 fi
-l2up() { [[ $(status_of "$l2") == up ]]; }
-if wait_for 30 l2up; then
-  ok "layer 2 circuit reports up: $(api GET "/customers/$cid/circuits" | jq -r --argjson i "$l2" '.[] | select(.id == $i) | "\(.rtt_ms) ms, \(.loss_pct)% loss"')"
+# Loss is over the last minute, so probes sent while the far end was still
+# being set up count until they age out.
+l2view() { api GET "/customers/$cid/circuits" | jq -r --argjson i "$l2" '.[] | select(.id == $i) | "\(.status) \(.rtt_ms) \(.loss_pct)"'; }
+l2clean() { read -r st _ loss <<<"$(l2view)" && [[ $st == up && $loss != null ]] && awk -v l="$loss" 'BEGIN { exit !(l < 5) }'; }
+if wait_for 90 l2clean; then
+  read -r _ rtt loss <<<"$(l2view)"
+  ok "layer 2 circuit up and monitored: round trip $rtt ms, $loss% loss over the last minute"
 else
-  bad "layer 2 circuit status: $(status_of "$l2")"
+  bad "layer 2 circuit status, round trip, loss: $(l2view)"
 fi
 
 echo "-- clean up"
