@@ -29,8 +29,9 @@ by = {}
 for r in reports:
     by[r.source] = by.get(r.source, 0) + 1
 events = hazards.cluster(hazards.current(reports, __import__("datetime").datetime.now(__import__("datetime").UTC), True))
-print(" ".join(f"{k}={v}" for k, v in sorted(by.items())), f"events={len(events)}", "failed=" + ",".join(sorted(failed)))' 2>&1 | tail -1)
-if [[ $live == *events=* && $live == *"failed=" ]]; then ok "all disaster feeds read from the lab host: $live"
+print(" ".join(f"{k}={v}" for k, v in sorted(by.items())), f"events={len(events)}", "failed=" + ",".join(sorted(failed)),
+      "; ".join(f"{k}: {v}" for k, v in hazards.last_errors.items()))' 2>&1 | tail -1)
+if [[ $live == *events=* && $live =~ failed=\ ?$ ]]; then ok "all disaster feeds read from the lab host: $live"
 elif [[ $live == *events=* ]]; then bad "a disaster feed could not be read: $live"
 else bad "disaster feeds: $live"; fi
 haz=$(api GET "/insights?kind=hazard" | jq -c '[.[] | select(.example)]')

@@ -44,7 +44,7 @@ from .storms import distance_km
 log = logging.getLogger("exaconnect.hazards")
 
 USER_AGENT = "ExaConnect disaster watch (exacarib.com)"
-MAX_BYTES = 6_000_000
+MAX_BYTES = 30_000_000
 KIND_WORD = {
     "earthquake": "Earthquake",
     "tsunami": "Tsunami",
@@ -259,10 +259,17 @@ def parse_tsunami(xml_text: str, feed: str = "ptwc") -> list[Report]:
     return out
 
 
-def fetch(url: str, timeout_s: float = 20) -> bytes:
+def fetch(url: str, timeout_s: float = 30) -> bytes:
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json, */*"})
     with urllib.request.urlopen(req, timeout=timeout_s) as r:  # noqa: S310 (fixed, configured URLs)
-        return r.read(MAX_BYTES)
+        body = r.read(MAX_BYTES + 1)
+    if len(body) > MAX_BYTES:
+        raise ValueError(f"feed is larger than {MAX_BYTES // 1_000_000} MB")
+    return body
+
+
+# The last error per feed, for the lab check and the logs.
+last_errors: dict[str, str] = {}
 
 
 def read_feeds(usgs_url: str, gdacs_url: str, tsunami_urls: list[str]) -> tuple[list[Report], set[str]]:
@@ -282,6 +289,7 @@ def read_feeds(usgs_url: str, gdacs_url: str, tsunami_urls: list[str]) -> tuple[
             reports += parse(fetch(url))
         except Exception as e:  # one feed down must not hide the others
             log.warning("%s feed %s: %s", source, url, e)
+            last_errors[source] = f"{type(e).__name__}: {e}"[:300]
             failed.add(source)
     return reports, failed
 

@@ -28,6 +28,17 @@ if wait_for 480 voice_on_a; then
   ok "site-a voice on wg-a at start$( ((waited > 5)) && echo " (moved back after $waited s; an earlier run left it on B)")"
 else
   bad "site-a voice on '$(path_of site-a $VOICE $DST)' at start, want wg-a"
+  note "$(sql "SELECT 'state: ' || st.path || ' since ' || st.since || ' return ' || coalesce(st.return_path, '-') || ' '
+               || coalesce(st.return_since::text, '-') || ' note ' || coalesce(st.note, '-') || ' updated ' || st.updated_at
+               FROM steering st JOIN sites s ON s.id = st.site_id WHERE s.name = 'site-a' AND st.class_name = 'voice'")"
+  note "$(sql "SELECT 'voice class: preferred ' || coalesce(preferred_path, 'none') || ', priority ' || priority
+               FROM app_classes WHERE name = 'voice'")"
+  sql "SELECT d.time, d.kind, d.reason FROM decisions d JOIN sites s ON s.id = d.site_id
+       WHERE s.name = 'site-a' AND d.class_name = 'voice' ORDER BY d.time DESC LIMIT 4" | sed 's/^/      /'
+  sql "SELECT 'probes ' || m.path || ': sent ' || sum(m.sent) || ' lost ' || sum(m.sent - m.received)
+              || ' rtt ' || round(avg(m.rtt_avg_ms)::numeric, 1) || ' jitter ' || round(avg(m.jitter_ms)::numeric, 1)
+       FROM path_metrics m JOIN nodes n ON n.id = m.node_id JOIN sites s ON s.id = n.site_id
+       WHERE s.name = 'site-a' AND m.time > now() - interval '3 minutes' GROUP BY m.path" | sed 's/^/      /'
 fi
 note "$(sql "SELECT 'maps: ' || string_agg(n.name || ' v' || m.v, ', ') FROM nodes n
              JOIN (SELECT node_id, max(version) v FROM steering_maps GROUP BY node_id) m ON m.node_id = n.id")"
