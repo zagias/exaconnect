@@ -1,4 +1,4 @@
-"""Insights (storm warnings, bill-shock forecasts, carrier anomalies) and
+"""Insights (storm warnings, disaster watch, bill-shock forecasts, carrier anomalies) and
 "Ask your network"."""
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 
 from .. import audit, db
 from ..ai import ask as ask_mod
-from ..ai import storms
+from ..ai import hazards, runner, storms
 from .deps import AdminDep, UserDep
 
 router = APIRouter(tags=["ai"])
@@ -24,6 +24,7 @@ def status(request: Request, user: UserDep) -> dict:
         "ask_enabled": bool(s.llm_api_key) and user.role != "carrier",
         "model": s.llm_model if s.llm_api_key else None,
         "storm_watch": bool(s.nhc_url),
+        "hazard_watch": runner.hazard_watch_on(s),
     }
 
 
@@ -31,7 +32,7 @@ def status(request: Request, user: UserDep) -> dict:
 def list_insights(
     user: UserDep,
     customer_id: str | None = None,
-    kind: Literal["storm_warning", "bill_shock", "anomaly"] | None = None,
+    kind: Literal["storm_warning", "hazard", "bill_shock", "anomaly"] | None = None,
     include_resolved: bool = False,
     limit: int = 100,
 ) -> list[dict]:
@@ -89,13 +90,18 @@ def acknowledge(insight_id: int, user: UserDep) -> dict:
 
 
 @router.post("/ai/storm-watch/example")
-def storm_example(user: AdminDep, on: bool = True) -> dict:
-    """Raise (or clear) warnings from a made-up hurricane near Jamaica, labelled
-    as example data, to show the hurricane watch without a real storm."""
+def storm_example(user: AdminDep, request: Request, on: bool = True) -> dict:
+    """Raise (or clear) warnings from a made-up hurricane near Jamaica and a
+    made-up earthquake off Trinidad, labelled as example data, to show the
+    hurricane and disaster watches without a real event. The earthquake is
+    reported by three feeds and still raises one insight."""
     with db.tx() as conn:
         n = storms.run_once(conn, storms.example_feed() if on else {"activeStorms": []}, example=True)
+        h = hazards.run_once(
+            conn, hazards.example_reports() if on else [], example=True, nhc_on=bool(request.app.state.settings.nhc_url)
+        )
         audit.record(conn, user.actor, "storm_watch.example", "on" if on else "off")
-    return {"open_warnings": n}
+    return {"open_warnings": n, "open_hazards": h}
 
 
 class AskIn(BaseModel):

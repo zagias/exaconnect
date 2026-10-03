@@ -3,7 +3,7 @@
 ExaCarib's connectivity platform: a Go edge agent (WireGuard + FRR), a FastAPI
 controller, AI SLA routing, customer traffic rules with priority queues and
 application detection, per-site Storm Mode, carrier metering and
-settlement, AI insights (hurricane watch, bill forecast, carrier anomalies,
+settlement, AI insights (hurricane and disaster watch, bill forecast, carrier anomalies,
 "Ask your network") and an ExaCarib-branded portal for customers, carriers
 and admins.
 The build brief is [CLAUDE.md](CLAUDE.md); progress per milestone is in
@@ -82,4 +82,6 @@ Secrets live only in `.env` on the host (git-ignored); `.env.example` lists the
 names. `lab/scripts/init-env.sh` generates the database password, proxy
 secret and admin password. Optional: `EXA_LLM_API_KEY` turns on "Ask your
 network" (DeepInfra by default, model `deepseek-ai/DeepSeek-V4-Flash`), and
-`EXA_NHC_URL` points the hurricane watch elsewhere or, set empty, turns it off.
+`EXA_NHC_URL` points the hurricane watch elsewhere or, set empty, turns it off;
+`EXA_USGS_URL`, `EXA_GDACS_URL` and `EXA_TSUNAMI_URLS` do the same for the
+disaster watch (ADR 0008).

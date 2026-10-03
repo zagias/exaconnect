@@ -210,4 +210,14 @@ recognises known applications and real-time or bulk behaviour and suggests
 a class, applied with one click or automatically for known applications. A
 new Traffic screen covers all three. Lab check `m9-traffic.sh`.
 
-Unit tests: 111 controller tests, agent tests, portal type check and build.
+**Disaster watch** (ADR 0008, 2026-10-03). Earthquakes (USGS), multi-hazard
+alerts (GDACS: floods, volcanoes, wildfires, cyclones outside NHC's waters)
+and tsunami messages (PTWC and NTWC) near a customer's sites, every 10
+minutes. Reports of one event from several feeds are merged, and each event
+(and each hurricane) raises one alert per customer listing every site in
+range. An alert notifies once, again only if it gets worse, and reopens
+rather than repeats if an event drops out and comes back. The Insights
+example button now also shows a made-up earthquake off Trinidad reported by
+all three feeds, which raises one alert.
+
+Unit tests: 123 controller tests, agent tests, portal type check and build.

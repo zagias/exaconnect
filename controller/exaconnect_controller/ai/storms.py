@@ -176,35 +176,65 @@ def example_feed() -> dict:
     return json.loads(resources.files(__package__).joinpath("fixtures/nhc-example.json").read_text())
 
 
+def summarise(storm: Storm, hits: list[tuple[dict, dict]]) -> dict:
+    """One warning per storm for a customer, however many of its sites are in
+    range: the most exposed site leads, the others are listed with theirs."""
+    hits = sorted(hits, key=lambda h: (h[1]["severity"] != "critical", h[1]["data"]["closest_km"]))
+    lead_site, lead = hits[0]
+    w = {**lead, "data": dict(lead["data"]), "site_id": lead_site["id"]}
+    w["severity"] = "critical" if any(h["severity"] == "critical" for _, h in hits) else "warning"
+    w["data"]["sites"] = [
+        {
+            "id": str(s["id"]),
+            "name": s["name"],
+            "km": h["data"]["closest_km"],
+            "hours": h["data"]["hours"],
+            "severity": h["severity"],
+            "suggest_storm_mode": h["data"]["suggest_storm_mode"],
+        }
+        for s, h in hits
+    ]
+    if len(hits) > 1:
+        others = ", ".join(f"{s['name']} ({h['data']['closest_km']:.0f} km)" for s, h in hits[1:])
+        w["title"] += f", and near {len(hits) - 1} more site{'s' if len(hits) > 2 else ''}"
+        w["detail"] += f" Also in range: {others}."
+    return w
+
+
 def run_once(conn, doc: dict, example: bool = False, now: dt.datetime | None = None) -> int:
-    """Raises or refreshes storm warnings for every customer; resolves the rest.
-    Returns how many warnings are open."""
+    """Raises or refreshes storm warnings for every customer, one per storm
+    (not one per site, so a customer hears about a storm once); resolves the
+    rest. Returns how many warnings are open."""
     storms = parse(doc)
     sites = conn.execute(
         """SELECT s.id, s.name, s.customer_id, s.latitude, s.longitude, c.storm_mode
            FROM sites s JOIN customers c ON c.id = s.customer_id
-           WHERE s.latitude IS NOT NULL AND s.longitude IS NOT NULL"""
+           WHERE s.latitude IS NOT NULL AND s.longitude IS NOT NULL ORDER BY s.name"""
     ).fetchall()
-    seen: dict[Any, set[str]] = {s["customer_id"]: set() for s in sites}
+    by_customer: dict[Any, list[dict]] = {}
     for site in sites:
+        by_customer.setdefault(site["customer_id"], []).append(site)
+    seen: dict[Any, set[str]] = {c: set() for c in by_customer}
+    for customer_id, csites in by_customer.items():
         for storm in storms:
-            w = assess(storm, site["name"], site["latitude"], site["longitude"])
-            if w is None:
+            hits = [(s, w) for s in csites if (w := assess(storm, s["name"], s["latitude"], s["longitude"]))]
+            if not hits:
                 continue
-            key = f"storm:{storm.id}:{site['name']}" + (":example" if example else "")
+            w = summarise(storm, hits)
+            key = f"storm:{storm.id}" + (":example" if example else "")
             raise_insight(
                 conn,
-                site["customer_id"],
+                customer_id,
                 "storm_warning",
                 key,
                 w["severity"],
                 ("Example data: " if example else "") + w["title"],
                 w["detail"],
                 w["data"],
-                site_id=site["id"],
+                site_id=w["site_id"],
                 example=example,
             )
-            seen[site["customer_id"]].add(key)
+            seen[customer_id].add(key)
     for customer_id, keys in seen.items():
         resolve_others(conn, customer_id, "storm_warning", keys, example=example)
     return sum(len(k) for k in seen.values())

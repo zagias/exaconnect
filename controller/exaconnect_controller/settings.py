@@ -29,6 +29,23 @@ class Settings:
     # Hurricane watch: NHC's active storms feed, checked every interval; "" turns it off.
     nhc_url: str = field(default_factory=lambda: _env("EXA_NHC_URL", "https://www.nhc.noaa.gov/CurrentStorms.json"))
     nhc_interval_s: float = field(default_factory=lambda: float(_env("EXA_NHC_INTERVAL_S", "900")))
+    # Disaster watch (ADR 0009): earthquakes, GDACS multi-hazard alerts and tsunami
+    # messages, checked every interval. Any URL set to "" turns that feed off.
+    usgs_url: str = field(
+        default_factory=lambda: _env(
+            "EXA_USGS_URL", "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_day.geojson"
+        )
+    )
+    gdacs_url: str = field(
+        default_factory=lambda: _env("EXA_GDACS_URL", "https://www.gdacs.org/gdacsapi/api/events/geteventlist/MAP")
+    )
+    tsunami_urls: str = field(
+        default_factory=lambda: _env(
+            "EXA_TSUNAMI_URLS",
+            "https://www.tsunami.gov/events/xml/PHEBAtom.xml,https://www.tsunami.gov/events/xml/PAAQAtom.xml",
+        )
+    )
+    hazard_interval_s: float = field(default_factory=lambda: float(_env("EXA_HAZARD_INTERVAL_S", "600")))
     # "Ask your network": any OpenAI-compatible endpoint. Off until a key is set.
     llm_api_key: str = field(default_factory=lambda: _env("EXA_LLM_API_KEY"), repr=False)
     llm_base_url: str = field(

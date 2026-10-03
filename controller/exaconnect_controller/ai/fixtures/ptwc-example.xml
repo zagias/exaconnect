@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:geo="http://www.w3.org/2003/01/geo/wgs84_pos#">
+  <title>Example data: PTWC messages</title>
+  <updated>2026-09-21T14:55:00Z</updated>
+  <entry>
+    <title>Tsunami Information Statement Number 2</title>
+    <id>urn:example:ptwc:2</id>
+    <updated>2026-09-21T14:55:00Z</updated>
+    <geo:lat>10.95</geo:lat>
+    <geo:long>-61.20</geo:long>
+    <link rel="alternate" type="text/html" href="https://www.tsunami.gov/"/>
+    <summary type="xhtml"><div xmlns="http://www.w3.org/1999/xhtml"><strong>Category:</strong> Information<br/>Final statement: no tsunami threat.</div></summary>
+  </entry>
+  <entry>
+    <title>Tsunami Information Statement Number 1</title>
+    <id>urn:example:ptwc:1</id>
+    <updated>2026-09-21T14:25:00Z</updated>
+    <geo:lat>10.95</geo:lat>
+    <geo:long>-61.20</geo:long>
+    <link rel="alternate" type="text/html" href="https://www.tsunami.gov/"/>
+    <summary type="xhtml"><div xmlns="http://www.w3.org/1999/xhtml"><strong>Category:</strong> Information<br/>Evaluating.</div></summary>
+  </entry>
+</feed>

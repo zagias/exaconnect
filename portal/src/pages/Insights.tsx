@@ -7,18 +7,48 @@ import { useCustomer, useStormToggle, who } from "../customer";
 
 const KIND_LABEL: Record<Insight["kind"], string> = {
   storm_warning: "Hurricane watch",
+  hazard: "Disaster watch",
   bill_shock: "Bill forecast",
   anomaly: "Carrier anomaly",
 };
 
-const SEVERITY: Record<Insight["severity"], { health: "ok" | "warn" | "bad"; word: string }> = {
+/** Sites an insight names (hurricane and disaster watches list every site in range). */
+interface InsightSite {
+  name: string;
+  suggest_storm_mode?: boolean;
+}
+
+function sitesToSwitch(i: Insight): string[] {
+  if (i.kind !== "storm_warning" && i.kind !== "hazard") return [];
+  const listed = Array.isArray(i.data.sites)
+    ? (i.data.sites as InsightSite[])
+    : null;
+  if (listed)
+    return listed
+      .filter((s) => s.suggest_storm_mode === true)
+      .map((s) => s.name);
+  return i.data.suggest_storm_mode === true && i.site ? [i.site] : [];
+}
+
+const SEVERITY: Record<
+  Insight["severity"],
+  { health: "ok" | "warn" | "bad"; word: string }
+> = {
   info: { health: "ok", word: "Note" },
   warning: { health: "warn", word: "Warning" },
   critical: { health: "bad", word: "Act now" },
 };
 
 /** A list of insights with actions: switch Storm Mode for the site, acknowledge. */
-export function InsightList({ items, reload, readOnly = false }: { items: Insight[]; reload: () => void; readOnly?: boolean }) {
+export function InsightList({
+  items,
+  reload,
+  readOnly = false,
+}: {
+  items: Insight[];
+  reload: () => void;
+  readOnly?: boolean;
+}) {
   const { current, busy, error, toggle } = useStormToggle();
   const [ackError, setAckError] = useState<string | null>(null);
   const ack = async (i: Insight) => {
@@ -30,14 +60,19 @@ export function InsightList({ items, reload, readOnly = false }: { items: Insigh
       setAckError((e as Error).message);
     }
   };
-  if (items.length === 0) return <p className="muted">Nothing to flag right now.</p>;
+  if (items.length === 0)
+    return <p className="muted">Nothing to flag right now.</p>;
   return (
     <>
       <ErrorNote error={error ?? ackError} />
       <ul className="insights">
         {items.map((i) => {
-          const site = current?.sites.find((s) => s.name === i.site);
-          const suggest = i.kind === "storm_warning" && i.data.suggest_storm_mode === true && site && !site.storm_mode;
+          const toSwitch = (current?.sites ?? []).filter(
+            (s) => sitesToSwitch(i).includes(s.name) && !s.storm_mode,
+          );
+          const links = Array.isArray(i.data.links)
+            ? (i.data.links as { label: string; url: string }[])
+            : [];
           const sev = SEVERITY[i.severity];
           return (
             <li key={i.id} className={`${i.kind} ${i.severity}`}>
@@ -48,32 +83,64 @@ export function InsightList({ items, reload, readOnly = false }: { items: Insigh
                 </span>
                 {i.example && <ExampleTag />}
                 <span className="muted small">
-                  {i.resolved_at ? `cleared ${ago(i.resolved_at)}` : `since ${ago(i.first_seen)}, checked ${ago(i.last_seen)}`}
+                  {i.resolved_at
+                    ? `cleared ${ago(i.resolved_at)}`
+                    : `since ${ago(i.first_seen)}, checked ${ago(i.last_seen)}`}
                 </span>
               </div>
               <strong>{i.title.replace(/^Example data: /, "")}</strong>
               <p>{i.detail}</p>
               <div className="form-actions">
-                {suggest && !readOnly && site && (
-                  <button className="button small storm-on" disabled={busy} onClick={() => toggle(site, true)}>
-                    Switch Storm Mode on for {site.name}
-                  </button>
-                )}
-                {typeof i.data.advisory_url === "string" && i.data.advisory_url && (
-                  <a className="small" href={i.data.advisory_url} target="_blank" rel="noreferrer">
-                    NHC advisory
+                {!readOnly &&
+                  !i.resolved_at &&
+                  toSwitch.map((site) => (
+                    <button
+                      key={site.id}
+                      className="button small storm-on"
+                      disabled={busy}
+                      onClick={() => toggle(site, true)}
+                    >
+                      Switch Storm Mode on for {site.name}
+                    </button>
+                  ))}
+                {typeof i.data.advisory_url === "string" &&
+                  i.data.advisory_url && (
+                    <a
+                      className="small"
+                      href={i.data.advisory_url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      NHC advisory
+                    </a>
+                  )}
+                {links.map((l) => (
+                  <a
+                    key={l.url + l.label}
+                    className="small"
+                    href={l.url}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {l.label}
                   </a>
-                )}
+                ))}
                 {i.kind === "bill_shock" && (
                   <Link className="small" to="/metering">
                     Metering
                   </Link>
                 )}
-                {!readOnly && !i.resolved_at &&
+                {!readOnly &&
+                  !i.resolved_at &&
                   (i.acknowledged_by ? (
-                    <span className="muted small">Acknowledged by {who(i.acknowledged_by)}</span>
+                    <span className="muted small">
+                      Acknowledged by {who(i.acknowledged_by)}
+                    </span>
                   ) : (
-                    <button className="button secondary small" onClick={() => ack(i)}>
+                    <button
+                      className="button secondary small"
+                      onClick={() => ack(i)}
+                    >
                       Acknowledge
                     </button>
                   ))}
@@ -112,9 +179,13 @@ export default function Insights() {
         <Eyebrow>Insights</Eyebrow>
         <h1>What the network is telling you</h1>
         <p className="muted">
-          Hurricanes forecast near your sites (from the US National Hurricane Center, checked every 15 minutes), bills
-          heading over commit, and carrier paths behaving worse than usual for the hour. Each one says how it was worked
-          out.
+          Hurricanes forecast near your sites (from the US National Hurricane
+          Center, checked every 15 minutes); earthquakes, tsunami messages,
+          floods, volcanoes and wildfires near them (from USGS, GDACS and
+          tsunami.gov, checked every 10 minutes, with one alert per event
+          however many sources report it); bills heading over commit; and
+          carrier paths behaving worse than usual for the hour. Each one says
+          how it was worked out.
         </p>
         <ErrorNote error={list.error} />
       </div>
@@ -123,11 +194,20 @@ export default function Insights() {
           <h2>{history ? "All insights" : "Open insights"}</h2>
           <div className="form-actions">
             <label className="small">
-              <input type="checkbox" checked={history} onChange={(e) => setHistory(e.target.checked)} /> Include cleared
+              <input
+                type="checkbox"
+                checked={history}
+                onChange={(e) => setHistory(e.target.checked)}
+              />{" "}
+              Include cleared
             </label>
             {user?.role === "admin" && (
-              <button className="button secondary small" disabled={busy} onClick={() => example(!hasExample)}>
-                {hasExample ? "Clear example hurricane" : "Show an example hurricane"}
+              <button
+                className="button secondary small"
+                disabled={busy}
+                onClick={() => example(!hasExample)}
+              >
+                {hasExample ? "Clear example alerts" : "Show example alerts"}
               </button>
             )}
           </div>
@@ -142,9 +222,12 @@ export default function Insights() {
 export function InsightSummary() {
   const { user } = useAuth();
   const { current } = useCustomer();
-  const q = user?.role === "admin" && current ? `?customer_id=${current.id}` : "";
+  const q =
+    user?.role === "admin" && current ? `?customer_id=${current.id}` : "";
   const list = useApi<Insight[]>(`/insights${q}`, 30_000);
-  const top = (list.data ?? []).filter((i) => i.severity !== "info").slice(0, 3);
+  const top = (list.data ?? [])
+    .filter((i) => i.severity !== "info")
+    .slice(0, 3);
   if (top.length === 0) return null;
   return (
     <section className="card span-12">

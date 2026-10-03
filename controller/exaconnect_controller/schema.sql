@@ -259,6 +259,11 @@ CREATE TABLE IF NOT EXISTS insights (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS insights_open_key ON insights (customer_id, key) WHERE resolved_at IS NULL;
 CREATE INDEX IF NOT EXISTS insights_customer_time ON insights (customer_id, last_seen DESC);
+-- Disaster watch (ADR 0009) adds the 'hazard' kind.
+ALTER TABLE insights DROP CONSTRAINT IF EXISTS insights_kind_check;
+ALTER TABLE insights ADD CONSTRAINT insights_kind_check
+  CHECK (kind IN ('storm_warning', 'bill_shock', 'anomaly', 'hazard'));
+CREATE INDEX IF NOT EXISTS insights_customer_key ON insights (customer_id, key, resolved_at DESC);
 
 -- Traffic rules and priorities (ADR 0007). A class says how traffic is treated
 -- (priority, SLA, preferred path); a rule says which traffic belongs to it.

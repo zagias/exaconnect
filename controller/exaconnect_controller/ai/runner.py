@@ -1,5 +1,6 @@
 """Background passes for the AI features: anomalies every 2 minutes, the
-bill-shock forecast and application detection every 5, and the hurricane watch every 15 (configurable).
+bill-shock forecast and application detection every 5, the disaster watch every 10
+and the hurricane watch every 15 (both configurable).
 A Postgres advisory lock keeps it to one controller at a time."""
 
 from __future__ import annotations
@@ -10,7 +11,7 @@ import time
 
 from .. import db
 from ..settings import Settings
-from . import anomaly, billshock, detect, storms
+from . import anomaly, billshock, detect, hazards, storms
 
 log = logging.getLogger("exaconnect.ai")
 LOCK_ID = 4245
@@ -26,6 +27,16 @@ def _locked(fn, *args) -> int | None:
 def storm_pass(url: str) -> int | None:
     doc = storms.fetch(url)  # outside the transaction: the network can be slow
     return _locked(storms.run_once, doc)
+
+
+def hazard_pass(settings: Settings) -> int | None:
+    urls = [u.strip() for u in settings.tsunami_urls.split(",") if u.strip()]
+    reports, failed = hazards.read_feeds(settings.usgs_url, settings.gdacs_url, urls)  # outside the transaction
+    return _locked(hazards.run_once, reports, failed, False, bool(settings.nhc_url))
+
+
+def hazard_watch_on(settings: Settings) -> bool:
+    return bool(settings.usgs_url or settings.gdacs_url or settings.tsunami_urls.strip(", "))
 
 
 async def loop(settings: Settings) -> None:
@@ -49,4 +60,6 @@ async def loop(settings: Settings) -> None:
         await every("detect", 300, _locked, detect.run_once)
         if settings.nhc_url:
             await every("storms", settings.nhc_interval_s, storm_pass, settings.nhc_url)
+        if hazard_watch_on(settings):
+            await every("hazards", settings.hazard_interval_s, hazard_pass, settings)
         await asyncio.sleep(15)

@@ -32,6 +32,9 @@ services:
       EXA_LLM_API_KEY: ${EXA_LLM_API_KEY:-}
       EXA_LLM_MODEL: ${EXA_LLM_MODEL:-deepseek-ai/DeepSeek-V4-Flash}
       EXA_NHC_URL: ${EXA_NHC_URL-https://www.nhc.noaa.gov/CurrentStorms.json}
+      EXA_USGS_URL: ${EXA_USGS_URL-https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_day.geojson}
+      EXA_GDACS_URL: ${EXA_GDACS_URL-https://www.gdacs.org/gdacsapi/api/events/geteventlist/MAP}
+      EXA_TSUNAMI_URLS: ${EXA_TSUNAMI_URLS-https://www.tsunami.gov/events/xml/PHEBAtom.xml,https://www.tsunami.gov/events/xml/PAAQAtom.xml}
     volumes:
       - controller-data:/data
     depends_on:

@@ -9,7 +9,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import pytest
 
 from exaconnect_controller import db
-from exaconnect_controller.ai import anomaly, billshock, storms
+from exaconnect_controller.ai import anomaly, billshock, hazards, insights, storms
 from exaconnect_controller.ai import ask as ask_mod
 from exaconnect_controller.security import hash_password
 
@@ -63,13 +63,199 @@ def test_storm_watch_insights_and_example_api(client, admin_headers):
 
     # The demo button raises the same warning, labelled as example data.
     r = client.post("/api/v1/ai/storm-watch/example", headers=admin_headers)
-    assert r.status_code == 200 and r.json()["open_warnings"] == 1
-    ex = client.get(f"/api/v1/insights?customer_id={cid}", headers=admin_headers).json()[0]
+    assert r.status_code == 200 and r.json()["open_warnings"] == 1 and r.json()["open_hazards"] == 1
+    ex = client.get(f"/api/v1/insights?customer_id={cid}&kind=storm_warning", headers=admin_headers).json()[0]
     assert ex["example"] is True and ex["title"].startswith("Example data: ")
     r = client.post(f"/api/v1/insights/{ex['id']}/acknowledge", headers=admin_headers)
     assert r.status_code == 200
     client.post("/api/v1/ai/storm-watch/example?on=false", headers=admin_headers)
     assert client.get("/api/v1/insights", headers=admin_headers).json() == []
+
+
+def test_one_storm_warning_per_customer_for_several_sites(client, admin_headers):
+    _seed()
+    with db.tx() as conn:
+        # Move site-b near Kingston: the hurricane now threatens both sites.
+        conn.execute("UPDATE sites SET latitude = 18.2, longitude = -77.5 WHERE name = 'site-b'")
+        before = _insight_events(conn)
+        assert storms.run_once(conn, storms.example_feed()) == 1
+        assert storms.run_once(conn, storms.example_feed()) == 1
+        assert _insight_events(conn) == before + 1
+    (w,) = client.get("/api/v1/insights?kind=storm_warning", headers=admin_headers).json()
+    assert sorted(s["name"] for s in w["data"]["sites"]) == ["site-a", "site-b"]
+    assert w["site"] == w["data"]["sites"][0]["name"] and "and near 1 more site" in w["title"]
+
+
+def _insight_events(conn) -> int:
+    return conn.execute("SELECT count(*) AS n FROM events WHERE kind = 'insight'").fetchone()["n"]
+
+
+# ---- Disaster watch ----
+
+NOW = dt.datetime(2026, 9, 21, 15, 0, tzinfo=dt.UTC)
+
+
+def _quake(source="usgs", id_="q1", mag=6.4, lat=10.95, lon=-61.2, minutes=0, alert="", severity=None):
+    return hazards.Report(
+        id=f"{source}:{id_}",
+        source=source,
+        kind="earthquake",
+        title=f"Magnitude {mag} earthquake",
+        lat=lat,
+        lon=lon,
+        time=NOW + dt.timedelta(minutes=minutes),
+        magnitude=mag,
+        alert=alert,
+        severity=severity,
+    )
+
+
+def _tsunami(id_, title, minutes, lat=10.9, lon=-61.3):
+    return hazards.Report(
+        id=f"ptwc:{id_}",
+        source="ptwc",
+        kind="tsunami",
+        title=title,
+        lat=lat,
+        lon=lon,
+        time=NOW + dt.timedelta(minutes=minutes),
+        severity=hazards.tsunami_severity(title),
+    )
+
+
+def _trinidad_reports(minutes=0):
+    return [
+        _quake("usgs", "q1", minutes=minutes),
+        _quake("gdacs", "EQ1", mag=6.3, lat=10.93, lon=-61.18, minutes=minutes + 4, severity="warning"),
+        _tsunami("m1", "Tsunami Information Statement Number 1", minutes + 10),
+        _tsunami("m2", "Tsunami Information Statement Number 2", minutes + 40),
+    ]
+
+
+def test_feed_parsers_read_the_examples():
+    rs = {r.id: r for r in hazards.example_reports(NOW)}
+    q = rs["usgs:us7000exmp"]
+    assert q.magnitude == 6.4 and (q.lat, q.lon) == (10.95, -61.2) and q.tsunami_flag and q.alert == "yellow"
+    # GDACS lists the quake twice (point and impact shape): one report, from the point.
+    eq = rs["gdacs:EQ1000001"]
+    assert (eq.lat, eq.lon) == (10.93, -61.18) and eq.severity == "warning" and eq.magnitude == 6.3
+    assert rs["gdacs:FL1000003"].kind == "flood" and rs["gdacs:TC1000002"].kind == "cyclone"
+    msgs = [r for r in rs.values() if r.kind == "tsunami"]
+    assert len(msgs) == 2 and all(m.severity == "info" for m in msgs)
+    assert all(m.url == "https://www.tsunami.gov/" for m in msgs)
+    assert hazards.parse_usgs({"features": [{"id": "x"}]}) == [] and hazards.parse_gdacs({}) == []
+    with pytest.raises(ValueError):
+        hazards.parse_tsunami('<!DOCTYPE x [<!ENTITY a "b">]><feed/>')
+
+
+def test_gdacs_shape_centre():
+    square = {"type": "Polygon", "coordinates": [[[-62.0, 10.0], [-60.0, 10.0], [-60.0, 12.0], [-62.0, 12.0]]]}
+    assert hazards._centre(square) == (11.0, -61.0)
+    assert hazards._centre({"type": "Point", "coordinates": [-61.5, 10.5]}) == (10.5, -61.5)
+
+
+def test_tsunami_message_types():
+    assert hazards.tsunami_severity("Tsunami Threat Message Number 1") == "critical"
+    assert hazards.tsunami_severity("Tsunami Warning") == "critical"
+    assert hazards.tsunami_severity("Tsunami Advisory") == "warning"
+    assert hazards.tsunami_severity("Tsunami Information Statement Number 1") == "info"
+    assert hazards.tsunami_severity("Final Tsunami Threat Message Number 3") == "info"
+
+
+def test_felt_radius():
+    assert hazards.felt_radius_km(4.5) == pytest.approx(61, rel=0.05)
+    assert hazards.felt_radius_km(6.0) == pytest.approx(269, rel=0.05)
+    assert hazards.felt_radius_km(7.0) == pytest.approx(724, rel=0.05)
+
+
+def test_one_event_from_three_feeds():
+    far = _quake("usgs", "far", mag=5.0, lat=61.2, lon=-150.1)
+    events = hazards.cluster([*_trinidad_reports(), far])
+    assert sorted(len(e.reports) for e in events) == [1, 4]
+    big = next(e for e in events if len(e.reports) == 4)
+    assert big.lead.id == "usgs:q1" and big.latest_tsunami().id == "ptwc:m2"
+    assert hazards.site_impact(big, *PORT_OF_SPAIN)[0] == "critical"
+    assert hazards.site_impact(big, *KINGSTON) is None
+
+
+def test_clustering_keeps_separate_events_apart():
+    # Same place an hour later: an aftershock is its own event.
+    assert len(hazards.cluster([_quake("usgs", "a"), _quake("gdacs", "b", minutes=60)])) == 2
+    # One feed never merges two of its own ids.
+    assert len(hazards.cluster([_quake("usgs", "a"), _quake("usgs", "b", minutes=2)])) == 2
+    # 200 km apart in the same minute: two quakes.
+    assert len(hazards.cluster([_quake("usgs", "a"), _quake("gdacs", "b", lat=12.75)])) == 2
+
+
+def test_latest_tsunami_message_wins():
+    threat = _tsunami("m1", "Tsunami Threat Message Number 1", 10)
+    final = _tsunami("m2", "Final Tsunami Threat Message Number 2", 90)
+    assert hazards.site_impact(hazards.Event([threat]), *PORT_OF_SPAIN)[0] == "critical"
+    assert hazards.site_impact(hazards.Event([threat, final]), *PORT_OF_SPAIN)[0] == "info"
+
+
+def test_severity_by_distance_and_magnitude():
+    near = (10.95, -61.0)  # about 22 km from the epicentre
+    assert hazards.site_impact(hazards.Event([_quake(mag=4.6)]), *near)[0] == "info"
+    assert hazards.site_impact(hazards.Event([_quake(mag=5.6)]), *near)[0] == "warning"
+    assert hazards.site_impact(hazards.Event([_quake(mag=6.4)]), *near)[0] == "critical"
+    # A magnitude 6.4 reaches about 400 km: Kingston, 1,800 km away, is clear.
+    assert hazards.site_impact(hazards.Event([_quake(mag=6.4)]), *KINGSTON) is None
+    # USGS's PAGER orange means significant damage is likely: critical anywhere in range.
+    assert hazards.site_impact(hazards.Event([_quake(mag=5.0, alert="orange")]), *near)[0] == "critical"
+
+
+def test_cyclones_in_nhc_waters_are_left_to_the_hurricane_watch():
+    tc = next(r for r in hazards.example_reports(NOW) if r.kind == "cyclone")
+    assert hazards.nhc_covers(tc)
+    assert hazards.current([tc], tc.time, nhc_on=True) == []
+    assert hazards.current([tc], tc.time, nhc_on=False) == [tc]
+    old = _quake(minutes=-49 * 60)
+    assert hazards.current([old], NOW, nhc_on=True) == []
+
+
+def test_disaster_watch_raises_one_insight_per_event(client, admin_headers):
+    _seed()
+    with db.tx() as conn:
+        before = _insight_events(conn)
+        # USGS reports first; GDACS and the tsunami messages arrive on later passes.
+        assert hazards.run_once(conn, _trinidad_reports()[:1], now=NOW + dt.timedelta(minutes=5)) == 1
+        assert hazards.run_once(conn, _trinidad_reports()[:2], now=NOW + dt.timedelta(minutes=15)) == 1
+        assert hazards.run_once(conn, _trinidad_reports(), now=NOW + dt.timedelta(minutes=45)) == 1
+        # USGS drops it from its feed; GDACS still has it: the same insight carries on.
+        assert hazards.run_once(conn, _trinidad_reports()[1:], now=NOW + dt.timedelta(minutes=60)) == 1
+        assert _insight_events(conn) == before + 1  # one notification in all
+    (i,) = client.get("/api/v1/insights?kind=hazard", headers=admin_headers).json()
+    assert i["site"] == "site-b" and i["severity"] == "critical"
+    assert i["data"]["sources"] == ["gdacs", "ptwc"] and i["data"]["sites"][0]["suggest_storm_mode"] is True
+    assert "Latest tsunami message: Tsunami Information Statement Number 2" in i["detail"]
+
+    with db.tx() as conn:
+        # A feed that cannot be read keeps its insight open rather than clearing it.
+        assert hazards.run_once(conn, [], failed={"gdacs", "ptwc"}, now=NOW + dt.timedelta(minutes=70)) == 1
+        # Every feed read and the event gone: cleared, without a new notification...
+        assert hazards.run_once(conn, [], now=NOW + dt.timedelta(minutes=80)) == 0
+        # ...and if it comes back within a day, the same insight reopens.
+        hazards.run_once(conn, _trinidad_reports()[1:2], now=NOW + dt.timedelta(minutes=90))
+        assert _insight_events(conn) == before + 1
+    ins = client.get("/api/v1/insights?kind=hazard&include_resolved=true", headers=admin_headers).json()
+    assert len(ins) == 1 and ins[0]["id"] == i["id"] and ins[0]["resolved_at"] is None
+
+
+def test_escalation_notifies_again_and_clears_the_acknowledgement(client):
+    seed = _seed()
+    cid = seed["customer_id"]
+    with db.tx() as conn:
+        before = _insight_events(conn)
+        iid, new = insights.raise_insight(conn, cid, "hazard", "k", "warning", "t", "d")
+        conn.execute("UPDATE insights SET acknowledged_by = 'x' WHERE id = %s", (iid,))
+        assert insights.raise_insight(conn, cid, "hazard", "k", "warning", "t", "d") == (iid, False)
+        assert insights.raise_insight(conn, cid, "hazard", "k", "info", "t", "d") == (iid, False)
+        ack = conn.execute("SELECT acknowledged_by FROM insights WHERE id = %s", (iid,)).fetchone()
+        assert new and ack["acknowledged_by"] == "x"
+        assert insights.raise_insight(conn, cid, "hazard", "k", "critical", "t", "d") == (iid, True)
+        ack = conn.execute("SELECT acknowledged_by FROM insights WHERE id = %s", (iid,)).fetchone()
+        assert ack["acknowledged_by"] is None and _insight_events(conn) == before + 2
 
 
 # ---- Bill shock ----
@@ -245,6 +431,7 @@ def test_ask_your_network(client, admin_headers, fake_llm):
         "ask_enabled": True,
         "model": "test-model",
         "storm_watch": True,
+        "hazard_watch": True,
     }
     r = client.post(
         "/api/v1/ai/ask", headers=admin_headers, json={"question": "Why did voice move?", "customer_id": cid}

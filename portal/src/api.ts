@@ -282,7 +282,7 @@ export interface CustomerSettings {
 export interface Insight {
   id: number;
   customer_id: string;
-  kind: "storm_warning" | "bill_shock" | "anomaly";
+  kind: "storm_warning" | "hazard" | "bill_shock" | "anomaly";
   severity: "info" | "warning" | "critical";
   title: string;
   detail: string;
