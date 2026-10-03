@@ -6,6 +6,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net"
 	"net/netip"
@@ -129,6 +130,10 @@ type Agent struct {
 	resolveErr  string
 	kick        chan struct{} // new steering map: look up its domains
 	refreshed   chan struct{} // lookups changed: re-apply the classifier
+	bfdKick     chan struct{} // the BFD watcher saw a change
+	netMu       sync.Mutex
+	netCancel   context.CancelFunc // the controller request in flight, if any
+	unreported  *client.Status     // an apply result the controller has not heard yet
 	flows       flows.Tracker
 	flowErr     string
 	// writeProc writes a /proc/sys file; nil uses os.WriteFile (tests stub it).
@@ -142,6 +147,7 @@ func (a *Agent) Run(ctx context.Context) error {
 	a.lastContact = time.Now()
 	a.kick = make(chan struct{}, 1)
 	a.refreshed = make(chan struct{}, 1)
+	a.bfdKick = make(chan struct{}, 1)
 
 	// Flow telemetry needs per-flow byte counters; best effort.
 	if a.writeProc == nil {
@@ -173,10 +179,14 @@ func (a *Agent) Run(ctx context.Context) error {
 		a.steer(ctx, "start")
 	}
 
+	// BFD is watched on its own goroutine too, so a controller request that
+	// hangs (up to the client timeout) never holds up local failover.
+	go a.watchBFD(ctx)
+
 	poll := time.NewTicker(a.Cfg.PollInterval)
 	tele := time.NewTicker(a.Cfg.TelemetryInterval)
 	cnt := time.NewTicker(a.Cfg.CounterInterval)
-	bfd := time.NewTicker(a.Cfg.BFDInterval)
+	bfd := time.NewTicker(4 * a.Cfg.BFDInterval) // backstop; the watcher wakes the loop sooner
 	str := time.NewTicker(a.Cfg.SteerInterval)
 	qos := time.NewTicker(a.Cfg.ResolveInterval)
 	defer str.Stop()
@@ -189,6 +199,14 @@ func (a *Agent) Run(ctx context.Context) error {
 	a.poll(ctx)
 	a.pollSteering(ctx)
 	for {
+		// A BFD change goes before anything else that is ready.
+		select {
+		case <-a.bfdKick:
+			if a.checkBFD(ctx) {
+				a.steer(ctx, "bfd")
+			}
+		default:
+		}
 		select {
 		case <-ctx.Done():
 			a.stopProbes()
@@ -202,6 +220,10 @@ func (a *Agent) Run(ctx context.Context) error {
 			a.collectCounters()
 			a.collectFlows(ctx)
 		case <-bfd.C:
+			if a.checkBFD(ctx) {
+				a.steer(ctx, "bfd")
+			}
+		case <-a.bfdKick:
 			if a.checkBFD(ctx) {
 				a.steer(ctx, "bfd")
 			}
@@ -227,7 +249,14 @@ func (a *Agent) have() int64 {
 }
 
 func (a *Agent) poll(ctx context.Context) {
-	ds, err := a.Client.DesiredState(ctx, a.have())
+	if st := a.unreported; st != nil {
+		if a.reportStatus(ctx, *st) {
+			a.unreported = nil
+		}
+	}
+	cctx, done := a.controllerCtx(ctx)
+	ds, err := a.Client.DesiredState(cctx, a.have())
+	done()
 	if err != nil {
 		a.controllerError(err)
 		return
@@ -255,12 +284,80 @@ func (a *Agent) poll(ctx context.Context) {
 		a.setCurrent(ctx, ds)
 		a.event("config_applied", map[string]string{"version": itoa(ds.Version)})
 	}
-	if err := a.Client.ReportStatus(ctx, st); err != nil {
-		a.Log.Warn("report status", "err", err)
+	if !a.reportStatus(ctx, st) {
+		a.unreported = &st // tell the controller on the next poll
+	}
+}
+
+func (a *Agent) reportStatus(ctx context.Context, st client.Status) bool {
+	cctx, done := a.controllerCtx(ctx)
+	defer done()
+	if err := a.Client.ReportStatus(cctx, st); err != nil {
+		if !errors.Is(err, context.Canceled) {
+			a.Log.Warn("report status", "err", err)
+		}
+		return false
+	}
+	return true
+}
+
+// controllerCtx bounds one request to the controller. The BFD watcher
+// cancels it when a path changes state, so the loop gets to failover at once.
+func (a *Agent) controllerCtx(ctx context.Context) (context.Context, func()) {
+	cctx, cancel := context.WithCancel(ctx)
+	a.netMu.Lock()
+	a.netCancel = cancel
+	a.netMu.Unlock()
+	return cctx, func() {
+		a.netMu.Lock()
+		a.netCancel = nil
+		a.netMu.Unlock()
+		cancel()
+	}
+}
+
+// watchBFD reads BFD state on its own and, on any change, interrupts the
+// controller request in flight and wakes the main loop, which then steers.
+func (a *Agent) watchBFD(ctx context.Context) {
+	t := time.NewTicker(a.Cfg.BFDInterval)
+	defer t.Stop()
+	last := ""
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		peers, err := frrstate.BFDPeers(ctx, a.Sys)
+		if err != nil {
+			continue // the main loop reports it
+		}
+		states := make([]string, 0, len(peers))
+		for _, p := range peers {
+			states = append(states, p.Peer+"="+p.Status)
+		}
+		sort.Strings(states)
+		if sig := strings.Join(states, ","); sig != last {
+			last = sig
+			// Kick first, then interrupt: the loop checks for a kick before
+			// anything else once the interrupted request returns.
+			select {
+			case a.bfdKick <- struct{}{}:
+			default:
+			}
+			a.netMu.Lock()
+			if a.netCancel != nil {
+				a.netCancel()
+			}
+			a.netMu.Unlock()
+		}
 	}
 }
 
 func (a *Agent) controllerError(err error) {
+	if errors.Is(err, context.Canceled) {
+		return // interrupted for a BFD change, or shutting down: not the controller's fault
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if !a.silent && time.Since(a.lastContact) > a.Cfg.SilentAfter {
@@ -508,7 +605,10 @@ func (a *Agent) flush(ctx context.Context) {
 			t.Tunnels[i].HandshakeAgeS = age
 		}
 	}
-	if err := a.Client.PostTelemetry(ctx, t); err != nil {
+	cctx, done := a.controllerCtx(ctx)
+	err := a.Client.PostTelemetry(cctx, t)
+	done()
+	if err != nil {
 		a.controllerError(err)
 		return // keep the buffer and retry next time
 	}
@@ -544,7 +644,9 @@ func (a *Agent) pollSteering(ctx context.Context) {
 		have = a.steerMap.Version
 	}
 	a.mu.Unlock()
-	m, err := a.Client.Steering(ctx, have)
+	cctx, done := a.controllerCtx(ctx)
+	m, err := a.Client.Steering(cctx, have)
+	done()
 	if err != nil {
 		a.controllerError(err)
 		return

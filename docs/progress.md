@@ -220,4 +220,12 @@ rather than repeats if an event drops out and comes back. The Insights
 example button now also shows a made-up earthquake off Trinidad reported by
 all three feeds, which raises one alert.
 
+**Fixes from the lab (2026-10-03).** The agent now watches BFD on its own
+goroutine and interrupts any controller request in flight when a path
+changes state: with the controller hung, a request could hold local
+failover for up to the 15-second client timeout (lab check m7 saw 5 to
+10 s). The public proxy now really returns 404 for agent endpoints (a
+bare `respond` ran after `handle /api/*`, so enrol reached the
+controller). Lab checks m4 and m9 no longer assume a fresh database.
+
 Unit tests: 123 controller tests, agent tests, portal type check and build.

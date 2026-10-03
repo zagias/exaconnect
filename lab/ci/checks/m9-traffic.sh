@@ -19,6 +19,11 @@ for t in wg-a wg-b; do
 done
 
 echo "-- application detection: Zoom-like traffic on UDP 8801 for 4 minutes"
+# The controller's data survives lab runs: remove the Zoom rule an earlier
+# run applied, so Zoom starts out unclassified again.
+for r in $(api GET "/customers/$cid/rules" | jq -r '.[] | select(.apps | index("zoom")) | .id'); do
+  api DELETE "/customers/$cid/rules/$r" >/dev/null
+done
 # 160-byte datagrams from one socket, about 50 a second (iperf3's UDP mode
 # stalled in this lab, so plain bash).
 docker exec -d "$(node lan-b)" sh -c 'nc -u -l -p 8801 > /dev/null 2>&1'

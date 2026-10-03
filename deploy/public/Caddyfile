@@ -17,10 +17,18 @@
 		-Server
 	}
 
-	# Agent-facing endpoints never leave the private networks.
-	@agent path /api/v1/agent/* /api/v1/enrol /api/v1/ca.pem
-	respond @agent 404
-
+	# Agent-facing endpoints never leave the private networks. These are
+	# handle blocks with paths, so Caddy sorts them ahead of /api/* (a bare
+	# respond runs after handle and never fired).
+	handle /api/v1/agent/* {
+		respond 404
+	}
+	handle /api/v1/enrol {
+		respond 404
+	}
+	handle /api/v1/ca.pem {
+		respond 404
+	}
 	handle /api/* {
 		reverse_proxy controller-api:8000
 	}

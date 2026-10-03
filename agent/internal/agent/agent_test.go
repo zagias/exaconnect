@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -342,4 +343,67 @@ func TestAgentResolvesMatchDomains(t *testing.T) {
 	addr = "52.114.2.2"
 	mu.Unlock()
 	waitFor(t, "re-resolved domain in the ruleset", func() bool { return strings.Contains(nft(), "elements = { 52.114.2.2 }") })
+}
+
+// A controller that hangs mid-request must not hold up BFD failover: the
+// HTTP client waits up to 15 s, the failover must not.
+func TestBFDFailoverWhileControllerHangs(t *testing.T) {
+	ds := state(1)
+	ds.Tunnels = []desired.Tunnel{
+		{Name: "wg-a", Path: "carrier-a", Address: "100.64.1.11/24", Peers: ds.Tunnels[0].Peers, Neighbors: []desired.Neighbor{{Address: "100.64.1.1", ASN: 65000}}},
+		{Name: "wg-b", Path: "carrier-b", Address: "100.64.2.11/24", Peers: ds.Tunnels[0].Peers, Neighbors: []desired.Neighbor{{Address: "100.64.2.1", ASN: 65000}}},
+	}
+	m := steer.Map{
+		Version: 5,
+		Paths:   []steer.Path{{Name: "carrier-a", Tunnel: "wg-a", Table: 101}, {Name: "carrier-b", Tunnel: "wg-b", Table: 102}},
+		Classes: []steer.Class{{Name: "voice", Mark: 0x101, DSCP: []int{46}}},
+		Rules:   []steer.Rule{{Class: "voice", Paths: []string{"carrier-a", "carrier-b"}}},
+	}
+	var hang atomic.Bool
+	stop := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if hang.Load() {
+			select {
+			case <-stop:
+			case <-r.Context().Done():
+			}
+			return
+		}
+		switch {
+		case r.URL.Path == "/api/v1/agent/desired-state" && r.URL.Query().Get("have") != "1":
+			json.NewEncoder(w).Encode(ds)
+		case r.URL.Path == "/api/v1/agent/steering" && r.URL.Query().Get("have") != "5":
+			json.NewEncoder(w).Encode(m)
+		default:
+			w.WriteHeader(http.StatusNoContent)
+		}
+	}))
+	defer srv.Close()
+	defer close(stop)
+
+	sys := &bfdSys{fakeSys: &fakeSys{files: map[string]string{}},
+		bfd:  map[string]string{"100.64.1.1": "up", "100.64.2.1": "up"},
+		tuns: map[string]string{"100.64.1.1": "wg-a", "100.64.2.1": "wg-b"}}
+	a := newAgent(srv.URL, sys.fakeSys)
+	a.Client.HTTP.Timeout = 15 * time.Second // as in production
+	a.Sys, a.Applier.Sys = sys, sys
+	a.Steerer = &steer.Steerer{Sys: sys, StateDir: "/state"}
+	a.Cfg.PollInterval = 20 * time.Millisecond
+	a.Cfg.SteerInterval = 20 * time.Millisecond
+	a.Cfg.BFDInterval = 50 * time.Millisecond
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go a.Run(ctx)
+	waitFor(t, "voice on carrier-a", func() bool { return sys.count("fwmark 0x101 lookup 101") > 0 })
+
+	hang.Store(true)
+	time.Sleep(100 * time.Millisecond) // a request is now stuck in flight
+	sys.mu.Lock()
+	sys.bfd["100.64.1.1"] = "down"
+	sys.mu.Unlock()
+	start := time.Now()
+	waitFor(t, "voice failover to carrier-b", func() bool { return sys.count("fwmark 0x101 lookup 102") > 0 })
+	if took := time.Since(start); took > time.Second {
+		t.Fatalf("failover took %s with the controller hanging", took)
+	}
 }

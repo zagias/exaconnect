@@ -17,8 +17,18 @@ for n in pop-miami site-a site-b; do
   rules=$(docker exec "$(node "$n")" ip rule show | grep -c fwmark)
   if ((rules >= 3)); then ok "$n $rules steering rules"; else bad "$n steering rules: $rules"; fi
 done
-v=$(path_of site-a $VOICE $DST)
-if [[ $v == wg-a ]]; then ok "site-a voice on wg-a at start"; else bad "site-a voice on '${v:-none}' at start, want wg-a"; fi
+# The controller's data survives lab runs, so a class an earlier run left on
+# carrier B returns to A only after A has scored well for 5 minutes and the
+# hold time has passed (demo step 4's rule). Wait for that rather than fail.
+lab/faults/restore.sh >/dev/null
+voice_on_a() { [[ $(path_of site-a "$VOICE" "$DST") == wg-a ]]; }
+t_start=$(date +%s)
+if wait_for 480 voice_on_a; then
+  waited=$(($(date +%s) - t_start))
+  ok "site-a voice on wg-a at start$( ((waited > 5)) && echo " (moved back after $waited s; an earlier run left it on B)")"
+else
+  bad "site-a voice on '$(path_of site-a $VOICE $DST)' at start, want wg-a"
+fi
 note "$(sql "SELECT 'maps: ' || string_agg(n.name || ' v' || m.v, ', ') FROM nodes n
              JOIN (SELECT node_id, max(version) v FROM steering_maps GROUP BY node_id) m ON m.node_id = n.id")"
 
