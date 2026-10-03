@@ -57,6 +57,10 @@ class Policy:
     return_after_s: float = 300
     # A path "scores well" (for moving back) when every metric is at most half its limit.
     good_score: float = 0.5
+    # Once it does, the return clock keeps running while every metric stays
+    # under three quarters of its limit: a hysteresis band, so ordinary noise
+    # (lab jitter wobbles around half the voice limit) does not restart it.
+    keep_score: float = 0.25
     # Consecutive evaluations a breach must be seen or forecast before acting.
     persistence: int = 2
     # SLA windows: loss is a rate, so it needs more probes to be meaningful
@@ -357,15 +361,11 @@ def decide(
         )
 
     # 4. Move back to a preferred path once it has scored well for a while.
-    better = [
-        p
-        for p in by_pref
-        if preference(p) < preference(cur)
-        and p.up
-        and p.known
-        and p.score_now >= policy.good_score
-        and p.score_ahead >= policy.good_score
-    ]
+    def scores_well(p: PathEval) -> bool:
+        bar = policy.keep_score if p.name == state.return_path else policy.good_score
+        return p.up and p.known and p.score_now >= bar and p.score_ahead >= bar
+
+    better = [p for p in by_pref if preference(p) < preference(cur) and scores_well(p)]
     target = better[0] if better else None
     if target is None:
         if state.return_path is not None:

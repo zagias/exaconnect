@@ -41,3 +41,15 @@ hour, and never back and forth.
 
 Probing costs a little bandwidth per path. The probe rate is per underlay type
 in `controller/exaconnect_controller/desired.py` and can be tuned.
+
+## Revision, 2026-10-03: a band for the return clock
+
+Lab runs showed carrier A's jitter at rest wobbling around 12 to 18 ms, half
+the voice limit of 30 ms. A path needs every metric at or under half its
+limit (score 0.5) to start the 5-minute return clock, and the clock used to
+restart whenever one pass fell short, so voice never moved back to carrier
+A. Now, once the clock is running, it keeps running while every metric
+stays under three quarters of its limit (score 0.25). A breach, a forecast
+breach or a path going down still restarts it. A class may still move
+away and back once on a borderline path, never more than that within the
+hold and return times.

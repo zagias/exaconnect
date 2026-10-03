@@ -3,6 +3,7 @@ simulated brownout where the predictive engine moves voice before the SLA is
 breached and the rules-only baseline moves only after."""
 
 import random
+from dataclasses import replace
 
 import pytest
 
@@ -182,6 +183,24 @@ def test_a_wobble_restarts_the_return_clock():
     assert d is None and st.return_since == now
 
 
+def test_noise_inside_the_band_keeps_the_return_clock():
+    t0 = 1000.0
+    st = State("carrier-b", since=t0 - 200)
+    for i in range(0, 31):
+        now = t0 + i * 10
+        ps = _paths(now)
+        # Every third pass carrier A's jitter reads 18 ms against voice's 30 ms
+        # (score 0.4): under the 0.5 that starts the clock, inside the band
+        # that keeps it running.
+        if i % 3 == 2:
+            ps["carrier-a"] = replace(ps["carrier-a"], windows=_windows(now, 30, jitter=18.0))
+        st, d = decide("voice", _eval(ps, VOICE, now), ["carrier-a", "carrier-b"], st, POLICY, now)
+        if d is not None:
+            assert d.kind == "move_back" and now == t0 + 300
+            return
+    raise AssertionError("never moved back")
+
+
 def test_storm_mode_satellite_and_leaving_it():
     now = 1000.0
     ev = _eval(_paths(now, a_down=True, b_down=True, sat=True), VOICE, now, STORM_POLICY)
@@ -261,8 +280,9 @@ def test_bulk_stays_on_a_through_the_brownout(seed):
 def test_no_flapping_on_noisy_healthy_paths(seed, background):
     """An hour of healthy paths with realistic noise: background loss, latency
     spikes and jittery windows. At 0.2% loss nothing moves. At 0.5% (half the
-    voice SLA) a confident-looking forecast can rarely move a class once, but
-    it must never bounce back and forth."""
+    voice SLA) a confident-looking forecast can rarely move a class once, and
+    it may come back once its home path has been fine for 5 minutes, but it
+    must never bounce back and forth."""
     rng = random.Random(1000 + seed)
     hist = {"carrier-a": [], "carrier-b": []}
     st = None
@@ -276,8 +296,14 @@ def test_no_flapping_on_noisy_healthy_paths(seed, background):
         ps = {k: PathInput(k, LABELS[k], n + 1, windows=hist[k][-40:]) for n, k in enumerate(hist)}
         st, d = decide("voice", _eval(ps, VOICE, now), list(ps), st, POLICY, now)
         if d is not None and d.kind != "hold":
-            moves.append(d)
-    assert len(moves) <= (0 if background < 0.5 else 1), moves
+            moves.append((now, d))
+    if background < 0.5:
+        assert moves == []
+    else:
+        assert len(moves) <= 2, moves
+        if len(moves) == 2:
+            (t1, away), (t2, back) = moves
+            assert away.kind == "move" and back.kind == "move_back" and t2 - t1 >= POLICY.return_after_s
 
 
 def test_noisy_but_good_alternative_is_still_a_place_to_go():
