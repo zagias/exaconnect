@@ -20,6 +20,7 @@ SCREENS = [
     ("/traffic/rules", "Traffic: rules"),
     ("/traffic/classes", "Traffic: classes"),
     ("/decisions", "Decisions"),
+    ("/fabric", "Fabric"),
     ("/metering", "Metering"),
     ("/insights", "Insights"),
     ("/ask", "Ask your network"),
@@ -95,8 +96,8 @@ def main() -> int:
         if show.count():
             show.click()
             page.wait_for_timeout(2500)
-            body = page.inner_text("body")
-            if "Disaster watch" in body and "Hurricane watch" in body:
+            body = page.inner_text("body").lower()  # labels are upper-cased in CSS
+            if "disaster watch" in body and "hurricane watch" in body:
                 ok("example hurricane and earthquake alerts appear on Insights")
             else:
                 bad("example alerts did not appear on Insights")

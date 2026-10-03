@@ -33,10 +33,15 @@ csv=$(curl "${loc[@]}" -o /dev/null -w '%{http_code} %{content_type}' -H "Author
 note "settlement CSV: $csv"
 
 echo "-- browser"
-image=mcr.microsoft.com/playwright/python:v1.48.0-noble
-if ! docker image inspect "$image" >/dev/null 2>&1 && ! docker pull -q "$image" >/dev/null 2>&1; then
-  skip "Playwright image not available on this host"
-  exit 0
+# Microsoft's image has the browsers but not the Python package; add it once.
+base=mcr.microsoft.com/playwright/python:v1.48.0-noble
+image=exaconnect/e2e:1.48.0
+if ! docker image inspect "$image" >/dev/null 2>&1; then
+  if ! printf 'FROM %s\nRUN PIP_BREAK_SYSTEM_PACKAGES=1 pip install --no-cache-dir playwright==1.48.0\n' "$base" |
+    docker build -q -t "$image" - >/dev/null 2>&1; then
+    bad "could not build the browser test image from $base"
+    exit 1
+  fi
 fi
 out=$(E2E_EMAIL=$email E2E_PASSWORD=$pass docker run --rm --network host --add-host "$host:127.0.0.1" \
   -e E2E_HOST="$host" -e E2E_EMAIL -e E2E_PASSWORD -v "$PWD/lab/ci/e2e:/e2e:ro" "$image" \
