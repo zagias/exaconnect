@@ -1,9 +1,8 @@
 # connect.exacarib.com: the portal and its API, nothing else.
 # The controller and database stay on the private compose network; agent
 # endpoints are not served here (agents use the mTLS proxy).
-{
-	email {$EXA_ACME_EMAIL:}
-}
+# No global options: an empty "email" option is a parse error, and Let's
+# Encrypt issues certificates without an account email.
 
 {$EXA_PUBLIC_HOST} {
 	encode zstd gzip

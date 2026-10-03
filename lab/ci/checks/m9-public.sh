@@ -24,6 +24,11 @@ if curl -fsS --max-time 10 -o /dev/null "http://$host/" 2>/dev/null || curl -fsS
 else
   note "$host not reachable via its public address from this host (some clouds don't hairpin; check from outside)"
 fi
+state=$(docker inspect -f '{{.State.Status}} restarts={{.RestartCount}}' exaconnect-web-1 2>&1)
+note "web container: $state"
+# Errors only: request lines would carry visitors' addresses into the public log.
+while read -r l; do note "caddy: $l"; done < <(docker logs --tail 200 exaconnect-web-1 2>&1 |
+  grep -iE 'error|caddyfile|adapt|certificate obtained|acme' | tail -8 | cut -c1-300)
 ports=$(ss -Htln | awk '{print $4}' | grep -vE '^(127\.|\[::1\]|172\.)' | grep -oE '[0-9]+$' | sort -un | tr '\n' ' ')
 note "listening on public addresses: $ports"
 if grep -qE '(^| )(8000|5432|5173)( |$)' <<<"$ports"; then bad "controller, database or dev portal exposed"; else ok "controller, database and dev portal stay private"; fi

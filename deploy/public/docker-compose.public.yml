@@ -11,7 +11,6 @@ services:
       dockerfile: deploy/public/Dockerfile
     environment:
       EXA_PUBLIC_HOST: ${EXA_PUBLIC_HOST:?set EXA_PUBLIC_HOST}
-      EXA_ACME_EMAIL: ${EXA_ACME_EMAIL:-}
     ports:
       - "80:80"
       - "443:443"
