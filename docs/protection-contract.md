@@ -34,7 +34,7 @@ No new agent fields. The second tunnel is a second entry in `circuits`:
 - Neither tunnel lists its sibling in `export_circuits`. Other circuits
   that export a resilient circuit's routes list both ids.
 - BGP picks between the two; both learn the same prefixes, so failover is
-  the BGP hold time (9 s) or IPsec dead-peer detection, whichever is first.
+  the BGP hold time (30 s, as AWS and Azure use) or IPsec dead-peer detection, whichever is first.
 
 ### Telemetry
 

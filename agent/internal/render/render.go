@@ -77,10 +77,13 @@ func FRR(s *desired.State) string {
 		}
 	}
 	// Cloud gateways: plain eBGP over the circuit's XFRM interface, no BFD.
+	// AWS's and Azure's timers (10 s keepalive, 30 s hold), so a resilient
+	// pair moves off a failed tunnel within 30 seconds (ADR 0012).
 	circuits := s.ActiveCircuits()
 	for _, c := range circuits {
 		fmt.Fprintf(&b, " neighbor %s remote-as %d\n", c.PeerInside, c.PeerASN)
 		fmt.Fprintf(&b, " neighbor %s description %s\n", c.PeerInside, c.Name)
+		fmt.Fprintf(&b, " neighbor %s timers 10 30\n", c.PeerInside)
 	}
 	b.WriteString(" !\n address-family ipv4 unicast\n")
 	if s.Loopback != "" {

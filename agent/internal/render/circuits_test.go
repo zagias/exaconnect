@@ -47,6 +47,7 @@ func TestFRRCircuits(t *testing.T) {
 		"  network 10.254.0.1/32\n",
 		" neighbor 169.254.100.1 remote-as 64512\n",
 		" neighbor 169.254.100.1 description vc7\n",
+		" neighbor 169.254.100.1 timers 10 30\n",
 		"  neighbor 169.254.100.1 prefix-list VC7-IN in\n",
 		"  neighbor 169.254.100.1 prefix-list VC7-OUT out\n",
 		"  neighbor 169.254.100.1 maximum-prefix 100\n",

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/netip"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -161,6 +162,7 @@ func (a *Applier) route(ctx context.Context, force bool) (changed bool, err erro
 		return false, nil // in place, or refused and waiting for RetryInternet
 	}
 	var errs []string
+	old := a.InternetVia()
 	for i, e := range exits {
 		args := append([]string{"ip", "route", "replace"}, strings.Fields(e.Route)...)
 		if err := a.run(ctx, append(args, "table", strconv.Itoa(InternetTable))...); err != nil {
@@ -168,6 +170,9 @@ func (a *Applier) route(ctx context.Context, force bool) (changed bool, err erro
 			continue
 		}
 		a.setRoute(exits[0].Route, i == 0, e.Via, false)
+		if s.Internet.Mode == desired.InternetLocal && old != "" && old != e.Via {
+			a.forgetNAT(ctx, old)
+		}
 		if len(errs) > 0 {
 			return true, fmt.Errorf("preferred internet exit refused, using %q: %s", e.Route, strings.Join(errs, "; "))
 		}
@@ -175,6 +180,23 @@ func (a *Applier) route(ctx context.Context, force bool) (changed bool, err erro
 	}
 	a.setRoute(exits[0].Route, false, "", false)
 	return true, fmt.Errorf("no internet exit could be set: %s", strings.Join(errs, "; "))
+}
+
+// forgetNAT drops the connection tracking entries translated to the old
+// uplink's address. Without this, a flow that started before the switch
+// (a ping, a DNS query) keeps its old source address, now on the wrong
+// carrier, until it times out. The uplink itself is still up, so the kernel
+// doesn't clear them. Best effort: errors only mean nothing to delete.
+func (a *Applier) forgetNAT(ctx context.Context, uplink string) {
+	out, err := a.Sys.Run(ctx, "ip", "-4", "-o", "addr", "show", "dev", uplink)
+	if err != nil {
+		return
+	}
+	for _, f := range strings.Fields(string(out)) {
+		if p, err := netip.ParsePrefix(f); err == nil && p.Addr().Is4() {
+			_, _ = a.Sys.Run(ctx, "conntrack", "-D", "--reply-dst", p.Addr().String())
+		}
+	}
 }
 
 func (a *Applier) setRoute(want string, ok bool, via string, flushed bool) {

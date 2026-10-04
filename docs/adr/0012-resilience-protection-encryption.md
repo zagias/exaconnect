@@ -14,7 +14,7 @@ end to end.
 **Resilient pairs on one PoP, now.** AWS and Azure give every VPN connection
 two gateway addresses. A cloud circuit may name the second one; the PoP then
 runs a second IPsec tunnel with its own BGP session, and BGP moves traffic
-when a tunnel fails (9-second hold time, or dead-peer detection). The agent
+when a tunnel fails (within the 30-second BGP hold time that AWS and Azure use, or sooner on dead-peer detection). The agent
 needed no change: the second tunnel is one more circuit in the PoP's desired
 state, numbered 1,000,000 + the circuit's id. Billing is unchanged: the
 pair is one circuit at one bandwidth.

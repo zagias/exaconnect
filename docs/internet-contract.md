@@ -60,6 +60,11 @@ what would otherwise use a default route goes to table 251, which holds:
 - site, `off`: `unreachable default`.
 - PoP: `default via <gateway> dev <interface>` of its uplink.
 
+When a local-mode site moves to another uplink, the agent deletes the
+connection tracking entries translated to the old uplink's address
+(`conntrack -D --reply-dst <address>`), so running flows start again on the
+new carrier instead of waiting to time out. Sites need `conntrack` installed.
+
 Firewall and NAT, one nftables table `ip exa_inet`, replaced atomically
 (`nft -f`), only on a local-mode site and the PoP:
 

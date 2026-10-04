@@ -188,7 +188,14 @@ func TestInternetExitFollowsBFD(t *testing.T) {
 	if err != nil || !changed || from != "eth1" || to != "eth2" {
 		t.Fatalf("reroute: %q -> %q changed=%v err=%v", from, to, changed, err)
 	}
-	if got := since(f, n); !reflect.DeepEqual(got, []string{"ip route replace default via 10.12.1.1 dev eth2 table 251"}) {
+	// Flows translated to carrier A's address are forgotten, so they start
+	// again on carrier B instead of waiting to time out.
+	want := []string{
+		"ip route replace default via 10.12.1.1 dev eth2 table 251",
+		"ip -4 -o addr show dev eth1",
+		"conntrack -D --reply-dst 10.11.1.2",
+	}
+	if got := since(f, n); !reflect.DeepEqual(got, want) {
 		t.Fatalf("commands %q", got)
 	}
 

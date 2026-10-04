@@ -111,18 +111,20 @@ else
 fi
 
 echo "-- the first tunnel fails"
-docker exec -d "$(node lan-a)" sh -c 'ping -c 150 -i 0.2 -W 1 10.100.0.1 > /tmp/pair-ping.txt 2>&1'
+docker exec -d "$(node lan-a)" sh -c 'ping -c 300 -i 0.2 -W 1 10.100.0.1 > /tmp/pair-ping.txt 2>&1'
 sleep 3
 docker exec "$(node cloud-aws)" ip link set xfrm1 down
 primary_down() { [[ $(tunnels) == "down up" || $(tunnels) == "provisioning up" ]]; }
 if wait_for 60 primary_down; then ok "the portal shows the first tunnel down and the second up"; else bad "pair tunnels after the cut: $(tunnels)"; fi
 st=$(api GET "/customers/$cid/circuits" | jq -r --argjson i "$pair" '.[] | select(.id == $i) | .status')
 if [[ $st == up ]]; then ok "the circuit stays up on one tunnel"; else bad "circuit status with one tunnel: $st"; fi
-sleep 32 # let the 30-second ping run finish
+# The 60-second ping run ends with its summary line.
+finished() { docker exec "$(node lan-a)" grep -q 'packets transmitted' /tmp/pair-ping.txt; }
+wait_for 90 finished || note "the ping run did not finish"
 read -r tx rx <<<"$(docker exec "$(node lan-a)" sh -c "grep -Eo '[0-9]+ packets transmitted, [0-9]+ received' /tmp/pair-ping.txt" | awk '{print $1, $4}')"
 lost_s=$(awk -v t="${tx:-0}" -v r="${rx:-0}" 'BEGIN { printf "%.1f", (t - r) * 0.2 }')
-if [[ -n $tx ]] && awk -v l="$lost_s" 'BEGIN { exit !(l <= 15) }'; then
-  ok "lan-a kept reaching the VPC: $rx of $tx pings answered (about $lost_s s lost while BGP moved)"
+if [[ -n $tx ]] && awk -v l="$lost_s" 'BEGIN { exit !(l <= 35) }'; then
+  ok "lan-a kept reaching the VPC: $rx of $tx pings answered (about $lost_s s lost; the BGP hold time is 30 s)"
 else
   bad "traffic over the pair during the cut: ${rx:-?} of ${tx:-?} answered"
 fi

@@ -37,6 +37,9 @@ func (f *fake) Run(_ context.Context, name string, args ...string) ([]byte, erro
 		return []byte(f.links), nil
 	case c == "ip -d -j link show":
 		return []byte(f.ipLinks), nil
+	case strings.HasPrefix(c, "ip -4 -o addr show dev eth"):
+		dev := strings.TrimPrefix(c, "ip -4 -o addr show dev eth")
+		return []byte(fmt.Sprintf("3: eth%s    inet 10.1%s.1.2/24 brd 10.1%s.1.255 scope global eth%s\n", dev, dev, dev, dev)), nil
 	case strings.HasPrefix(c, "ip -j -4 address show dev lo"):
 		return []byte(f.loAddrs), nil
 	case c == "ip -j rule show":
