@@ -27,6 +27,25 @@ jobs:
         working-directory: agent
         run: CGO_ENABLED=0 GOOS=linux GOARCH=${{ matrix.arch }} go build -trimpath -o exa-agent ./cmd/exa-agent
 
+  terraform:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: terraform/go.mod
+      - name: gofmt
+        run: test -z "$(gofmt -l terraform)" || (gofmt -l terraform && exit 1)
+      - name: vet and unit tests
+        working-directory: terraform
+        run: go vet ./... && go test -count=1 ./...
+      - name: build linux/arm64, linux/amd64, darwin/arm64
+        working-directory: terraform
+        run: |
+          for t in linux/arm64 linux/amd64 darwin/arm64; do
+            CGO_ENABLED=0 GOOS=${t%/*} GOARCH=${t#*/} go build -trimpath -o /dev/null .
+          done
+
   controller:
     runs-on: ubuntu-24.04
     services:
@@ -50,6 +69,9 @@ jobs:
       - run: pip install -e 'controller[dev]'
       - name: lint
         working-directory: controller
+        run: ruff check . && ruff format --check .
+      - name: lint the Python SDK
+        working-directory: sdk/python
         run: ruff check . && ruff format --check .
       - name: test
         run: make test-controller

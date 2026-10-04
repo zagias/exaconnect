@@ -295,3 +295,12 @@ A new Encryption screen shows every path and circuit tunnel with the
 algorithms in use and flags weak ones. Pairs through two PoPs wait for a
 second PoP; blackholing at carriers and route-server peering are left as
 seams. Lab check `m9-protection.sh`.
+
+**Fabric step 6: API keys, Python SDK and Terraform provider** (ADR 0013,
+2026-10-04). People create API keys on the Account screen; a key acts as
+its owner and can expire or be revoked. The Python SDK (`sdk/python`)
+covers circuits, internet, traffic rules, orders, partners, encryption,
+metering, decisions and Storm Mode, and is tested against the real API. The
+Terraform provider (`terraform/`) manages circuits, firewall rules, port
+forwards, internet breakout and traffic rules. Publishing to PyPI and the
+Terraform Registry waits for ExaCarib accounts there.

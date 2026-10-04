@@ -32,4 +32,15 @@ while read -r l; do note "caddy: $l"; done < <(docker logs --tail 200 exaconnect
 ports=$(ss -Htln | awk '{print $4}' | grep -vE '^(127\.|\[::1\]|172\.)' | grep -oE '[0-9]+$' | sort -un | tr '\n' ' ')
 note "listening on public addresses: $ports"
 if grep -qE '(^| )(8000|5432|5173)( |$)' <<<"$ports"; then bad "controller, database or dev portal exposed"; else ok "controller, database and dev portal stay private"; fi
-exit $fail
+
+# An API key (ADR 0013) through the public proxy, as the SDK and Terraform use it. Never printed.
+made=$(api POST /auth/api-keys '{"name": "lab public check", "days": 1}')
+key=$(jq -r '.token // empty' <<<"$made")
+kid=$(jq -r '.id // empty' <<<"$made")
+as_key() { curl -s -o /dev/null -w '%{http_code}' "${loc[@]}" -k -H "Authorization: Bearer $key" "https://$host/api/v1/auth/me"; }
+if [[ -n $key && $(as_key) == 200 ]]; then ok "an API key works through the public address"; else bad "API key through the public proxy"; fi
+[[ -n $kid ]] && api DELETE "/auth/api-keys/$kid" >/dev/null
+if [[ -n $key && $(as_key) == 401 ]]; then ok "a revoked key is refused at once"; else bad "revoked key not refused"; fi
+unset key
+# shellcheck disable=SC2031  # fail is only set by ok/bad in this shell
+exit "$fail"

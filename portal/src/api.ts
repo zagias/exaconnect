@@ -886,3 +886,32 @@ export interface EncryptionReport {
 }
 
 export const encryptionPath = (cid: string) => `/customers/${cid}/encryption`;
+
+// ---- API keys (docs/automation-contract.md, ADR 0013) ----
+// A key acts as the person who made it. The token comes back once, from create;
+// the portal keeps it only in component state and never stores or logs it.
+
+export interface ApiKey {
+  id: number;
+  name: string;
+  prefix: string;
+  created_at: string;
+  last_used_at: string | null;
+  expires_at: string | null;
+}
+
+export interface ApiKeyCreated {
+  id: number;
+  name: string;
+  prefix: string;
+  created_at: string;
+  expires_at: string | null;
+  token: string;
+}
+
+export const apiKeysPath = "/auth/api-keys";
+
+export const createApiKey = (body: { name: string; days?: number }) =>
+  api<ApiKeyCreated>(apiKeysPath, { method: "POST", body: JSON.stringify(body) });
+
+export const revokeApiKey = (id: number) => api<void>(`${apiKeysPath}/${id}`, { method: "DELETE" });

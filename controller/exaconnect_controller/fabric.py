@@ -112,6 +112,8 @@ def inside_pair(inside_cidr: Any) -> tuple[str, str]:
 
 def validate(conn: psycopg.Connection, customer_id: Any, c: dict[str, Any], circuit_id: Any = None) -> dict[str, Any]:
     """Check and normalise a circuit (new or changed). Raises CircuitError."""
+    # An empty string means "none" for optional references, on create as on update.
+    c = {**c, **{k: None for k in ("a_site_id", "b_site_id", "class_name", "inside_cidr") if c.get(k) == ""}}
     sites = {
         str(r["id"]): r
         for r in conn.execute(

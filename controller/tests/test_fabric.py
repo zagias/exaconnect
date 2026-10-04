@@ -274,3 +274,21 @@ def test_elastic_bandwidth_is_billed_by_the_hour(client, admin_headers):
             ).fetchone()["n"]
             == 0
         )
+
+
+def test_empty_optional_fields_mean_none(client, admin_headers):
+    # Tools that send "" for "not set" (Terraform, forms) get a circuit, not a 500.
+    cid = _seed()["customer_id"]
+    r = client.post(
+        f"/api/v1/customers/{cid}/circuits",
+        json=_cloud(a_site_id="", class_name="", inside_cidr=""),
+        headers=admin_headers,
+    )
+    assert r.status_code == 201, r.text
+    c = r.json()
+    assert c["inside_cidr"] == "169.254.100.0/30"
+    r = client.patch(f"/api/v1/customers/{cid}/circuits/{c['id']}", json={"class_name": ""}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    with db.tx() as conn:
+        row = conn.execute("SELECT a_site_id, class_name FROM circuits WHERE id = %s", (c["id"],)).fetchone()
+    assert row["a_site_id"] is None and row["class_name"] is None

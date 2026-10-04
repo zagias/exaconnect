@@ -2,8 +2,9 @@ import { useState, type FormEvent } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { ErrorNote, Eyebrow } from "../components";
+import ApiKeys from "./ApiKeys";
 
-/** Your account: change your password. Other sessions are signed out. */
+/** Your account: change your password (other sessions are signed out) and manage your API keys. */
 export default function Account() {
   const { user } = useAuth();
   const [current, setCurrent] = useState("");
@@ -70,6 +71,7 @@ export default function Account() {
         <ErrorNote error={error} />
         {done && <p className="ok-note">Password changed. Your other sessions have been signed out.</p>}
       </section>
+      <ApiKeys />
     </>
   );
 }

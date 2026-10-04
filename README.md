@@ -3,14 +3,13 @@
 ExaCarib's connectivity platform: a Go edge agent (WireGuard + FRR), a FastAPI
 controller, AI SLA routing, customer traffic rules with priority queues and
 application detection, virtual circuits to clouds and between sites
-(ExaConnect Fabric, with a cloud router and elastic bandwidth), internet
-breakout with a NAT gateway and firewall, resilient circuit pairs, DDoS
-protection, an encryption report, a partner directory with
-plain-English ordering, per-site
-Storm Mode, carrier metering and
-settlement, AI insights (hurricane and disaster watch, bill forecast, carrier anomalies,
-"Ask your network") and an ExaCarib-branded portal for customers, carriers
-and admins.
+(ExaConnect Fabric, with a cloud router, elastic bandwidth and resilient
+pairs), internet breakout with a NAT gateway, firewall and DDoS protection,
+an encryption report, a partner directory with plain-English ordering, API
+keys with a Python SDK and a Terraform provider, per-site Storm Mode, carrier
+metering and settlement, AI insights (hurricane and disaster watch, bill
+forecast, carrier anomalies, "Ask your network") and an ExaCarib-branded
+portal for customers, carriers and admins.
 The build brief is [CLAUDE.md](CLAUDE.md); progress per milestone is in
 [docs/progress.md](docs/progress.md).
 
@@ -20,6 +19,8 @@ The build brief is [CLAUDE.md](CLAUDE.md); progress per milestone is in
 | `controller/` | FastAPI controller (API, routing, storm, metering, models) |
 | `portal/` | React + TypeScript + Vite portal |
 | `lab/` | containerlab topology, netem profiles, fault scripts, lab host setup |
+| `sdk/python/` | Python SDK (`exaconnect` package) for the REST API |
+| `terraform/` | Terraform provider for circuits, firewall rules, port forwards, internet breakout and traffic rules |
 | `deploy/` | Docker Compose for the controller, database and agent TLS proxy; `deploy/public` for the HTTPS portal |
 | `docs/` | Lab runbook, ADRs, progress notes |
 

@@ -560,6 +560,20 @@ CREATE TABLE IF NOT EXISTS blocked_sources (
 );
 ALTER TABLE blocked_sources ADD COLUMN IF NOT EXISTS lifted boolean NOT NULL DEFAULT false;
 
+-- API keys for automation: the SDK, Terraform, customers' own code (ADR 0013).
+CREATE TABLE IF NOT EXISTS api_keys (
+  id            bigserial PRIMARY KEY,
+  user_id       uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name          text NOT NULL,
+  prefix        text NOT NULL,
+  token_hash    text NOT NULL UNIQUE,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  last_used_at  timestamptz,
+  expires_at    timestamptz,
+  revoked_at    timestamptz
+);
+CREATE INDEX IF NOT EXISTS api_keys_user ON api_keys (user_id) WHERE revoked_at IS NULL;
+
 -- Time series (TimescaleDB hypertables when the extension is available).
 CREATE TABLE IF NOT EXISTS path_metrics (
   time         timestamptz NOT NULL,

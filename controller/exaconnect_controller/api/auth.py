@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 from .. import audit, db
 from ..security import hash_password, new_token, token_hash, verify_password
-from .deps import UserDep
+from .deps import API_KEY_PREFIX, UserDep
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -113,3 +113,60 @@ def change_password(body: PasswordIn, user: UserDep, authorization: str = Header
             (user.id, token_hash(authorization.removeprefix("Bearer "))),
         )
         audit.record(conn, user.actor, "user.change_password", user.email, user.customer_id)
+
+
+# ---- API keys (ADR 0013) ----------------------------------------------------
+
+MAX_KEYS = 20
+KEY_COLUMNS = "id, name, prefix, created_at, last_used_at, expires_at"
+
+
+class KeyIn(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+    days: int | None = Field(default=None, ge=1, le=730)
+
+
+@router.get("/api-keys")
+def list_keys(user: UserDep) -> list[dict]:
+    """Your own active keys. The keys themselves are never shown again."""
+    with db.tx() as conn:
+        return conn.execute(
+            f"""SELECT {KEY_COLUMNS} FROM api_keys WHERE user_id = %s AND revoked_at IS NULL
+                AND (expires_at IS NULL OR expires_at > now()) ORDER BY created_at DESC""",
+            (user.id,),
+        ).fetchall()
+
+
+@router.post("/api-keys", status_code=201)
+def create_key(body: KeyIn, user: UserDep) -> dict:
+    """A key that acts as you, for the SDK, Terraform or your own code. Shown once."""
+    token = API_KEY_PREFIX + new_token()
+    with db.tx() as conn:
+        active = conn.execute(
+            """SELECT count(*) AS n FROM api_keys WHERE user_id = %s AND revoked_at IS NULL
+               AND (expires_at IS NULL OR expires_at > now())""",
+            (user.id,),
+        ).fetchone()["n"]
+        if active >= MAX_KEYS:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"You have {MAX_KEYS} keys. Revoke one first.")
+        row = conn.execute(
+            f"""INSERT INTO api_keys (user_id, name, prefix, token_hash, expires_at)
+                VALUES (%s, %s, %s, %s, CASE WHEN %s::int IS NULL THEN NULL ELSE now() + make_interval(days => %s) END)
+                RETURNING {KEY_COLUMNS}""",
+            (user.id, body.name.strip(), token[:12], token_hash(token), body.days, body.days),
+        ).fetchone()
+        audit.record(conn, user.actor, "api_key.create", row["prefix"], user.customer_id, {"name": row["name"]})
+    return {**row, "token": token}
+
+
+@router.delete("/api-keys/{key_id}", status_code=204)
+def revoke_key(key_id: int, user: UserDep) -> None:
+    with db.tx() as conn:
+        row = conn.execute(
+            "UPDATE api_keys SET revoked_at = now() WHERE id = %s AND user_id = %s AND revoked_at IS NULL"
+            " RETURNING prefix, name",
+            (key_id, user.id),
+        ).fetchone()
+        if row is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Key not found.")
+        audit.record(conn, user.actor, "api_key.revoke", row["prefix"], user.customer_id, {"name": row["name"]})

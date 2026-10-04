@@ -26,15 +26,38 @@ class User:
         return f"user:{self.email}"
 
 
+API_KEY_PREFIX = "exa_"
+
+
 def current_user(authorization: Annotated[str | None, Header()] = None) -> User:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Sign in first.")
+    token = authorization.removeprefix("Bearer ")
     with db.tx() as conn:
-        row = conn.execute(
-            "SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id"
-            " WHERE s.token_hash = %s AND s.expires_at > now()",
-            (token_hash(authorization.removeprefix("Bearer ")),),
-        ).fetchone()
+        if token.startswith(API_KEY_PREFIX):
+            # An API key (ADR 0013): it acts as the person who made it.
+            row = conn.execute(
+                """WITH k AS (
+                     UPDATE api_keys SET last_used_at = now()
+                     WHERE token_hash = %(h)s AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > now())
+                       AND (last_used_at IS NULL OR last_used_at < now() - interval '1 minute')
+                     RETURNING user_id)
+                   SELECT u.* FROM users u
+                   WHERE u.id = (SELECT user_id FROM k UNION ALL
+                                 SELECT user_id FROM api_keys WHERE token_hash = %(h)s AND revoked_at IS NULL
+                                   AND (expires_at IS NULL OR expires_at > now()) LIMIT 1)""",
+                {"h": token_hash(token)},
+            ).fetchone()
+        else:
+            row = None
+        if row is None:
+            row = conn.execute(
+                "SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id"
+                " WHERE s.token_hash = %s AND s.expires_at > now()",
+                (token_hash(token),),
+            ).fetchone()
+    if row is None and token.startswith(API_KEY_PREFIX):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "This API key has been revoked or has expired.")
     if row is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Your session has ended. Sign in again.")
     return User(row["id"], row["email"], row["role"], row["customer_id"], row["carrier_id"])
