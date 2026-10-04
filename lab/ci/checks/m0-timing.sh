@@ -21,12 +21,25 @@ rtt() {
   shift 2
   docker exec "$(node "$n")" ping -q -c 100 -i 0.05 -W 1 "$@" "$t" 2>/dev/null | awk -F' = ' '/^rtt|^round-trip/ {print $2}'
 }
-note "site-a to lan-a (no netem):              $(rtt site-a 192.168.10.10)"
-note "site-a to carrier-a router (one netem):  $(rtt site-a 10.11.1.1)"
-note "site-a to PoP underlay via carrier A:    $(rtt site-a 10.11.0.2)"
-note "site-a to PoP through wg-a:              $(rtt site-a 100.64.1.1 -I wg-a)"
-note "site-a to PoP underlay via carrier B:    $(rtt site-a 10.12.0.2)"
-note "  (netem asks for 25 ms on A and 35 ms on B round trip, with 2 and 4 ms jitter)"
+layers() {
+  note "site-a to lan-a (no netem):              $(rtt site-a 192.168.10.10)"
+  note "site-a to carrier-a router (one netem):  $(rtt site-a 10.11.1.1)"
+  note "site-a to PoP underlay via carrier A:    $(rtt site-a 10.11.0.2)"
+  note "site-a to PoP through wg-a:              $(rtt site-a 100.64.1.1 -I wg-a)"
+  note "site-a to PoP underlay via carrier B:    $(rtt site-a 10.12.0.2)"
+}
+note "cpuidle driver $(cat /sys/devices/system/cpu/cpuidle/current_driver 2>/dev/null)," \
+  "governor $(cat /sys/devices/system/cpu/cpuidle/current_governor_ro /sys/devices/system/cpu/cpuidle/current_governor 2>/dev/null | head -1)"
+note "(netem asks for 25 ms on A and 35 ms on B round trip, with 2 and 4 ms jitter; min/avg/max/mdev)"
+layers
+# netem releases packets from timers; on a VM an idle vCPU may wake late.
+# Holding /dev/cpu_dma_latency at 0 keeps CPUs out of idle states while open.
+if exec 3>/dev/cpu_dma_latency 2>/dev/null; then
+  printf '\0\0\0\0' >&3
+  echo "-- the same with CPUs kept out of idle states"
+  layers
+  exec 3>&-
+fi
 
 echo "-- busiest containers"
 docker stats --no-stream --format '{{.CPUPerc}} {{.Name}}' 2>/dev/null | sort -rn | head -8 | sed 's/^/      /'
