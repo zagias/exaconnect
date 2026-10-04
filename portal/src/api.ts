@@ -155,8 +155,62 @@ export interface SiteSummary {
 }
 
 export interface Overview {
-  sites: SiteSummary[];
+  sites: OverviewSite[];
   attention: string[];
+  /** Per class: share of 10 s windows in the last 24 h that met the class SLA on the path it was on. */
+  sla_24h: ClassSla24h[];
+  /** The share of windows each class should meet; shown as the target. */
+  sla_target_pct: number;
+  /** Non-shadow routing moves in the last 24 h, all sites. */
+  moves_24h: number;
+  /** The last five non-shadow moves, newest first. */
+  recent_decisions: RecentMove[];
+}
+
+export interface OverviewSteering {
+  class_name: string;
+  intended: string | null;
+  intended_label: string | null;
+  since: string | null;
+  /** Set only when the agent reports a different path from the intended one. */
+  actual: string | null;
+  actual_label: string | null;
+  paused: boolean | null;
+  failover: boolean | null;
+  moves_24h: number;
+}
+
+export interface OverviewSite extends SiteSummary {
+  storm_mode: boolean;
+  /** Empty for the PoP. */
+  steering: OverviewSteering[];
+}
+
+export interface ClassSla24h {
+  class_name: string;
+  /** Bulk is best effort: reported, never a breach. */
+  best_effort: boolean;
+  max_latency_ms: number | null;
+  max_jitter_ms: number | null;
+  max_loss_pct: number | null;
+  windows: number;
+  met: number;
+  pct: number | null;
+  sites: { site_id: string; site: string; windows: number; met: number; pct: number | null }[];
+}
+
+export interface RecentMove {
+  id: number;
+  time: string;
+  site_id: string;
+  site: string;
+  class_name: string;
+  kind: "move" | "move_back" | "failover" | string;
+  from_path: string | null;
+  from_label: string | null;
+  to_path: string | null;
+  to_label: string | null;
+  reason: string;
 }
 
 export interface SiteDetail extends SiteSummary {

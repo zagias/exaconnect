@@ -218,24 +218,146 @@ export default function Insights() {
   );
 }
 
-/** The most pressing open insights, for the overview. */
-export function InsightSummary() {
-  const { user } = useAuth();
-  const { current } = useCustomer();
-  const q =
-    user?.role === "admin" && current ? `?customer_id=${current.id}` : "";
-  const list = useApi<Insight[]>(`/insights${q}`, 30_000);
-  const top = (list.data ?? [])
-    .filter((i) => i.severity !== "info")
-    .slice(0, 3);
+const SEVERITY_ORDER: Record<Insight["severity"], number> = {
+  critical: 0,
+  warning: 1,
+  info: 2,
+};
+
+/** Open insights that should count as "needs attention": warnings and worse, not yet acknowledged. */
+export function pressing(items: Insight[]): Insight[] {
+  return items
+    .filter((i) => !i.resolved_at && i.severity !== "info")
+    .sort(
+      (a, b) =>
+        SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] ||
+        Number(!!a.acknowledged_by) - Number(!!b.acknowledged_by) ||
+        b.first_seen.localeCompare(a.first_seen),
+    );
+}
+
+/** The most pressing open insights for the overview: one compact row each, with the
+ *  long text and source links behind "Details". Rows only; the overview owns the card. */
+export function InsightSummary({
+  items,
+  reload,
+  max = 3,
+  siteIds = {},
+}: {
+  items: Insight[];
+  reload: () => void;
+  max?: number;
+  /** Site name to id, so an anomaly row can link to its site. */
+  siteIds?: Record<string, string>;
+}) {
+  const { current, busy, error, toggle } = useStormToggle();
+  const [open, setOpen] = useState<number | null>(null);
+  const [ackError, setAckError] = useState<string | null>(null);
+  const ack = async (i: Insight) => {
+    setAckError(null);
+    try {
+      await api(`/insights/${i.id}/acknowledge`, { method: "POST" });
+      reload();
+    } catch (e) {
+      setAckError((e as Error).message);
+    }
+  };
+  const top = pressing(items).slice(0, max);
   if (top.length === 0) return null;
   return (
-    <section className="card span-12">
-      <div className="card-head">
-        <h2>Needs a look</h2>
-        <Link to="/insights">All insights</Link>
-      </div>
-      <InsightList items={top} reload={list.reload} />
-    </section>
+    <>
+      {(error ?? ackError) && (
+        <li className="attn-row">
+          <ErrorNote error={error ?? ackError} />
+        </li>
+      )}
+      {top.map((i) => {
+        const sev = SEVERITY[i.severity];
+        const toSwitch = (current?.sites ?? []).filter(
+          (s) => sitesToSwitch(i).includes(s.name) && !s.storm_mode,
+        );
+        const links = Array.isArray(i.data.links)
+          ? (i.data.links as { label: string; url: string }[])
+          : [];
+        const expanded = open === i.id;
+        const detailId = `insight-${i.id}-detail`;
+        const siteId = i.site ? siteIds[i.site] : undefined;
+        return (
+          <li key={i.id} className={`attn-row ${i.severity} ${i.kind}`}>
+            <div className="attn-main">
+              <span className="attn-meta">
+                <StatusPill health={sev.health}>{sev.word}</StatusPill>
+                <span className="attn-kind">{KIND_LABEL[i.kind]}</span>
+                {i.example && <ExampleTag />}
+                <span className="attn-age">{ago(i.first_seen)}</span>
+              </span>
+              <span className="attn-title" title={i.title.replace(/^Example data: /, "")}>
+                {i.title.replace(/^Example data: /, "")}
+              </span>
+            </div>
+            <div className="attn-actions">
+              {toSwitch.map((site) => (
+                <button
+                  key={site.id}
+                  className="button small storm-on"
+                  disabled={busy}
+                  onClick={() => toggle(site, true)}
+                >
+                  Storm Mode on for {site.name}
+                </button>
+              ))}
+              {i.kind === "bill_shock" && (
+                <Link className="button small secondary" to="/metering">
+                  Open metering
+                </Link>
+              )}
+              {i.kind === "anomaly" && siteId && (
+                <Link className="button small secondary" to={`/sites/${siteId}`}>
+                  Open {i.site}
+                </Link>
+              )}
+              <button
+                className="button small secondary"
+                aria-expanded={expanded}
+                aria-controls={detailId}
+                onClick={() => setOpen(expanded ? null : i.id)}
+              >
+                {expanded ? "Hide details" : "Details"}
+              </button>
+              {i.acknowledged_by ? (
+                <span className="attn-ack">
+                  Acknowledged by {who(i.acknowledged_by)}
+                </span>
+              ) : (
+                <button className="button small secondary" onClick={() => ack(i)}>
+                  Acknowledge
+                </button>
+              )}
+            </div>
+            {expanded && (
+              <div className="attn-detail" id={detailId}>
+                <p>{i.detail}</p>
+                <p className="attn-links">
+                  <span className="muted">
+                    Since {ago(i.first_seen)}, checked {ago(i.last_seen)}.
+                  </span>
+                  {typeof i.data.advisory_url === "string" &&
+                    i.data.advisory_url && (
+                      <a href={i.data.advisory_url} target="_blank" rel="noreferrer">
+                        NHC advisory
+                      </a>
+                    )}
+                  {links.map((l) => (
+                    <a key={l.url + l.label} href={l.url} target="_blank" rel="noreferrer">
+                      {l.label}
+                    </a>
+                  ))}
+                </p>
+              </div>
+            )}
+          </li>
+        );
+      })}
+    </>
   );
 }

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
@@ -63,12 +64,77 @@ def _site_paths(conn, site_ids: list) -> dict[Any, list[dict]]:
     return out
 
 
+# A non-shadow decision that put a class on a path (holds and pauses carry no to_path).
+_MOVE = "NOT d.shadow AND d.kind <> 'hold' AND d.to_path IS NOT NULL"
+
+# The share of windows a class should meet its SLA in. Shown as the target on the portal.
+SLA_TARGET_PCT = 99.5
+
+
+def _sla_24h(conn, site_ids: list) -> list[dict]:
+    """Per site and class: 10 s windows in the last 24 h, and how many met the class SLA
+    on the path the class was actually on at that moment.
+
+    The path a class was on is rebuilt from non-shadow moves: from each move until the
+    next, the class sat on its to_path. Before the first move it sat on that move's
+    from_path; with no moves at all, on its current steering path. Each path_metrics row
+    is one window (its time is the window end). A window meets the SLA when probes came
+    back and latency, jitter and loss are within the class limits; a null limit is ignored."""
+    return conn.execute(
+        f"""WITH sc AS (
+              SELECT s.id AS site_id, n.id AS node_id, c.name AS class_name, st.path AS current_path,
+                     sp.max_latency_ms, sp.max_jitter_ms, sp.max_loss_pct
+              FROM sites s
+              JOIN nodes n ON n.site_id = s.id
+              JOIN app_classes c ON c.customer_id = s.customer_id
+              LEFT JOIN sla_policies sp ON sp.customer_id = s.customer_id AND sp.class_name = c.name
+              LEFT JOIN steering st ON st.site_id = s.id AND st.class_name = c.name
+              WHERE s.id = ANY(%(sites)s) AND s.kind = 'site'
+            ),
+            mv AS (
+              SELECT d.site_id, d.class_name, d.id, d.time, d.from_path, d.to_path
+              FROM decisions d WHERE d.site_id = ANY(%(sites)s) AND {_MOVE}
+            ),
+            seg AS (
+              SELECT site_id, class_name, to_path AS path, time AS t0,
+                     COALESCE(lead(time) OVER (PARTITION BY site_id, class_name ORDER BY time, id),
+                              'infinity'::timestamptz) AS t1
+              FROM mv
+              UNION ALL
+              SELECT sc.site_id, sc.class_name, COALESCE(f.from_path, sc.current_path),
+                     '-infinity'::timestamptz, COALESCE(f.time, 'infinity'::timestamptz)
+              FROM sc LEFT JOIN LATERAL (
+                SELECT mv.time, mv.from_path FROM mv
+                WHERE mv.site_id = sc.site_id AND mv.class_name = sc.class_name
+                ORDER BY mv.time, mv.id LIMIT 1
+              ) f ON true
+            )
+            SELECT sc.site_id, sc.class_name, count(pm.time)::int AS windows,
+                   (count(pm.time) FILTER (WHERE pm.received > 0
+                      AND (sc.max_latency_ms IS NULL OR pm.rtt_avg_ms <= sc.max_latency_ms)
+                      AND (sc.max_jitter_ms IS NULL OR pm.jitter_ms <= sc.max_jitter_ms)
+                      AND (sc.max_loss_pct IS NULL OR pm.loss_pct <= sc.max_loss_pct)))::int AS met
+            FROM sc
+            JOIN seg ON seg.site_id = sc.site_id AND seg.class_name = sc.class_name
+            JOIN path_metrics pm ON pm.node_id = sc.node_id AND pm.path = seg.path
+                 AND pm.time >= seg.t0 AND pm.time < seg.t1 AND pm.time > now() - interval '24 hours'
+            GROUP BY sc.site_id, sc.class_name""",
+        {"sites": site_ids},
+    ).fetchall()
+
+
+def _pct(met: int, windows: int) -> float | None:
+    return round(100.0 * met / windows, 2) if windows else None
+
+
 @router.get("/overview")
-def overview(user: ViewerDep) -> dict:
+def overview(user: ViewerDep, customer_id: uuid.UUID | None = None) -> dict:
     scope = customer_scope(user)
+    if scope is None and customer_id:
+        scope = customer_id  # an admin looking at one customer
     with db.tx() as conn:
         sites = conn.execute(
-            f"""SELECT s.id, s.customer_id, s.name, s.kind, s.location, s.timezone,
+            f"""SELECT s.id, s.customer_id, s.name, s.kind, s.location, s.timezone, s.storm_mode,
                       n.id AS node_id, n.last_seen, n.applied_version, n.apply_ok,
                       (n.last_seen > now() - interval '{ONLINE_SECONDS} seconds') AS online,
                       (SELECT max(version) FROM desired_states d WHERE d.node_id = n.id) AS desired_version
@@ -77,12 +143,52 @@ def overview(user: ViewerDep) -> dict:
                ORDER BY s.kind DESC, s.name""",
             {"c": scope},
         ).fetchall()
-        paths = _site_paths(conn, [s["id"] for s in sites])
+        site_ids = [s["id"] for s in sites]
+        paths = _site_paths(conn, site_ids)
         slas = _voice_slas(conn)
+        classes = conn.execute(
+            """SELECT c.name AS class_name, min(c.ordinal) AS ordinal,
+                      bool_or(c.priority = 'bulk' OR c.name = 'bulk') AS best_effort,
+                      min(sp.max_latency_ms)::float8 AS max_latency_ms, min(sp.max_jitter_ms)::float8 AS max_jitter_ms,
+                      min(sp.max_loss_pct)::float8 AS max_loss_pct
+               FROM app_classes c
+               LEFT JOIN sla_policies sp ON sp.customer_id = c.customer_id AND sp.class_name = c.name
+               WHERE %(c)s::uuid IS NULL OR c.customer_id = %(c)s
+               GROUP BY c.name ORDER BY min(c.ordinal), c.name""",
+            {"c": scope},
+        ).fetchall()
+        sla_rows = _sla_24h(conn, site_ids)
+        steering = conn.execute(
+            f"""SELECT s.id AS site_id, c.name AS class_name, st.path AS intended, ip.label AS intended_label,
+                       st.since, a.path AS actual, ap.label AS actual_label, a.paused, a.failover,
+                       (SELECT count(*) FROM decisions d WHERE d.site_id = s.id AND d.class_name = c.name
+                          AND d.time > now() - interval '24 hours' AND {_MOVE})::int AS moves_24h
+                FROM sites s
+                JOIN app_classes c ON c.customer_id = s.customer_id
+                LEFT JOIN steering st ON st.site_id = s.id AND st.class_name = c.name
+                LEFT JOIN paths ip ON ip.name = st.path
+                LEFT JOIN nodes n ON n.site_id = s.id
+                LEFT JOIN steering_actual a ON a.node_id = n.id AND a.class_name = c.name AND a.dst = ''
+                LEFT JOIN paths ap ON ap.name = a.path
+                WHERE s.id = ANY(%s) AND s.kind = 'site'
+                ORDER BY c.ordinal, c.name""",
+            (site_ids,),
+        ).fetchall()
+        recent = conn.execute(
+            f"""SELECT d.id, d.time, d.site_id, s.name AS site, d.class_name, d.kind,
+                       d.from_path, fp.label AS from_label, d.to_path, tp.label AS to_label, d.reason
+                FROM decisions d JOIN sites s ON s.id = d.site_id
+                LEFT JOIN paths fp ON fp.name = d.from_path LEFT JOIN paths tp ON tp.name = d.to_path
+                WHERE d.site_id = ANY(%s) AND {_MOVE}
+                ORDER BY d.time DESC, d.id DESC LIMIT 5""",
+            (site_ids,),
+        ).fetchall()
+
     attention = []
     for s in sites:
         sla = slas.get(s["customer_id"])
         s["paths"] = [{**p, "health": _health(p if p["sent"] else None, sla)} for p in paths.get(s["id"], [])]
+        s["steering"] = []
         if s["node_id"] is None:
             continue
         if not s["online"]:
@@ -90,7 +196,45 @@ def overview(user: ViewerDep) -> dict:
         elif s["kind"] == "site":
             # The PoP only reflects probes; paths are measured from the sites.
             attention += [f"{p['label']} at {s['name']}" for p in s["paths"] if p["health"] != "ok"]
-    return {"sites": sites, "attention": attention}
+
+    by_site = {s["id"]: s for s in sites}
+    for r in steering:
+        site_id = r.pop("site_id")
+        if r["actual"] == r["intended"]:
+            r["actual"] = r["actual_label"] = None  # only shown when the agent reports something else
+        by_site[site_id]["steering"].append(r)
+
+    per_class: dict[str, dict] = {
+        c["class_name"]: {**c, "windows": 0, "met": 0, "pct": None, "sites": []} for c in classes
+    }
+    for r in sla_rows:
+        c = per_class.get(r["class_name"])
+        if c is None:
+            continue
+        c["windows"] += r["windows"]
+        c["met"] += r["met"]
+        c["sites"].append(
+            {
+                "site_id": r["site_id"],
+                "site": by_site[r["site_id"]]["name"],
+                "windows": r["windows"],
+                "met": r["met"],
+                "pct": _pct(r["met"], r["windows"]),
+            }
+        )
+    for c in per_class.values():
+        c["pct"] = _pct(c["met"], c["windows"])
+        c["sites"].sort(key=lambda x: x["site"])
+        c.pop("ordinal")
+
+    return {
+        "sites": sites,
+        "attention": attention,
+        "sla_24h": list(per_class.values()),
+        "sla_target_pct": SLA_TARGET_PCT,
+        "moves_24h": sum(r["moves_24h"] for r in steering),
+        "recent_decisions": recent,
+    }
 
 
 def _site(conn, site_id: str, user) -> dict:
