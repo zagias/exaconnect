@@ -42,9 +42,9 @@ export function AuthGate({ children }: { children: ReactNode }) {
       <main className="signin-page" id="main">
         <div className="signin-box">
           <div className="signin-brand">
-            <img className="wm-light" src="/brand/exacarib-wordmark.png" alt="ExaCarib" width={168} height={31} />
-            <img className="wm-dark" src="/brand/exacarib-wordmark-reversed.png" alt="ExaCarib" width={168} height={31} />
-            <span className="signin-product">ExaConnect</span>
+            <img className="wm-light" src="/brand/exacarib-wordmark.png" alt="ExaCarib" width={168} height={29} />
+            <img className="wm-dark" src="/brand/exacarib-wordmark-reversed.png" alt="ExaCarib" width={168} height={29} />
+            <span className="signin-product">Connect</span>
           </div>
           {checking ? (
             <p className="signin-checking" role="status">

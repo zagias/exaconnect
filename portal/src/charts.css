@@ -5,7 +5,7 @@
 .series-carrier-a { --c: var(--path-a); }
 .series-carrier-b { --c: var(--path-b); }
 .series-sat { --c: var(--coral); }
-.series-in { --c: var(--teal); }
+.series-in { --c: var(--blue); }
 .series-out { --c: var(--ink-muted); }
 
 .chart.xchart { margin: 0; min-width: 0; }
@@ -80,7 +80,7 @@ table.paths.settle tbody.group th {
 }
 table.paths.settle tbody.group:first-of-type th { padding-top: var(--space-2); }
 table.paths.settle td.site-cell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-table.paths tr.selected td { background: var(--teal-tint); }
+table.paths tr.selected td { background: var(--blue-tint); }
 table.paths td.nowrap, table.paths th.nowrap { white-space: nowrap; }
 table.paths .reasons div { margin-bottom: 2px; }
 .period-note { margin: 0 0 var(--space-2); }

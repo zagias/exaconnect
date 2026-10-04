@@ -292,12 +292,12 @@ export function Shell({ children }: { children: ReactNode }) {
       <aside id="shell-nav" className="shell-side" data-open={drawer || undefined} aria-label="Portal">
         <div className="shell-brand">
           <NavLink to="/" className="shell-brand-link" aria-label="ExaCarib, home">
-            <img className="shell-wordmark" src="/brand/exacarib-wordmark-reversed.png" alt="ExaCarib" width={140} height={26} />
+            <img className="shell-wordmark" src="/brand/exacarib-wordmark-reversed.png" alt="ExaCarib" width={140} height={25} />
             <span className="shell-symbol" aria-hidden="true">
-              <img src="/brand/exacarib-wordmark-reversed.png" alt="" width={141} height={26} />
+              <img src="/brand/exacarib-wordmark-reversed.png" alt="" width={141} height={25} />
             </span>
           </NavLink>
-          <span className="shell-product">ExaConnect</span>
+          <span className="shell-product">Connect</span>
           <button ref={closeButton} className="shell-iconbtn shell-close" aria-label="Close menu" onClick={closeDrawer}>
             {icons.close}
           </button>
@@ -373,7 +373,7 @@ export function Shell({ children }: { children: ReactNode }) {
             {icons.menu}
           </button>
           <NavLink to="/" className="shell-top-brand" aria-label="ExaCarib, home">
-            <img src="/brand/exacarib-wordmark-reversed.png" alt="ExaCarib" width={112} height={21} />
+            <img src="/brand/exacarib-wordmark-reversed.png" alt="ExaCarib" width={112} height={20} />
           </NavLink>
           <div className="shell-context" aria-hidden={ctx ? undefined : true}>
             {ctx?.group && <span className="shell-context-group">{ctx.group}</span>}

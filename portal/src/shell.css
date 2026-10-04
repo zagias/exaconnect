@@ -6,7 +6,7 @@
 :root {
   --shell-side: 232px;
   --shell-top: 60px;
-  --shell-side-bg: var(--navy);
+  --shell-side-bg: var(--navy-deep);
   --shell-side-line: rgba(255, 255, 255, 0.1);
   --shell-side-muted: rgba(255, 255, 255, 0.62);
   --shell-side-text: rgba(255, 255, 255, 0.86);
@@ -37,8 +37,8 @@
 .shell-brand-link { display: block; border-radius: var(--radius-sm); }
 .shell-wordmark { display: block; width: 140px; height: auto; }
 /* The rail shows only the X of the reversed wordmark. */
-.shell-symbol { display: none; width: 27px; height: 26px; overflow: hidden; }
-.shell-symbol img { display: block; width: 141px; height: 26px; max-width: none; }
+.shell-symbol { display: none; width: 34px; height: 25px; overflow: hidden; }
+.shell-symbol img { display: block; width: 141px; height: 25px; max-width: none; }
 .shell-product {
   font: 500 11px/16px var(--font-body); letter-spacing: 0.14em; text-transform: uppercase;
   color: var(--shell-side-muted); padding-left: 1px;
@@ -64,12 +64,12 @@
 .shell-link:hover { background: var(--shell-side-hover); color: #fff; }
 .shell-link .shell-icon { flex: none; opacity: 0.85; }
 .shell-link.active { background: var(--shell-side-active); color: #fff; font-weight: 600; }
-.shell-link.active .shell-icon { color: var(--teal); opacity: 1; }
+.shell-link.active .shell-icon { color: var(--blue); opacity: 1; }
 .shell-link.active::before {
   content: ""; position: absolute; left: -12px; top: 6px; bottom: 6px; width: 3px;
-  border-radius: 0 3px 3px 0; background: var(--teal);
+  border-radius: 0 3px 3px 0; background: var(--blue);
 }
-.shell-side :focus-visible { outline: 2px solid var(--teal); outline-offset: 1px; }
+.shell-side :focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
 
 /* Phone-only user block inside the drawer. */
 .shell-drawer-user { display: none; }
@@ -179,7 +179,7 @@
   .shell-top-brand img { display: block; width: 112px; height: auto; }
   .shell-context, .shell-top-picker, .shell-user { display: none; }
   .shell-actions { gap: 8px; }
-  .shell-top :focus-visible { outline-color: var(--teal); }
+  .shell-top :focus-visible { outline-color: var(--blue); }
 
   .shell .shell-top .storm-switch {
     color: var(--on-navy); background: transparent; border-color: rgba(255, 255, 255, 0.4);
@@ -207,7 +207,7 @@
 
   .shell-drawer-user { display: block; padding: 16px 12px 24px; border-top: 1px solid var(--shell-side-line); }
   .shell-drawer-user .shell-user-id { display: flex; align-items: center; gap: 12px; padding: 0 12px 12px; min-width: 0; }
-  .shell-drawer-user .shell-avatar { background: var(--teal); color: var(--navy-deep); }
+  .shell-drawer-user .shell-avatar { background: var(--blue); color: var(--navy-deep); }
   .shell-drawer-user .shell-user-text { display: grid; min-width: 0; }
   .shell-drawer-user .shell-user-email { color: #fff; font-size: 14px; line-height: 20px; font-weight: 600; }
   .shell-drawer-user .shell-user-role { color: var(--shell-side-muted); }
@@ -229,6 +229,6 @@
 
 /* Dark: the navy avatar would vanish on the navy-deep bar. */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .shell-avatar { background: var(--teal); color: var(--navy-deep); }
+  :root:not([data-theme="light"]) .shell-avatar { background: var(--blue); color: var(--navy-deep); }
 }
-:root[data-theme="dark"] .shell-avatar { background: var(--teal); color: var(--navy-deep); }
+:root[data-theme="dark"] .shell-avatar { background: var(--blue); color: var(--navy-deep); }

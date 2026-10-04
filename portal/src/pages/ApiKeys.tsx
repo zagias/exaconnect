@@ -68,7 +68,7 @@ export default function ApiKeys() {
         <h2 id="api-keys-title">API keys</h2>
       </div>
       <p className="muted small" style={{ marginTop: 0 }}>
-        A key lets your own code, the ExaConnect Python SDK or Terraform act as you, with your access. It is shown once, when
+        A key lets your own code, the Connect Python SDK or Terraform act as you, with your access. It is shown once, when
         you create it.
       </p>
 

@@ -162,11 +162,12 @@ Screens:
 5. **Carrier view**: read-only, the carrier's own links only.
 6. **Admin**: sites, links, classes, SLA policies, enrolment tokens.
 
-Brand rules (from the ExaCarib brand system):
+Brand rules (matched to www.exacarib.com on 4 October 2026; see `docs/adr/0014-website-brand.md`):
 
-- Colours: navy `#011F4D`, navy-deep `#00142F`, teal `#00ABB6` (fills and marks only), teal-strong `#00737B` (teal text and links), page grey `#E6ECF2`, white cards, ink `#0E1B2E`, ink-muted `#4A5A70`, line `#C9D3DE`. Status colours: success `#18704B`, warning `#9A5B00`, danger `#B42318`, always with a word or icon. Coral `#FF7A59` means backup and Storm Mode only.
-- Fonts: Lexend for headings, IBM Plex Sans for body, IBM Plex Mono for figures.
-- Layout: grey page, white cards with a soft shadow, 8px corners on cards and buttons.
+- Colours: brand blue `#155EEF` (buttons, links, marks; hover `#084BD0`, tint `#E9F0FF`), ink `#10213D`, navy `#07182E`, navy-deep `#061326`, muted text `#52647A`, line `#DFE6EE`, page `#F3F6FB`, white cards, light blue `#8DCFFF` for highlights on dark. Status colours: success `#18704B`, warning `#9A5B00`, danger `#B42318`, always with a word or icon. Coral `#FF7A59` means backup and Storm Mode only.
+- Fonts: the system sans stack (`-apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif`) for headings and body, headings weight 650 with tight tracking; IBM Plex Mono for figures.
+- Layout: pale page, white cards with a 1 px line border, 8px corners on cards, 5px on buttons. Eyebrows are small uppercase brand-blue labels.
+- Naming: the product is "ExaCarib Connect" or "Connect", never "ExaConnect" in the interface. The logo is the two-tone X (blue and navy) with "ExaCarib".
 - Copy: plain, short, British and Caribbean spelling ("organisation", "centre"). Never call ExaCarib a carrier, telco or integrator. Any screen with sample data carries an "Example data" label.
 
 ### 4.7 Lab (`lab/`)

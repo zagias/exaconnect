@@ -281,7 +281,7 @@ function CarrierAnomalies() {
     <section className="card span-12">
       <div className="card-head">
         <h2>Anomalies on these links</h2>
-        <span className="muted small">Paths behaving worse than usual for the hour, measured by ExaConnect probes.</span>
+        <span className="muted small">Paths behaving worse than usual for the hour, measured by Connect probes.</span>
       </div>
       <InsightList items={list.data ?? []} reload={list.reload} readOnly />
     </section>
