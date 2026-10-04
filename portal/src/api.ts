@@ -237,6 +237,9 @@ export interface MetricPoint {
   rtt_avg_ms: number | string | null;
   jitter_ms: number | string | null;
   loss_pct: number | string | null;
+  /** Probes behind the point, so loss can be averaged by probes sent. */
+  sent?: number | null;
+  received?: number | null;
 }
 
 export interface EventRow {

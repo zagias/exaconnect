@@ -79,7 +79,12 @@ export function SitePage() {
       label: p.label,
       points: (metrics.data?.points ?? [])
         .filter((m) => m.path === p.path)
-        .map((m) => ({ t: new Date(m.time).getTime(), v: num(m[field]) })),
+        .map((m) => ({
+          t: new Date(m.time).getTime(),
+          v: num(m[field]),
+          // Loss averages by probes sent, so a quiet minute doesn't count as much as a busy one.
+          w: field === "loss_pct" ? (m.sent ?? null) : null,
+        })),
     }));
   // A missed report or two is not an outage; break the line after a longer silence.
   const gapMs = minutes <= 60 ? 25_000 : 150_000;

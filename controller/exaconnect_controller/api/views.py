@@ -301,7 +301,7 @@ def site_metrics(site_id: str, user: ViewerDep, minutes: int = Query(default=15,
         # Raw 10 s windows up to an hour; one-minute averages beyond that.
         if minutes <= 60:
             points = conn.execute(
-                """SELECT time, path, rtt_avg_ms, jitter_ms, loss_pct FROM path_metrics
+                """SELECT time, path, rtt_avg_ms, jitter_ms, loss_pct, sent, received FROM path_metrics
                    WHERE node_id = %s AND time > now() - make_interval(mins => %s) ORDER BY time""",
                 (s["node_id"], minutes),
             ).fetchall()
@@ -309,7 +309,8 @@ def site_metrics(site_id: str, user: ViewerDep, minutes: int = Query(default=15,
             points = conn.execute(
                 """SELECT date_trunc('minute', time) AS time, path, avg(rtt_avg_ms) AS rtt_avg_ms,
                           avg(jitter_ms) AS jitter_ms,
-                          CASE WHEN sum(sent) > 0 THEN 100.0 * (sum(sent) - sum(received)) / sum(sent) END AS loss_pct
+                          CASE WHEN sum(sent) > 0 THEN 100.0 * (sum(sent) - sum(received)) / sum(sent) END AS loss_pct,
+                          sum(sent)::int AS sent, sum(received)::int AS received
                    FROM path_metrics WHERE node_id = %s AND time > now() - make_interval(mins => %s)
                    GROUP BY 1, 2 ORDER BY 1""",
                 (s["node_id"], minutes),
