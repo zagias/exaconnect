@@ -22,7 +22,9 @@ start() {
 stop() {
   local n
   for n in "${NODES[@]}"; do
-    docker exec "$(node "$n")" pkill -f "exa-agent run" 2>/dev/null && echo "$n: agent stopped" || true
+    if docker exec "$(node "$n")" pkill -f "exa-agent run" 2>/dev/null; then
+      echo "$n: agent stopped"
+    fi
   done
 }
 
