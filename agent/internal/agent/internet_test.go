@@ -24,7 +24,20 @@ const nftJSON = `{"nftables": [{"metainfo": {"version": "1.0.9", "json_schema_ve
 {"rule": {"family": "ip", "table": "exa_inet", "chain": "filter_fwd", "handle": 8, "comment": "inbound", "expr": [{"match": {"op": "==", "left": {"meta": {"key": "iifname"}}, "right": "eth9"}}, {"counter": {"packets": 2, "bytes": 120}}, {"drop": null}]}},
 {"rule": {"family": "ip", "table": "exa_inet", "chain": "filter_fwd", "handle": 10, "comment": "fw12", "expr": [{"match": {"op": "==", "left": {"payload": {"protocol": "ip", "field": "daddr"}}, "right": {"prefix": {"addr": "198.51.100.0", "len": 24}}}}, {"counter": {"packets": 40, "bytes": 3360}}, {"drop": null}]}},
 {"rule": {"family": "ip", "table": "exa_inet", "chain": "filter_fwd", "handle": 11, "comment": "someone else's", "expr": [{"counter": {"packets": 1, "bytes": 1}}, {"drop": null}]}},
-{"rule": {"family": "ip", "table": "exa_inet", "chain": "filter_fwd", "handle": 12, "comment": "fw13", "expr": [{"accept": null}]}}]}`
+{"rule": {"family": "ip", "table": "exa_inet", "chain": "filter_fwd", "handle": 12, "comment": "fw13", "expr": [{"accept": null}]}},
+{"rule": {"family": "ip", "table": "exa_inet", "chain": "guard", "handle": 13, "comment": "blocked", "expr": [{"match": {"op": "==", "left": {"payload": {"protocol": "ip", "field": "saddr"}}, "right": "@blocklist"}}, {"counter": {"packets": 5, "bytes": 300}}, {"drop": null}]}},
+{"rule": {"family": "ip", "table": "exa_inet", "chain": "guard", "handle": 14, "comment": "auto", "expr": [{"match": {"op": "==", "left": {"payload": {"protocol": "ip", "field": "saddr"}}, "right": "@auto_block"}}, {"counter": {"packets": 49, "bytes": 2940}}, {"drop": null}]}},
+{"rule": {"family": "ip", "table": "exa_inet", "chain": "guard", "handle": 15, "comment": "flood", "expr": [{"match": {"op": "in", "left": {"ct": {"key": "state"}}, "right": "new"}}, {"set": {"op": "update", "elem": {"payload": {"protocol": "ip", "field": "saddr"}}, "set": "@rate", "stmt": [{"limit": {"rate": 50, "burst": 100, "per": "second", "inv": true}}]}}, {"set": {"op": "add", "elem": {"payload": {"protocol": "ip", "field": "saddr"}}, "set": "@auto_block"}}, {"counter": {"packets": 1, "bytes": 60}}, {"drop": null}]}},
+{"rule": {"family": "ip", "table": "exa_inet", "chain": "guard", "handle": 16, "comment": "syn", "expr": [{"limit": {"rate": 2000, "burst": 2000, "per": "second", "inv": true}}, {"counter": {"packets": 0, "bytes": 0}}, {"drop": null}]}}]}`
+
+// What `nft -j list set ip exa_inet auto_block` prints (nft 1.0.9): an
+// element added by the rule carries only expires; one added by hand with its
+// own timeout carries both.
+const autoBlockJSON = `{"nftables": [{"metainfo": {"version": "1.0.9", "release_name": "Old Doc Yak #3", "json_schema_version": 1}},
+{"set": {"family": "ip", "name": "auto_block", "table": "exa_inet", "type": "ipv4_addr", "handle": 7, "size": 65536,
+ "flags": ["timeout", "dynamic"], "timeout": 600,
+ "elem": [{"elem": {"val": "203.0.113.9", "expires": 540}}, {"elem": {"val": "203.0.113.10", "timeout": 300, "expires": 299}},
+  {"elem": {"val": "198.51.100.7", "expires": 599}}, "192.0.2.1", {"elem": {"val": {"prefix": {"addr": "10.0.0.0", "len": 8}}}}]}}]}`
 
 func TestParseInternetCounters(t *testing.T) {
 	got := parseInternetCounters([]byte(nftJSON))
@@ -32,6 +45,10 @@ func TestParseInternetCounters(t *testing.T) {
 		{Kind: "forward", ID: 3, Packets: 7, Bytes: 420},
 		{Kind: "inbound", ID: 0, Packets: 2, Bytes: 120},
 		{Kind: "rule", ID: 12, Packets: 40, Bytes: 3360},
+		{Kind: "blocked", ID: 0, Packets: 5, Bytes: 300},
+		{Kind: "auto", ID: 0, Packets: 49, Bytes: 2940},
+		{Kind: "flood", ID: 0, Packets: 1, Bytes: 60},
+		{Kind: "syn", ID: 0, Packets: 0, Bytes: 0},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v", got)
@@ -41,13 +58,39 @@ func TestParseInternetCounters(t *testing.T) {
 	}
 }
 
-// nftSys answers `nft -j list table` with nftJSON.
+func TestParseAutoBlocked(t *testing.T) {
+	got := parseAutoBlocked([]byte(autoBlockJSON), 100)
+	want := []AutoBlocked{
+		{Address: "198.51.100.7", ExpiresS: 599},
+		{Address: "203.0.113.9", ExpiresS: 540},
+		{Address: "203.0.113.10", ExpiresS: 299},
+		{Address: "192.0.2.1", ExpiresS: 0}, // no timeout of its own: nothing to count down
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %+v", got)
+	}
+	if got := parseAutoBlocked([]byte(autoBlockJSON), 2); len(got) != 2 || got[1].Address != "203.0.113.9" {
+		t.Fatalf("capped: %+v", got)
+	}
+	empty := `{"nftables": [{"metainfo": {"version": "1.0.9"}}, {"set": {"family": "ip", "name": "auto_block", "table": "exa_inet", "type": "ipv4_addr", "flags": ["timeout", "dynamic"], "timeout": 600}}]}`
+	for _, in := range []string{empty, "not json", ""} {
+		if got := parseAutoBlocked([]byte(in), 100); got == nil || len(got) != 0 {
+			t.Fatalf("%q: %+v", in, got)
+		}
+	}
+}
+
+// nftSys answers `nft -j list table` with nftJSON and `nft -j list set` with
+// autoBlockJSON.
 type nftSys struct{ fakeSys }
 
 func (n *nftSys) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
 	n.fakeSys.Run(ctx, name, args...)
-	if name+" "+strings.Join(args, " ") == "nft -j list table ip exa_inet" {
+	switch name + " " + strings.Join(args, " ") {
+	case "nft -j list table ip exa_inet":
 		return []byte(nftJSON), nil
+	case "nft -j list set ip exa_inet auto_block":
+		return []byte(autoBlockJSON), nil
 	}
 	return nil, nil
 }
@@ -63,11 +106,29 @@ func TestInternetTelemetry(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := a.internetState(context.Background(), pop)
-	if got == nil || got.Mode != "gateway" || got.Via != "eth9" || len(got.Counters) != 3 {
+	if got == nil || got.Mode != "gateway" || got.Via != "eth9" || len(got.Counters) != 7 {
 		t.Fatalf("%+v", got)
 	}
 	b, _ := json.Marshal(got)
-	if !strings.Contains(string(b), `{"kind":"rule","id":12,"packets":40,"bytes":3360}`) {
+	if !strings.Contains(string(b), `{"kind":"rule","id":12,"packets":40,"bytes":3360}`) ||
+		!strings.Contains(string(b), `"auto_blocked":[]`) {
+		t.Fatalf("json %s", b)
+	}
+	if sys.count("nft -j list set") != 0 {
+		t.Fatal("read the auto block set without protection")
+	}
+
+	// Protected: the sources blocked automatically too.
+	pop.Version = 2
+	pop.Internet.PublicAddress = "100.64.0.2"
+	pop.Internet.Protection = &desired.Protection{Enabled: true, NewPerSource: 50, SynPerS: 2000, BlockMinutes: 10}
+	if err := a.Applier.Apply(context.Background(), pop); err != nil {
+		t.Fatal(err)
+	}
+	got = a.internetState(context.Background(), pop)
+	b, _ = json.Marshal(got)
+	if len(got.AutoBlocked) != 4 || !strings.Contains(string(b), `"auto_blocked":[{"address":"198.51.100.7","expires_s":599},`) ||
+		!strings.Contains(string(b), `{"kind":"flood","id":0,"packets":1,"bytes":60}`) {
 		t.Fatalf("json %s", b)
 	}
 

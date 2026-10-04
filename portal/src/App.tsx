@@ -7,6 +7,7 @@ import Insights from "./pages/Insights";
 import Internet from "./pages/Internet";
 import Admin from "./pages/Admin";
 import Decisions from "./pages/Decisions";
+import Encryption from "./pages/Encryption";
 import Fabric from "./pages/Fabric";
 import Metering from "./pages/Metering";
 import OrderPage from "./pages/Order";
@@ -50,6 +51,7 @@ function Layout() {
                 <NavLink to="/decisions">Decisions</NavLink>
                 <NavLink to="/fabric">Fabric</NavLink>
                 <NavLink to="/internet">Internet</NavLink>
+                <NavLink to="/encryption">Encryption</NavLink>
                 <NavLink to="/order">Order</NavLink>
                 <NavLink to="/metering">Metering</NavLink>
                 <NavLink to="/insights">Insights</NavLink>
@@ -80,6 +82,7 @@ function Layout() {
             <Route path="/decisions" element={<Decisions />} />
             <Route path="/fabric" element={<Fabric />} />
             <Route path="/internet" element={<Internet />} />
+            <Route path="/encryption" element={<Encryption />} />
             <Route path="/order" element={<OrderPage />} />
             <Route path="/metering" element={<Metering />} />
             <Route path="/insights" element={<Insights />} />

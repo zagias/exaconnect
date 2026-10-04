@@ -355,6 +355,16 @@ export interface UsageRow {
 export type CircuitKind = "cloud" | "site";
 export type CircuitStatus = "provisioning" | "up" | "down" | "off";
 
+/** One IPsec tunnel of a cloud circuit; a resilient circuit has two (docs/protection-contract.md). */
+export interface CircuitTunnel {
+  which: "primary" | "secondary";
+  peer_address: string | null;
+  ike: string | null;
+  bgp: string | null;
+  prefixes_received: number | null;
+  status: CircuitStatus;
+}
+
 export interface Circuit {
   id: number;
   name: string;
@@ -370,6 +380,12 @@ export interface Circuit {
   peer_address: string | null;
   peer_asn: number | null;
   inside_cidr: string | null;
+  /** Resilient circuits: a second tunnel to a second gateway address. */
+  resilient?: boolean;
+  secondary_peer_address?: string | null;
+  secondary_inside_cidr?: string | null;
+  /** One entry, or two for a resilient circuit. Absent from older controllers. */
+  tunnels?: CircuitTunnel[];
   our_inside: string | null;
   cloud_inside: string | null;
   cloud_prefixes: string[];
@@ -411,6 +427,9 @@ export interface CircuitIn {
   peer_address?: string;
   peer_asn?: number;
   inside_cidr?: string;
+  /** null in a PATCH removes the second tunnel. */
+  secondary_peer_address?: string | null;
+  secondary_inside_cidr?: string | null;
   psk?: string;
   cloud_prefixes?: string[];
   class_name?: string;
@@ -522,6 +541,29 @@ export interface PortForward {
   bytes: number | string | null;
 }
 
+/** DDoS protection on the PoP's shared public address; customers see counts only. */
+export interface ProtectionDropped {
+  /** On ExaCarib's block list. */
+  blocked: number | string | null;
+  /** From sources blocked automatically. */
+  auto: number | string | null;
+  /** Over the per-source new connection limit. */
+  flood: number | string | null;
+  /** Over the SYN flood limit, all sources together. */
+  syn: number | string | null;
+}
+
+export interface ProtectionSummary {
+  enabled: boolean;
+  new_per_source: number;
+  syn_per_s: number;
+  block_minutes: number;
+  dropped: ProtectionDropped | null;
+  /** How many sources are blocked right now. */
+  auto_blocked: number | null;
+  updated_at: string | null;
+}
+
 export interface InternetState {
   /** The PoP address port forwards listen on; shared with other customers. */
   public_address: string | null;
@@ -529,6 +571,8 @@ export interface InternetState {
   rules: FirewallRule[];
   forwards: PortForward[];
   inbound_dropped: number | string | null;
+  /** Absent from controllers older than ADR 0012. */
+  protection?: ProtectionSummary | null;
 }
 
 export interface FirewallRuleIn {
@@ -760,3 +804,85 @@ export const completeOrder = (id: number, body: CompleteOrderIn) =>
 // The PoP checks pre-shared keys the same way (controller fabric.PSK_RE).
 export const PSK_PATTERN = "[A-Za-z1-9._][A-Za-z0-9._]{7,63}";
 export const PSK_HINT = "8 to 64 letters, digits, dots and underscores; it can't start with 0.";
+
+// ---- DDoS protection at the PoP (docs/protection-contract.md, admin only) ----
+
+export interface ProtectionSettings {
+  enabled: boolean;
+  new_per_source: number;
+  syn_per_s: number;
+  block_minutes: number;
+}
+
+export interface BlockedSource {
+  id: number;
+  prefix: string;
+  reason: string | null;
+  created_by: string | null;
+  created_at: string;
+  /** null: until removed. */
+  expires_at: string | null;
+}
+
+export interface ProtectionAdminState {
+  settings: ProtectionSettings;
+  dropped: ProtectionDropped | null;
+  auto_blocked: { address: string; expires_s: number }[];
+  blocklist: BlockedSource[];
+}
+
+export const protectionPaths = {
+  admin: "/admin/protection",
+  blocklist: "/admin/protection/blocklist",
+  blocked: (id: number) => `/admin/protection/blocklist/${id}`,
+};
+
+export const updateProtection = (body: Partial<ProtectionSettings>) =>
+  api<unknown>(protectionPaths.admin, { method: "PATCH", body: JSON.stringify(body) });
+
+/** hours null blocks the prefix until it is removed. */
+export const addBlockedSource = (body: { prefix: string; reason?: string; hours: number | null }) =>
+  api<BlockedSource>(protectionPaths.blocklist, { method: "POST", body: JSON.stringify(body) });
+
+export const removeBlockedSource = (id: number) => api<void>(protectionPaths.blocked(id), { method: "DELETE" });
+
+// ---- Encryption report (docs/protection-contract.md §3) ----
+
+export type PathEncryption = "encrypted" | "idle" | "down";
+
+export interface EncryptionPath {
+  site: string;
+  path: string;
+  label: string;
+  protocol: string;
+  cipher: string;
+  /** -1 or null when there has been no handshake. */
+  handshake_age_s: number | null;
+  status: PathEncryption;
+}
+
+export interface EncryptionCircuit {
+  id: number;
+  name: string;
+  kind: CircuitKind;
+  tunnel: "primary" | "secondary";
+  protocol: string;
+  ike_cipher: string;
+  esp_cipher: string;
+  /** Seconds since the IKE SA was established; -1 unknown. */
+  established_s: number | null;
+  status: "encrypted" | "down";
+  /** Weak algorithms the cloud negotiated, such as "Uses SHA-1". */
+  notes: string[];
+}
+
+export interface EncryptionReport {
+  summary: { encrypted: number; total: number };
+  paths: EncryptionPath[];
+  circuits: EncryptionCircuit[];
+  layer2: { id: number; name: string; protocol: string; status: PathEncryption }[];
+  control: { protocol: string };
+  internet: string;
+}
+
+export const encryptionPath = (cid: string) => `/customers/${cid}/encryption`;

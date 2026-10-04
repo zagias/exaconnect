@@ -78,6 +78,14 @@ a { color: var(--teal-strong); }
 .topbar nav a:hover { opacity: 1; }
 .topbar nav a.active { opacity: 1; box-shadow: inset 0 -3px 0 var(--teal); border-radius: 0; }
 
+/* With this many screens the links get their own row under the wordmark, wrapping
+   when needed, so none hides behind a scroll on a laptop. Phones scroll it instead. */
+@media (min-width: 641px) {
+  .topbar { height: auto; }
+  .topbar-inner { flex-wrap: wrap; justify-content: space-between; row-gap: 0; padding-top: var(--space-3); }
+  .topbar nav { order: 3; flex-basis: 100%; flex-wrap: wrap; overflow-x: visible; margin: 0 calc(-1 * var(--space-3)); }
+}
+
 .storm-switch {
   display: inline-flex; align-items: center; gap: var(--space-2); white-space: nowrap;
   background: transparent; color: var(--on-navy); border: 1.5px solid rgba(255, 255, 255, 0.4);
@@ -306,3 +314,10 @@ tr.selected td { background: #f0f7f8; }
 .estimate { font-weight: 600; margin: 8px 0 12px; }
 .draft .form fieldset .form { margin-top: 4px; }
 .mono.wrap, .wrap { white-space: normal; overflow-wrap: anywhere; }
+
+/* Protection and encryption (ADR 0012): a warning callout, always with words. */
+.callout { border-left: 3px solid var(--line); background: var(--page); border-radius: 0 var(--radius-md) var(--radius-md) 0; padding: 8px 12px; margin: 0 0 12px; }
+.callout.warn { border-left-color: var(--warning); }
+.callout.warn strong { color: var(--warning); }
+.cipher { font-family: var(--font-mono); font-size: 13px; line-height: 18px; white-space: normal; }
+.note-list { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 2px; }

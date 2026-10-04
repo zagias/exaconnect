@@ -23,6 +23,7 @@ SCREENS = [
     ("/fabric", "Fabric"),
     ("/internet", "Internet"),
     ("/order", "Order"),
+    ("/encryption", "Encryption"),
     ("/metering", "Metering"),
     ("/insights", "Insights"),
     ("/ask", "Ask your network"),
@@ -34,6 +35,7 @@ SCREENS = [
     ("/admin/users", "Admin: users"),
     ("/admin/settings", "Admin: settings"),
     ("/admin/partners", "Admin: partners"),
+    ("/admin/protection", "Admin: protection"),
     ("/admin/audit", "Admin: audit"),
 ]
 failed = 0

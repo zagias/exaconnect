@@ -80,6 +80,22 @@ func TestValidateCircuits(t *testing.T) {
 	}
 }
 
+// A resilient circuit's second tunnel is a second entry, numbered 1,000,000
+// above the circuit (ADR 0012).
+func TestValidateResilientCircuit(t *testing.T) {
+	s := pop()
+	c := s.Circuits[0]
+	c.ID, c.Name, c.IfID = 1000007, "vc1000007", 1000007
+	c.RemoteAddress, c.InsideAddress, c.PeerInside = "100.64.10.3", "169.254.100.6/30", "169.254.100.5"
+	s.Circuits = append(s.Circuits, c)
+	if err := s.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Circuits[1].Conn(); got != "exa-vc1000007" {
+		t.Fatalf("conn %q", got)
+	}
+}
+
 func TestValidateL2(t *testing.T) {
 	bad := map[string]func(s *State){
 		"name":      func(s *State) { s.L2Circuits[0].Name = "eth0" },

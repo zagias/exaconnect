@@ -3,7 +3,21 @@
 from fastapi import APIRouter
 
 from .. import __version__
-from . import admin, agent, ai, auth, circuits, internet, metering, ordering, settings, traffic, views
+from . import (
+    admin,
+    agent,
+    ai,
+    auth,
+    circuits,
+    internet,
+    metering,
+    ordering,
+    protection,
+    security,
+    settings,
+    traffic,
+    views,
+)
 
 router = APIRouter()
 
@@ -24,3 +38,5 @@ router.include_router(traffic.router)
 router.include_router(circuits.router)
 router.include_router(internet.router)
 router.include_router(ordering.router)
+router.include_router(protection.router)
+router.include_router(security.router)

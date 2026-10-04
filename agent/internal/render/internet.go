@@ -18,12 +18,21 @@ const (
 	CommentRule    = "fw"      // fw<id>: a firewall rule
 	CommentForward = "pf"      // pf<id>: a port forward
 	CommentInbound = "inbound" // the drop of everything else arriving from the internet
+	// The PoP's protection (ADR 0012), each a drop of new inbound traffic.
+	CommentBlocked = "blocked" // from the block list
+	CommentAuto    = "auto"    // from a source blocked automatically
+	CommentFlood   = "flood"   // a source over its limit, which is then blocked
+	CommentSYN     = "syn"     // TCP SYNs over the limit for all sources
 )
+
+// AutoBlockSet is the dynamic set of automatically blocked sources.
+const AutoBlockSet = "auto_block"
 
 // InternetNFT renders the `ip exa_inet` table for `nft -f`, replacing any
 // earlier one atomically. The forward chain is filter_fwd: nft reserves
-// "fwd" (the contract's name) as a keyword. It is "" where the node has no such table: no
-// internet block, or a site in pop or off mode.
+// "fwd" (the contract's name) as a keyword. A protected PoP also has the
+// guard chain and its sets (ADR 0012). It is "" where the node has no such
+// table: no internet block, or a site in pop or off mode.
 func InternetNFT(s *desired.State) string {
 	if !s.Firewalled() {
 		return ""
@@ -42,6 +51,9 @@ func InternetNFT(s *desired.State) string {
 		fmt.Fprintf(&b, "\t\telements = { %s }\n", strings.Join(lan, ", "))
 	}
 	b.WriteString("\t}\n")
+	if s.Protected() {
+		guard(&b, ifs[0], in.PublicAddress, in.Protection)
+	}
 	if s.Role == desired.RolePoP && len(in.PortForwards) > 0 {
 		b.WriteString("\tchain pre {\n\t\ttype nat hook prerouting priority dstnat;\n")
 		for _, f := range in.PortForwards {
@@ -74,6 +86,28 @@ func InternetNFT(s *desired.State) string {
 	}
 	b.WriteString("\t}\n}\n")
 	return b.String()
+}
+
+// guard renders the PoP's protection sets and its filter chain, which sees
+// traffic before NAT. Only new inbound traffic to the public address meets
+// the limits: replies to outbound NAT are established.
+func guard(b *strings.Builder, uplink, public string, p *desired.Protection) {
+	b.WriteString("\tset blocklist {\n\t\ttype ipv4_addr\n\t\tflags interval\n")
+	if list := nftPrefixes(p.Blocklist); len(list) > 0 {
+		fmt.Fprintf(b, "\t\telements = { %s }\n", strings.Join(list, ", "))
+	}
+	b.WriteString("\t}\n")
+	fmt.Fprintf(b, "\tset %s {\n\t\ttype ipv4_addr\n\t\tflags dynamic, timeout\n\t\ttimeout %dm\n\t\tsize 65536\n\t}\n", AutoBlockSet, p.BlockMinutes)
+	b.WriteString("\tset rate {\n\t\ttype ipv4_addr\n\t\tflags dynamic, timeout\n\t\ttimeout 1m\n\t\tsize 65536\n\t}\n")
+	b.WriteString("\tchain guard {\n\t\ttype filter hook prerouting priority -150; policy accept;\n")
+	to := fmt.Sprintf("iifname %s ip daddr %s", uplink, public)
+	fmt.Fprintf(b, "\t\t%s ip saddr @blocklist counter drop comment %q\n", to, CommentBlocked)
+	fmt.Fprintf(b, "\t\t%s ip saddr @%s counter drop comment %q\n", to, AutoBlockSet, CommentAuto)
+	fmt.Fprintf(b, "\t\t%s ct state new update @rate { ip saddr limit rate over %d/second burst %d packets } add @%s { ip saddr } counter drop comment %q\n",
+		to, p.NewPerSource, 2*p.NewPerSource, AutoBlockSet, CommentFlood)
+	fmt.Fprintf(b, "\t\t%s tcp flags & (syn|ack) == syn limit rate over %d/second burst %d packets counter drop comment %q\n",
+		to, p.SynPerS, p.SynPerS, CommentSYN)
+	b.WriteString("\t}\n")
 }
 
 func verdict(action string) string {

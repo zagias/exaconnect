@@ -45,6 +45,8 @@ LOOPBACK_NET = ipaddress.ip_network("10.254.0.0/24")
 VNI_BASE = 10000
 L2_MTU = 1370  # WireGuard's 1420 less VXLAN's 50
 MAX_PREFIXES = 100
+# The second tunnel of a resilient pair reaches the agent as circuit SECOND + id (ADR 0012).
+SECOND = 1_000_000
 HOURS_PER_MONTH = Decimal(730)
 
 
@@ -73,16 +75,17 @@ def _cidrs(values: list[str], what: str) -> list[str]:
     return sorted(set(out))
 
 
-def _inside(conn: psycopg.Connection, customer_id: Any, want: str | None, circuit_id: Any = None) -> str:
-    """The tunnel's inside /30: the one the cloud console shows, or the next free one."""
-    used = {
-        str(r["inside_cidr"])
-        for r in conn.execute(
-            "SELECT inside_cidr FROM circuits WHERE customer_id = %s AND inside_cidr IS NOT NULL AND deleted_at IS NULL"
-            " AND id IS DISTINCT FROM %s",
-            (customer_id, circuit_id),
-        )
-    }
+def _inside(
+    conn: psycopg.Connection, customer_id: Any, want: str | None, circuit_id: Any = None, taken: tuple[str, ...] = ()
+) -> str:
+    """A tunnel's inside /30: the one the cloud console shows, or the next free one."""
+    used = set(taken)
+    for r in conn.execute(
+        """SELECT inside_cidr, secondary_inside_cidr FROM circuits
+           WHERE customer_id = %s AND deleted_at IS NULL AND id IS DISTINCT FROM %s""",
+        (customer_id, circuit_id),
+    ):
+        used |= {str(x) for x in (r["inside_cidr"], r["secondary_inside_cidr"]) if x is not None}
     if want:
         try:
             net = ipaddress.ip_network(want, strict=False)
@@ -151,6 +154,23 @@ def validate(conn: psycopg.Connection, customer_id: Any, c: dict[str, Any], circ
             if not any(ipaddress.ip_network(p).subnet_of(n) for n in lan):
                 raise CircuitError(f"Site subnets: {p} is not inside any of your sites' networks.")
         c["inside_cidr"] = _inside(conn, customer_id, c.get("inside_cidr"), circuit_id)
+        # A resilient pair (ADR 0012): a second tunnel to the cloud's second gateway address.
+        second = str(c.get("secondary_peer_address") or "").strip()
+        if second:
+            try:
+                peer2 = ipaddress.ip_address(second)
+            except ValueError:
+                raise CircuitError("The second gateway address is an IPv4 address, like 52.1.2.4.") from None
+            if peer2.version != 4 or peer2.is_loopback or peer2.is_multicast or peer2.is_unspecified:
+                raise CircuitError("The second gateway address is an IPv4 address, like 52.1.2.4.")
+            if str(peer2) == c["peer_address"]:
+                raise CircuitError("The second gateway address must differ from the first.")
+            c["secondary_peer_address"] = str(peer2)
+            c["secondary_inside_cidr"] = _inside(
+                conn, customer_id, c.get("secondary_inside_cidr"), circuit_id, (c["inside_cidr"],)
+            )
+        else:
+            c["secondary_peer_address"] = c["secondary_inside_cidr"] = None
         c["b_site_id"] = c["a_vlan"] = c["b_vlan"] = None
     elif c["kind"] == "site":
         b = sites.get(str(c.get("b_site_id"))) if c.get("b_site_id") else None
@@ -162,7 +182,16 @@ def validate(conn: psycopg.Connection, customer_id: Any, c: dict[str, Any], circ
         if c.get("a_vlan") is None:
             raise CircuitError("Choose the VLAN to carry.")
         c["b_vlan"] = c.get("b_vlan") or c["a_vlan"]
-        for k in ("provider", "peer_address", "peer_asn", "inside_cidr", "psk", "class_name"):
+        for k in (
+            "provider",
+            "peer_address",
+            "peer_asn",
+            "inside_cidr",
+            "psk",
+            "class_name",
+            "secondary_peer_address",
+            "secondary_inside_cidr",
+        ):
             c[k] = None
         c["cloud_prefixes"] = c["a_prefixes"] = []
     else:
@@ -183,6 +212,8 @@ COLUMNS = (
     "peer_address",
     "peer_asn",
     "inside_cidr",
+    "secondary_peer_address",
+    "secondary_inside_cidr",
     "cloud_prefixes",
     "class_name",
     "bandwidth_mbps",
@@ -203,11 +234,13 @@ def create(conn: psycopg.Connection, customer_id: Any, c: dict[str, Any], actor:
     row["region"] = row["region"] or ""
     cid = conn.execute(
         """INSERT INTO circuits (customer_id, name, kind, a_site_id, a_prefixes, a_vlan, b_site_id, b_vlan, provider,
-                                 region, peer_address, peer_asn, inside_cidr, psk, cloud_prefixes, class_name,
-                                 bandwidth_mbps, enabled, created_by)
+                                 region, peer_address, peer_asn, inside_cidr, secondary_peer_address,
+                                 secondary_inside_cidr, psk, cloud_prefixes, class_name, bandwidth_mbps, enabled,
+                                 created_by)
            VALUES (%(c)s, %(name)s, %(kind)s, %(a_site_id)s, %(a_prefixes)s::cidr[], %(a_vlan)s, %(b_site_id)s,
-                   %(b_vlan)s, %(provider)s, %(region)s, %(peer_address)s, %(peer_asn)s, %(inside_cidr)s, %(psk)s,
-                   %(cloud_prefixes)s::cidr[], %(class_name)s, %(bandwidth_mbps)s, %(enabled)s, %(actor)s)
+                   %(b_vlan)s, %(provider)s, %(region)s, %(peer_address)s, %(peer_asn)s, %(inside_cidr)s,
+                   %(secondary_peer_address)s, %(secondary_inside_cidr)s, %(psk)s, %(cloud_prefixes)s::cidr[],
+                   %(class_name)s, %(bandwidth_mbps)s, %(enabled)s, %(actor)s)
            RETURNING id""",
         {**row, "c": customer_id, "psk": c.get("psk"), "actor": actor},
     ).fetchone()["id"]
@@ -230,8 +263,11 @@ def update(conn: psycopg.Connection, circuit: dict, changes: dict[str, Any], act
         merged[k] = str(merged[k]) if merged[k] else None
     for k in ("a_prefixes", "cloud_prefixes"):
         merged[k] = [str(p) for p in merged[k] or []]
-    merged["inside_cidr"] = str(merged["inside_cidr"]) if merged["inside_cidr"] else None
-    merged["peer_address"] = str(merged["peer_address"]) if merged["peer_address"] else None
+    for k in ("inside_cidr", "peer_address", "secondary_peer_address", "secondary_inside_cidr"):
+        merged[k] = str(merged[k]) if merged[k] else None
+    if changes.get("secondary_peer_address") == "":
+        # Removing the second tunnel frees its inside addresses too.
+        merged["secondary_inside_cidr"] = None
     psk = changes.get("psk")
     merged["psk"] = psk
     c = validate(conn, circuit["customer_id"], merged, circuit["id"])
@@ -239,7 +275,9 @@ def update(conn: psycopg.Connection, circuit: dict, changes: dict[str, Any], act
         """UPDATE circuits SET name = %(name)s, a_site_id = %(a_site_id)s, a_prefixes = %(a_prefixes)s::cidr[],
              a_vlan = %(a_vlan)s, b_site_id = %(b_site_id)s, b_vlan = %(b_vlan)s, provider = %(provider)s,
              region = %(region)s, peer_address = %(peer_address)s, peer_asn = %(peer_asn)s,
-             inside_cidr = %(inside_cidr)s, cloud_prefixes = %(cloud_prefixes)s::cidr[], class_name = %(class_name)s,
+             inside_cidr = %(inside_cidr)s, secondary_peer_address = %(secondary_peer_address)s,
+             secondary_inside_cidr = %(secondary_inside_cidr)s, cloud_prefixes = %(cloud_prefixes)s::cidr[],
+             class_name = %(class_name)s,
              bandwidth_mbps = %(bandwidth_mbps)s, enabled = %(enabled)s, psk = coalesce(%(psk)s, psk),
              updated_at = now()
            WHERE id = %(id)s""",
@@ -305,8 +343,8 @@ def status(c: dict, st: list[dict], received: int, now: dt.datetime) -> str:
     if not fresh:
         return "provisioning"
     if c["kind"] == "cloud":
-        s = fresh[0]
-        if s["ike"] == "up" and s["bgp"] == "Established":
+        # A resilient pair is up while either tunnel is.
+        if any(s["ike"] == "up" and s["bgp"] == "Established" for s in fresh):
             return "up"
-        return "provisioning" if s["ike"] in ("connecting", "") else "down"
+        return "provisioning" if all(s["ike"] in ("connecting", "") for s in fresh) else "down"
     return "up" if received > 0 else "down"

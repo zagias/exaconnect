@@ -529,6 +529,37 @@ INSERT INTO partners (slug, name, category, kind, provider, description, website
    '{}', '{203.0.113.128/25}', true)
 ON CONFLICT (slug) DO NOTHING;
 
+-- Resilient circuits, DDoS protection and encryption reporting (ADR 0012).
+ALTER TABLE circuits ADD COLUMN IF NOT EXISTS secondary_peer_address inet;
+ALTER TABLE circuits ADD COLUMN IF NOT EXISTS secondary_inside_cidr cidr;
+ALTER TABLE circuit_state ADD COLUMN IF NOT EXISTS tunnel smallint NOT NULL DEFAULT 1;
+ALTER TABLE circuit_state ADD COLUMN IF NOT EXISTS ike_cipher text NOT NULL DEFAULT '';
+ALTER TABLE circuit_state ADD COLUMN IF NOT EXISTS esp_cipher text NOT NULL DEFAULT '';
+ALTER TABLE circuit_state ADD COLUMN IF NOT EXISTS established_s int NOT NULL DEFAULT -1;
+DO $$
+BEGIN
+  IF (SELECT array_length(conkey, 1) FROM pg_constraint WHERE conname = 'circuit_state_pkey') = 2 THEN
+    ALTER TABLE circuit_state DROP CONSTRAINT circuit_state_pkey;
+    ALTER TABLE circuit_state ADD PRIMARY KEY (circuit_id, node_id, tunnel);
+  END IF;
+END $$;
+ALTER TABLE circuit_metrics ADD COLUMN IF NOT EXISTS tunnel smallint NOT NULL DEFAULT 1;
+
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS ddos_enabled boolean NOT NULL DEFAULT true;
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS ddos_new_per_source int NOT NULL DEFAULT 50;
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS ddos_syn_per_s int NOT NULL DEFAULT 2000;
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS ddos_block_minutes int NOT NULL DEFAULT 10;
+ALTER TABLE internet_state ADD COLUMN IF NOT EXISTS auto_blocked jsonb NOT NULL DEFAULT '[]';
+CREATE TABLE IF NOT EXISTS blocked_sources (
+  id          bigserial PRIMARY KEY,
+  prefix      cidr NOT NULL,
+  reason      text NOT NULL DEFAULT '',
+  created_by  text NOT NULL,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  expires_at  timestamptz
+);
+ALTER TABLE blocked_sources ADD COLUMN IF NOT EXISTS lifted boolean NOT NULL DEFAULT false;
+
 -- Time series (TimescaleDB hypertables when the extension is available).
 CREATE TABLE IF NOT EXISTS path_metrics (
   time         timestamptz NOT NULL,

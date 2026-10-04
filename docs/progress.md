@@ -283,3 +283,15 @@ complete orders that wait on a service partner (Admin, Partners). Lab check
 `m9-order.sh`.
 
 Unit tests: 145 controller tests, agent tests, portal type check and build.
+
+**Fabric step 5: resilient circuits, DDoS protection and encryption
+reporting** (ADR 0012, 2026-10-04). A cloud circuit can have a second
+tunnel to the cloud's second gateway address; when one tunnel fails, BGP
+moves traffic to the other and the circuit stays up. The PoP's public
+address is protected: a source opening too many connections is blocked for
+a while, there is a SYN flood limit, and ExaCarib keeps a block list
+(Admin, Protection); customers see the drop counts on the Internet screen.
+A new Encryption screen shows every path and circuit tunnel with the
+algorithms in use and flags weak ones. Pairs through two PoPs wait for a
+second PoP; blackholing at carriers and route-server peering are left as
+seams. Lab check `m9-protection.sh`.

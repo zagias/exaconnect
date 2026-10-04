@@ -19,8 +19,9 @@ import {
   type InternetState,
   type PortForward,
   type PortForwardIn,
+  type ProtectionSummary,
 } from "../api";
-import { ErrorNote, Eyebrow } from "../components";
+import { ErrorNote, Eyebrow, ago } from "../components";
 import { useCustomer } from "../customer";
 import { Card, useAction } from "../ui";
 
@@ -98,6 +99,7 @@ export default function Internet() {
           <Breakout customerId={current.id} data={data} reload={state.reload} />
           <Firewall customerId={current.id} data={data} reload={state.reload} />
           <Forwards customerId={current.id} data={data} reload={state.reload} />
+          {data.protection && <Protection p={data.protection} publicAddress={data.public_address} />}
         </>
       )}
     </>
@@ -469,6 +471,76 @@ function RuleForm({
         <ErrorNote error={act.error} />
       </div>
     </form>
+  );
+}
+
+// ---- DDoS protection on the PoP's public address (read-only for customers) ----
+
+/** "50 new connections a second", "1 minute", in plain words. */
+export const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString("en-GB")} ${n === 1 ? one : many}`;
+
+/** The protection limits as sentences; shared with the admin Protection tab. */
+export function protectionLimits(p: { new_per_source: number; syn_per_s: number; block_minutes: number }): string[] {
+  return [
+    `A source sending more than ${plural(p.new_per_source, "new connection")} a second is blocked for ${plural(p.block_minutes, "minute")}.`,
+    `New TCP connections above ${p.syn_per_s.toLocaleString("en-GB")} a second, from all sources together, are dropped (SYN flood protection).`,
+    "Addresses on ExaCarib's block list are always dropped.",
+  ];
+}
+
+export const DROP_KINDS: { key: "blocked" | "auto" | "flood" | "syn"; label: string }[] = [
+  { key: "blocked", label: "On the block list" },
+  { key: "auto", label: "From automatically blocked sources" },
+  { key: "flood", label: "Flood: over the per-source limit" },
+  { key: "syn", label: "SYN flood: over the overall limit" },
+];
+
+function Protection({ p, publicAddress }: { p: ProtectionSummary; publicAddress: string | null }) {
+  return (
+    <Card
+      title="Protection"
+      note={p.enabled ? <span className="pill ok">On</span> : <span className="pill warn">Off</span>}
+    >
+      <p className="small muted" style={{ marginTop: 0 }}>
+        Protects the PoP's public address <span className="mono">{publicAddress ?? "–"}</span> from floods of new inbound
+        connections. Replies to your own outbound traffic and your sites' traffic out are never affected.
+      </p>
+      {p.enabled ? (
+        <ul className="small" style={{ margin: "0 0 12px", paddingLeft: 20 }}>
+          {protectionLimits(p).map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
+      ) : (
+        <p className="small">Protection is off, so no inbound limits apply right now.</p>
+      )}
+      <div className="table-wrap">
+        <table className="paths small" style={{ maxWidth: 520 }}>
+          <thead>
+            <tr>
+              <th scope="col">Dropped</th>
+              <th scope="col" className="num">Packets</th>
+            </tr>
+          </thead>
+          <tbody>
+            {DROP_KINDS.map((k) => (
+              <tr key={k.key}>
+                <td>{k.label}</td>
+                <td className="num mono">{count(p.dropped?.[k.key] ?? 0)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="small" style={{ margin: "12px 0 0" }}>
+        Sources blocked right now: <span className="mono">{count(p.auto_blocked ?? 0)}</span>
+        {p.updated_at && <span className="muted"> · Counts from {ago(p.updated_at)}</span>}
+      </p>
+      <p className="small muted" style={{ margin: "4px 0 0" }}>
+        ExaCarib manages these settings. The public address is shared, so they are the same for every customer on it. Contact
+        ExaCarib if a service you rely on is being blocked.
+      </p>
+    </Card>
   );
 }
 

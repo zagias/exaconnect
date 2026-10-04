@@ -25,7 +25,9 @@ func (c *circuitSys) Run(ctx context.Context, name string, args ...string) ([]by
 	cmd := name + " " + strings.Join(args, " ")
 	switch {
 	case cmd == "swanctl --list-sas":
-		return []byte("exa-vc7: #1, ESTABLISHED, IKEv2, 01_i* 02_r\n  exa-vc7: #2, reqid 1, INSTALLED, TUNNEL, ESP:AES_GCM_16-256\nexa-vc8: #3, CONNECTING, IKEv2, 03_i* 00_r\n"), nil
+		return []byte("exa-vc7: #1, ESTABLISHED, IKEv2, 01_i* 02_r\n  AES_GCM_16-256/PRF_HMAC_SHA2_256/MODP_2048\n" +
+			"  established 120s ago, rekeying in 13000s\n  exa-vc7: #2, reqid 1, INSTALLED, TUNNEL, ESP:AES_GCM_16-256\n" +
+			"exa-vc8: #3, CONNECTING, IKEv2, 03_i* 00_r\n"), nil
 	case cmd == "vtysh -c show bgp neighbors 169.254.100.1 json":
 		return []byte(`{"169.254.100.1":{"bgpState":"Established","addressFamilyInfo":{"ipv4Unicast":{"acceptedPrefixCounter":1}}}}`), nil
 	case cmd == "vtysh -c show bgp ipv4 unicast neighbors 169.254.100.1 routes json":
@@ -59,14 +61,16 @@ func TestCircuitTelemetry(t *testing.T) {
 	}
 	c := got[0]
 	if c.ID != 7 || c.IKE != "up" || c.BGP != "Established" || c.PrefixesReceived != 1 ||
-		len(c.Routes) != 1 || c.Routes[0] != "10.100.0.0/16" || c.BytesIn != 123 || c.BytesOut != 456 || c.RTTMS != nil {
+		len(c.Routes) != 1 || c.Routes[0] != "10.100.0.0/16" || c.BytesIn != 123 || c.BytesOut != 456 || c.RTTMS != nil ||
+		c.IKECipher != "AES_GCM_16-256/PRF_HMAC_SHA2_256/MODP_2048" || c.ESPCipher != "AES_GCM_16-256" || c.EstablishedS != 120 {
 		t.Fatalf("vc7: %+v", c)
 	}
 	if got[1].IKE != "connecting" || got[1].BGP != "Active" || got[1].Routes == nil {
 		t.Fatalf("vc8: %+v", got[1])
 	}
 	b, _ := json.Marshal(got[1])
-	for _, want := range []string{`"ike":"connecting"`, `"routes":[]`, `"rtt_ms":null`, `"sent":0`} {
+	for _, want := range []string{`"ike":"connecting"`, `"routes":[]`, `"rtt_ms":null`, `"sent":0`,
+		`"ike_cipher":"","esp_cipher":"","established_s":-1`} {
 		if !strings.Contains(string(b), want) {
 			t.Errorf("missing %s in %s", want, b)
 		}
@@ -94,7 +98,8 @@ func TestCircuitTelemetry(t *testing.T) {
 		t.Fatalf("%+v", got)
 	}
 	l2 := got[0]
-	if l2.IKE != "" || l2.BGP != "" || l2.Sent == 0 || l2.Received == 0 || l2.RTTMS == nil || l2.BytesIn != 7 || l2.BytesOut != 8 {
+	if l2.IKE != "" || l2.BGP != "" || l2.Sent == 0 || l2.Received == 0 || l2.RTTMS == nil || l2.BytesIn != 7 || l2.BytesOut != 8 ||
+		l2.IKECipher != "" || l2.EstablishedS != -1 {
 		t.Fatalf("vx9: %+v", l2)
 	}
 	if sys.count("swanctl") != 1 {
@@ -109,9 +114,9 @@ func TestCircuitTelemetry(t *testing.T) {
 
 func TestTelemetryCarriesCircuits(t *testing.T) {
 	var tel Telemetry
-	tel.Circuits = []CircuitState{{ID: 9, Name: "vx9", Routes: []string{}}}
+	tel.Circuits = []CircuitState{{ID: 9, Name: "vx9", Routes: []string{}, EstablishedS: -1}}
 	b, _ := json.Marshal(tel)
-	if !strings.Contains(string(b), `"circuits":[{"id":9,"name":"vx9","ike":"","bgp":"","prefixes_received":0,"routes":[],"sent":0,"received":0,"rtt_ms":null,"bytes_in":0,"bytes_out":0}]`) {
+	if !strings.Contains(string(b), `"circuits":[{"id":9,"name":"vx9","ike":"","bgp":"","prefixes_received":0,"routes":[],"sent":0,"received":0,"rtt_ms":null,"bytes_in":0,"bytes_out":0,"ike_cipher":"","esp_cipher":"","established_s":-1}]`) {
 		t.Fatalf("%s", b)
 	}
 }

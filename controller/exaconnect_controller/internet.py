@@ -321,8 +321,16 @@ def delete_forward(conn: psycopg.Connection, customer_id: Any, fwd: dict, actor:
 
 
 def load(conn: psycopg.Connection, customer_id: Any) -> dict[str, Any]:
-    """What desired.build needs: enabled rules in order and enabled forwards."""
+    """What desired.build needs: enabled rules in order, enabled forwards and
+    the PoP block list (ExaCarib's, for every customer)."""
     return {
+        "blocklist": [
+            r["p"]
+            for r in conn.execute(
+                """SELECT DISTINCT prefix::text AS p FROM blocked_sources
+                   WHERE expires_at IS NULL OR expires_at > now() ORDER BY 1 LIMIT 1000"""
+            )
+        ],
         "firewall": conn.execute(
             """SELECT id, site_id, action, src::text[] AS src, dst::text[] AS dst, protocol, ports
                FROM firewall_rules WHERE customer_id = %s AND enabled ORDER BY position, id""",
@@ -404,6 +412,14 @@ def block(inv: dict[str, Any], site: dict, tunnels: list[str], links: list[dict]
                 for f in net["forwards"]
                 if f["to_site_id"] in pop_ids and public
             ],
+            # DDoS protection on the public address (ADR 0012).
+            "protection": {
+                "enabled": bool(site["ddos_enabled"]) and bool(public),
+                "new_per_source": site["ddos_new_per_source"],
+                "syn_per_s": site["ddos_syn_per_s"],
+                "block_minutes": site["ddos_block_minutes"],
+                "blocklist": net["blocklist"],
+            },
         }
     mode = site["internet_mode"]
     out: dict[str, Any] = {"mode": mode, "lan_prefixes": [str(p) for p in site["lan_prefixes"]]}
@@ -448,11 +464,18 @@ def corporate(conn: psycopg.Connection, customer_id: Any) -> list[str]:
 
 def record(conn: psycopg.Connection, node: dict, data: dict[str, Any]) -> None:
     conn.execute(
-        """INSERT INTO internet_state (node_id, customer_id, mode, via, counters, updated_at)
-           VALUES (%s, %s, %s, %s, %s, now())
+        """INSERT INTO internet_state (node_id, customer_id, mode, via, counters, auto_blocked, updated_at)
+           VALUES (%s, %s, %s, %s, %s, %s, now())
            ON CONFLICT (node_id) DO UPDATE SET mode = EXCLUDED.mode, via = EXCLUDED.via,
-             counters = EXCLUDED.counters, updated_at = now()""",
-        (node["id"], node["customer_id"], data.get("mode", ""), data.get("via", ""), Jsonb(data.get("counters", []))),
+             counters = EXCLUDED.counters, auto_blocked = EXCLUDED.auto_blocked, updated_at = now()""",
+        (
+            node["id"],
+            node["customer_id"],
+            data.get("mode", ""),
+            data.get("via", ""),
+            Jsonb(data.get("counters", [])),
+            Jsonb([{"address": str(b["address"]), "expires_s": b["expires_s"]} for b in data.get("auto_blocked", [])]),
+        ),
     )
 
 
@@ -540,4 +563,33 @@ def view(conn: psycopg.Connection, customer_id: Any) -> dict[str, Any]:
             for f in forwards
         ],
         "inbound_dropped": counters.get(("inbound", 0), {"packets": 0})["packets"],
+        "protection": protection(conn, pop) if pop else None,
+    }
+
+
+DROP_KINDS = ("blocked", "auto", "flood", "syn")
+
+
+def protection(conn: psycopg.Connection, pop: dict) -> dict[str, Any]:
+    """The PoP's DDoS protection: its settings, what it dropped and what is
+    blocked now (ADR 0012). Counts only: nothing about anyone's traffic."""
+    row = conn.execute(
+        """SELECT s.ddos_enabled, s.ddos_new_per_source, s.ddos_syn_per_s, s.ddos_block_minutes,
+                  st.counters, st.auto_blocked, st.updated_at
+           FROM sites s LEFT JOIN nodes n ON n.site_id = s.id LEFT JOIN internet_state st ON st.node_id = n.id
+           WHERE s.id = %s""",
+        (pop["id"],),
+    ).fetchone()
+    dropped = dict.fromkeys(DROP_KINDS, 0)
+    for c in row["counters"] or []:
+        if c.get("kind") in dropped:
+            dropped[c["kind"]] += int(c.get("packets") or 0)
+    return {
+        "enabled": row["ddos_enabled"],
+        "new_per_source": row["ddos_new_per_source"],
+        "syn_per_s": row["ddos_syn_per_s"],
+        "block_minutes": row["ddos_block_minutes"],
+        "dropped": dropped,
+        "auto_blocked": len(row["auto_blocked"] or []),
+        "updated_at": row["updated_at"],
     }

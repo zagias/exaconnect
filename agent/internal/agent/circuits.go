@@ -31,6 +31,11 @@ type CircuitState struct {
 	RTTMS    *float64 `json:"rtt_ms"`
 	BytesIn  uint64   `json:"bytes_in"`
 	BytesOut uint64   `json:"bytes_out"`
+	// The IKE and ESP algorithms and the IKE SA's age (cloud circuits, ADR
+	// 0012); "", "" and -1 with no SA, and for layer 2.
+	IKECipher    string `json:"ike_cipher"`
+	ESPCipher    string `json:"esp_cipher"`
+	EstablishedS int    `json:"established_s"`
 }
 
 func circuitProbeKey(s *desired.State) string {
@@ -100,12 +105,14 @@ func (a *Agent) circuitStates(ctx context.Context, s *desired.State, now time.Ti
 	}
 	var out []CircuitState
 	if cloud := s.ActiveCircuits(); len(cloud) > 0 {
-		sas := ike.States(ctx, a.Sys)
+		sas := ike.SAs(ctx, a.Sys)
 		for _, c := range cloud {
-			cs := CircuitState{ID: c.ID, Name: c.Name, IKE: ike.Down, Routes: []string{}}
-			if st, ok := sas[c.Conn()]; ok {
-				cs.IKE = st
+			sa, ok := sas[c.Conn()]
+			if !ok {
+				sa = ike.NoSA
 			}
+			cs := CircuitState{ID: c.ID, Name: c.Name, IKE: sa.State, Routes: []string{},
+				IKECipher: sa.IKECipher, ESPCipher: sa.ESPCipher, EstablishedS: sa.EstablishedS}
 			if n, err := frrstate.BGPNeighbor(ctx, a.Sys, c.PeerInside); err == nil {
 				cs.BGP, cs.PrefixesReceived = n.State, n.PrefixesReceived
 			}
@@ -122,7 +129,7 @@ func (a *Agent) circuitStates(ctx context.Context, s *desired.State, now time.Ti
 	stats := a.circStats
 	a.mu.Unlock()
 	for _, c := range s.L2Circuits {
-		cs := CircuitState{ID: c.ID, Name: c.Name, Routes: []string{}}
+		cs := CircuitState{ID: c.ID, Name: c.Name, Routes: []string{}, EstablishedS: -1}
 		if st := stats[c.Name]; st != nil {
 			if w, ok := st.Collect(now); ok {
 				cs.Sent, cs.Received = w.Sent, w.Received

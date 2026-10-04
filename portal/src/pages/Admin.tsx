@@ -7,9 +7,10 @@ import { useCustomer, who } from "../customer";
 import { Card, useAction } from "../ui";
 import { Classes } from "./Classes";
 import { PartnersAdmin } from "./PartnersAdmin";
+import { ProtectionAdmin } from "./ProtectionAdmin";
 
 // Admin screens (CLAUDE.md §4.6, screen 6): agents, customers, sites and links,
-// enrolment tokens, classes and SLA policies, partners, users, settings and the audit log.
+// enrolment tokens, classes and SLA policies, partners, DDoS protection, users, settings and the audit log.
 export default function Admin() {
   return (
     <>
@@ -22,6 +23,7 @@ export default function Admin() {
         <NavLink to="/admin/sites">Sites and links</NavLink>
         <NavLink to="/admin/classes">Classes and SLA</NavLink>
         <NavLink to="/admin/partners">Partners</NavLink>
+        <NavLink to="/admin/protection">Protection</NavLink>
         <NavLink to="/admin/users">Users</NavLink>
         <NavLink to="/admin/settings">Settings</NavLink>
         <NavLink to="/admin/audit">Audit log</NavLink>
@@ -32,6 +34,7 @@ export default function Admin() {
         <Route path="sites" element={<SitesAdmin />} />
         <Route path="classes" element={<Classes />} />
         <Route path="partners" element={<PartnersAdmin />} />
+        <Route path="protection" element={<ProtectionAdmin />} />
         <Route path="users" element={<UsersAdmin />} />
         <Route path="settings" element={<SettingsAdmin />} />
         <Route path="audit" element={<AuditLog />} />

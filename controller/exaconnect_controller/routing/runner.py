@@ -245,6 +245,20 @@ def run_once(now: dt.datetime | None = None, forecaster: Forecaster | None = Non
     return made
 
 
+def lift_expired_blocks() -> int:
+    """Take block list entries that have expired out of the PoPs' desired state (ADR 0012)."""
+    from .. import desired
+
+    with db.tx() as conn:
+        lifted = conn.execute(
+            "UPDATE blocked_sources SET lifted = true WHERE expires_at <= now() AND NOT lifted RETURNING id"
+        ).fetchall()
+        if lifted:
+            for r in conn.execute("SELECT DISTINCT customer_id FROM sites WHERE kind = 'pop'").fetchall():
+                desired.refresh(conn, r["customer_id"])
+    return len(lifted)
+
+
 async def loop(interval_s: float) -> None:
     """Background task started by the app: a routing pass every interval and a
     metering rollup about once a minute. Errors are logged, never fatal."""
@@ -262,6 +276,7 @@ async def loop(interval_s: float) -> None:
             last_rollup = time.monotonic()
             try:
                 await asyncio.to_thread(rollup.run_once)
+                await asyncio.to_thread(lift_expired_blocks)
             except asyncio.CancelledError:
                 raise
             except Exception:

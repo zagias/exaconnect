@@ -12,7 +12,7 @@ from fastapi.responses import PlainTextResponse
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field, IPvAnyAddress
 
-from .. import audit, db, desired, internet, pki
+from .. import audit, db, desired, fabric, internet, pki
 from ..routing import maps
 from ..security import token_hash
 from .deps import NodeDep
@@ -205,13 +205,22 @@ class CircuitIn(BaseModel):
     rtt_ms: float | None = None
     bytes_in: int = Field(default=0, ge=0)
     bytes_out: int = Field(default=0, ge=0)
+    # Negotiated algorithms, for the encryption report (ADR 0012).
+    ike_cipher: str = Field(default="", max_length=120)
+    esp_cipher: str = Field(default="", max_length=120)
+    established_s: int = Field(default=-1, ge=-1)
 
 
 class InternetCounter(BaseModel):
-    kind: Literal["rule", "forward", "inbound"]
+    kind: Literal["rule", "forward", "inbound", "blocked", "auto", "flood", "syn"]
     id: int = Field(default=0, ge=0)
     packets: int = Field(default=0, ge=0)
     bytes: int = Field(default=0, ge=0)
+
+
+class AutoBlocked(BaseModel):
+    address: IPvAnyAddress
+    expires_s: int = Field(default=0, ge=0)
 
 
 class InternetIn(BaseModel):
@@ -220,6 +229,8 @@ class InternetIn(BaseModel):
     mode: str = Field(default="", max_length=16)
     via: str = Field(default="", max_length=16)
     counters: list[InternetCounter] = Field(default=[], max_length=500)
+    # PoP: sources blocked automatically for flooding, with seconds left (ADR 0012).
+    auto_blocked: list[AutoBlocked] = Field(default=[], max_length=100)
 
 
 class TelemetryIn(BaseModel):
@@ -326,28 +337,48 @@ def _event(conn, customer_id, node_id, kind: str, detail: dict, at: dt.datetime 
 
 
 def _circuits(conn, node, body: TelemetryIn) -> None:
-    """Circuit state and metrics, for this customer's own circuits only."""
+    """Circuit state and metrics, for this customer's own circuits only. An id
+    above fabric.SECOND is the second tunnel of a resilient pair (ADR 0012)."""
+
+    def split(cid: int) -> tuple[int, int]:
+        return (cid - fabric.SECOND, 2) if cid > fabric.SECOND else (cid, 1)
+
     own = {
         r["id"]
         for r in conn.execute(
             "SELECT id FROM circuits WHERE customer_id = %s AND id = ANY(%s)",
-            (node.customer_id, [c.id for c in body.circuits or []]),
+            (node.customer_id, [split(c.id)[0] for c in body.circuits or []]),
         )
     }
     for c in body.circuits or []:
-        if c.id not in own:
+        cid, tunnel = split(c.id)
+        if cid not in own:
             continue
         conn.execute(
-            """INSERT INTO circuit_state (circuit_id, node_id, ike, bgp, prefixes_received, routes, updated_at)
-               VALUES (%s, %s, %s, %s, %s, %s, %s)
-               ON CONFLICT (circuit_id, node_id) DO UPDATE SET ike = EXCLUDED.ike, bgp = EXCLUDED.bgp,
+            """INSERT INTO circuit_state (circuit_id, node_id, tunnel, ike, bgp, prefixes_received, routes,
+                                          ike_cipher, esp_cipher, established_s, updated_at)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+               ON CONFLICT (circuit_id, node_id, tunnel) DO UPDATE SET ike = EXCLUDED.ike, bgp = EXCLUDED.bgp,
                  prefixes_received = EXCLUDED.prefixes_received, routes = EXCLUDED.routes,
-                 updated_at = EXCLUDED.updated_at""",
-            (c.id, node.id, c.ike, c.bgp, c.prefixes_received, [r[:64] for r in c.routes], body.at),
+                 ike_cipher = EXCLUDED.ike_cipher, esp_cipher = EXCLUDED.esp_cipher,
+                 established_s = EXCLUDED.established_s, updated_at = EXCLUDED.updated_at""",
+            (
+                cid,
+                node.id,
+                tunnel,
+                c.ike,
+                c.bgp,
+                c.prefixes_received,
+                [r[:64] for r in c.routes],
+                c.ike_cipher,
+                c.esp_cipher,
+                c.established_s,
+                body.at,
+            ),
         )
         conn.execute(
-            """INSERT INTO circuit_metrics (time, customer_id, circuit_id, node_id, sent, received, rtt_avg_ms,
-                                            bytes_in, bytes_out)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-            (body.at, node.customer_id, c.id, node.id, c.sent, c.received, c.rtt_ms, c.bytes_in, c.bytes_out),
+            """INSERT INTO circuit_metrics (time, customer_id, circuit_id, node_id, tunnel, sent, received,
+                                            rtt_avg_ms, bytes_in, bytes_out)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            (body.at, node.customer_id, cid, node.id, tunnel, c.sent, c.received, c.rtt_ms, c.bytes_in, c.bytes_out),
         )

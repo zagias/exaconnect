@@ -21,6 +21,7 @@ const (
 const (
 	MaxFirewallRules = 500
 	MaxPortForwards  = 500
+	MaxBlocklist     = 1000
 )
 
 // Internet is where a node's LAN traffic to the internet goes, and the NAT
@@ -36,6 +37,19 @@ type Internet struct {
 	PublicAddress string         `json:"public_address,omitempty"`
 	Firewall      []FirewallRule `json:"firewall,omitempty"`
 	PortForwards  []PortForward  `json:"port_forwards,omitempty"`
+	// Protection guards the PoP's public address (ADR 0012); nil or not
+	// enabled means none.
+	Protection *Protection `json:"protection,omitempty"`
+}
+
+// Protection is the PoP's DDoS protection: per-source limits on new inbound
+// connections with automatic blocking, a SYN flood limit and a block list.
+type Protection struct {
+	Enabled      bool     `json:"enabled"`
+	NewPerSource int      `json:"new_per_source"` // new connections a second from one source
+	SynPerS      int      `json:"syn_per_s"`      // new TCP connections a second, all sources
+	BlockMinutes int      `json:"block_minutes"`  // how long an automatic block lasts
+	Blocklist    []string `json:"blocklist"`      // IPv4 prefixes, always dropped
 }
 
 type Uplink struct {
@@ -72,6 +86,16 @@ type PortForward struct {
 // traffic itself: the PoP, and a site breaking out locally.
 func (s *State) Firewalled() bool {
 	return s.Internet != nil && (s.Role == RolePoP || s.Internet.Mode == InternetLocal)
+}
+
+// Protected reports whether the PoP guards its public address. Without a
+// public address there is nothing to guard, so no guard chain either.
+func (s *State) Protected() bool {
+	if !s.Firewalled() || s.Role != RolePoP {
+		return false
+	}
+	in := s.Internet
+	return in.Protection != nil && in.Protection.Enabled && in.PublicAddress != "" && len(in.Uplinks) > 0
 }
 
 // PortRange is one inclusive range of a Ports spec.
@@ -236,6 +260,35 @@ func (s *State) validateInternet() error {
 		if err := addrsOrPrefixes(f.AllowFrom); err != nil {
 			return fmt.Errorf("internet: forward %d: allow_from: %w", f.ID, err)
 		}
+	}
+	return s.validateProtection()
+}
+
+// validateProtection checks the PoP's protection settings against the API's
+// ranges. Disabled settings are not used, so only their place is checked.
+func (s *State) validateProtection() error {
+	p := s.Internet.Protection
+	if p == nil {
+		return nil
+	}
+	if s.Role != RolePoP {
+		return fmt.Errorf("internet: protection is for the PoP only")
+	}
+	if !p.Enabled {
+		return nil
+	}
+	switch {
+	case p.NewPerSource < 1 || p.NewPerSource > 100000:
+		return fmt.Errorf("internet: protection: new_per_source must be 1 to 100000, not %d", p.NewPerSource)
+	case p.SynPerS < 10 || p.SynPerS > 1000000:
+		return fmt.Errorf("internet: protection: syn_per_s must be 10 to 1000000, not %d", p.SynPerS)
+	case p.BlockMinutes < 1 || p.BlockMinutes > 1440:
+		return fmt.Errorf("internet: protection: block_minutes must be 1 to 1440, not %d", p.BlockMinutes)
+	case len(p.Blocklist) > MaxBlocklist:
+		return fmt.Errorf("internet: protection: too many blocklist entries (%d, at most %d)", len(p.Blocklist), MaxBlocklist)
+	}
+	if err := prefixes(p.Blocklist); err != nil {
+		return fmt.Errorf("internet: protection: blocklist: %w", err)
 	}
 	return nil
 }

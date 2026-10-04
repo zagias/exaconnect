@@ -13,6 +13,7 @@ import {
   type CircuitCharges,
   type CircuitMetric,
   type CircuitStatus,
+  type CircuitTunnel,
   type CloudProviders,
   type CustomerSettings,
 } from "../api";
@@ -48,6 +49,16 @@ const split = (s: string) =>
     .filter(Boolean);
 
 const thisMonth = () => new Date().toISOString().slice(0, 7);
+
+const SECOND_HINT = "AWS and Azure each give two tunnel addresses. Add the second for a resilient pair: if one tunnel fails, traffic moves to the other.";
+
+const TUNNEL_WORD: Record<CircuitTunnel["which"], string> = { primary: "Primary", secondary: "Secondary" };
+
+/** A resilient circuit's tunnels, or the single tunnel of an older controller's circuit. */
+const tunnelsOf = (c: Circuit): CircuitTunnel[] =>
+  c.tunnels?.length
+    ? c.tunnels
+    : [{ which: "primary", peer_address: c.peer_address, ike: c.ike, bgp: c.bgp, prefixes_received: c.prefixes_received, status: c.status }];
 
 export default function Fabric() {
   const { current } = useCustomer();
@@ -191,6 +202,12 @@ function ends(c: Circuit, providers: CloudProviders) {
       {c.region ? `, ${c.region}` : ""}
       <div className="small muted">
         Gateway <span className="mono">{c.peer_address ?? "–"}</span>
+        {c.secondary_peer_address ? (
+          <>
+            {" "}
+            and <span className="mono">{c.secondary_peer_address}</span>
+          </>
+        ) : null}
         {c.peer_asn ? (
           <>
             , ASN <span className="mono">{c.peer_asn}</span>
@@ -216,7 +233,7 @@ function CircuitRow({
   return (
     <tr className={open ? "selected" : undefined}>
       <td>
-        <strong>{c.name}</strong>
+        <strong>{c.name}</strong> {c.resilient && <span className="tag">Resilient</span>}
         <div className="small muted">{c.kind === "cloud" ? "To a cloud" : "Between sites"}</div>
       </td>
       <td className="small">{ends(c, providers)}</td>
@@ -233,6 +250,14 @@ function CircuitRow({
             <div className="muted">
               <span className="mono">{c.prefixes_received ?? 0}</span> routes received
             </div>
+            {c.resilient && (
+              <div className="muted">
+                <span className="mono">
+                  {tunnelsOf(c).filter((t) => t.status === "up").length} of {tunnelsOf(c).length}
+                </span>{" "}
+                tunnels up
+              </div>
+            )}
           </>
         ) : (
           <>
@@ -352,6 +377,7 @@ function CircuitDetail({
               </p>
             </form>
           )}
+          {c.kind === "cloud" && <SecondGateway customerId={customerId} c={c} reload={reload} />}
           <div className="form-actions" style={{ marginTop: 16 }}>
             <button className={c.enabled ? "button secondary small" : "button small"} disabled={act.busy} onClick={toggle}>
               {c.enabled ? "Switch off" : "Switch on"}
@@ -369,6 +395,7 @@ function CircuitDetail({
           <Facts c={c} />
         </div>
         <div className="span-6">
+          {c.kind === "cloud" && <Tunnels c={c} />}
           <Charges customerId={customerId} c={c} />
         </div>
         <div className="span-12">
@@ -385,6 +412,7 @@ function Facts({ c }: { c: Circuit }) {
       ? [
           ["Tunnel", c.ike || "–"],
           ["Inside addresses", c.inside_cidr ? `${c.our_inside ?? "–"} (ours), ${c.cloud_inside ?? "–"} (cloud)` : "–"],
+          ...(c.secondary_inside_cidr ? ([["Second tunnel inside /30", c.secondary_inside_cidr]] as [string, ReactNode][]) : []),
           ["Cloud subnets", (c.cloud_prefixes ?? []).length ? c.cloud_prefixes.join(", ") : "Any the cloud announces"],
           ["The cloud may reach", (c.a_prefixes ?? []).length ? c.a_prefixes.join(", ") : c.a_site ?? "All your sites"],
           ["Routes received", (c.routes ?? []).length ? (c.routes ?? []).join(", ") : "None yet"],
@@ -415,6 +443,128 @@ function Facts({ c }: { c: Circuit }) {
         Added by {who(c.created_by)} on {new Date(c.created_at).toLocaleDateString("en-GB")}
       </div>
     </dl>
+  );
+}
+
+// ---- Resilient pair: the second gateway and both tunnels ----
+
+function SecondGateway({ customerId, c, reload }: { customerId: string; c: Circuit; reload: () => void }) {
+  const [addr, setAddr] = useState(c.secondary_peer_address ?? "");
+  const [cidr, setCidr] = useState(c.secondary_inside_cidr ?? "");
+  const [saved, setSaved] = useState<string | null>(null);
+  const act = useAction();
+  const had = !!c.secondary_peer_address;
+  const next = addr.trim();
+  const nextCidr = cidr.trim();
+  const unchanged = next === (c.secondary_peer_address ?? "") && (!next || nextCidr === (c.secondary_inside_cidr ?? ""));
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    setSaved(null);
+    if (!next) {
+      const q = `Remove the second tunnel from ${c.name}? The circuit keeps running on the first tunnel only, with no failover.`;
+      if (!window.confirm(q)) return;
+      act.run(async () => {
+        await updateCircuit(customerId, c.id, { secondary_peer_address: null });
+        setCidr("");
+        setSaved("Second tunnel removed. The PoP takes it down within 10 seconds.");
+        reload();
+      });
+      return;
+    }
+    if (next === c.peer_address) {
+      act.setError("The second gateway address must differ from the first.");
+      return;
+    }
+    act.run(async () => {
+      await updateCircuit(customerId, c.id, {
+        secondary_peer_address: next,
+        ...(nextCidr && nextCidr !== (c.secondary_inside_cidr ?? "") ? { secondary_inside_cidr: nextCidr } : {}),
+      });
+      setSaved(had ? "Second tunnel updated. It reconnects within 10 seconds." : "Second tunnel added. It comes up within 10 seconds.");
+      reload();
+    });
+  };
+  return (
+    <form className="form" onSubmit={submit} style={{ marginTop: 16 }}>
+      <label>
+        Second gateway address (for a resilient pair)
+        <input value={addr} onChange={(e) => setAddr(e.target.value)} inputMode="decimal" placeholder="Optional, e.g. 52.1.2.4" />
+      </label>
+      {next && (
+        <label>
+          Second inside addresses /30
+          <input value={cidr} onChange={(e) => setCidr(e.target.value)} placeholder="Leave blank to pick one" />
+        </label>
+      )}
+      <div className="actions">
+        <button className="button secondary small" disabled={act.busy || unchanged}>
+          {had && !next ? "Remove second tunnel" : "Save"}
+        </button>
+      </div>
+      <p className="small muted wide" style={{ margin: 0 }}>
+        {SECOND_HINT} Both tunnels use the same pre-shared key.{had ? " Clear the address to remove the second tunnel." : ""}
+      </p>
+      {saved && (
+        <p className="ok-note small wide" role="status" style={{ margin: 0 }}>
+          {saved}
+        </p>
+      )}
+      <div className="wide">
+        <ErrorNote error={act.error} />
+      </div>
+    </form>
+  );
+}
+
+function Tunnels({ c }: { c: Circuit }) {
+  const tunnels = tunnelsOf(c);
+  return (
+    <>
+      <h3 style={{ marginTop: 0 }}>
+        {tunnels.length > 1 ? "Tunnels" : "Tunnel"} {c.resilient && <span className="tag">Resilient</span>}
+      </h3>
+      <div className="table-wrap" style={{ marginBottom: 16 }}>
+        <table className="paths small">
+          <thead>
+            <tr>
+              <th scope="col">Tunnel</th>
+              <th scope="col">Gateway</th>
+              <th scope="col">IKE</th>
+              <th scope="col">BGP</th>
+              <th scope="col">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {tunnels.map((t) => {
+              const st = STATUS[t.status] ?? STATUS.provisioning;
+              return (
+                <tr key={t.which}>
+                  <td>{TUNNEL_WORD[t.which] ?? t.which}</td>
+                  <td className="mono">{t.peer_address ?? "–"}</td>
+                  <td className="mono">{t.ike || "–"}</td>
+                  <td>
+                    <span className="mono">{t.bgp || "–"}</span>
+                    {t.prefixes_received != null && (
+                      <div className="muted">
+                        <span className="mono">{t.prefixes_received}</span> routes
+                      </div>
+                    )}
+                  </td>
+                  <td>
+                    <span className={`pill ${st.cls}`}>{st.word}</span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {c.resilient && (
+        <p className="small muted" style={{ marginTop: -8 }}>
+          Both tunnels carry BGP. If one fails, traffic moves to the other within about 10 seconds.
+        </p>
+      )}
+    </>
   );
 }
 
@@ -538,6 +688,8 @@ function CloudForm({
     peer_asn: "",
     psk: "",
     inside_cidr: "",
+    secondary_peer_address: "",
+    secondary_inside_cidr: "",
     cloud_prefixes: "",
     a_site_id: "",
     a_prefixes: "",
@@ -551,8 +703,13 @@ function CloudForm({
     setF({ ...f, provider, peer_asn: p ? String(p.asn) : f.peer_asn });
   };
   const chosen = providers[f.provider];
+  const second = f.secondary_peer_address.trim();
   const submit = (e: FormEvent) => {
     e.preventDefault();
+    if (second && second === f.peer_address.trim()) {
+      act.setError("The second gateway address must differ from the first.");
+      return;
+    }
     act.run(async () => {
       await createCircuit(customerId, {
         kind: "cloud",
@@ -563,6 +720,8 @@ function CloudForm({
         peer_asn: Number(f.peer_asn),
         psk: f.psk,
         inside_cidr: f.inside_cidr.trim() || undefined,
+        secondary_peer_address: second || undefined,
+        secondary_inside_cidr: (second && f.secondary_inside_cidr.trim()) || undefined,
         cloud_prefixes: split(f.cloud_prefixes),
         a_site_id: f.a_site_id || undefined,
         a_prefixes: split(f.a_prefixes),
@@ -631,6 +790,19 @@ function CloudForm({
         Inside addresses /30
         <input value={f.inside_cidr} onChange={set("inside_cidr")} placeholder="Leave blank to pick one" />
       </label>
+      <label>
+        Second gateway address (for a resilient pair)
+        <input value={f.secondary_peer_address} onChange={set("secondary_peer_address")} inputMode="decimal" placeholder="Optional, e.g. 52.1.2.4" />
+      </label>
+      {second && (
+        <label>
+          Second inside addresses /30
+          <input value={f.secondary_inside_cidr} onChange={set("secondary_inside_cidr")} placeholder="Leave blank to pick one" />
+        </label>
+      )}
+      <p className="small muted wide" style={{ margin: 0 }}>
+        {SECOND_HINT}
+      </p>
       <label className="wide">
         Cloud subnets (comma separated)
         <input value={f.cloud_prefixes} onChange={set("cloud_prefixes")} placeholder="10.100.0.0/16, 10.101.0.0/16" />

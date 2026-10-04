@@ -2,6 +2,7 @@ package desired
 
 import (
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -172,6 +173,95 @@ func TestParsePorts(t *testing.T) {
 	for _, bad := range []string{"-1", "1-", "a", "1-2-3", "443 80", strings.Repeat("9", 6), "+80"} {
 		if _, err := ParsePorts(bad); err == nil {
 			t.Errorf("%q accepted", bad)
+		}
+	}
+}
+
+func protection() *Protection {
+	return &Protection{Enabled: true, NewPerSource: 50, SynPerS: 2000, BlockMinutes: 10,
+		Blocklist: []string{"203.0.113.66/32", "198.51.100.128/25"}}
+}
+
+func TestProtectionValid(t *testing.T) {
+	s := inetPoP()
+	s.Internet.Protection = protection()
+	if err := s.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if !s.Protected() {
+		t.Fatal("enabled protection with a public address should guard")
+	}
+	// The ends of the API's ranges, and a full block list.
+	p := s.Internet.Protection
+	p.NewPerSource, p.SynPerS, p.BlockMinutes, p.Blocklist = 100000, 10, 1440, nil
+	for i := 0; i < MaxBlocklist; i++ {
+		p.Blocklist = append(p.Blocklist, fmt.Sprintf("10.%d.%d.0/24", i/256, i%256))
+	}
+	if err := s.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	p.NewPerSource, p.SynPerS, p.BlockMinutes = 1, 1000000, 1
+	if err := s.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	// Disabled: the numbers are not used, so zeros are fine; nothing guarded.
+	s.Internet.Protection = &Protection{}
+	if err := s.Validate(); err != nil || s.Protected() {
+		t.Fatalf("disabled: %v, protected %v", err, s.Protected())
+	}
+	// No public address yet: valid, but nothing to guard.
+	s.Internet.Protection, s.Internet.PublicAddress, s.Internet.PortForwards = protection(), "", nil
+	if err := s.Validate(); err != nil || s.Protected() {
+		t.Fatalf("no public address: %v, protected %v", err, s.Protected())
+	}
+	doc := `{"schema":1,"version":4,"role":"pop","asn":65000,"router_id":"100.64.1.1",
+	  "internet":{"mode":"gateway","lan_prefixes":["192.168.10.0/24"],
+	    "uplinks":[{"interface":"eth9","gateway":"100.64.0.1","path":"","tunnel":""}],"public_address":"100.64.0.2",
+	    "protection":{"enabled":true,"new_per_source":50,"syn_per_s":2000,"block_minutes":10,
+	      "blocklist":["203.0.113.66/32","198.51.100.128/25"]}}}`
+	var j State
+	if err := json.Unmarshal([]byte(doc), &j); err != nil {
+		t.Fatal(err)
+	}
+	if err := j.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(j.Internet.Protection, protection()) || !j.Protected() {
+		t.Fatalf("%+v", j.Internet.Protection)
+	}
+}
+
+func TestProtectionInvalid(t *testing.T) {
+	bad := map[string]func(p *Protection){
+		"new_per_source 0":      func(p *Protection) { p.NewPerSource = 0 },
+		"new_per_source big":    func(p *Protection) { p.NewPerSource = 100001 },
+		"syn_per_s 9":           func(p *Protection) { p.SynPerS = 9 },
+		"syn_per_s big":         func(p *Protection) { p.SynPerS = 1000001 },
+		"block_minutes 0":       func(p *Protection) { p.BlockMinutes = 0 },
+		"block_minutes a day+1": func(p *Protection) { p.BlockMinutes = 1441 },
+		"bare address":          func(p *Protection) { p.Blocklist = []string{"203.0.113.66"} },
+		"ipv6":                  func(p *Protection) { p.Blocklist = []string{"2001:db8::/32"} },
+		"injection":             func(p *Protection) { p.Blocklist = []string{"203.0.113.0/24 } ; flush ruleset"} },
+		"too long": func(p *Protection) {
+			for i := 0; i <= MaxBlocklist; i++ {
+				p.Blocklist = append(p.Blocklist, fmt.Sprintf("10.%d.%d.0/24", i/256, i%256))
+			}
+		},
+	}
+	for name, f := range bad {
+		s := inetPoP()
+		s.Internet.Protection = protection()
+		f(s.Internet.Protection)
+		if s.Validate() == nil {
+			t.Errorf("%s accepted", name)
+		}
+	}
+	// Protection is the PoP's alone, even switched off.
+	for _, p := range []*Protection{protection(), {}} {
+		s := inetSite("local")
+		s.Internet.Protection = p
+		if s.Validate() == nil {
+			t.Errorf("a site accepted protection %+v", p)
 		}
 	}
 }

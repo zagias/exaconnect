@@ -4,7 +4,8 @@ ExaCarib's connectivity platform: a Go edge agent (WireGuard + FRR), a FastAPI
 controller, AI SLA routing, customer traffic rules with priority queues and
 application detection, virtual circuits to clouds and between sites
 (ExaConnect Fabric, with a cloud router and elastic bandwidth), internet
-breakout with a NAT gateway and firewall, a partner directory with
+breakout with a NAT gateway and firewall, resilient circuit pairs, DDoS
+protection, an encryption report, a partner directory with
 plain-English ordering, per-site
 Storm Mode, carrier metering and
 settlement, AI insights (hurricane and disaster watch, bill forecast, carrier anomalies,

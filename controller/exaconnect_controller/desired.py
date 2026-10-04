@@ -81,35 +81,45 @@ def _export_prefixes(inv: dict[str, Any], c: dict) -> list[str]:
 
 
 def cloud_circuits(inv: dict[str, Any], pop: dict) -> list[dict[str, Any]]:
-    """The PoP's IPsec circuits to cloud gateways (ADR 0009)."""
+    """The PoP's IPsec circuits to cloud gateways (ADR 0009). The second tunnel
+    of a resilient pair is one more entry, numbered fabric.SECOND + id (ADR 0012)."""
     if not pop.get("cloud_interface") or pop.get("cloud_address") is None:
         return []
     clouds = [c for c in inv["circuits"] if c["kind"] == "cloud" and c["enabled"]]
+
+    def ids(c: dict) -> list[int]:
+        return [c["id"], fabric.SECOND + c["id"]] if c["secondary_peer_address"] else [c["id"]]
+
     out = []
     for c in clouds:
-        ours, theirs = fabric.inside_pair(c["inside_cidr"])
-        out.append(
-            {
-                "id": c["id"],
-                "name": fabric.ifname(c),
-                "if_id": c["id"],
-                "underlay_interface": pop["cloud_interface"],
-                "local_address": str(ipaddress.ip_interface(str(pop["cloud_address"])).ip),
-                "remote_address": str(c["peer_address"]),
-                "psk": c["psk"],
-                "ike_proposals": fabric.IKE_PROPOSALS,
-                "esp_proposals": fabric.ESP_PROPOSALS,
-                "inside_address": ours,
-                "peer_inside": theirs,
-                "peer_asn": c["peer_asn"],
-                "import_prefixes": [str(p) for p in c["cloud_prefixes"]],
-                "max_prefixes": fabric.MAX_PREFIXES,
-                "export_prefixes": _export_prefixes(inv, c),
-                # The cloud router: each cloud also learns the other clouds' routes.
-                "export_circuits": [o["id"] for o in clouds if o["id"] != c["id"]] if inv["cloud_to_cloud"] else [],
-                "shape_kbit": c["bandwidth_mbps"] * 1000,
-            }
-        )
+        # The cloud router: each cloud also learns the other clouds' routes (never its own twin's).
+        others = [i for o in clouds if o["id"] != c["id"] for i in ids(o)] if inv["cloud_to_cloud"] else []
+        tunnels = [(c["id"], c["peer_address"], c["inside_cidr"])]
+        if c["secondary_peer_address"]:
+            tunnels.append((fabric.SECOND + c["id"], c["secondary_peer_address"], c["secondary_inside_cidr"]))
+        for tid, peer, inside in tunnels:
+            ours, theirs = fabric.inside_pair(inside)
+            out.append(
+                {
+                    "id": tid,
+                    "name": f"vc{tid}",
+                    "if_id": tid,
+                    "underlay_interface": pop["cloud_interface"],
+                    "local_address": str(ipaddress.ip_interface(str(pop["cloud_address"])).ip),
+                    "remote_address": str(peer),
+                    "psk": c["psk"],
+                    "ike_proposals": fabric.IKE_PROPOSALS,
+                    "esp_proposals": fabric.ESP_PROPOSALS,
+                    "inside_address": ours,
+                    "peer_inside": theirs,
+                    "peer_asn": c["peer_asn"],
+                    "import_prefixes": [str(p) for p in c["cloud_prefixes"]],
+                    "max_prefixes": fabric.MAX_PREFIXES,
+                    "export_prefixes": _export_prefixes(inv, c),
+                    "export_circuits": others,
+                    "shape_kbit": c["bandwidth_mbps"] * 1000,
+                }
+            )
     return out
 
 
