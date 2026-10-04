@@ -1,7 +1,7 @@
 import { useRef, useState, type FormEvent } from "react";
 import { apiKeysPath, createApiKey, revokeApiKey, useApi, type ApiKey, type ApiKeyCreated } from "../api";
 import { ErrorNote } from "../components";
-import { useAction } from "../ui";
+import { RowActions, useAction } from "../ui";
 
 const EXPIRY: { label: string; days: number | null }[] = [
   { label: "Never", days: null },
@@ -63,19 +63,24 @@ export default function ApiKeys() {
   const keys = data ?? [];
 
   return (
-    <section className="card" style={{ maxWidth: 880, marginTop: 24 }}>
+    <section className="card" style={{ maxWidth: 880, marginTop: 24 }} aria-labelledby="api-keys-title">
       <div className="card-head">
-        <h2>API keys</h2>
+        <h2 id="api-keys-title">API keys</h2>
       </div>
-      <p className="muted" style={{ marginTop: 0 }}>
-        A key lets your own code, the ExaConnect Python SDK or Terraform act as you, with your access. Each key is shown only once, when you create it.
+      <p className="muted small" style={{ marginTop: 0 }}>
+        A key lets your own code, the ExaConnect Python SDK or Terraform act as you, with your access. It is shown once, when
+        you create it.
       </p>
 
       <ErrorNote error={error} />
-      {data && keys.length === 0 && <p className="muted">You have no API keys.</p>}
+      {data && keys.length === 0 && (
+        <div className="empty">
+          <p>You have no API keys yet. Create one below when your code or Terraform needs access.</p>
+        </div>
+      )}
       {keys.length > 0 && (
         <div className="table-wrap">
-          <table className="paths">
+          <table className="paths dt stack">
             <thead>
               <tr>
                 <th scope="col">Name</th>
@@ -83,7 +88,7 @@ export default function ApiKeys() {
                 <th scope="col">Created</th>
                 <th scope="col">Last used</th>
                 <th scope="col">Expires</th>
-                <th scope="col">
+                <th scope="col" className="actions">
                   <span className="sr-only">Actions</span>
                 </th>
               </tr>
@@ -91,21 +96,28 @@ export default function ApiKeys() {
             <tbody>
               {keys.map((k) => (
                 <tr key={k.id}>
-                  <td className="wrap">{k.name}</td>
-                  <td className="mono">{k.prefix}…</td>
-                  <td className="mono">{day(k.created_at)}</td>
-                  <td className="mono">{dayTime(k.last_used_at)}</td>
-                  <td className="mono">{day(k.expires_at)}</td>
-                  <td>
-                    <button
-                      type="button"
-                      className="button secondary small"
-                      onClick={() => onRevoke(k)}
+                  <td className="cell-wrap">
+                    <strong>{k.name}</strong>
+                    {revoking === k.id && <span className="sub">Revoking…</span>}
+                  </td>
+                  <td data-label="Key" className="mono">
+                    {k.prefix}…
+                  </td>
+                  <td data-label="Created" className="mono">
+                    {day(k.created_at)}
+                  </td>
+                  <td data-label="Last used" className="mono">
+                    {dayTime(k.last_used_at)}
+                  </td>
+                  <td data-label="Expires" className="mono">
+                    {day(k.expires_at)}
+                  </td>
+                  <td className="actions">
+                    <RowActions
+                      label={`key ${k.name}`}
                       disabled={revoke.busy}
-                      aria-label={`Revoke ${k.name}`}
-                    >
-                      {revoking === k.id ? "Revoking…" : "Revoke"}
-                    </button>
+                      items={[{ label: "Revoke key", danger: true, onSelect: () => onRevoke(k) }]}
+                    />
                   </td>
                 </tr>
               ))}

@@ -1,8 +1,8 @@
 import { Fragment } from "react";
 import { encryptionPath, useApi, type EncryptionCircuit, type EncryptionReport, type PathEncryption } from "../api";
-import { ErrorNote, Eyebrow } from "../components";
+import { ErrorNote } from "../components";
 import { useCustomer } from "../customer";
-import { Card } from "../ui";
+import { Card, PageHead } from "../ui";
 
 // Encryption report (ADR 0012, docs/protection-contract.md §3): which traffic is
 // encrypted, how, and since when. Read-only, for customers and admins alike.
@@ -58,13 +58,9 @@ export default function Encryption() {
   const data = report.data;
   return (
     <>
-      <div className="page-head">
-        <Eyebrow>Encryption</Eyebrow>
-        <h1>Encryption</h1>
-        <p className="muted">
-          Which of {current.name}'s traffic is encrypted, how, and since when. Updated every 30 seconds.
-        </p>
-      </div>
+      <PageHead eyebrow="Encryption" title="Encryption">
+        Which of {current.name}'s traffic is encrypted, how, and since when. Updated every 30 seconds.
+      </PageHead>
       <ErrorNote error={report.error} />
       {data && (
         <>
@@ -111,15 +107,14 @@ function Paths({ data }: { data: EncryptionReport }) {
   return (
     <Card title="Paths from your sites to the PoP">
       <p className="small muted" style={{ marginTop: 0 }}>
-        Each site has a WireGuard tunnel over every carrier link. <strong>Idle</strong> means no traffic has needed the tunnel
-        for over 3 minutes while the link is up: WireGuard only renews keys while traffic flows, so the next packet starts a
-        fresh handshake. It is not a fault.
+        Each site has a WireGuard tunnel over every carrier link. <strong>Idle</strong> is not a fault: no traffic has needed
+        the tunnel for 3 minutes, and the next packet starts a fresh handshake.
       </p>
       {data.paths.length === 0 ? (
         <p className="muted">No paths yet.</p>
       ) : (
         <div className="table-wrap">
-          <table className="paths">
+          <table className="paths dt">
             <thead>
               <tr>
                 <th scope="col">Site</th>
@@ -139,7 +134,7 @@ function Paths({ data }: { data: EncryptionReport }) {
                   <td className="small" style={{ minWidth: 180 }}>
                     {p.cipher || "–"}
                   </td>
-                  <td className="mono small">{ageAgo(p.handshake_age_s)}</td>
+                  <td className="mono small nowrap">{ageAgo(p.handshake_age_s)}</td>
                   <td>
                     <Status status={p.status} />
                   </td>
@@ -164,7 +159,7 @@ function Circuits({ data }: { data: EncryptionReport }) {
         <p className="muted">No cloud circuits.</p>
       ) : (
         <div className="table-wrap">
-          <table className="paths">
+          <table className="paths dt">
             <thead>
               <tr>
                 <th scope="col">Circuit</th>
@@ -201,7 +196,7 @@ function Circuits({ data }: { data: EncryptionReport }) {
                   <td style={{ minWidth: 140 }}>
                     <Cipher value={c.esp_cipher} />
                   </td>
-                  <td className="mono small">{c.status === "down" ? "–" : ageAgo(c.established_s, "Unknown")}</td>
+                  <td className="mono small nowrap">{c.status === "down" ? "–" : ageAgo(c.established_s, "Unknown")}</td>
                   <td>
                     <Status status={c.status} />
                   </td>
@@ -225,7 +220,7 @@ function Layer2({ data }: { data: EncryptionReport }) {
   return (
     <Card title="Layer 2 circuits between sites">
       <div className="table-wrap">
-        <table className="paths">
+        <table className="paths dt">
           <thead>
             <tr>
               <th scope="col">Circuit</th>

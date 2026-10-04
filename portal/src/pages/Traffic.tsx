@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from "react";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import { api, useApi, type CustomerSettings } from "../api";
-import { ErrorNote, Eyebrow, StatusPill, ago } from "../components";
+import { ErrorNote, StatusPill, ago } from "../components";
 import { useCustomer, who } from "../customer";
-import { Card, useAction } from "../ui";
+import { Card, PageHead, RowActions, Tabs, useAction } from "../ui";
 import { Classes, PRIORITY_LABEL, type Priority } from "./Classes";
 
 // Traffic: what the network has seen leaving each site, the customer's own
@@ -11,20 +11,15 @@ import { Classes, PRIORITY_LABEL, type Priority } from "./Classes";
 export default function Traffic() {
   return (
     <>
-      <div className="page-head">
-        <Eyebrow>Traffic</Eyebrow>
-        <h1>Applications and priorities</h1>
-        <p className="muted">
-          Decide which traffic matters most. Rules put applications, addresses, VLANs and websites into classes; each class
-          has a queue priority, an SLA and a preferred path. The network also watches what leaves each site and suggests
-          rules for applications it recognises. It looks at addresses, ports and packet rates only, never at content.
-        </p>
-      </div>
-      <nav className="tabs" aria-label="Traffic sections">
+      <PageHead eyebrow="Traffic" title="Applications and priorities">
+        Decide which traffic matters most. Rules put applications into classes, and each class has a priority, an SLA and a
+        preferred path.
+      </PageHead>
+      <Tabs label="Traffic sections">
         <NavLink to="/traffic/applications">Seen on your network</NavLink>
         <NavLink to="/traffic/rules">Your rules</NavLink>
         <NavLink to="/traffic/classes">Classes</NavLink>
-      </nav>
+      </Tabs>
       <Routes>
         <Route index element={<Navigate to="applications" replace />} />
         <Route path="applications" element={<Detections />} />
@@ -97,9 +92,9 @@ function Detections() {
           <strong>Prioritise known applications automatically.</strong>
         </label>
         <p className="small muted" style={{ margin: "4px 0 0" }}>
-          Applications the network recognises with confidence, such as Teams, Zoom or Citrix, get a rule for their site
-          without asking. Anything it is less sure of still waits for you here. Every rule it creates shows in Your rules
-          and the audit log.
+          Applications the network recognises with confidence, such as Teams, Zoom or Citrix, get a rule without asking.
+          Anything less certain waits for you here. The network looks at addresses, ports and packet rates only, never at
+          content.
         </p>
       </div>
       <ErrorNote error={list.error ?? act.error} />
@@ -209,9 +204,9 @@ function Rules() {
         </button>
       }
     >
-      <p className="muted small">
-        Rules are checked in order, before the classes' own DSCP and port matches. Within a rule, everything you fill in must
-        match; a website or a destination address both count as the destination. Sites get changes within 10 seconds.
+      <p className="muted small" style={{ marginTop: 0 }}>
+        Checked in order, before each class's own matches. Everything you fill in on a rule must match. Sites pick up changes
+        within 10 seconds.
       </p>
       <ErrorNote error={list.error ?? act.error} />
       {editing && (
@@ -228,29 +223,38 @@ function Rules() {
         />
       )}
       {(list.data ?? []).length === 0 ? (
-        <p className="muted">No rules yet. Add one, or apply a suggestion from Seen on your network.</p>
+        <div className="empty">
+          <p>No rules yet. Add one, or apply a suggestion from Seen on your network.</p>
+          {editing !== "new" && (
+            <button className="button small" onClick={() => setEditing("new")}>
+              Add a rule
+            </button>
+          )}
+        </div>
       ) : (
         <div className="table-wrap">
-          <table className="paths">
+          <table className="paths dt stack">
             <thead>
               <tr>
                 <th scope="col">Rule</th>
                 <th scope="col">Traffic</th>
                 <th scope="col">Class</th>
                 <th scope="col">Sites</th>
-                <th scope="col">Actions</th>
+                <th scope="col" className="actions">
+                  <span className="sr-only">Actions</span>
+                </th>
               </tr>
             </thead>
             <tbody>
               {(list.data ?? []).map((r) => (
-                <tr key={r.id} className={r.enabled ? undefined : "muted"}>
+                <tr key={r.id} className={r.enabled ? undefined : "row-off"}>
                   <td>
                     <strong>{r.name}</strong>
-                    <div className="small muted">
+                    <span className="sub">
                       {r.enabled ? "On" : "Off"} · {r.source === "detected" ? "from a suggestion" : "added"} by {who(r.created_by)}
-                    </div>
+                    </span>
                   </td>
-                  <td className="small">
+                  <td data-label="Traffic" className="small cell-wrap">
                     {r.apps.length > 0 && <div>{r.apps.map(appName).join(", ")}</div>}
                     {r.domains.length > 0 && <div className="mono">{r.domains.join(", ")}</div>}
                     {r.dst_subnets.length > 0 && <div className="mono">to {r.dst_subnets.join(", ")}</div>}
@@ -259,18 +263,26 @@ function Rules() {
                     {r.vlans.length > 0 && <div>VLAN {r.vlans.join(", ")}</div>}
                     {r.dscp.length > 0 && <div>DSCP {r.dscp.join(", ")}</div>}
                   </td>
-                  <td className="mono">{r.class_name}</td>
-                  <td className="small">{r.site_ids.length ? r.site_ids.map(siteName).join(", ") : "All sites"}</td>
-                  <td>
-                    <button className="button secondary small" onClick={() => setEditing(r)}>
-                      Edit
-                    </button>{" "}
-                    <button className="button secondary small" disabled={act.busy} onClick={() => toggle(r)}>
-                      {r.enabled ? "Turn off" : "Turn on"}
-                    </button>{" "}
-                    <button className="button secondary small" disabled={act.busy} onClick={() => remove(r)}>
-                      Delete
-                    </button>
+                  <td data-label="Class" className="mono">
+                    {r.class_name}
+                  </td>
+                  <td data-label="Sites" className="small">
+                    {r.site_ids.length ? r.site_ids.map(siteName).join(", ") : "All sites"}
+                  </td>
+                  <td className="actions">
+                    <RowActions
+                      label={r.name}
+                      disabled={act.busy}
+                      primary={
+                        <button className="button secondary small" aria-label={`Edit ${r.name}`} onClick={() => setEditing(r)}>
+                          Edit
+                        </button>
+                      }
+                      items={[
+                        { label: r.enabled ? "Turn off" : "Turn on", onSelect: () => toggle(r) },
+                        { label: "Delete rule", danger: true, onSelect: () => remove(r) },
+                      ]}
+                    />
                   </td>
                 </tr>
               ))}

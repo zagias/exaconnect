@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { api, useApi } from "../api";
 import { ErrorNote } from "../components";
 import { useCustomer } from "../customer";
-import { Card, useAction } from "../ui";
+import { Card, RowActions, useAction } from "../ui";
 
 // ---- Application classes and SLA policies ----
 
@@ -63,10 +63,9 @@ export function Classes() {
         </button>
       }
     >
-      <p className="muted small">
-        A class sets how its traffic is treated: its place in the queue when a link is full, the SLA the routing engine
-        keeps it within, and the path it prefers. Traffic rules decide what goes in each class; a class's own DSCP, ports and
-        subnets are matched after the rules. Sites get changes within 10 seconds.
+      <p className="muted small" style={{ marginTop: 0 }}>
+        A class sets its traffic's place in the queue, the SLA the routing engine keeps it within, and the path it prefers.
+        Its own DSCP, ports and subnets are matched after your traffic rules.
       </p>
       <ErrorNote error={list.error ?? act.error} />
       {editing && (
@@ -81,18 +80,20 @@ export function Classes() {
         />
       )}
       <div className="table-wrap">
-        <table className="paths">
+        <table className="paths dt stack">
           <thead>
             <tr>
               <th scope="col">Class</th>
               <th scope="col">Priority</th>
               <th scope="col">Prefers</th>
               <th scope="col">Match</th>
-              <th scope="col">Latency</th>
-              <th scope="col">Jitter</th>
-              <th scope="col">Loss</th>
+              <th scope="col" className="num">Latency</th>
+              <th scope="col" className="num">Jitter</th>
+              <th scope="col" className="num">Loss</th>
               <th scope="col">Satellite</th>
-              <th scope="col">Actions</th>
+              <th scope="col" className="actions">
+                <span className="sr-only">Actions</span>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -100,28 +101,43 @@ export function Classes() {
               <tr key={c.name}>
                 <td>
                   <strong className="mono">{c.name}</strong>
-                  <div className="small muted">{c.description}</div>
+                  {c.description && <span className="sub">{c.description}</span>}
                 </td>
-                <td className="small">{PRIORITY_LABEL[c.priority]}</td>
-                <td className="small">{pathLabel(paths.data ?? [], c.preferred_path)}</td>
-                <td className="small">
+                <td data-label="Priority" className="small">
+                  {PRIORITY_LABEL[c.priority]}
+                </td>
+                <td data-label="Prefers" className="small">
+                  {pathLabel(paths.data ?? [], c.preferred_path)}
+                </td>
+                <td data-label="Match" className="small cell-wrap">
                   {c.dscp.length > 0 && <div>DSCP {c.dscp.join(", ")}</div>}
                   {c.ports && <div className="mono">{c.ports}</div>}
                   {c.subnets.length > 0 && <div className="mono">{c.subnets.join(", ")}</div>}
+                  {c.dscp.length === 0 && !c.ports && c.subnets.length === 0 && <span className="muted">Rules only</span>}
                 </td>
-                <td className="mono">{val(c.max_latency_ms, "ms")}</td>
-                <td className="mono">{val(c.max_jitter_ms, "ms")}</td>
-                <td className="mono">{val(c.max_loss_pct, "%")}</td>
-                <td>{c.allow_satellite ? "In Storm Mode" : "Never"}</td>
-                <td>
-                  <button className="button secondary small" onClick={() => setEditing(c)}>
-                    Edit
-                  </button>{" "}
-                  {!c.builtin && (
-                    <button className="button secondary small" onClick={() => remove(c)}>
-                      Delete
-                    </button>
-                  )}
+                <td data-label="Latency" className="num">
+                  {val(c.max_latency_ms, "ms")}
+                </td>
+                <td data-label="Jitter" className="num">
+                  {val(c.max_jitter_ms, "ms")}
+                </td>
+                <td data-label="Loss" className="num">
+                  {val(c.max_loss_pct, "%")}
+                </td>
+                <td data-label="Satellite" className="small">
+                  {c.allow_satellite ? "In Storm Mode" : "Never"}
+                </td>
+                <td className="actions">
+                  <RowActions
+                    label={`the ${c.name} class`}
+                    disabled={act.busy}
+                    primary={
+                      <button className="button secondary small" aria-label={`Edit ${c.name}`} onClick={() => setEditing(c)}>
+                        Edit
+                      </button>
+                    }
+                    items={c.builtin ? [] : [{ label: "Delete class", danger: true, onSelect: () => remove(c) }]}
+                  />
                 </td>
               </tr>
             ))}

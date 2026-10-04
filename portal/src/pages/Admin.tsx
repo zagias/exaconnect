@@ -2,9 +2,9 @@ import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import { api, useApi, type NodeRow } from "../api";
 import { useAuth } from "../auth";
-import { ErrorNote, Eyebrow, StatusPill, ago } from "../components";
+import { ErrorNote, StatusPill, ago } from "../components";
 import { useCustomer, who } from "../customer";
-import { Card, useAction } from "../ui";
+import { Card, PageHead, RowActions, Tabs, useAction } from "../ui";
 import { Classes } from "./Classes";
 import { PartnersAdmin } from "./PartnersAdmin";
 import { ProtectionAdmin } from "./ProtectionAdmin";
@@ -14,11 +14,10 @@ import { ProtectionAdmin } from "./ProtectionAdmin";
 export default function Admin() {
   return (
     <>
-      <div className="page-head">
-        <Eyebrow>Admin</Eyebrow>
-        <h1>Administration</h1>
-      </div>
-      <nav className="tabs" aria-label="Admin sections">
+      <PageHead eyebrow="Admin" title="Administration">
+        Agents, customers and sites, classes, partners, protection, users and the audit log.
+      </PageHead>
+      <Tabs label="Admin sections">
         <NavLink to="/admin/agents">Agents</NavLink>
         <NavLink to="/admin/sites">Sites and links</NavLink>
         <NavLink to="/admin/classes">Classes and SLA</NavLink>
@@ -27,7 +26,7 @@ export default function Admin() {
         <NavLink to="/admin/users">Users</NavLink>
         <NavLink to="/admin/settings">Settings</NavLink>
         <NavLink to="/admin/audit">Audit log</NavLink>
-      </nav>
+      </Tabs>
       <Routes>
         <Route index element={<Navigate to="agents" replace />} />
         <Route path="agents" element={<Agents />} />
@@ -71,7 +70,7 @@ function Agents() {
     <Card title="Agents" note={<span className="muted small">Each agent polls for its desired state every 10 seconds.</span>}>
       <ErrorNote error={error} />
       <div className="table-wrap">
-        <table className="paths">
+        <table className="paths dt">
           <thead>
             <tr>
               <th scope="col">Node</th>
@@ -86,7 +85,7 @@ function Agents() {
               <tr key={n.id}>
                 <td className="mono">{n.name}</td>
                 <td>{n.role === "pop" ? "PoP" : "Site"}</td>
-                <td>{ago(n.last_seen)}</td>
+                <td className="nowrap">{ago(n.last_seen)}</td>
                 <td>
                   {n.apply_ok === false ? (
                     <StatusPill health="bad">v{n.desired_version} failed</StatusPill>
@@ -97,7 +96,7 @@ function Agents() {
                       v{n.applied_version} of v{n.desired_version ?? "–"}
                     </StatusPill>
                   )}
-                  {n.apply_error && <div className="muted small">{n.apply_error}</div>}
+                  {n.apply_error && <span className="sub">{n.apply_error}</span>}
                 </td>
                 <td className="mono muted">{n.agent_version || "–"}</td>
               </tr>
@@ -105,7 +104,7 @@ function Agents() {
             {data?.length === 0 && (
               <tr>
                 <td colSpan={5} className="muted">
-                  No agents yet. Add a site, issue an enrolment token and install the agent.
+                  No agents yet. Add a site in Sites and links, issue an enrolment token and install the agent.
                 </td>
               </tr>
             )}
@@ -212,13 +211,15 @@ function SitesAdmin() {
             />
           )}
           <div className="table-wrap">
-            <table className="paths">
+            <table className="paths dt stack">
               <thead>
                 <tr>
                   <th scope="col">Site</th>
                   <th scope="col">Agent</th>
                   <th scope="col">Links</th>
-                  <th scope="col">Actions</th>
+                  <th scope="col" className="actions">
+                    <span className="sr-only">Actions</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -226,12 +227,21 @@ function SitesAdmin() {
                   <tr key={s.id}>
                     <td>
                       <strong className="mono">{s.name}</strong> {s.kind === "pop" && <span className="tag">PoP</span>}
-                      <div className="small muted">
+                      <span className="sub">
                         {s.location || "No location"} · AS{s.asn} · {s.lan_prefixes.join(", ") || "no LAN prefixes"}
-                      </div>
+                      </span>
                     </td>
-                    <td>{s.node ? <span title={`Last seen ${ago(s.last_seen)}`}>{s.node}</span> : <span className="muted">Not enrolled</span>}</td>
-                    <td>
+                    <td data-label="Agent">
+                      {s.node ? (
+                        <>
+                          <span className="mono">{s.node}</span>
+                          <span className="sub">Seen {ago(s.last_seen)}</span>
+                        </>
+                      ) : (
+                        <span className="pill off">Not enrolled</span>
+                      )}
+                    </td>
+                    <td data-label="Links">
                       {s.links.map((l) => (
                         <div key={l.id} className="small">
                           <button className="link" onClick={() => setLinkFor({ site: s, link: l })}>
@@ -243,18 +253,19 @@ function SitesAdmin() {
                       ))}
                       {s.links.length === 0 && <span className="muted small">No links</span>}
                     </td>
-                    <td>
-                      <div className="form-actions">
-                        <button className="button secondary small" onClick={() => setEditing(s)}>
-                          Edit
-                        </button>{" "}
-                        <button className="button secondary small" onClick={() => setLinkFor({ site: s, link: null })}>
-                          Add link
-                        </button>{" "}
-                        <button className="button secondary small" disabled={act.busy} onClick={() => issue(s)}>
-                          Enrolment token
-                        </button>
-                      </div>
+                    <td className="actions">
+                      <RowActions
+                        label={s.name}
+                        primary={
+                          <button className="button secondary small" aria-label={`Edit ${s.name}`} onClick={() => setEditing(s)}>
+                            Edit
+                          </button>
+                        }
+                        items={[
+                          { label: "Add a link", onSelect: () => setLinkFor({ site: s, link: null }) },
+                          { label: "Issue enrolment token", disabled: act.busy, onSelect: () => issue(s) },
+                        ]}
+                      />
                     </td>
                   </tr>
                 ))}
@@ -279,7 +290,7 @@ function NewCustomer({ onDone }: { onDone: () => void }) {
     });
   };
   return (
-    <Card title="Customers" note={<span className="muted small">Pick the customer to work on at the top of the page.</span>}>
+    <Card title="Customers" note={<span className="muted small">With more than one customer, choose which to work on in the top bar (in the menu on phones).</span>}>
       <form className="form" onSubmit={submit}>
         <label>
           New customer organisation
@@ -525,6 +536,8 @@ function LinkForm({ site, link, onDone }: { site: SiteRow; link: LinkRow | null;
 
 // ---- Users ----
 
+const ROLE_WORD: Record<string, string> = { admin: "Admin", customer: "Customer", carrier: "Carrier (read-only)" };
+
 interface UserRow {
   id: string;
   email: string;
@@ -574,9 +587,8 @@ function UsersAdmin() {
 
   return (
     <Card title="Users">
-      <p className="muted small">
-        Admins see everything. Customer users see their own organisation. Carrier users see only their own links on a
-        read-only metering page.
+      <p className="muted small" style={{ marginTop: 0 }}>
+        Admins see everything. Customer users see their own organisation. Carrier users see only their own links, read-only.
       </p>
       <form className="form" onSubmit={create}>
         <label>
@@ -623,33 +635,40 @@ function UsersAdmin() {
       </form>
       <ErrorNote error={users.error ?? act.error} />
       {shown && <Secret label={`One-time password for ${shown.email}. Ask them to change it after signing in`} value={shown.password} />}
-      <div className="table-wrap">
-        <table className="paths">
+      <div className="table-wrap" style={{ marginTop: 24 }}>
+        <table className="paths dt stack">
           <thead>
             <tr>
               <th scope="col">Email</th>
               <th scope="col">Role</th>
               <th scope="col">For</th>
               <th scope="col">Last sign-in</th>
-              <th scope="col">Actions</th>
+              <th scope="col" className="actions">
+                <span className="sr-only">Actions</span>
+              </th>
             </tr>
           </thead>
           <tbody>
             {(users.data ?? []).map((u) => (
               <tr key={u.id}>
-                <td>{u.email}</td>
-                <td>{u.role}</td>
-                <td>{u.customer ?? u.carrier ?? "All"}</td>
-                <td>{u.last_login ? ago(u.last_login) : "Never"}</td>
-                <td>
-                  <button className="button secondary small" onClick={() => reset(u)}>
-                    Reset password
-                  </button>{" "}
-                  {u.email !== user?.email && (
-                    <button className="button secondary small" onClick={() => remove(u)}>
-                      Delete
-                    </button>
-                  )}
+                <td className="cell-wrap">
+                  {u.email}
+                  {u.email === user?.email && <span className="sub">You</span>}
+                </td>
+                <td data-label="Role">{ROLE_WORD[u.role] ?? u.role}</td>
+                <td data-label="For">{u.customer ?? u.carrier ?? "All"}</td>
+                <td data-label="Last sign-in" className="nowrap">
+                  {u.last_login ? ago(u.last_login) : "Never"}
+                </td>
+                <td className="actions">
+                  <RowActions
+                    label={u.email}
+                    disabled={act.busy}
+                    items={[
+                      { label: "Reset password", onSelect: () => reset(u) },
+                      ...(u.email !== user?.email ? [{ label: "Delete user", danger: true, onSelect: () => remove(u) }] : []),
+                    ]}
+                  />
                 </td>
               </tr>
             ))}
@@ -752,7 +771,7 @@ function AuditLog() {
     <Card title="Audit log" note={<span className="muted small">Every write, sign-in and enrolment, newest first.</span>}>
       <ErrorNote error={error} />
       <div className="table-wrap">
-        <table className="paths">
+        <table className="paths dt compact small">
           <thead>
             <tr>
               <th scope="col">When</th>
@@ -765,11 +784,11 @@ function AuditLog() {
           <tbody>
             {(data ?? []).map((a, i) => (
               <tr key={i}>
-                <td className="small">{new Date(a.at).toLocaleString()}</td>
-                <td className="small">{who(a.actor)}</td>
-                <td className="mono small">{a.action}</td>
-                <td className="small">{a.target}</td>
-                <td className="mono small muted">{a.detail ? JSON.stringify(a.detail).slice(0, 160) : ""}</td>
+                <td className="mono nowrap">{new Date(a.at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", second: "2-digit" })}</td>
+                <td>{who(a.actor)}</td>
+                <td className="mono">{a.action}</td>
+                <td className="cell-wrap">{a.target}</td>
+                <td className="mono muted cell-wrap">{a.detail ? JSON.stringify(a.detail).slice(0, 160) : ""}</td>
               </tr>
             ))}
           </tbody>

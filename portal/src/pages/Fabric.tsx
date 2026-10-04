@@ -17,9 +17,9 @@ import {
   type CloudProviders,
   type CustomerSettings,
 } from "../api";
-import { ErrorNote, Eyebrow, LineChart, fmt } from "../components";
+import { ErrorNote, LineChart, fmt } from "../components";
 import { useCustomer, who } from "../customer";
-import { Card, useAction } from "../ui";
+import { Card, PageHead, RowActions, useAction } from "../ui";
 
 // ExaConnect Fabric: virtual circuits to clouds and between sites (ADR 0009,
 // docs/fabric-contract.md). Bandwidth can change at any time and is billed by
@@ -67,22 +67,34 @@ export default function Fabric() {
   const classes = useApi<{ name: string }[]>(current ? `/classes?customer_id=${current.id}` : null, 0);
   const [form, setForm] = useState<"cloud" | "site" | null>(null);
   const [open, setOpen] = useState<number | null>(null);
+  const rowAct = useAction();
   if (!current) return null;
   const circuits = list.data ?? [];
   const done = () => {
     setForm(null);
     list.reload();
   };
+  const switchCircuit = (c: Circuit) => {
+    if (c.enabled && !window.confirm(switchOffQuestion(c))) return;
+    rowAct.run(async () => {
+      await updateCircuit(current.id, c.id, { enabled: !c.enabled });
+      list.reload();
+    });
+  };
+  const removeCircuit = (c: Circuit) => {
+    if (!window.confirm(deleteQuestion(c))) return;
+    rowAct.run(async () => {
+      await deleteCircuit(current.id, c.id);
+      if (open === c.id) setOpen(null);
+      list.reload();
+    });
+  };
   return (
     <>
-      <div className="page-head">
-        <Eyebrow>ExaConnect Fabric</Eyebrow>
-        <h1>Virtual circuits</h1>
-        <p className="muted">
-          Private circuits from your sites to your clouds, and between your sites, through ExaCarib's PoP. Change the
-          bandwidth whenever you need to; you pay by the hour for what is set.
-        </p>
-      </div>
+      <PageHead eyebrow="ExaConnect Fabric" title="Virtual circuits">
+        Private circuits to your clouds and between your sites, through ExaCarib's PoP. Change the bandwidth at any time;
+        you pay by the hour.
+      </PageHead>
       <CloudRouter customerId={current.id} />
       <Card
         title={`Circuits for ${current.name}`}
@@ -101,7 +113,7 @@ export default function Fabric() {
           </div>
         }
       >
-        <ErrorNote error={list.error} />
+        <ErrorNote error={list.error ?? rowAct.error} />
         {form === "cloud" && (
           <CloudForm
             customerId={current.id}
@@ -115,10 +127,17 @@ export default function Fabric() {
         )}
         {form === "site" && <SiteForm customerId={current.id} sites={current.sites} onDone={done} onCancel={() => setForm(null)} />}
         {list.data && circuits.length === 0 ? (
-          <p className="muted">No circuits yet. Connect a cloud, or join two of your sites at layer 2.</p>
+          <div className="empty">
+            <p>No circuits yet. Connect a cloud, or join two of your sites at layer 2.</p>
+            {form === null && (
+              <button className="button small" onClick={() => setForm("cloud")}>
+                Connect a cloud
+              </button>
+            )}
+          </div>
         ) : (
           <div className="table-wrap">
-            <table className="paths">
+            <table className="paths dt wide">
               <thead>
                 <tr>
                   <th scope="col">Circuit</th>
@@ -127,7 +146,9 @@ export default function Fabric() {
                   <th scope="col">Status</th>
                   <th scope="col">Health</th>
                   <th scope="col" className="num">This month</th>
-                  <th scope="col">Actions</th>
+                  <th scope="col" className="actions">
+                    <span className="sr-only">Actions</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -138,9 +159,12 @@ export default function Fabric() {
                       providers={providers.data ?? {}}
                       open={open === c.id}
                       onToggle={() => setOpen(open === c.id ? null : c.id)}
+                      busy={rowAct.busy}
+                      onSwitch={() => switchCircuit(c)}
+                      onDelete={() => removeCircuit(c)}
                     />
                     {open === c.id && (
-                      <tr>
+                      <tr className="detail-row">
                         <td colSpan={7}>
                           <CircuitDetail customerId={current.id} c={c} reload={list.reload} onDeleted={() => setOpen(null)} />
                         </td>
@@ -171,7 +195,7 @@ function CloudRouter({ customerId }: { customerId: string }) {
       reload();
     });
   return (
-    <div className="card-inset" style={{ marginBottom: 24 }}>
+    <div className="card" style={{ marginBottom: 24, padding: "16px 24px" }}>
       <label className="check">
         <input type="checkbox" checked={on} disabled={act.busy || !settings.data} onChange={(e) => flip(e.target.checked)} />{" "}
         <strong>Cloud router</strong>
@@ -223,21 +247,27 @@ function CircuitRow({
   providers,
   open,
   onToggle,
+  busy,
+  onSwitch,
+  onDelete,
 }: {
   c: Circuit;
   providers: CloudProviders;
   open: boolean;
   onToggle: () => void;
+  busy: boolean;
+  onSwitch: () => void;
+  onDelete: () => void;
 }) {
   const st = STATUS[c.status] ?? STATUS.provisioning;
   return (
-    <tr className={open ? "selected" : undefined}>
+    <tr className={open ? "selected" : c.enabled ? undefined : "row-off"}>
       <td>
         <strong>{c.name}</strong> {c.resilient && <span className="tag">Resilient</span>}
-        <div className="small muted">{c.kind === "cloud" ? "To a cloud" : "Between sites"}</div>
+        <span className="sub">{c.kind === "cloud" ? "To a cloud" : "Between sites"}</span>
       </td>
       <td className="small">{ends(c, providers)}</td>
-      <td className="num mono">{mbps(c.bandwidth_mbps)}</td>
+      <td className="num">{mbps(c.bandwidth_mbps)}</td>
       <td>
         <span className={`pill ${st.cls}`}>{st.word}</span>
       </td>
@@ -270,17 +300,35 @@ function CircuitRow({
           </>
         )}
       </td>
-      <td className="money">{usd(c.month_to_date)}</td>
-      <td>
-        <button className="button secondary small" aria-expanded={open} onClick={onToggle}>
-          {open ? "Close" : "Manage"}
-        </button>
+      <td className="num">{usd(c.month_to_date)}</td>
+      <td className="actions">
+        <RowActions
+          label={c.name}
+          disabled={busy}
+          primary={
+            <button className="button secondary small" aria-expanded={open} aria-label={`${open ? "Close" : "Manage"} ${c.name}`} onClick={onToggle}>
+              {open ? "Close" : "Manage"}
+            </button>
+          }
+          items={[
+            { label: c.enabled ? "Switch off" : "Switch on", onSelect: onSwitch },
+            { label: "Delete circuit", danger: true, onSelect: onDelete },
+          ]}
+        />
       </td>
     </tr>
   );
 }
 
 // ---- Expanded circuit: bandwidth, on/off, key, delete, charges and charts ----
+
+const switchOffQuestion = (c: Circuit) =>
+  `Switch off ${c.name}? Traffic on it stops within 10 seconds. The bandwidth stays reserved and billed until you delete the circuit.`;
+
+const deleteQuestion = (c: Circuit) =>
+  c.kind === "cloud"
+    ? `Delete ${c.name}? The tunnel to the cloud comes down within 10 seconds and billing stops. This can't be undone.`
+    : `Delete ${c.name}? The VLAN stops being carried between ${c.a_site} and ${c.b_site} within 10 seconds and billing stops. This can't be undone.`;
 
 function CircuitDetail({
   customerId,
@@ -315,18 +363,11 @@ function CircuitDetail({
     change({ psk: key }, "New key saved. The tunnel reconnects with it within 10 seconds.");
   };
   const toggle = () => {
-    if (c.enabled) {
-      const q = `Switch off ${c.name}? Traffic on it stops within 10 seconds. The bandwidth stays reserved and billed until you delete the circuit.`;
-      if (!window.confirm(q)) return;
-    }
+    if (c.enabled && !window.confirm(switchOffQuestion(c))) return;
     change({ enabled: !c.enabled }, c.enabled ? "Switched off." : "Switched on. It comes up within 10 seconds.");
   };
   const remove = () => {
-    const q =
-      c.kind === "cloud"
-        ? `Delete ${c.name}? The tunnel to the cloud comes down within 10 seconds and billing stops. This can't be undone.`
-        : `Delete ${c.name}? The VLAN stops being carried between ${c.a_site} and ${c.b_site} within 10 seconds and billing stops. This can't be undone.`;
-    if (!window.confirm(q)) return;
+    if (!window.confirm(deleteQuestion(c))) return;
     act.run(async () => {
       await deleteCircuit(customerId, c.id);
       onDeleted();
@@ -382,8 +423,8 @@ function CircuitDetail({
             <button className={c.enabled ? "button secondary small" : "button small"} disabled={act.busy} onClick={toggle}>
               {c.enabled ? "Switch off" : "Switch on"}
             </button>
-            <button className="button danger small" disabled={act.busy} onClick={remove}>
-              Delete
+            <button className="button danger-text small" disabled={act.busy} onClick={remove}>
+              Delete circuit
             </button>
           </div>
           {saved && (
@@ -524,7 +565,7 @@ function Tunnels({ c }: { c: Circuit }) {
         {tunnels.length > 1 ? "Tunnels" : "Tunnel"} {c.resilient && <span className="tag">Resilient</span>}
       </h3>
       <div className="table-wrap" style={{ marginBottom: 16 }}>
-        <table className="paths small">
+        <table className="paths dt compact small">
           <thead>
             <tr>
               <th scope="col">Tunnel</th>
@@ -578,7 +619,7 @@ function Charges({ customerId, c }: { customerId: string; c: Circuit }) {
       <h3 style={{ marginTop: 0 }}>Charges this month</h3>
       <ErrorNote error={error} />
       {data && (
-        <table className="paths small">
+        <table className="paths dt compact small">
           <thead>
             <tr>
               <th scope="col" className="num">Speed</th>

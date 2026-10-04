@@ -69,7 +69,7 @@ def main() -> int:
         page.fill('input[type="password"]', os.environ["E2E_PASSWORD"])
         page.click('button[type="submit"]')
         try:
-            page.wait_for_selector("nav", timeout=15000)
+            page.wait_for_selector(".shell main#main", timeout=15000)
             ok("signed in through the browser")
         except Exception:
             bad("sign-in did not reach the portal")

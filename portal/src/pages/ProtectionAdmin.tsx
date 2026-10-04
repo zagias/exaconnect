@@ -11,7 +11,7 @@ import {
 } from "../api";
 import { ErrorNote } from "../components";
 import { who } from "../customer";
-import { Card, useAction } from "../ui";
+import { Card, RowActions, useAction } from "../ui";
 import { DROP_KINDS, protectionLimits } from "./Internet";
 
 // Admin: DDoS protection on the PoP's shared public address (ADR 0012,
@@ -149,7 +149,7 @@ function Dropped({ data }: { data: ProtectionAdminState }) {
       <div className="grid">
         <div className="span-6">
           <div className="table-wrap">
-            <table className="paths small">
+            <table className="paths dt compact small">
               <thead>
                 <tr>
                   <th scope="col">Dropped</th>
@@ -160,7 +160,7 @@ function Dropped({ data }: { data: ProtectionAdminState }) {
                 {DROP_KINDS.map((k) => (
                   <tr key={k.key}>
                     <td>{k.label}</td>
-                    <td className="num mono">{count(data.dropped?.[k.key])}</td>
+                    <td className="num">{count(data.dropped?.[k.key])}</td>
                   </tr>
                 ))}
               </tbody>
@@ -168,14 +168,14 @@ function Dropped({ data }: { data: ProtectionAdminState }) {
           </div>
         </div>
         <div className="span-6">
-          <h3 style={{ marginTop: 0 }}>
+          <h3 style={{ marginTop: 0, marginBottom: 8 }}>
             Blocked automatically: <span className="mono">{auto.length}</span>
           </h3>
           {auto.length === 0 ? (
             <p className="small muted">No source is over the limit right now.</p>
           ) : (
             <div className="table-wrap">
-              <table className="paths small">
+              <table className="paths dt compact small">
                 <thead>
                   <tr>
                     <th scope="col">Address</th>
@@ -186,7 +186,7 @@ function Dropped({ data }: { data: ProtectionAdminState }) {
                   {auto.map((a) => (
                     <tr key={a.address}>
                       <td className="mono">{a.address}</td>
-                      <td className="num mono">{timeLeft(a.expires_s)}</td>
+                      <td className="num">{timeLeft(a.expires_s)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -248,39 +248,45 @@ function Blocklist({ list, reload }: { list: BlockedSource[]; reload: () => void
         <p className="muted">Nothing on the block list.</p>
       ) : (
         <div className="table-wrap">
-          <table className="paths">
+          <table className="paths dt stack">
             <thead>
               <tr>
                 <th scope="col">Address or range</th>
                 <th scope="col">Reason</th>
                 <th scope="col">Added</th>
                 <th scope="col">Until</th>
-                <th scope="col">Actions</th>
+                <th scope="col" className="actions">
+                  <span className="sr-only">Actions</span>
+                </th>
               </tr>
             </thead>
             <tbody>
               {list.map((b) => (
                 <tr key={b.id}>
                   <td className="mono">{b.prefix}</td>
-                  <td className="small">{b.reason || "–"}</td>
-                  <td className="small">
-                    {when(b.created_at)}
-                    <div className="muted">by {who(b.created_by)}</div>
+                  <td data-label="Reason" className="small cell-wrap">
+                    {b.reason || "–"}
                   </td>
-                  <td className="small">
+                  <td data-label="Added" className="small">
+                    {when(b.created_at)}
+                    <span className="sub">by {who(b.created_by)}</span>
+                  </td>
+                  <td data-label="Until" className="small">
                     {b.expires_at ? (
                       <>
                         {when(b.expires_at)}
-                        <div className="muted">{timeLeft((new Date(b.expires_at).getTime() - Date.now()) / 1000)} left</div>
+                        <span className="sub">{timeLeft((new Date(b.expires_at).getTime() - Date.now()) / 1000)} left</span>
                       </>
                     ) : (
                       "Until removed"
                     )}
                   </td>
-                  <td>
-                    <button className="button danger small" disabled={act.busy} onClick={() => remove(b)}>
-                      Remove
-                    </button>
+                  <td className="actions">
+                    <RowActions
+                      label={b.prefix}
+                      disabled={act.busy}
+                      items={[{ label: "Remove from block list", danger: true, onSelect: () => remove(b) }]}
+                    />
                   </td>
                 </tr>
               ))}

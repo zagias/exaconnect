@@ -18,7 +18,7 @@ import {
 } from "../api";
 import { ErrorNote, ExampleTag } from "../components";
 import { who } from "../customer";
-import { Card, useAction } from "../ui";
+import { Card, RowActions, useAction } from "../ui";
 import { CATEGORY_LABEL, OrderStatusPill, partnerOf, safeUrl, split, usd, when } from "./Order";
 
 // Admin: the partner directory and service partner orders waiting for ExaCarib
@@ -91,7 +91,7 @@ export function PartnersAdmin() {
           <p className="muted">No partners yet.</p>
         ) : (
           <div className="table-wrap">
-            <table className="paths">
+            <table className="paths dt stack">
               <thead>
                 <tr>
                   <th scope="col">Partner</th>
@@ -99,23 +99,27 @@ export function PartnersAdmin() {
                   <th scope="col">Kind</th>
                   <th scope="col" className="num">Per Mbps a month</th>
                   <th scope="col">Directory</th>
-                  <th scope="col">Actions</th>
+                  <th scope="col" className="actions">
+                    <span className="sr-only">Actions</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {partners.map((p) => (
-                  <tr key={p.id} className={p.listed ? undefined : "muted"}>
+                  <tr key={p.id} className={p.listed ? undefined : "row-off"}>
                     <td style={{ minWidth: 200 }}>
                       <strong>{p.name}</strong> {p.example && <ExampleTag />}
-                      <div className="small mono muted">{p.slug}</div>
+                      <span className="sub mono">{p.slug}</span>
                       {safeUrl(p.website) && (
                         <a className="small" href={safeUrl(p.website)!} target="_blank" rel="noopener noreferrer">
-                          Website
+                          Website<span className="sr-only"> of {p.name} (opens in a new tab)</span>
                         </a>
                       )}
                     </td>
-                    <td className="small">{CATEGORY_LABEL[p.category] ?? p.category}</td>
-                    <td className="small">
+                    <td data-label="Category" className="small">
+                      {CATEGORY_LABEL[p.category] ?? p.category}
+                    </td>
+                    <td data-label="Kind" className="small">
                       {KIND_LABEL[p.kind] ?? p.kind}
                       {p.kind === "cloud" && p.provider && (
                         <div className="muted">{providers.data?.[p.provider]?.name ?? p.provider}</div>
@@ -124,25 +128,27 @@ export function PartnersAdmin() {
                         <div className="mono muted wrap">{p.prefixes.join(", ")}</div>
                       )}
                     </td>
-                    <td className="num mono small">{usd(p.price_per_mbps_month)}</td>
-                    <td>
-                      <span className={`pill ${p.listed ? "ok" : "shadow"}`}>{p.listed ? "Listed" : "Unlisted"}</span>
+                    <td data-label="Per Mbps" className="num">
+                      {usd(p.price_per_mbps_month)}
                     </td>
-                    <td>
-                      <div className="form-actions">
-                        <button className="button secondary small" onClick={() => setEditing(p)}>
-                          Edit
-                        </button>
-                        {p.listed ? (
-                          <button className="button danger small" disabled={act.busy} onClick={() => unlist(p)}>
-                            Unlist
+                    <td data-label="Directory">
+                      <span className={`pill ${p.listed ? "ok" : "off"}`}>{p.listed ? "Listed" : "Unlisted"}</span>
+                    </td>
+                    <td className="actions">
+                      <RowActions
+                        label={p.name}
+                        disabled={act.busy}
+                        primary={
+                          <button className="button secondary small" aria-label={`Edit ${p.name}`} onClick={() => setEditing(p)}>
+                            Edit
                           </button>
-                        ) : (
-                          <button className="button secondary small" disabled={act.busy} onClick={() => relist(p)}>
-                            List again
-                          </button>
-                        )}
-                      </div>
+                        }
+                        items={
+                          p.listed
+                            ? [{ label: "Unlist", danger: true, onSelect: () => unlist(p) }]
+                            : [{ label: "List again", onSelect: () => relist(p) }]
+                        }
+                      />
                     </td>
                   </tr>
                 ))}

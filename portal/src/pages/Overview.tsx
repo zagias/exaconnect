@@ -97,7 +97,19 @@ export default function Overview() {
   const { current } = useCustomer();
   const controller = useControllerStatus();
   const q = user?.role === "admin" && current ? `?customer_id=${current.id}` : "";
-  const { data, error } = useApi<OverviewData>(`/overview${q}`, 10_000);
+  const raw = useApi<OverviewData>(`/overview${q}`, 10_000);
+  const error = raw.error;
+  // Fill fields an older controller doesn't send, so a portal deployed ahead
+  // of its controller degrades instead of crashing.
+  const data: OverviewData | null = raw.data
+    ? {
+        ...raw.data,
+        sla_24h: raw.data.sla_24h ?? [],
+        recent_decisions: raw.data.recent_decisions ?? [],
+        moves_24h: raw.data.moves_24h ?? 0,
+        sites: raw.data.sites.map((s) => ({ ...s, steering: s.steering ?? [] })),
+      }
+    : null;
   const insights = useApi<Insight[]>(`/insights${q}`, 30_000);
 
   const sites = data?.sites ?? [];

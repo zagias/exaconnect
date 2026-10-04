@@ -21,9 +21,9 @@ import {
   type PortForwardIn,
   type ProtectionSummary,
 } from "../api";
-import { ErrorNote, Eyebrow, ago } from "../components";
+import { ErrorNote, ago } from "../components";
 import { useCustomer } from "../customer";
-import { Card, useAction } from "../ui";
+import { Card, PageHead, RowActions, useAction } from "../ui";
 
 // Internet breakout, NAT gateway and firewall (ADR 0010, docs/internet-contract.md).
 // Each site sends its internet traffic through the PoP, straight out of its own
@@ -85,14 +85,10 @@ export default function Internet() {
   const data = state.data;
   return (
     <>
-      <div className="page-head">
-        <Eyebrow>Internet</Eyebrow>
-        <h1>Internet access</h1>
-        <p className="muted">
-          Choose how each site reaches the internet, which traffic may leave, and which services outside can reach in.
-          Sites get changes within 10 seconds.
-        </p>
-      </div>
+      <PageHead eyebrow="Internet" title="Internet access">
+        How each site reaches the internet, what may leave, and what outside can reach in. Sites pick up changes within 10
+        seconds.
+      </PageHead>
       <ErrorNote error={state.error} />
       {data && (
         <>
@@ -235,8 +231,7 @@ function Firewall({ customerId, data, reload }: SectionProps) {
       }
     >
       <p className="small muted" style={{ marginTop: 0 }}>
-        Rules apply where traffic leaves for the internet: at the PoP for sites going through it, at the site for sites going
-        straight out. They are checked in order and the first match wins; anything no rule matches is allowed.
+        Checked in order where traffic leaves for the internet; the first match wins. Anything no rule matches is allowed.
       </p>
       <ErrorNote error={act.error} />
       {editing && (
@@ -254,10 +249,17 @@ function Firewall({ customerId, data, reload }: SectionProps) {
         />
       )}
       {rules.length === 0 ? (
-        <p className="muted">No rules yet, so all outbound internet traffic is allowed.</p>
+        <div className="empty">
+          <p>No rules yet, so all outbound internet traffic is allowed.</p>
+          {editing !== "new" && (
+            <button className="button small" onClick={() => setEditing("new")}>
+              Add a rule
+            </button>
+          )}
+        </div>
       ) : (
         <div className="table-wrap">
-          <table className="paths">
+          <table className="paths dt stack">
             <thead>
               <tr>
                 <th scope="col" className="num">#</th>
@@ -265,11 +267,12 @@ function Firewall({ customerId, data, reload }: SectionProps) {
                 <th scope="col">Site</th>
                 <th scope="col">From</th>
                 <th scope="col">To</th>
-                <th scope="col">Protocol and ports</th>
+                <th scope="col">Protocol</th>
                 <th scope="col">Description</th>
-                <th scope="col">Enabled</th>
-                <th scope="col" className="num">Hits</th>
-                <th scope="col">Actions</th>
+                <th scope="col" className="num">Packets</th>
+                <th scope="col" className="actions">
+                  <span className="sr-only">Actions</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -277,56 +280,49 @@ function Firewall({ customerId, data, reload }: SectionProps) {
                 const a = ACTION[r.action] ?? ACTION.allow;
                 const proto = PROTOCOLS.find((p) => p.value === r.protocol)?.label ?? r.protocol;
                 return (
-                  <tr key={r.id} className={r.enabled ? undefined : "muted"}>
-                    <td className="num mono">{i + 1}</td>
-                    <td>
-                      <span className={`pill ${a.cls}`}>{a.word}</span>
+                  <tr key={r.id} className={r.enabled ? undefined : "row-off"}>
+                    <td className="num">
+                      <span className="stack-only">Rule </span>
+                      {i + 1}
                     </td>
-                    <td className="small">{r.site ?? "All sites"}</td>
-                    <td className="small mono" style={{ whiteSpace: "normal" }}>
+                    <td data-label="Action">
+                      <span className={`pill ${a.cls}`}>{a.word}</span>
+                      {!r.enabled && <span className="sub">Off, not checked</span>}
+                    </td>
+                    <td data-label="Site">{r.site ?? "All sites"}</td>
+                    <td data-label="From" className="mono cell-wrap">
                       {any(r.src)}
                     </td>
-                    <td className="small mono" style={{ whiteSpace: "normal" }}>
+                    <td data-label="To" className="mono cell-wrap">
                       {any(r.dst)}
                     </td>
-                    <td className="small">
+                    <td data-label="Protocol">
                       {proto}
                       {r.ports && <span className="mono"> {r.ports}</span>}
                     </td>
-                    <td className="small">{r.description || "–"}</td>
-                    <td className="small">{r.enabled ? "On" : "Off"}</td>
-                    <td className="num small">
-                      <div className="mono">{count(r.packets)} packets</div>
-                      <div className="mono muted">{bytes(r.bytes)}</div>
+                    <td data-label="Description" className="cell-wrap">
+                      {r.description || "–"}
                     </td>
-                    <td>
-                      <div className="form-actions">
-                        <button
-                          className="button secondary small"
-                          disabled={act.busy || i === 0}
-                          aria-label={`Move rule ${i + 1} up`}
-                          onClick={() => move(i, -1)}
-                        >
-                          Up
-                        </button>
-                        <button
-                          className="button secondary small"
-                          disabled={act.busy || i === rules.length - 1}
-                          aria-label={`Move rule ${i + 1} down`}
-                          onClick={() => move(i, 1)}
-                        >
-                          Down
-                        </button>
-                        <button className="button secondary small" onClick={() => setEditing(r)}>
-                          Edit
-                        </button>
-                        <button className="button secondary small" disabled={act.busy} onClick={() => toggle(r)}>
-                          {r.enabled ? "Turn off" : "Turn on"}
-                        </button>
-                        <button className="button danger small" disabled={act.busy} onClick={() => remove(r)}>
-                          Delete
-                        </button>
-                      </div>
+                    <td data-label="Packets" className="num">
+                      {count(r.packets)}
+                      <span className="sub">{bytes(r.bytes)}</span>
+                    </td>
+                    <td className="actions">
+                      <RowActions
+                        label={`rule ${i + 1}`}
+                        disabled={act.busy}
+                        primary={
+                          <button className="button secondary small" aria-label={`Edit rule ${i + 1}`} onClick={() => setEditing(r)}>
+                            Edit
+                          </button>
+                        }
+                        items={[
+                          { label: "Move up", disabled: i === 0, onSelect: () => move(i, -1) },
+                          { label: "Move down", disabled: i === rules.length - 1, onSelect: () => move(i, 1) },
+                          { label: r.enabled ? "Turn off" : "Turn on", onSelect: () => toggle(r) },
+                          { label: "Delete rule", danger: true, onSelect: () => remove(r) },
+                        ]}
+                      />
                     </td>
                   </tr>
                 );
@@ -515,7 +511,7 @@ function Protection({ p, publicAddress }: { p: ProtectionSummary; publicAddress:
         <p className="small">Protection is off, so no inbound limits apply right now.</p>
       )}
       <div className="table-wrap">
-        <table className="paths small" style={{ maxWidth: 520 }}>
+        <table className="paths dt compact small" style={{ maxWidth: 520 }}>
           <thead>
             <tr>
               <th scope="col">Dropped</th>
@@ -526,7 +522,7 @@ function Protection({ p, publicAddress }: { p: ProtectionSummary; publicAddress:
             {DROP_KINDS.map((k) => (
               <tr key={k.key}>
                 <td>{k.label}</td>
-                <td className="num mono">{count(p.dropped?.[k.key] ?? 0)}</td>
+                <td className="num">{count(p.dropped?.[k.key] ?? 0)}</td>
               </tr>
             ))}
           </tbody>
@@ -580,9 +576,8 @@ function Forwards({ customerId, data, reload }: SectionProps) {
       }
     >
       <p className="small muted" style={{ marginTop: 0 }}>
-        Lets a service on a site be reached from the internet, on the PoP's public address{" "}
-        <span className="mono">{pub}</span>. A forward only works while its site goes through the PoP. The address is
-        shared, so each public port can be used once.
+        Lets the internet reach a service on a site, through the PoP's shared public address{" "}
+        <span className="mono">{pub}</span>. Each public port can be used once, and only while the site goes through the PoP.
       </p>
       <p className="small" style={{ margin: "0 0 12px" }}>
         Unsolicited inbound connections blocked: <span className="mono">{count(data.inbound_dropped ?? 0)}</span>
@@ -602,65 +597,82 @@ function Forwards({ customerId, data, reload }: SectionProps) {
         />
       )}
       {data.forwards.length === 0 ? (
-        <p className="muted">No port forwards. Nothing on the internet can start a connection to your sites.</p>
+        <div className="empty">
+          <p>No port forwards. Nothing on the internet can start a connection to your sites.</p>
+          {editing !== "new" && (
+            <button className="button small" onClick={() => setEditing("new")}>
+              Add a forward
+            </button>
+          )}
+        </div>
       ) : (
         <div className="table-wrap">
-          <table className="paths">
+          <table className="paths dt stack">
             <thead>
               <tr>
                 <th scope="col">Public address</th>
                 <th scope="col">Protocol</th>
                 <th scope="col">To</th>
                 <th scope="col">Allowed from</th>
-                <th scope="col">Enabled</th>
-                <th scope="col" className="num">Hits</th>
-                <th scope="col">Actions</th>
+                <th scope="col" className="num">Packets</th>
+                <th scope="col" className="actions">
+                  <span className="sr-only">Actions</span>
+                </th>
               </tr>
             </thead>
             <tbody>
               {data.forwards.map((p) => {
                 const site = siteOf(p.to_site_id);
                 const off = inactive(site);
+                const name = `${p.protocol.toUpperCase()} port ${p.port}`;
                 return (
-                  <tr key={p.id} className={p.enabled ? undefined : "muted"}>
+                  <tr key={p.id} className={p.enabled ? undefined : "row-off"}>
                     <td>
                       <span className="mono">
                         {pub}:{p.port}
                       </span>
-                      {p.description && <div className="small muted">{p.description}</div>}
+                      {p.description && <span className="sub">{p.description}</span>}
+                      {!p.enabled && (
+                        <div>
+                          <span className="pill off">Off</span>
+                        </div>
+                      )}
                       {off && (
                         <div>
-                          <span className="pill warn small">{off}</span>
+                          <span className="pill warn">{off}</span>
                         </div>
                       )}
                     </td>
-                    <td className="mono">{p.protocol.toUpperCase()}</td>
-                    <td className="small">
-                      {p.to_site ?? site?.name ?? "–"}
-                      <div className="mono">
-                        {p.to_address}:{p.to_port ?? p.port}
-                      </div>
+                    <td data-label="Protocol" className="mono">
+                      {p.protocol.toUpperCase()}
                     </td>
-                    <td className="small mono" style={{ whiteSpace: "normal" }}>
+                    <td data-label="To">
+                      {p.to_site ?? site?.name ?? "–"}
+                      <span className="sub mono">
+                        {p.to_address}:{p.to_port ?? p.port}
+                      </span>
+                    </td>
+                    <td data-label="Allowed from" className="mono cell-wrap">
                       {any(p.allow_from, "Anyone")}
                     </td>
-                    <td className="small">{p.enabled ? "On" : "Off"}</td>
-                    <td className="num small">
-                      <div className="mono">{count(p.packets)} packets</div>
-                      <div className="mono muted">{bytes(p.bytes)}</div>
+                    <td data-label="Packets" className="num">
+                      {count(p.packets)}
+                      <span className="sub">{bytes(p.bytes)}</span>
                     </td>
-                    <td>
-                      <div className="form-actions">
-                        <button className="button secondary small" onClick={() => setEditing(p)}>
-                          Edit
-                        </button>
-                        <button className="button secondary small" disabled={act.busy} onClick={() => toggle(p)}>
-                          {p.enabled ? "Turn off" : "Turn on"}
-                        </button>
-                        <button className="button danger small" disabled={act.busy} onClick={() => remove(p)}>
-                          Delete
-                        </button>
-                      </div>
+                    <td className="actions">
+                      <RowActions
+                        label={name}
+                        disabled={act.busy}
+                        primary={
+                          <button className="button secondary small" aria-label={`Edit forward on ${name}`} onClick={() => setEditing(p)}>
+                            Edit
+                          </button>
+                        }
+                        items={[
+                          { label: p.enabled ? "Turn off" : "Turn on", onSelect: () => toggle(p) },
+                          { label: "Delete forward", danger: true, onSelect: () => remove(p) },
+                        ]}
+                      />
                     </td>
                   </tr>
                 );

@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { api, getToken, setToken, type User } from "./api";
-import { Eyebrow } from "./components";
+import "./tables.css";
 
 interface Auth {
   user: User | null;
@@ -39,14 +39,22 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   if (checking || !user)
     return (
-      <>
-        <header className="topbar">
-          <div className="topbar-inner">
-            <img src="/brand/exacarib-wordmark-reversed.png" alt="ExaCarib" width={140} height={26} />
+      <main className="signin-page" id="main">
+        <div className="signin-box">
+          <div className="signin-brand">
+            <img className="wm-light" src="/brand/exacarib-wordmark.png" alt="ExaCarib" width={168} height={31} />
+            <img className="wm-dark" src="/brand/exacarib-wordmark-reversed.png" alt="ExaCarib" width={168} height={31} />
+            <span className="signin-product">ExaConnect</span>
           </div>
-        </header>
-        <main className="page">{checking ? <p className="muted">Checking your session…</p> : <SignIn />}</main>
-      </>
+          {checking ? (
+            <p className="signin-checking" role="status">
+              Checking your session…
+            </p>
+          ) : (
+            <SignIn />
+          )}
+        </div>
+      </main>
     );
   return <AuthContext.Provider value={{ user, signOut }}>{children}</AuthContext.Provider>;
 }
@@ -75,10 +83,10 @@ function SignIn() {
   };
 
   return (
-    <section className="card signin">
-      <Eyebrow>Sign in</Eyebrow>
-      <h1>ExaConnect portal</h1>
-      <form onSubmit={submit}>
+    <section className="card signin" aria-labelledby="signin-title">
+      <h1 id="signin-title">Sign in</h1>
+      <p className="signin-intro">Your sites, paths and routing decisions in one place.</p>
+      <form onSubmit={submit} aria-describedby={error ? "signin-error" : undefined}>
         <label>
           Email
           <input type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} />
@@ -94,7 +102,7 @@ function SignIn() {
           />
         </label>
         {error && (
-          <p className="pill bad" role="alert">
+          <p className="signin-error" id="signin-error" role="alert">
             {error}
           </p>
         )}
@@ -102,6 +110,7 @@ function SignIn() {
           {busy ? "Signing in…" : "Sign in"}
         </button>
       </form>
+      <p className="signin-foot">Need an account or a new password? Ask your ExaCarib administrator.</p>
     </section>
   );
 }

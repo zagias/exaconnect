@@ -21,9 +21,9 @@ import {
   type PartnerCategory,
   type StormSite,
 } from "../api";
-import { ErrorNote, ExampleTag, Eyebrow } from "../components";
+import { ErrorNote, ExampleTag } from "../components";
 import { useCustomer, who } from "../customer";
-import { Card, useAction } from "../ui";
+import { Card, PageHead, useAction } from "../ui";
 
 // Partner directory and plain-English ordering (ADR 0011, docs/ordering-contract.md).
 // A person describes what they need, or picks a partner from the directory; the
@@ -112,14 +112,10 @@ function OrderScreen({ customerId, customerName, sites }: { customerId: string; 
   };
   return (
     <>
-      <div className="page-head">
-        <Eyebrow>Order</Eyebrow>
-        <h1>Order connections</h1>
-        <p className="muted">
-          Ask for circuits, bandwidth changes and internet access in plain English, or connect to a partner from the
-          directory. We draft the order for you to check; nothing changes until you confirm it.
-        </p>
-      </div>
+      <PageHead eyebrow="Order" title="Order connections">
+        Ask for circuits, bandwidth and internet access in plain English, or pick a partner from the directory. Nothing
+        changes until you confirm the draft.
+      </PageHead>
       <div ref={top} style={{ scrollMarginTop: 16 }}>
         <Describe
           customerId={customerId}
@@ -631,17 +627,19 @@ function Orders({
     <Card title="Your orders" note={<span className="small muted">{customerName}, newest first</span>}>
       <ErrorNote error={error} />
       {orders && list.length === 0 ? (
-        <p className="muted">No orders yet.</p>
+        <p className="muted">No orders yet. Describe what you need above and we draft it for you.</p>
       ) : (
         <div className="table-wrap">
-          <table className="paths">
+          <table className="paths dt stack">
             <thead>
               <tr>
                 <th scope="col">Order</th>
                 <th scope="col">Status</th>
                 <th scope="col">By</th>
                 <th scope="col">Results</th>
-                <th scope="col">Actions</th>
+                <th scope="col" className="actions">
+                  <span className="sr-only">Actions</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -655,10 +653,10 @@ function Orders({
                     )}
                     {!o.text && o.summary.length === 0 && <span className="muted">–</span>}
                   </td>
-                  <td>
+                  <td data-label="Status">
                     <OrderStatusPill status={o.status} />
                   </td>
-                  <td className="small">
+                  <td data-label="By" className="small">
                     <div>{who(o.created_by)}</div>
                     <div className="muted">{when(o.created_at)}</div>
                     {o.confirmed_by && (
@@ -667,10 +665,10 @@ function Orders({
                       </div>
                     )}
                   </td>
-                  <td className="small" style={{ minWidth: 200 }}>
+                  <td data-label="Results" className="small" style={{ minWidth: 200 }}>
                     {(o.results ?? []).length > 0 ? <Results order={o} /> : <span className="muted">–</span>}
                   </td>
-                  <td>
+                  <td className="actions">
                     {o.status === "draft" && (
                       <button className="button secondary small" onClick={() => onOpen(o)}>
                         Open

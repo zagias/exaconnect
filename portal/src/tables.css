@@ -1,0 +1,187 @@
+/* Shared table look, row actions menu, scrollable tabs and the sign-in screen.
+   Loaded from ui.tsx, so it arrives before brand.css: table rules carry an extra
+   class (table.paths.dt) to win over brand.css's table.paths base.
+   Opt in with <table className="paths dt">; add "stack" for a card layout on phones. */
+
+/* ---- Wrapper: wide tables scroll inside their card, never the page ---- */
+.table-wrap {
+  overflow-x: auto; max-width: 100%;
+  overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+/* ---- Table ---- */
+table.paths.dt { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 15px; line-height: 22px; }
+table.paths.dt th {
+  font: 600 12px/16px var(--font-body); letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--ink-muted); text-align: left; vertical-align: bottom; white-space: nowrap;
+  padding: 0 12px 10px; border-bottom: 1.5px solid var(--line);
+}
+table.paths.dt td {
+  padding: 12px; vertical-align: middle; border-bottom: 1px solid var(--line);
+  transition: background-color 120ms ease-out;
+}
+table.paths.dt th:first-child, table.paths.dt td:first-child { padding-left: 8px; }
+table.paths.dt th:last-child, table.paths.dt td:last-child { padding-right: 8px; }
+table.paths.dt tbody tr:last-child td { border-bottom: none; }
+table.paths.dt tbody tr:hover > td { background: var(--dt-hover); }
+table.paths.dt .num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+table.paths.dt th.num { font-family: var(--font-body); }
+table.paths.dt .pill { font-size: 13px; line-height: 18px; }
+table.paths.dt .sub { display: block; font-size: 13px; line-height: 18px; font-weight: 400; color: var(--ink-muted); }
+table.paths.dt .mono.sub { font-family: var(--font-mono); }
+table.paths.dt td.cell-wrap { white-space: normal; overflow-wrap: anywhere; min-width: 120px; }
+/* A switched-off row reads muted, but its actions stay full strength. */
+table.paths.dt tr.row-off > td:not(.actions) { color: var(--ink-muted); }
+table.paths.dt th.actions, table.paths.dt td.actions { width: 1%; text-align: right; white-space: nowrap; }
+table.paths.dt.compact td { padding-top: 8px; padding-bottom: 8px; }
+/* Too many columns to squeeze: scroll inside the card instead. */
+table.paths.dt.wide { min-width: 780px; }
+table.paths.dt.small { font-size: 14px; line-height: 20px; }
+
+:root { --dt-hover: rgba(1, 31, 77, 0.035); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --dt-hover: rgba(255, 255, 255, 0.04); } }
+:root[data-theme="dark"] { --dt-hover: rgba(255, 255, 255, 0.04); }
+
+.stack-only { display: none; }
+
+/* Off / Shadow pill: hollow circle, muted. */
+.pill.off { color: var(--ink-muted); }
+.pill.off::before { border-radius: 50%; background: transparent; border: 2px solid currentColor; box-sizing: border-box; }
+
+/* ---- Row actions: primary visible, the rest behind a menu ---- */
+.row-actions { display: inline-flex; gap: 6px; align-items: center; justify-content: flex-end; }
+.row-actions-more { display: inline-grid; place-items: center; width: 32px; padding-left: 0 !important; padding-right: 0 !important; }
+.row-actions-spacer { display: inline-block; width: 32px; flex: none; }
+.row-actions-more[aria-expanded="true"] { background: var(--page); border-color: var(--ink-muted); }
+.row-menu {
+  position: fixed; z-index: 60; min-width: 184px; max-width: min(280px, calc(100vw - 16px));
+  padding: 6px; background: var(--card); color: var(--ink);
+  border: 1px solid var(--line); border-radius: var(--radius-md);
+  box-shadow: 0 2px 4px rgba(1, 31, 77, 0.08), 0 12px 32px rgba(1, 31, 77, 0.16);
+  animation: row-menu-in 120ms ease-out;
+}
+.row-menu-item {
+  display: block; width: 100%; padding: 8px 12px; border: none; border-radius: 6px; background: none;
+  font: 500 15px/20px var(--font-body); color: var(--ink); text-align: left; cursor: pointer; white-space: nowrap;
+}
+.row-menu-item:hover:not(:disabled), .row-menu-item:focus-visible { background: var(--page); outline: none; }
+.row-menu-item:focus-visible { box-shadow: inset 0 0 0 2px var(--focus); }
+.row-menu-item:disabled { color: var(--ink-muted); opacity: 0.6; cursor: not-allowed; }
+.row-menu-item.danger { color: var(--danger); font-weight: 600; }
+.row-menu-sep { height: 1px; background: var(--line); margin: 6px 4px; }
+@keyframes row-menu-in { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .row-menu { animation: none; } }
+
+/* ---- Tabs: one row; scrolls sideways with fade edges on phones ---- */
+.tabs-scroll { position: relative; margin-bottom: 20px; }
+.tabs-scroll .tabs { margin-bottom: 0; }
+.tabs a { white-space: nowrap; border-radius: var(--radius-sm) var(--radius-sm) 0 0; }
+.tabs a:hover { color: var(--ink); }
+@media (max-width: 640px) {
+  .tabs-scroll .tabs {
+    flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; scroll-snap-type: x proximity;
+    margin: 0 -16px; padding: 0 16px; gap: 0;
+  }
+  .tabs-scroll .tabs::-webkit-scrollbar { display: none; }
+  .tabs-scroll .tabs a { scroll-snap-align: start; padding: 10px 12px; min-height: 44px; box-sizing: border-box; }
+  .tabs-scroll::before, .tabs-scroll::after {
+    content: ""; position: absolute; top: 0; bottom: 2px; width: 32px; pointer-events: none;
+    opacity: 0; transition: opacity 150ms ease-out; z-index: 1;
+  }
+  .tabs-scroll::before { left: -16px; background: linear-gradient(to right, var(--page), transparent); }
+  .tabs-scroll::after { right: -16px; background: linear-gradient(to left, var(--page), transparent); }
+  .tabs-scroll[data-more-left]::before, .tabs-scroll[data-more-right]::after { opacity: 1; }
+}
+
+/* ---- Page header: eyebrow, title, one muted line ---- */
+.page-head p.muted { max-width: 72ch; }
+
+/* ---- Empty state: a sentence and the primary action ---- */
+.empty { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 16px; border: 1.5px dashed var(--line); border-radius: var(--radius-md); }
+.empty p { margin: 0; color: var(--ink-muted); }
+
+/* ---- Phones ---- */
+@media (max-width: 640px) {
+  /* Scrolling tables keep their first column in view. */
+  table.paths.dt:not(.stack) th:first-child, table.paths.dt:not(.stack) td:first-child {
+    position: sticky; left: 0; z-index: 1; background: var(--card);
+    box-shadow: 1px 0 0 var(--line);
+  }
+  table.paths.dt:not(.stack) td { padding: 10px; }
+
+}
+
+/* ---- Stacked: below ~760 px of table width (phones, and tablets beside the
+   sidebar) each row becomes a small card of label/value pairs. ---- */
+.table-wrap { container: dt / inline-size; }
+@container dt (max-width: 760px) {
+  table.paths.dt.stack, table.paths.dt.stack tbody, table.paths.dt.stack tr, table.paths.dt.stack td { display: block; width: 100%; }
+  table.paths.dt.stack thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  table.paths.dt.stack tr { padding: 12px 0; border-bottom: 1px solid var(--line); }
+  table.paths.dt.stack tbody tr:last-child { border-bottom: none; }
+  table.paths.dt.stack tbody tr:hover > td { background: none; }
+  /* Label in a fixed gutter on the left; the value flows as normal inline content. */
+  table.paths.dt.stack td {
+    position: relative; padding: 3px 0 3px 112px; min-height: 26px; border: none;
+    text-align: left; white-space: normal; overflow-wrap: anywhere;
+  }
+  table.paths.dt.stack td::before {
+    content: attr(data-label); position: absolute; left: 0; top: 5px; width: 104px;
+    font: 600 11px/20px var(--font-body); letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-muted);
+  }
+  table.paths.dt.stack td:not([data-label]) { padding-left: 0; }
+  table.paths.dt.stack td:not([data-label])::before { content: none; }
+  table.paths.dt.stack td:first-child { padding-bottom: 6px; font-size: 16px; font-weight: 600; font-family: var(--font-body); }
+  table.paths.dt.stack td::before { top: 3px; }
+  table.paths.dt.stack .stack-only { display: inline; }
+  table.paths.dt.stack td.num { text-align: left; }
+  table.paths.dt.stack td.actions { width: auto; padding: 10px 0 0; }
+  table.paths.dt.stack td.actions .row-actions { justify-content: flex-start; }
+  table.paths.dt.stack td.actions::before { content: none; }
+}
+
+/* Mid widths: two label/value columns per stacked row. */
+@container dt (min-width: 520px) and (max-width: 760px) {
+  table.paths.dt.stack tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; }
+  table.paths.dt.stack td:first-child, table.paths.dt.stack td.actions { grid-column: 1 / -1; }
+}
+
+/* ---- Sign-in: a centred card on the page background ---- */
+.signin-page {
+  min-height: 100vh; min-height: 100dvh; display: grid; place-items: center;
+  padding: 32px 16px; box-sizing: border-box;
+}
+.signin-box { width: 100%; max-width: 400px; }
+.signin-brand { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-bottom: 24px; }
+.signin-brand img { display: block; width: 168px; height: auto; }
+.signin-brand .wm-dark { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .signin-brand .wm-light { display: none; }
+  :root:not([data-theme="light"]) .signin-brand .wm-dark { display: block; }
+}
+:root[data-theme="dark"] .signin-brand .wm-light { display: none; }
+:root[data-theme="dark"] .signin-brand .wm-dark { display: block; }
+.signin-product { font: 500 12px/16px var(--font-body); letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-muted); }
+.card.signin { max-width: none; margin: 0; padding: 32px; overflow: visible; }
+.signin h1 { font-size: 26px; line-height: 32px; margin: 0 0 4px; }
+.signin .signin-intro { margin: 0 0 24px; color: var(--ink-muted); font-size: 15px; line-height: 22px; }
+.signin form { display: grid; gap: 16px; }
+.signin label { display: grid; gap: 6px; font-weight: 600; font-size: 14px; line-height: 20px; }
+.signin input { width: 100%; box-sizing: border-box; min-height: 44px; }
+.signin input:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; border-color: var(--focus); }
+.signin .button { width: 100%; min-height: 44px; margin-top: 4px; }
+.signin-error {
+  margin: 0; padding: 8px 12px; border-radius: var(--radius-md); border-left: 3px solid var(--danger);
+  background: var(--page); color: var(--danger); font-size: 14px; line-height: 20px; font-weight: 600;
+}
+.signin-foot { margin: 20px 0 0; text-align: center; font-size: 13px; line-height: 18px; color: var(--ink-muted); }
+.signin-checking { color: var(--ink-muted); text-align: center; }
+@media (max-width: 640px) {
+  .signin-page { place-items: start center; padding-top: 48px; }
+  .card.signin { padding: 24px 20px; }
+}
+
+/* Expanded detail under a row (Fabric circuits). */
+table.paths.dt tr.detail-row > td, table.paths.dt tr.detail-row:hover > td { background: none; padding: 4px 0 16px; }
+table.paths.dt .nowrap { white-space: nowrap; }

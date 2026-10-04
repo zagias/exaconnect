@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { api, useApi, type AiStatus } from "../api";
-import { ErrorNote, Eyebrow } from "../components";
+import { ErrorNote } from "../components";
+import { PageHead } from "../ui";
 import { useCustomer } from "../customer";
 
 interface Turn {
@@ -49,16 +50,11 @@ export default function Ask() {
   const enabled = status.data?.ask_enabled;
   return (
     <>
-      <div className="page-head">
-        <Eyebrow>Ask your network</Eyebrow>
-        <h1>Ask in plain English</h1>
-        <p className="muted">
-          Answers come from {current ? `${current.name}'s` : "your"} own data: sites, path health, routing decisions and
-          their reasons, events, insights and this month's metering. Check anything important against the screens it
-          names.
-        </p>
-        <ErrorNote error={status.error} />
-      </div>
+      <PageHead eyebrow="Ask your network" title="Ask in plain English">
+        Answers come from {current ? `${current.name}'s` : "your"} own sites, paths, decisions, events and metering. Check
+        anything important against the screen it names.
+      </PageHead>
+      <ErrorNote error={status.error} />
       <section className="card chat" style={{ maxWidth: 820 }}>
         {status.data && !enabled && (
           <p className="muted">Ask your network is switched off on this controller: no AI service key is configured.</p>
