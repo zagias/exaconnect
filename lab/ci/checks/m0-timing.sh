@@ -32,14 +32,21 @@ note "cpuidle driver $(cat /sys/devices/system/cpu/cpuidle/current_driver 2>/dev
   "governor $(cat /sys/devices/system/cpu/cpuidle/current_governor_ro /sys/devices/system/cpu/cpuidle/current_governor 2>/dev/null | head -1)"
 note "(netem asks for 25 ms on A and 35 ms on B round trip, with 2 and 4 ms jitter; min/avg/max/mdev)"
 layers
-# netem releases packets from timers; on a VM an idle vCPU may wake late.
-# Holding /dev/cpu_dma_latency at 0 keeps CPUs out of idle states while open.
-if exec 3>/dev/cpu_dma_latency 2>/dev/null; then
-  printf '\0\0\0\0' >&3
-  echo "-- the same with CPUs kept out of idle states"
-  layers
-  exec 3>&-
+# Where the spikes come from: the same carrier A path with the agents frozen
+# (SIGSTOP for about 6 s; FRR and BFD keep running), then with the controller
+# paused. Forwarding never depends on either.
+a="site-a to PoP underlay via carrier A:   "
+note "$a $(rtt site-a 10.11.0.2)   (as is)"
+for n in pop-miami site-a site-b; do docker exec "$(node "$n")" pkill -STOP -f "exa-agent run"; done
+note "$a $(rtt site-a 10.11.0.2)   (agents frozen)"
+for n in pop-miami site-a site-b; do docker exec "$(node "$n")" pkill -CONT -f "exa-agent run"; done
+ctl=$(docker ps -q -f name=exaconnect-controller)
+if [[ -n $ctl ]]; then
+  docker pause "$ctl" >/dev/null
+  note "$a $(rtt site-a 10.11.0.2)   (controller paused)"
+  docker unpause "$ctl" >/dev/null
 fi
+note "$a $(rtt site-a 10.11.0.2)   (as is)"
 
 echo "-- busiest containers"
 docker stats --no-stream --format '{{.CPUPerc}} {{.Name}}' 2>/dev/null | sort -rn | head -8 | sed 's/^/      /'
