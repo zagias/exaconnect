@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Diagnostics only: how much latency and jitter the lab host itself adds.
-# Probe jitter in the lab reads far above what netem is asked for (carrier A
-# 25 ms with 2 ms jitter), which stalls voice's move back to carrier A. This
-# pings each layer of one path to see where the extra comes from: no netem
-# (site to its LAN), one carrier (underlay to the PoP), and the tunnel.
+# On the current host, packets that netem delays sometimes leave 50 to 300 ms
+# late, while the same path without netem stays under 2 ms; freezing the
+# agents, pausing the controller or keeping CPUs out of idle made no
+# difference (lab runs of 2026-10-04). So probe jitter here can exceed
+# voice's 30 ms SLA on every path, and m4 can find voice still on carrier B.
+# These pings show how bad it is on each run.
 # shellcheck source=lab/ci/lib.sh
 source "$(dirname "$0")/../lib.sh"
 
@@ -32,22 +34,6 @@ note "cpuidle driver $(cat /sys/devices/system/cpu/cpuidle/current_driver 2>/dev
   "governor $(cat /sys/devices/system/cpu/cpuidle/current_governor_ro /sys/devices/system/cpu/cpuidle/current_governor 2>/dev/null | head -1)"
 note "(netem asks for 25 ms on A and 35 ms on B round trip, with 2 and 4 ms jitter; min/avg/max/mdev)"
 layers
-# Where the spikes come from: the same carrier A path with the agents frozen
-# (SIGSTOP for about 6 s; FRR and BFD keep running), then with the controller
-# paused. Forwarding never depends on either.
-a="site-a to PoP underlay via carrier A:   "
-note "$a $(rtt site-a 10.11.0.2)   (as is)"
-for n in pop-miami site-a site-b; do docker exec "$(node "$n")" pkill -STOP -f "exa-agent run"; done
-note "$a $(rtt site-a 10.11.0.2)   (agents frozen)"
-for n in pop-miami site-a site-b; do docker exec "$(node "$n")" pkill -CONT -f "exa-agent run"; done
-ctl=$(docker ps -q -f name=exaconnect-controller)
-if [[ -n $ctl ]]; then
-  docker pause "$ctl" >/dev/null
-  note "$a $(rtt site-a 10.11.0.2)   (controller paused)"
-  docker unpause "$ctl" >/dev/null
-fi
-note "$a $(rtt site-a 10.11.0.2)   (as is)"
-
 echo "-- busiest containers"
 docker stats --no-stream --format '{{.CPUPerc}} {{.Name}}' 2>/dev/null | sort -rn | head -8 | sed 's/^/      /'
 echo "-- busiest processes"

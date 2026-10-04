@@ -66,4 +66,7 @@ if wait_for 30 erp; then ok "site-a classifies TCP 5201 to site B as business"; 
 pop() { docker exec "$(node pop-miami)" nft list ruleset 2>/dev/null | grep -Eq 'ip saddr \{? ?192.168.20.0/24 \}? ?tcp sport \{? ?5201 \}? ?meta mark set 0x0*102'; }
 if wait_for 30 pop; then ok "the PoP classifies the return direction"; else bad "no return-direction rule at the PoP"; fi
 api DELETE "/customers/$cid/rules/$rule" >/dev/null
+# Stop the generator so it does not load the host during the next run.
+docker exec "$(node lan-a)" pkill -f "dev/udp/$DST/8801" 2>/dev/null
+docker exec "$(node lan-b)" pkill -f "nc -u -l -p 8801" 2>/dev/null
 exit $fail

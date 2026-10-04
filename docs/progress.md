@@ -244,3 +244,13 @@ Azure from AWS, changes a speed, and bridges VLAN 100 at site A to VLAN 200
 at site B.
 
 Unit tests: 131 controller tests, agent tests, portal type check and build.
+
+**Lab host timing (2026-10-04).** On the lab VPS, packets that netem
+delays sometimes leave 50 to 300 ms late, while the same path without netem
+stays under 2 ms. Freezing the agents, pausing the controller and keeping
+CPUs out of idle made no difference, so it is the virtual machine's timer
+wake-ups on shared CPUs, not ExaConnect. Measured probe jitter then reaches
+voice's 30 ms SLA on every path at times, and the steering check can find
+voice parked on carrier B (correctly, by its numbers). Runs pass when the
+host is quiet (108 of 108 at a14f9fa). A host with dedicated CPUs would
+make the lab steady; `m0-timing.sh` prints the figures on every run.
