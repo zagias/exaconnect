@@ -145,6 +145,8 @@ topology:
         - ip route replace 10.200.0.0/24 via 192.168.10.1
         - ip route replace 10.100.0.0/15 via 192.168.10.1
         - ip route replace 198.51.100.0/24 via 192.168.10.1
+        # The PoP's internet side, where port-forwarded connections come from.
+        - ip route replace 100.64.0.0/24 via 192.168.10.1
         - ip link add link eth1 name eth1.100 type vlan id 100
         - ip addr add 172.16.100.10/24 dev eth1.100
         - ip link set eth1.100 mtu 1370 up
@@ -156,6 +158,8 @@ topology:
         - ip route replace 10.200.0.0/24 via 192.168.20.1
         - ip route replace 10.100.0.0/15 via 192.168.20.1
         - ip route replace 198.51.100.0/24 via 192.168.20.1
+        # The PoP's internet side, where port-forwarded connections come from.
+        - ip route replace 100.64.0.0/24 via 192.168.20.1
         - ip link add link eth1 name eth1.200 type vlan id 200
         - ip addr add 172.16.100.20/24 dev eth1.200
         - ip link set eth1.200 mtu 1370 up

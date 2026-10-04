@@ -30,8 +30,12 @@ nat_seen() { docker exec "$(node "$1")" conntrack -L -p icmp -s 192.168.10.10 -d
 via() { api GET "/customers/$cid/internet" | jq -r --arg a "$a" '.sites[] | select(.id == $a) | .via'; }
 
 echo "-- through the PoP (the default)"
-if wait_for 30 reaches; then ok "lan-a reaches the internet through the PoP"; else bad "lan-a cannot reach $INET through the PoP"; fi
-if nat_seen pop-miami 100.64.0.2; then ok "the PoP translated it to its own address"; else bad "no NAT entry at the PoP for lan-a"; fi
+pop_nat() { reaches && nat_seen pop-miami 100.64.0.2; }
+if wait_for 40 pop_nat; then
+  ok "lan-a reaches the internet through the PoP, translated to the PoP's address"
+else
+  bad "lan-a does not reach $INET through the PoP (exits by $(via))"
+fi
 note "site-a exits by: $(via)"
 
 echo "-- firewall at the PoP"
