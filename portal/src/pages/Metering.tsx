@@ -3,7 +3,7 @@ import { InsightList } from "./Insights";
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth";
 import { download, num, useApi, type Insight, type LinkSettlement, type UsagePoint, type UsageRow } from "../api";
-import { ErrorNote, Eyebrow, LineChart, clock } from "../components";
+import { ErrorNote, Eyebrow, LineChart, rangeLabel, when } from "../components";
 
 const PERIODS = [
   { key: "hours=6", label: "Last 6 hours" },
@@ -12,7 +12,14 @@ const PERIODS = [
 ];
 
 const mbps = (v: number | null | undefined) => (v == null ? "–" : `${v.toFixed(v >= 100 ? 0 : 1)} Mbps`);
+const rate = (v: number | null | undefined) => (v == null ? "–" : v.toFixed(v >= 100 ? 0 : 1));
 const cost = (v: string | number) => Number(v).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/** "1 Oct to now" for a period still running; full start and end otherwise. */
+function periodLabel(start: string, end: string): string {
+  const to = Math.min(new Date(end).getTime(), Date.now());
+  return rangeLabel(new Date(start).getTime(), to);
+}
 
 /** Usage per link, the 95th percentile, the commit line and burst (CLAUDE.md §4.5).
  *  Carrier accounts get the same screen, limited to their own links and read only. */
@@ -41,6 +48,7 @@ export default function Metering({ carrierView = false }: { carrierView?: boolea
     }
   };
 
+  const showCustomer = !carrierView && user?.role === "admin";
   const byCarrier = new Map<string, LinkSettlement[]>();
   for (const l of links) byCarrier.set(l.carrier, [...(byCarrier.get(l.carrier) ?? []), l]);
 
@@ -73,49 +81,73 @@ export default function Metering({ carrierView = false }: { carrierView?: boolea
             </button>
           </div>
           {data && (
-            <p className="muted small">
-              {new Date(data.start).toLocaleString("en-GB")} to {new Date(data.end).toLocaleString("en-GB")} (UTC
-              buckets)
+            <p className="muted small period-note">
+              {periodLabel(data.start, data.end)}, in 5-minute UTC buckets. Charges in US dollars.
             </p>
           )}
-          {[...byCarrier.entries()].map(([carrier, ls]) => (
-            <div key={carrier}>
-              <h2>{carrier}</h2>
-              <table className="paths">
-                <thead>
+          {links.length > 0 && (
+            <table className="paths settle">
+              <colgroup>
+                <col className="c-site" />
+                {showCustomer && <col className="c-cust" />}
+                <col className="c-samples" />
+                <col span={4} className="c-rate" />
+                <col span={3} className="c-money" />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th scope="col">Site and path</th>
+                  {showCustomer && <th scope="col">Customer</th>}
+                  <th scope="col" className="num" title="5-minute samples, with the number discarded as the top 5%">
+                    Samples
+                  </th>
+                  <th scope="col" className="num">
+                    95th in <span className="unit">Mbps</span>
+                  </th>
+                  <th scope="col" className="num">
+                    95th out <span className="unit">Mbps</span>
+                  </th>
+                  <th scope="col" className="num">
+                    Commit <span className="unit">Mbps</span>
+                  </th>
+                  <th scope="col" className="num">
+                    Burst <span className="unit">Mbps</span>
+                  </th>
+                  <th scope="col" className="num">
+                    Commit <span className="unit">US$</span>
+                  </th>
+                  <th scope="col" className="num">
+                    Burst <span className="unit">US$</span>
+                  </th>
+                  <th scope="col" className="num">
+                    Total <span className="unit">US$</span>
+                  </th>
+                </tr>
+              </thead>
+              {[...byCarrier.entries()].map(([carrier, ls]) => (
+                <tbody key={carrier} className="group">
                   <tr>
-                    <th scope="col">Site</th>
-                    {!carrierView && user?.role === "admin" && <th scope="col">Customer</th>}
-                    <th scope="col" className="num">Samples</th>
-                    <th scope="col" className="num">95th in</th>
-                    <th scope="col" className="num">95th out</th>
-                    <th scope="col" className="num">Commit</th>
-                    <th scope="col" className="num">Burst</th>
-                    <th scope="col" className="num">Commit charge</th>
-                    <th scope="col" className="num">Burst charge</th>
-                    <th scope="col" className="num">Total</th>
+                    <th scope="colgroup" colSpan={showCustomer ? 10 : 9}>
+                      {carrier}
+                    </th>
                   </tr>
-                </thead>
-                <tbody>
                   {ls.map((l) => (
                     <tr key={l.id} className={current?.id === l.id ? "selected" : ""}>
-                      <td>
-                        <button className="link" onClick={() => setSelected(l.id)}>
+                      <td className="site-cell">
+                        <button className="link" onClick={() => setSelected(l.id)} aria-pressed={current?.id === l.id}>
                           {l.site}
                         </button>{" "}
-                        <span className="muted small">
-                          {l.path_label}, {l.underlay_type}
-                        </span>
+                        <span className="muted small">{l.underlay_type}</span>
                       </td>
-                      {!carrierView && user?.role === "admin" && <td>{l.customer}</td>}
+                      {showCustomer && <td className="site-cell">{l.customer}</td>}
                       <td className="num mono">
                         {l.samples}
                         {l.discarded > 0 && <span className="muted"> (−{l.discarded})</span>}
                       </td>
-                      <td className="num mono">{mbps(l.p95_in_mbps)}</td>
-                      <td className="num mono">{mbps(l.p95_out_mbps)}</td>
-                      <td className="num mono">{mbps(num(l.commit_mbps))}</td>
-                      <td className="num mono">{Number(l.burst_mbps) > 0 ? mbps(Number(l.burst_mbps)) : "–"}</td>
+                      <td className="num mono">{rate(l.p95_in_mbps)}</td>
+                      <td className="num mono">{rate(l.p95_out_mbps)}</td>
+                      <td className="num mono">{rate(num(l.commit_mbps))}</td>
+                      <td className="num mono">{Number(l.burst_mbps) > 0 ? rate(Number(l.burst_mbps)) : "–"}</td>
                       <td className="money">{cost(l.commit_charge)}</td>
                       <td className="money">{cost(l.burst_charge)}</td>
                       <td className="money">
@@ -124,9 +156,9 @@ export default function Metering({ carrierView = false }: { carrierView?: boolea
                     </tr>
                   ))}
                 </tbody>
-              </table>
-            </div>
-          ))}
+              ))}
+            </table>
+          )}
           {data && links.length === 0 && <p className="muted">No links to show.</p>}
         </section>
         {current && <LinkChart link={current} period={period} onCsv={() => csv(current.id)} />}
@@ -143,7 +175,9 @@ function LinkChart({ link, period, onCsv }: { link: LinkSettlement; period: stri
     60_000,
   );
   const from = data ? new Date(data.start).getTime() : Date.now() - 86_400_000;
-  const to = data ? new Date(data.end).getTime() : Date.now();
+  // A period still in progress ends at now (or the last sample), not at the end of the month.
+  const last = data?.points.length ? new Date(data.points[data.points.length - 1].bucket).getTime() + 5 * 60_000 : 0;
+  const to = data ? Math.min(new Date(data.end).getTime(), Math.max(Date.now(), last)) : Date.now();
   const pts = data?.points ?? [];
   const series = [
     { key: "in", label: "In", points: pts.map((p) => ({ t: new Date(p.bucket).getTime(), v: p.in_mbps })) },
@@ -167,13 +201,21 @@ function LinkChart({ link, period, onCsv }: { link: LinkSettlement; period: stri
         </button>
       </div>
       <ErrorNote error={error} />
-      <div className="chart-wide">
-        <LineChart title="5-minute average" unit=" Mbps" series={series} from={from} to={to} refs={refs} />
-      </div>
+      <LineChart
+        title="Throughput"
+        unit=" Mbps"
+        series={series}
+        from={from}
+        to={to}
+        refs={refs}
+        height={260}
+        gapMs={15 * 60_000}
+        note={rangeLabel(from, to)}
+      />
       <p className="muted small">
         {link.samples} samples; {link.discarded} discarded as the top 5%. Billable {mbps(link.billable_mbps)} against a
-        commit of {mbps(num(link.commit_mbps))} at {cost(link.cost_per_mbps)} per Mbps; burst at {cost(link.burst_price)}{" "}
-        per Mbps.
+        commit of {mbps(num(link.commit_mbps))} at US$ {cost(link.cost_per_mbps)} per Mbps; burst at US${" "}
+        {cost(link.burst_price)} per Mbps.
       </p>
     </section>
   );
@@ -189,10 +231,10 @@ function UsageCard({ data }: { data: { totals: { gb: number; over_commit_gb: num
         {data.totals.gb.toFixed(2)} GB in total. {pct(data.totals.over_commit_gb)} above commit,{" "}
         {pct(data.totals.satellite_gb)} on satellite.
       </p>
-      <table className="paths">
+      <table className="paths usage">
         <thead>
           <tr>
-            <th scope="col">Site</th>
+            <th scope="col" className="nowrap">Site</th>
             <th scope="col">Path</th>
             <th scope="col" className="num">Data</th>
             <th scope="col" className="num">Above commit</th>
@@ -203,22 +245,23 @@ function UsageCard({ data }: { data: { totals: { gb: number; over_commit_gb: num
         <tbody>
           {data.paths.map((p) => (
             <tr key={`${p.site_id}-${p.path}`}>
-              <td>
+              <td className="nowrap" data-label="Site">
                 <Link to={`/sites/${p.site_id}`}>{p.site}</Link>
               </td>
-              <td>
-                {p.path_label} <span className="muted small">{p.carrier}</span>
+              <td className="nowrap" data-label="Path">
+                {p.path_label}
+                {p.carrier !== p.path_label && <span className="muted small"> {p.carrier}</span>}
               </td>
-              <td className="num mono">{p.gb.toFixed(2)} GB</td>
-              <td className="num mono">{p.over_commit_gb ? `${p.over_commit_gb.toFixed(2)} GB` : "–"}</td>
-              <td className="num mono">{mbps(p.p95_mbps)}</td>
-              <td className="small">
+              <td className="num mono" data-label="Data">{p.gb.toFixed(2)} GB</td>
+              <td className="num mono" data-label="Above commit">{p.over_commit_gb ? `${p.over_commit_gb.toFixed(2)} GB` : "–"}</td>
+              <td className="num mono" data-label="95th">{mbps(p.p95_mbps)}</td>
+              <td className="small reasons" data-label="Why traffic went there">
                 {p.reasons.length === 0 ? (
                   <span className="muted">{p.satellite ? "No moves onto satellite" : "Default routing"}</span>
                 ) : (
-                  p.reasons.map((r) => (
-                    <div key={r.time}>
-                      <span className="mono muted">{clock(r.time)}</span> {r.reason}
+                  p.reasons.map((r, i) => (
+                    <div key={`${r.time}-${r.class_name}-${i}`}>
+                      <span className="mono muted">{when(r.time)}</span> {r.reason}
                     </div>
                   ))
                 )}

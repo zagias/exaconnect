@@ -1,0 +1,107 @@
+/* Charts, drawn at real pixel width (components.tsx LineChart). Loaded before
+   brand.css, so rules here use `.chart.xchart` to win over brand.css's `.chart`. */
+
+/* Each series sets --c for its dots, bands and tooltip swatches. */
+.series-carrier-a { --c: var(--path-a); }
+.series-carrier-b { --c: var(--path-b); }
+.series-sat { --c: var(--coral); }
+.series-in { --c: var(--teal); }
+.series-out { --c: var(--ink-muted); }
+
+.chart.xchart { margin: 0; min-width: 0; }
+.chart.xchart figcaption {
+  display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 12px;
+  font: 600 14px/20px var(--font-body); margin-bottom: var(--space-1);
+}
+.chart.xchart .chart-unit { font: 400 12px/16px var(--font-mono); color: var(--ink-muted); }
+.chart.xchart .chart-note { font: 400 12px/16px var(--font-body); color: var(--ink-muted); }
+.chart.xchart .chart-box { position: relative; width: 100%; outline-offset: 4px; border-radius: var(--radius-sm); }
+.chart.xchart svg { width: auto; max-width: none; height: auto; display: block; overflow: visible; }
+.chart.xchart .axis { fill: var(--ink-muted); font: 400 11px var(--font-mono); font-variant-numeric: tabular-nums; }
+.chart.xchart .axis.empty { font-family: var(--font-body); font-size: 12px; }
+.chart.xchart .tick { stroke: var(--line); }
+.chart.xchart .series { fill: none; stroke-width: 1.75; stroke-linejoin: round; stroke-linecap: round; }
+.chart.xchart .band { fill: var(--c, var(--ink-muted)); stroke: none; opacity: 0.14; stroke-dasharray: none; }
+.chart.xchart .sla-line { stroke: var(--danger); stroke-width: 1.25; stroke-dasharray: 6 4; }
+.chart.xchart .ref-line { stroke-width: 1.25; }
+.chart.xchart .ref-line.ref-p95 { stroke: var(--path-a); stroke-dasharray: 2 3; }
+.chart.xchart .ref-line.ref-commit { stroke: var(--success); }
+.chart.xchart .sla-label, .chart.xchart .ref-label { font: 600 11px var(--font-body); }
+.chart.xchart .sla-label { fill: var(--danger); }
+.chart.xchart .ref-label.ref-p95 { fill: var(--path-a); }
+.chart.xchart .ref-label.ref-commit { fill: var(--success); }
+/* A halo in the card colour keeps labels legible where they cross a line. */
+.chart.xchart .halo { paint-order: stroke; stroke: var(--card); stroke-width: 3px; stroke-linejoin: round; }
+
+/* Crosshair and tooltip */
+.chart.xchart .hit { fill: transparent; cursor: crosshair; touch-action: pan-y; }
+.chart.xchart .crosshair line { stroke: var(--ink-muted); stroke-width: 1; stroke-dasharray: 3 3; }
+.chart.xchart .crosshair .dot { fill: var(--c, var(--ink)); stroke: var(--card); stroke-width: 2; stroke-dasharray: none; }
+.chart-tip {
+  position: absolute; z-index: 5; pointer-events: none; min-width: 150px; max-width: 220px;
+  background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: var(--radius-md);
+  box-shadow: 0 2px 8px rgba(1, 31, 77, 0.16); padding: 6px 10px; font: 400 12px/18px var(--font-body);
+}
+.chart-tip .tip-time { font: 600 12px/18px var(--font-mono); margin-bottom: 2px; white-space: nowrap; }
+.chart-tip .tip-row { display: grid; grid-template-columns: 14px 1fr auto; gap: 6px; align-items: center; white-space: nowrap; }
+.chart-tip .tip-value { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; }
+.chart-tip .tip-range { color: var(--ink-muted); font-size: 11px; }
+.chart-tip .swatch, .chart.xchart .legend .swatch { width: 14px; height: 3px; display: inline-block; background: var(--c, var(--ink-muted)); }
+.chart-tip .swatch.series-sat, .chart.xchart .legend .swatch.series-sat {
+  background: repeating-linear-gradient(90deg, var(--coral) 0 4px, transparent 4px 7px);
+}
+.chart.xchart .legend .band-swatch { height: 10px; background: var(--ink-muted); opacity: 0.18; }
+.chart.xchart .legend { font-size: 12px; gap: 4px 12px; }
+
+/* Site page: path figures near or over the voice SLA carry a mark and a word. */
+.lvl { display: inline-flex; align-items: center; gap: 4px; }
+.lvl::before { content: ""; width: 7px; height: 7px; background: currentColor; flex: none; }
+.lvl.warn { color: var(--warning); }
+.lvl.warn::before { transform: rotate(45deg) scale(0.9); }
+.lvl.bad { color: var(--danger); font-weight: 600; }
+.probe-lost { color: var(--warning); }
+
+/* Events and timelines: a time column as wide as its longest entry. */
+.events.stamped { display: grid; grid-template-columns: max-content 1fr; column-gap: 12px; }
+.events.stamped li { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: baseline; }
+.stamp { color: var(--ink-muted); }
+
+/* Metering: one table, carriers as group rows, so every column lines up. */
+table.paths.settle { table-layout: fixed; min-width: 860px; }
+table.paths.settle col.c-site { width: 20%; }
+table.paths.settle col.c-cust { width: 16%; }
+table.paths.settle col.c-samples { width: 10%; }
+table.paths.settle col.c-rate { width: 7.5%; }
+table.paths.settle col.c-money { width: 8%; }
+table.paths.settle th .unit { display: block; font-weight: 400; }
+table.paths.settle td.num, table.paths.settle td.money { padding-left: var(--space-2); }
+table.paths.settle tbody.group th {
+  font: 600 16px/24px var(--font-head); color: var(--ink); padding: var(--space-4) 0 var(--space-2); letter-spacing: -0.01em;
+}
+table.paths.settle tbody.group:first-of-type th { padding-top: var(--space-2); }
+table.paths.settle td.site-cell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+table.paths tr.selected td { background: var(--teal-tint); }
+table.paths td.nowrap, table.paths th.nowrap { white-space: nowrap; }
+table.paths .reasons div { margin-bottom: 2px; }
+.period-note { margin: 0 0 var(--space-2); }
+
+@media (max-width: 640px) {
+  .chart-tip { max-width: 200px; }
+}
+
+/* Metering usage on phones: each path becomes a small card of label and value,
+   so the routing reasons get the full width instead of a sliver. */
+@media (max-width: 640px) {
+  table.paths.usage thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  table.paths.usage, table.paths.usage tbody { display: block; }
+  table.paths.usage tr { display: block; padding: var(--space-3) 0; border-bottom: 1px solid var(--line); }
+  table.paths.usage tr:last-child { border-bottom: none; }
+  table.paths.usage td {
+    display: flex; justify-content: space-between; gap: var(--space-3); border: none; padding: 2px 0; text-align: right;
+  }
+  table.paths.usage td::before { content: attr(data-label); font: 600 13px/20px var(--font-body); color: var(--ink-muted); text-align: left; }
+  table.paths.usage td.reasons { display: block; text-align: left; margin-top: var(--space-1); }
+  table.paths.usage td.reasons::before { display: block; }
+}
+
+/* Decisions timeline: keep its own layout even if a page-wide `.move` rule is loaded. */

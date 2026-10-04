@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useApi, type DecisionRow, type SiteSummary } from "../api";
-import { ErrorNote, Eyebrow, clock } from "../components";
+import { ErrorNote, Eyebrow, Stamp } from "../components";
 
 const KIND_WORDS: Record<DecisionRow["kind"], string> = {
   move: "Moved",
@@ -69,7 +69,7 @@ export default function Decisions() {
           {(data ?? []).map((d) => (
             <li key={d.id} className={`decision ${d.kind}`}>
               <div className="decision-head">
-                <span className="mono muted">{clock(d.time)}</span>
+                <Stamp iso={d.time} seconds />
                 <span className={`pill ${d.kind === "failover" ? "bad" : d.kind === "hold" ? "warn" : "ok"}`}>
                   {KIND_WORDS[d.kind]}
                 </span>

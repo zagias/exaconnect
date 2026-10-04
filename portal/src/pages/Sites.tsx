@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useStormToggle } from "../customer";
 import { Link, useParams } from "react-router-dom";
 import { num, useApi, type EventRow, type MetricPoint, type SiteDetail, type SiteSummary, type SteeringRow } from "../api";
-import { ErrorNote, Eyebrow, LineChart, StatusPill, ago, clock, fmt, type Series } from "../components";
+import { ErrorNote, Eyebrow, LineChart, Stamp, StatusPill, ago, fmt, when, type Series } from "../components";
 import { NodeState } from "./Overview";
 
 export function SiteList() {
@@ -77,13 +77,13 @@ export function SitePage() {
     s.paths.map((p) => ({
       key: p.path,
       label: p.label,
-      points: withGaps(
-        (metrics.data?.points ?? [])
-          .filter((m) => m.path === p.path)
-          .map((m) => ({ t: new Date(m.time).getTime(), v: num(m[field]) })),
-        minutes <= 60 ? 25_000 : 150_000,
-      ),
+      points: (metrics.data?.points ?? [])
+        .filter((m) => m.path === p.path)
+        .map((m) => ({ t: new Date(m.time).getTime(), v: num(m[field]) })),
     }));
+  // A missed report or two is not an outage; break the line after a longer silence.
+  const gapMs = minutes <= 60 ? 25_000 : 150_000;
+  const slaFor = { latency: num(voice?.max_latency_ms), jitter: num(voice?.max_jitter_ms), loss: num(voice?.max_loss_pct) };
 
   return (
     <>
@@ -122,6 +122,9 @@ export function SitePage() {
                   <th scope="col" className="num">Latency</th>
                   <th scope="col" className="num">Jitter</th>
                   <th scope="col" className="num">Loss</th>
+                  <th scope="col" className="num" title="Probes received of probes sent in the last 30 seconds">
+                    Probes, 30 s
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -132,19 +135,31 @@ export function SitePage() {
                       {p.carrier} <span className="muted">({p.underlay_type})</span>
                     </td>
                     <td>{p.sent ? <StatusPill health={p.health} /> : <span className="muted">No recent probes</span>}</td>
-                    <td className="num mono">{fmt(p.rtt_avg_ms, " ms")}</td>
-                    <td className="num mono">{fmt(p.jitter_ms, " ms")}</td>
-                    <td className="num mono">{fmt(p.loss_pct, "%", 2)}</td>
+                    <td className="num mono">
+                      <Level v={p.rtt_avg_ms} limit={slaFor.latency} unit=" ms" />
+                    </td>
+                    <td className="num mono">
+                      <Level v={p.jitter_ms} limit={slaFor.jitter} unit=" ms" />
+                    </td>
+                    <td className="num mono">
+                      <Level v={p.loss_pct} limit={slaFor.loss} unit="%" digits={2} />
+                    </td>
+                    <td className="num mono">
+                      <Probes sent={p.sent} received={p.received} />
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            <p className="muted small">Last 30 seconds, against the voice SLA, the strictest class.</p>
+            <p className="muted small">
+              Last 30 seconds, against the voice SLA, the strictest class. A diamond marks a figure above 80% of the SLA;
+              a square marks a breach.
+            </p>
             <ErrorNote error={metrics.error} />
             <div className="charts">
-              <LineChart title="Latency (round trip)" unit=" ms" series={series("rtt_avg_ms")} from={from} to={to} sla={num(voice?.max_latency_ms)} />
-              <LineChart title="Jitter" unit=" ms" series={series("jitter_ms")} from={from} to={to} sla={num(voice?.max_jitter_ms)} />
-              <LineChart title="Loss" unit="%" series={series("loss_pct")} from={from} to={to} sla={num(voice?.max_loss_pct)} />
+              <LineChart title="Latency (round trip)" unit=" ms" series={series("rtt_avg_ms")} from={from} to={to} sla={slaFor.latency} gapMs={gapMs} height={190} />
+              <LineChart title="Jitter" unit=" ms" series={series("jitter_ms")} from={from} to={to} sla={slaFor.jitter} gapMs={gapMs} height={190} />
+              <LineChart title="Loss" unit="%" series={series("loss_pct")} from={from} to={to} sla={slaFor.loss} gapMs={gapMs} height={190} band={false} />
             </div>
           </section>
         )}
@@ -172,7 +187,7 @@ export function SitePage() {
                     <td className="mono">{c.class_name}</td>
                     <td>
                       {c.intended_label ?? <span className="muted">Default</span>}
-                      {c.since && <span className="muted small"> since {clock(c.since)}</span>}
+                      {c.since && <span className="muted small"> since {when(c.since)}</span>}
                     </td>
                     <td>{actualCell(c)}</td>
                     <td className="small">{c.last_reason ?? <span className="muted">No moves yet</span>}</td>
@@ -222,13 +237,16 @@ export function SitePage() {
           <Eyebrow>Events</Eyebrow>
           <h2>What happened</h2>
           <ErrorNote error={events.error} />
-          <ul className="events">
+          <ul className="events stamped">
             {(events.data ?? []).map((e, i) => (
               <li key={`${e.time}-${i}`}>
-                <span className="mono muted">{clock(e.time)}</span> <strong>{eventWord(e.kind)}</strong>
-                {e.detail && Object.keys(e.detail).length > 0 && (
-                  <span className="muted"> {Object.entries(e.detail).map(([k, v]) => `${k} ${v}`).join(", ")}</span>
-                )}
+                <Stamp iso={e.time} seconds />
+                <span>
+                  <strong>{eventWord(e.kind)}</strong>
+                  {e.detail && Object.keys(e.detail).length > 0 && (
+                    <span className="muted"> {Object.entries(e.detail).map(([k, v]) => `${k} ${v}`).join(", ")}</span>
+                  )}
+                </span>
               </li>
             ))}
             {events.data?.length === 0 && <li className="muted">Nothing yet.</li>}
@@ -274,15 +292,31 @@ function eventWord(kind: string) {
   return EVENT_WORDS[kind] ?? kind.replace(/_/g, " ");
 }
 
-/** Inserts a null between points further apart than `gap` so the chart breaks the line. */
-function withGaps(points: { t: number; v: number | null }[], gap: number) {
-  const out: { t: number; v: number | null }[] = [];
-  for (const p of points) {
-    const prev = out[out.length - 1];
-    if (prev && p.t - prev.t > gap) out.push({ t: prev.t + 1, v: null });
-    out.push(p);
-  }
-  return out;
+/** A path figure against the voice SLA: a diamond and "near SLA" above 80% of the
+ *  limit, a square and "over SLA" above it. Never colour alone. */
+function Level({ v, limit, unit, digits = 1 }: { v: unknown; limit: number | null; unit: string; digits?: number }) {
+  const n = num(v);
+  const text = fmt(v, unit, digits);
+  if (n === null || limit == null || limit <= 0 || n <= 0.8 * limit) return <>{text}</>;
+  const over = n > limit;
+  return (
+    <span className={`lvl ${over ? "bad" : "warn"}`} title={`${over ? "Over" : "Near"} the voice SLA of ${limit}${unit}`}>
+      {text}
+      <span className="sr-only">{over ? ", over the voice SLA" : ", near the voice SLA"}</span>
+    </span>
+  );
+}
+
+/** Probes received of sent in the last 30 seconds, with the number lost. */
+function Probes({ sent, received }: { sent: number | null; received: number | null }) {
+  if (!sent) return <span className="muted">–</span>;
+  const lost = sent - (received ?? 0);
+  return (
+    <span title={`${received ?? 0} of ${sent} probes came back`}>
+      {received ?? 0}/{sent}
+      {lost > 0 && <span className="probe-lost"> ({lost} lost)</span>}
+    </span>
+  );
 }
 
 /** This site's Storm Mode state and switch. */
