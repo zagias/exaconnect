@@ -21,6 +21,7 @@ SCREENS = [
     ("/traffic/classes", "Traffic: classes"),
     ("/decisions", "Decisions"),
     ("/fabric", "Fabric"),
+    ("/internet", "Internet"),
     ("/metering", "Metering"),
     ("/insights", "Insights"),
     ("/ask", "Ask your network"),

@@ -104,6 +104,8 @@ type Telemetry struct {
 	SteeringVersion int64          `json:"steering_version,omitempty"`
 	// Circuits is every circuit's state at this flush (ADR 0009).
 	Circuits []CircuitState `json:"circuits,omitempty"`
+	// Internet is where internet traffic leaves, with firewall counters (ADR 0010).
+	Internet *InternetState `json:"internet,omitempty"`
 }
 
 type Agent struct {
@@ -140,6 +142,7 @@ type Agent struct {
 	unreported  *client.Status     // an apply result the controller has not heard yet
 	flows       flows.Tracker
 	flowErr     string
+	inetErr     string
 	// writeProc writes a /proc/sys file; nil uses os.WriteFile (tests stub it).
 	writeProc func(path string, data []byte) error
 }
@@ -152,6 +155,7 @@ func (a *Agent) Run(ctx context.Context) error {
 	a.kick = make(chan struct{}, 1)
 	a.refreshed = make(chan struct{}, 1)
 	a.bfdKick = make(chan struct{}, 1)
+	a.Applier.TunnelUp = a.tunnelUp
 
 	// Flow telemetry needs per-flow byte counters; best effort.
 	if a.writeProc == nil {
@@ -182,6 +186,7 @@ func (a *Agent) Run(ctx context.Context) error {
 		a.checkBFD(ctx)
 		a.steer(ctx, "start")
 	}
+	a.reroute(ctx)
 
 	// BFD is watched on its own goroutine too, so a controller request that
 	// hangs (up to the client timeout) never holds up local failover.
@@ -207,7 +212,7 @@ func (a *Agent) Run(ctx context.Context) error {
 		select {
 		case <-a.bfdKick:
 			if a.checkBFD(ctx) {
-				a.steer(ctx, "bfd")
+				a.bfdChanged(ctx)
 			}
 		default:
 		}
@@ -226,11 +231,11 @@ func (a *Agent) Run(ctx context.Context) error {
 			a.collectFlows(ctx)
 		case <-bfd.C:
 			if a.checkBFD(ctx) {
-				a.steer(ctx, "bfd")
+				a.bfdChanged(ctx)
 			}
 		case <-a.bfdKick:
 			if a.checkBFD(ctx) {
-				a.steer(ctx, "bfd")
+				a.bfdChanged(ctx)
 			}
 		case <-str.C:
 			a.pollSteering(ctx)
@@ -244,6 +249,12 @@ func (a *Agent) Run(ctx context.Context) error {
 	}
 }
 
+// bfdChanged moves classes and the internet exit off paths BFD says are down.
+func (a *Agent) bfdChanged(ctx context.Context) {
+	a.steer(ctx, "bfd")
+	a.reroute(ctx)
+}
+
 func (a *Agent) have() int64 {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -254,6 +265,9 @@ func (a *Agent) have() int64 {
 }
 
 func (a *Agent) poll(ctx context.Context) {
+	if err := a.Applier.RetryInternet(ctx); err != nil {
+		a.Log.Debug("internet exit retry", "err", err)
+	}
 	if st := a.unreported; st != nil {
 		if a.reportStatus(ctx, *st) {
 			a.unreported = nil
@@ -619,6 +633,7 @@ func (a *Agent) flush(ctx context.Context) {
 	cur := a.current
 	a.mu.Unlock()
 	t.Circuits = a.circuitStates(ctx, cur, now)
+	t.Internet = a.internetState(ctx, cur)
 	for i := range t.Tunnels {
 		if age, err := frrstate.HandshakeAge(ctx, a.Sys, t.Tunnels[i].Name, now); err == nil {
 			t.Tunnels[i].HandshakeAgeS = age

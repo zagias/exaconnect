@@ -49,11 +49,19 @@ class SiteIn(BaseModel):
     cloud_address: str | None = None
     # The LAN-facing interface, where layer 2 circuits take their VLANs (default eth4).
     lan_interface: str | None = Field(default=None, pattern=r"^[a-zA-Z0-9._-]{1,15}$")
+    # PoP only: the interface and next hop toward the internet (ADR 0010).
+    internet_interface: str | None = Field(default=None, pattern=r"^[a-zA-Z0-9._-]{1,15}$")
+    internet_gateway: str | None = None
 
     @field_validator("cloud_address")
     @classmethod
     def _cloud_address(cls, v: str | None) -> str | None:
         return None if not v else str(ipaddress.ip_interface(v))
+
+    @field_validator("internet_gateway")
+    @classmethod
+    def _internet_gateway(cls, v: str | None) -> str | None:
+        return None if not v else str(ipaddress.IPv4Address(v))
 
     @field_validator("lan_prefixes")
     @classmethod
@@ -74,9 +82,16 @@ class LinkIn(BaseModel):
     underlay_type: Literal["fibre", "broadband", "lte", "leo", "geo"]
     underlay_interface: str = Field(pattern=r"^[a-zA-Z0-9._-]{1,15}$")
     underlay_ip: str | None = None
+    # The carrier's next hop on this link, for local internet breakout (ADR 0010).
+    underlay_gateway: str | None = None
     commit_mbps: float = 0
     cost_per_mbps: float = 0
     burst_price: float = 0
+
+    @field_validator("underlay_gateway")
+    @classmethod
+    def _underlay_gateway(cls, v: str | None) -> str | None:
+        return None if not v else str(ipaddress.IPv4Address(v))
 
 
 @router.post("/sites/{site_id}/links", status_code=201)
@@ -163,8 +178,8 @@ def inventory_view(user: AdminDep, customer_id: str) -> dict:
             """SELECT s.id, s.name, s.kind, s.location, s.timezone, s.asn, s.lan_prefixes::text[] AS lan_prefixes,
                       s.overlay_host, s.latitude, s.longitude, s.cloud_interface,
                       s.cloud_address::text AS cloud_address,
-                      s.lan_interface,
-                      n.name AS node, n.last_seen
+                      s.lan_interface, s.internet_interface, host(s.internet_gateway) AS internet_gateway,
+                      s.internet_mode, n.name AS node, n.last_seen
                FROM sites s LEFT JOIN nodes n ON n.site_id = s.id
                WHERE s.customer_id = %s ORDER BY s.kind DESC, s.name""",
             (customer_id,),
@@ -172,6 +187,7 @@ def inventory_view(user: AdminDep, customer_id: str) -> dict:
         links = conn.execute(
             """SELECT l.id, l.site_id, l.path, c.name AS carrier, l.underlay_type, l.underlay_interface,
                       host(l.underlay_ip) || '/' || masklen(l.underlay_ip) AS underlay_ip,
+                      host(l.underlay_gateway) AS underlay_gateway,
                       l.commit_mbps, l.cost_per_mbps, l.burst_price
                FROM links l JOIN carriers c ON c.id = l.carrier_id JOIN paths p ON p.name = l.path
                WHERE l.customer_id = %s ORDER BY p.ordinal""",

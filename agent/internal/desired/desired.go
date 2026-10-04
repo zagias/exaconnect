@@ -43,6 +43,9 @@ type State struct {
 	Circuits []Circuit `json:"circuits,omitempty"`
 	// L2Circuits are a site's VLANs bridged over VXLAN to another site.
 	L2Circuits []L2Circuit `json:"l2_circuits,omitempty"`
+	// Internet is where the LAN's internet traffic goes (ADR 0010); absent
+	// means the agent removes everything it set up for it.
+	Internet *Internet `json:"internet,omitempty"`
 }
 
 // Tunnel is one WireGuard interface over one underlay (carrier) link.
@@ -257,7 +260,10 @@ func (s *State) Validate() error {
 	if err := s.validateCircuits(); err != nil {
 		return err
 	}
-	return s.validateL2()
+	if err := s.validateL2(); err != nil {
+		return err
+	}
+	return s.validateInternet()
 }
 
 func validListen(l string) error {

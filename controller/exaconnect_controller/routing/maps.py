@@ -15,7 +15,7 @@ from typing import Any
 import psycopg
 from psycopg.types.json import Jsonb
 
-from .. import traffic
+from .. import internet, traffic
 from ..ports import parse_ports
 
 TABLE_BASE = 100
@@ -107,6 +107,7 @@ def load(conn: psycopg.Connection, customer_id: Any) -> dict[str, Any]:
     return {
         "customer": customer,
         "sites": sites,
+        "corporate": internet.corporate(conn, customer_id),
         "links": by_site,
         "classes": classes,
         "steering": {(r["site_id"], r["class_name"]): r["path"] for r in steering},
@@ -165,6 +166,10 @@ def build(inv: dict[str, Any], site: dict) -> dict[str, Any]:
         "rules": rules,
         "local_prefixes": [str(p) for p in site["lan_prefixes"]],
     }
+    # A site breaking out locally classifies only traffic for the customer's
+    # own networks; the rest leaves by its carrier links (ADR 0010).
+    if site["kind"] == "site" and site.get("internet_mode") == "local":
+        out["corporate_prefixes"] = inv["corporate"]
     # Traffic rules (ADR 0007). The PoP gets the rules of every site it serves
     # so return traffic is classified the same way.
     matches = traffic.fit(traffic.compile_matches(inv["rules"], served))

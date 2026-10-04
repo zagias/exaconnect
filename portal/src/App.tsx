@@ -4,6 +4,7 @@ import { CustomerPicker, CustomerProvider, StormBanner, StormSwitch } from "./cu
 import Account from "./pages/Account";
 import Ask from "./pages/Ask";
 import Insights from "./pages/Insights";
+import Internet from "./pages/Internet";
 import Admin from "./pages/Admin";
 import Decisions from "./pages/Decisions";
 import Fabric from "./pages/Fabric";
@@ -47,6 +48,7 @@ function Layout() {
                 <NavLink to="/traffic">Traffic</NavLink>
                 <NavLink to="/decisions">Decisions</NavLink>
                 <NavLink to="/fabric">Fabric</NavLink>
+                <NavLink to="/internet">Internet</NavLink>
                 <NavLink to="/metering">Metering</NavLink>
                 <NavLink to="/insights">Insights</NavLink>
                 <NavLink to="/ask">Ask</NavLink>
@@ -75,6 +77,7 @@ function Layout() {
             <Route path="/traffic/*" element={<Traffic />} />
             <Route path="/decisions" element={<Decisions />} />
             <Route path="/fabric" element={<Fabric />} />
+            <Route path="/internet" element={<Internet />} />
             <Route path="/metering" element={<Metering />} />
             <Route path="/insights" element={<Insights />} />
             <Route path="/ask" element={<Ask />} />

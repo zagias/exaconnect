@@ -79,6 +79,9 @@ def seed_lab(conn) -> dict:
             # The PoP reaches the lab's simulated clouds through the "ix" router.
             cloud_interface="eth5" if kind == "pop" else None,
             cloud_address="100.64.0.2/24" if kind == "pop" else None,
+            # ...which also stands in for its internet upstream (ADR 0010).
+            internet_interface="eth5" if kind == "pop" else None,
+            internet_gateway="100.64.0.1" if kind == "pop" else None,
         )
         for path, carrier, utype, iface, second, commit, cost, burst, speed in LAB_LINKS:
             carrier_id = inventory.ensure_carrier(conn, carrier, ACTOR)
@@ -92,6 +95,7 @@ def seed_lab(conn) -> dict:
                 underlay_type=utype,
                 underlay_interface=iface,
                 underlay_ip=f"10.{second}.{octet}.2/24",
+                underlay_gateway=f"10.{second}.{octet}.1",
                 commit_mbps=commit,
                 cost_per_mbps=cost,
                 burst_price=burst,

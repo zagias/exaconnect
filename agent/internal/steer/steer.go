@@ -47,6 +47,9 @@ type Map struct {
 	Rules   []Rule  `json:"rules"`
 	// LocalPrefixes are never steered (the site's own LAN).
 	LocalPrefixes []string `json:"local_prefixes"`
+	// CorporatePrefixes, when set, are the only destinations classified: a
+	// site breaking out to the internet locally leaves the rest unmarked.
+	CorporatePrefixes []string `json:"corporate_prefixes,omitempty"`
 	// Matches are custom traffic rules, checked in order before the class
 	// defaults; the first that fits decides the class.
 	Matches []Match `json:"matches,omitempty"`
@@ -216,6 +219,9 @@ func (m *Map) Validate() error {
 			return fmt.Errorf("local prefix %q", s)
 		}
 	}
+	if err := validV4(m.CorporatePrefixes); err != nil {
+		return fmt.Errorf("corporate prefix: %w", err)
+	}
 	if err := m.validateMatches(classes); err != nil {
 		return err
 	}
@@ -353,6 +359,10 @@ func NFT(m *Map, l *Lookups) string {
 		fmt.Fprintf(&b, "\tset local {\n\t\ttype ipv4_addr\n\t\tflags interval\n\t\telements = { %s }\n\t}\n",
 			strings.Join(m.LocalPrefixes, ", "))
 	}
+	if len(m.CorporatePrefixes) > 0 {
+		fmt.Fprintf(&b, "\tset corporate {\n\t\ttype ipv4_addr\n\t\tflags interval\n\t\telements = { %s }\n\t}\n",
+			strings.Join(prefixList(parseAll(m.CorporatePrefixes)), ", "))
+	}
 	// One set per match with domains: its dst subnets plus what the domains
 	// resolve to. A set with nothing in it matches nothing.
 	for i, mt := range m.Matches {
@@ -368,6 +378,9 @@ func NFT(m *Map, l *Lookups) string {
 	b.WriteString("\tchain classify {\n\t\ttype filter hook prerouting priority mangle; policy accept;\n")
 	if len(m.LocalPrefixes) > 0 {
 		b.WriteString("\t\tip daddr @local return\n")
+	}
+	if len(m.CorporatePrefixes) > 0 {
+		b.WriteString("\t\tip daddr != @corporate return\n")
 	}
 	acts := actions(m)
 	// Custom traffic rules first, in order.
@@ -471,14 +484,18 @@ next:
 	return out
 }
 
-func subnetSet(subnets []string) string {
+func parseAll(subnets []string) []netip.Prefix {
 	var ps []netip.Prefix
 	for _, s := range subnets {
 		if p, err := netip.ParsePrefix(s); err == nil {
 			ps = append(ps, p)
 		}
 	}
-	return "{ " + strings.Join(prefixList(ps), ", ") + " }"
+	return ps
+}
+
+func subnetSet(subnets []string) string {
+	return "{ " + strings.Join(prefixList(parseAll(subnets)), ", ") + " }"
 }
 
 // matchRules renders one match: one rule per VLAN and per protocol with

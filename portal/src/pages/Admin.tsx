@@ -119,6 +119,7 @@ interface LinkRow {
   underlay_type: string;
   underlay_interface: string;
   underlay_ip: string | null;
+  underlay_gateway: string | null;
   commit_mbps: string | number;
   cost_per_mbps: string | number;
   burst_price: string | number;
@@ -135,6 +136,11 @@ interface SiteRow {
   overlay_host: number;
   latitude: number | null;
   longitude: number | null;
+  cloud_interface: string | null;
+  cloud_address: string | null;
+  lan_interface: string | null;
+  internet_interface: string | null;
+  internet_gateway: string | null;
   node: string | null;
   last_seen: string | null;
   links: LinkRow[];
@@ -295,6 +301,11 @@ function SiteForm({ customerId, site, onDone }: { customerId: string; site: Site
     overlay_host: String(site?.overlay_host ?? ""),
     latitude: site?.latitude == null ? "" : String(site.latitude),
     longitude: site?.longitude == null ? "" : String(site.longitude),
+    lan_interface: site?.lan_interface ?? "",
+    cloud_interface: site?.cloud_interface ?? "",
+    cloud_address: site?.cloud_address ?? "",
+    internet_interface: site?.internet_interface ?? "",
+    internet_gateway: site?.internet_gateway ?? "",
   });
   const act = useAction();
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
@@ -317,6 +328,12 @@ function SiteForm({ customerId, site, onDone }: { customerId: string; site: Site
           overlay_host: Number(f.overlay_host),
           latitude: f.latitude.trim() === "" ? null : Number(f.latitude),
           longitude: f.longitude.trim() === "" ? null : Number(f.longitude),
+          // Sent every time: a field left out would be cleared.
+          lan_interface: f.lan_interface.trim() || null,
+          cloud_interface: f.cloud_interface.trim() || null,
+          cloud_address: f.cloud_address.trim() || null,
+          internet_interface: f.internet_interface.trim() || null,
+          internet_gateway: f.internet_gateway.trim() || null,
         }),
       });
       onDone();
@@ -367,6 +384,31 @@ function SiteForm({ customerId, site, onDone }: { customerId: string; site: Site
         LAN prefixes, comma separated
         <input value={f.lan_prefixes} onChange={set("lan_prefixes")} placeholder="192.168.10.0/24" />
       </label>
+      {f.kind === "site" ? (
+        <label>
+          LAN interface (for layer 2 circuits)
+          <input value={f.lan_interface} onChange={set("lan_interface")} placeholder="eth4" pattern="[a-zA-Z0-9._-]{1,15}" />
+        </label>
+      ) : (
+        <>
+          <label>
+            Cloud interface
+            <input value={f.cloud_interface} onChange={set("cloud_interface")} placeholder="eth5" pattern="[a-zA-Z0-9._-]{1,15}" />
+          </label>
+          <label>
+            Public address for clouds and port forwards
+            <input value={f.cloud_address} onChange={set("cloud_address")} placeholder="100.64.0.2/24" />
+          </label>
+          <label>
+            Internet interface
+            <input value={f.internet_interface} onChange={set("internet_interface")} placeholder="eth5" pattern="[a-zA-Z0-9._-]{1,15}" />
+          </label>
+          <label>
+            Internet next hop
+            <input value={f.internet_gateway} onChange={set("internet_gateway")} placeholder="100.64.0.1" />
+          </label>
+        </>
+      )}
       <div className="actions wide">
         <button className="button" disabled={act.busy}>
           Save site
@@ -387,6 +429,7 @@ function LinkForm({ site, link, onDone }: { site: SiteRow; link: LinkRow | null;
     underlay_type: link?.underlay_type ?? "fibre",
     underlay_interface: link?.underlay_interface ?? "",
     underlay_ip: link?.underlay_ip ?? "",
+    underlay_gateway: link?.underlay_gateway ?? "",
     commit_mbps: String(link ? Number(link.commit_mbps) : ""),
     cost_per_mbps: String(link ? Number(link.cost_per_mbps) : ""),
     burst_price: String(link ? Number(link.burst_price) : ""),
@@ -401,6 +444,7 @@ function LinkForm({ site, link, onDone }: { site: SiteRow; link: LinkRow | null;
         body: JSON.stringify({
           ...f,
           underlay_ip: f.underlay_ip || null,
+          underlay_gateway: f.underlay_gateway || null,
           commit_mbps: Number(f.commit_mbps || 0),
           cost_per_mbps: Number(f.cost_per_mbps || 0),
           burst_price: Number(f.burst_price || 0),
@@ -443,6 +487,10 @@ function LinkForm({ site, link, onDone }: { site: SiteRow; link: LinkRow | null;
       <label>
         Underlay address (optional)
         <input value={f.underlay_ip} onChange={set("underlay_ip")} placeholder="10.11.1.2/24" />
+      </label>
+      <label>
+        Carrier next hop (for internet straight out)
+        <input value={f.underlay_gateway} onChange={set("underlay_gateway")} placeholder="10.11.1.1" />
       </label>
       <label>
         Commit, Mbps

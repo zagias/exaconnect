@@ -11,6 +11,8 @@
 # and cloud-azure (100.64.11.2, VNet 10.101.0.0/16). Lab check m9-fabric sets
 # their IPsec and BGP up with a key it makes for each run.
 # Layer 2 circuits: lan-a tags VLAN 100 (172.16.100.10/24), lan-b VLAN 200 (.20).
+# The internet (ADR 0010): 198.51.100.1 answers on every carrier router and on
+# ix, so a site reaches it straight out of its own links or through the PoP.
 # Sites and the PoP run exa-agent from bin/lab (built by `make lab-agent`, mounted as a
 # directory so a rebuild reaches running nodes; `make agents-upgrade` restarts them);
 # it owns WireGuard (wg-a, wg-b, wg-sat) and /etc/frr/frr.conf once enrolled.
@@ -33,6 +35,9 @@ topology:
         - ip addr add 10.11.0.1/24 dev eth1
         - ip addr add 10.11.1.1/24 dev eth2
         - ip addr add 10.11.2.1/24 dev eth3
+        - ip link add inet type dummy
+        - ip addr add 198.51.100.1/24 dev inet
+        - ip link set inet up
     carrier-b:
       mgmt-ipv4: 172.30.0.12
       exec:
@@ -40,6 +45,9 @@ topology:
         - ip addr add 10.12.0.1/24 dev eth1
         - ip addr add 10.12.1.1/24 dev eth2
         - ip addr add 10.12.2.1/24 dev eth3
+        - ip link add inet type dummy
+        - ip addr add 198.51.100.1/24 dev inet
+        - ip link set inet up
     sat:
       mgmt-ipv4: 172.30.0.13
       exec:
@@ -47,6 +55,9 @@ topology:
         - ip addr add 10.13.0.1/24 dev eth1
         - ip addr add 10.13.1.1/24 dev eth2
         - ip addr add 10.13.2.1/24 dev eth3
+        - ip link add inet type dummy
+        - ip addr add 198.51.100.1/24 dev inet
+        - ip link set inet up
 
     pop-miami:
       mgmt-ipv4: 172.30.0.20
@@ -103,6 +114,9 @@ topology:
         - ip addr add 100.64.0.1/24 dev eth1
         - ip addr add 100.64.10.1/24 dev eth2
         - ip addr add 100.64.11.1/24 dev eth3
+        - ip link add inet type dummy
+        - ip addr add 198.51.100.1/24 dev inet
+        - ip link set inet up
     cloud-aws:
       mgmt-ipv4: 172.30.0.51
       exec:
@@ -130,6 +144,7 @@ topology:
         - ip route replace 192.168.0.0/16 via 192.168.10.1
         - ip route replace 10.200.0.0/24 via 192.168.10.1
         - ip route replace 10.100.0.0/15 via 192.168.10.1
+        - ip route replace 198.51.100.0/24 via 192.168.10.1
         - ip link add link eth1 name eth1.100 type vlan id 100
         - ip addr add 172.16.100.10/24 dev eth1.100
         - ip link set eth1.100 mtu 1370 up
@@ -140,6 +155,7 @@ topology:
         - ip route replace 192.168.0.0/16 via 192.168.20.1
         - ip route replace 10.200.0.0/24 via 192.168.20.1
         - ip route replace 10.100.0.0/15 via 192.168.20.1
+        - ip route replace 198.51.100.0/24 via 192.168.20.1
         - ip link add link eth1 name eth1.200 type vlan id 200
         - ip addr add 172.16.100.20/24 dev eth1.200
         - ip link set eth1.200 mtu 1370 up

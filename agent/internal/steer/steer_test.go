@@ -204,3 +204,33 @@ func TestSteererSwapsOnlyRules(t *testing.T) {
 		t.Fatalf("voice should move to carrier-a: %s", sys.cmds[n])
 	}
 }
+
+func TestNFTCorporatePrefixes(t *testing.T) {
+	m := siteMap()
+	plain := NFT(m, nil)
+	m.CorporatePrefixes = []string{"192.168.10.0/24", "10.200.0.0/24", "10.254.0.0/24", "100.64.0.0/16", "100.64.1.0/24"}
+	if err := m.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	nft := NFT(m, nil)
+	set := "\tset corporate {\n\t\ttype ipv4_addr\n\t\tflags interval\n" +
+		"\t\telements = { 10.200.0.0/24, 10.254.0.0/24, 100.64.0.0/16, 192.168.10.0/24 }\n\t}\n"
+	top := "\t\ttype filter hook prerouting priority mangle; policy accept;\n" +
+		"\t\tip daddr @local return\n\t\tip daddr != @corporate return\n\t\tip dscp { 46, 34 }"
+	for _, want := range []string{set, top} {
+		if !strings.Contains(nft, want) {
+			t.Errorf("missing %q in\n%s", want, nft)
+		}
+	}
+	if strings.Replace(strings.Replace(nft, set, "", 1), "\t\tip daddr != @corporate return\n", "", 1) != plain {
+		t.Error("corporate prefixes changed more than the set and the early return")
+	}
+	m.CorporatePrefixes = []string{"10.0.0.0/8", "fd00::/8"}
+	if m.Validate() == nil {
+		t.Error("IPv6 corporate prefix accepted")
+	}
+	m.CorporatePrefixes = []string{"10.0.0.0/33"}
+	if m.Validate() == nil {
+		t.Error("bad corporate prefix accepted")
+	}
+}

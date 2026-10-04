@@ -22,6 +22,7 @@ type fake struct {
 	links   string // json for ip -j link show type wireguard
 	ipLinks string // json for ip -d -j link show
 	loAddrs string // json for the labelled loopback addresses
+	rules   string // json for ip -j rule show
 	charon  bool   // strongSwan is running; `ipsec start` starts it
 }
 
@@ -38,6 +39,8 @@ func (f *fake) Run(_ context.Context, name string, args ...string) ([]byte, erro
 		return []byte(f.ipLinks), nil
 	case strings.HasPrefix(c, "ip -j -4 address show dev lo"):
 		return []byte(f.loAddrs), nil
+	case c == "ip -j rule show":
+		return []byte(f.rules), nil
 	case c == "swanctl --stats" && !f.charon:
 		return nil, fmt.Errorf("swanctl: connecting to 'unix:///var/run/charon.vici' failed")
 	case c == "ipsec start":

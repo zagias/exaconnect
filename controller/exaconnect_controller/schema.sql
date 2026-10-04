@@ -409,6 +409,65 @@ CREATE TABLE IF NOT EXISTS circuit_metrics (
 );
 CREATE INDEX IF NOT EXISTS circuit_metrics_circuit_time ON circuit_metrics (circuit_id, time DESC);
 
+-- Internet breakout, NAT gateway and firewall (ADR 0010).
+-- Per site: through the PoP (default), straight out of its own links, or off.
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS internet_mode text NOT NULL DEFAULT 'pop';
+DO $$ BEGIN
+  ALTER TABLE sites ADD CONSTRAINT sites_internet_mode_check CHECK (internet_mode IN ('pop', 'local', 'off'));
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+-- The PoP's interface and next hop toward the internet.
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS internet_interface text;
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS internet_gateway inet;
+-- A site's next hop on each carrier link, for local breakout.
+ALTER TABLE links ADD COLUMN IF NOT EXISTS underlay_gateway inet;
+
+CREATE TABLE IF NOT EXISTS firewall_rules (
+  id           bigserial PRIMARY KEY,
+  customer_id  uuid NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  site_id      uuid REFERENCES sites(id) ON DELETE CASCADE,  -- NULL = every site
+  position     int NOT NULL,
+  action       text NOT NULL CHECK (action IN ('allow', 'deny')),
+  src          cidr[] NOT NULL DEFAULT '{}',
+  dst          cidr[] NOT NULL DEFAULT '{}',
+  protocol     text NOT NULL DEFAULT 'any' CHECK (protocol IN ('any', 'tcp', 'udp', 'icmp')),
+  ports        text NOT NULL DEFAULT '',
+  description  text NOT NULL DEFAULT '',
+  enabled      boolean NOT NULL DEFAULT true,
+  created_by   text NOT NULL,
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  updated_at   timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS firewall_rules_customer ON firewall_rules (customer_id, position);
+
+CREATE TABLE IF NOT EXISTS port_forwards (
+  id           bigserial PRIMARY KEY,
+  customer_id  uuid NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  description  text NOT NULL DEFAULT '',
+  protocol     text NOT NULL CHECK (protocol IN ('tcp', 'udp')),
+  port         int NOT NULL CHECK (port BETWEEN 1 AND 65535),
+  to_site_id   uuid NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+  to_address   inet NOT NULL,
+  to_port      int NOT NULL CHECK (to_port BETWEEN 1 AND 65535),
+  allow_from   cidr[] NOT NULL DEFAULT '{}',
+  enabled      boolean NOT NULL DEFAULT true,
+  created_by   text NOT NULL,
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  updated_at   timestamptz NOT NULL DEFAULT now(),
+  -- the PoP has one public address, shared by every customer
+  UNIQUE (protocol, port)
+);
+
+-- What each node last reported: where internet traffic leaves, and nft's
+-- cumulative counters per rule, port forward and the inbound drop.
+CREATE TABLE IF NOT EXISTS internet_state (
+  node_id     uuid PRIMARY KEY,
+  customer_id uuid NOT NULL,
+  mode        text NOT NULL DEFAULT '',
+  via         text NOT NULL DEFAULT '',
+  counters    jsonb NOT NULL DEFAULT '[]',
+  updated_at  timestamptz NOT NULL
+);
+
 -- Time series (TimescaleDB hypertables when the extension is available).
 CREATE TABLE IF NOT EXISTS path_metrics (
   time         timestamptz NOT NULL,

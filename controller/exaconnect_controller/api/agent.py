@@ -12,7 +12,7 @@ from fastapi.responses import PlainTextResponse
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field, IPvAnyAddress
 
-from .. import audit, db, desired, pki
+from .. import audit, db, desired, internet, pki
 from ..routing import maps
 from ..security import token_hash
 from .deps import NodeDep
@@ -207,6 +207,21 @@ class CircuitIn(BaseModel):
     bytes_out: int = Field(default=0, ge=0)
 
 
+class InternetCounter(BaseModel):
+    kind: Literal["rule", "forward", "inbound"]
+    id: int = Field(default=0, ge=0)
+    packets: int = Field(default=0, ge=0)
+    bytes: int = Field(default=0, ge=0)
+
+
+class InternetIn(BaseModel):
+    """Where internet traffic leaves this node, and the firewall's counters (ADR 0010)."""
+
+    mode: str = Field(default="", max_length=16)
+    via: str = Field(default="", max_length=16)
+    counters: list[InternetCounter] = Field(default=[], max_length=500)
+
+
 class TelemetryIn(BaseModel):
     at: dt.datetime
     probes: list[ProbeWindow] | None = Field(default=None, max_length=5000)
@@ -217,6 +232,7 @@ class TelemetryIn(BaseModel):
     steering_version: int = 0
     flows: list[FlowIn] | None = Field(default=None, max_length=2000)
     circuits: list[CircuitIn] | None = Field(default=None, max_length=200)
+    internet: InternetIn | None = None
 
 
 @router.post("/agent/telemetry", status_code=204)
@@ -288,6 +304,8 @@ def telemetry(body: TelemetryIn, node: NodeDep) -> None:
             )
         if body.circuits:
             _circuits(conn, node, body)
+        if body.internet is not None:
+            internet.record(conn, {"id": node.id, "customer_id": node.customer_id}, body.internet.model_dump())
         if body.steering is not None:
             conn.execute("DELETE FROM steering_actual WHERE node_id = %s", (node.id,))
             cur.executemany(

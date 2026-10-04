@@ -254,3 +254,16 @@ voice's 30 ms SLA on every path at times, and the steering check can find
 voice parked on carrier B (correctly, by its numbers). Runs pass when the
 host is quiet (108 of 108 at a14f9fa). A host with dedicated CPUs would
 make the lab steady; `m0-timing.sh` prints the figures on every run.
+
+**Fabric step 3: internet breakout, NAT gateway and firewall** (ADR 0010,
+2026-10-04). A new Internet screen sets, per site, whether internet
+traffic goes through ExaCarib's PoP (the default), straight out of the
+site's own carrier links with failover between them, or nowhere. The PoP
+is each customer's NAT gateway; customers write ordered firewall rules
+(applied where traffic leaves, with hit counts) and port forwards on the
+PoP's public address. Only traffic from the LAN is affected, never the
+agent's own. The admin forms now carry the PoP's cloud and internet
+settings and each link's carrier next hop; editing a PoP no longer clears
+its cloud settings, and editing a link keeps its shaping speed. Lab check
+`m9-internet.sh`.
+

@@ -1,5 +1,6 @@
 // Package apply makes the node match a desired state: the loopback, WireGuard
-// interfaces and peers, cloud (IPsec) and layer 2 (VXLAN) circuits, then FRR.
+// interfaces and peers, cloud (IPsec) and layer 2 (VXLAN) circuits, internet
+// breakout, then FRR.
 // It is idempotent, keeps the last good state on disk, and
 // rolls back to it if applying a new version fails.
 package apply
@@ -12,6 +13,7 @@ import (
 	"log/slog"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/zagias/exaconnect/agent/internal/desired"
@@ -36,8 +38,21 @@ type Applier struct {
 	// Sleep waits while strongSwan starts; nil uses time.Sleep (tests stub it).
 	Sleep func(time.Duration)
 
+	// TunnelUp reports whether BFD says a tunnel works, for choosing the
+	// internet exit; nil counts every tunnel up.
+	TunnelUp func(tunnel string) bool
+
 	shaped   map[string]string // circuit interface -> shaping last applied
 	shapeErr map[string]string // circuit interface -> last shaping error logged
+
+	inetMu       sync.Mutex
+	inetState    *desired.State // the state whose internet block was applied last
+	inetWant     string         // the preferred internet route last written or tried
+	inetOK       bool           // inetWant is in place
+	inetVia      string
+	inetFlushed  bool   // the internet table was flushed and nothing written since
+	inetNFT      string // the NAT and firewall table last applied
+	inetNFTKnown bool   // inetNFT is what the host has
 }
 
 func (a *Applier) lastGoodPath() string { return filepath.Join(a.StateDir, "last-good.json") }
@@ -106,6 +121,9 @@ func (a *Applier) apply(ctx context.Context, s *desired.State) error {
 	}
 	if err := a.circuits(ctx, s); err != nil {
 		return fmt.Errorf("circuits: %w", err)
+	}
+	if err := a.internet(ctx, s); err != nil {
+		return fmt.Errorf("internet: %w", err)
 	}
 	return a.frr(ctx, s)
 }

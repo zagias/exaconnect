@@ -469,6 +469,124 @@ export const deleteCircuit = (cid: string, id: number) => api<void>(circuitPaths
 export const setCloudToCloud = (cid: string, on: boolean) =>
   api<CustomerSettings>(circuitPaths.settings(cid), { method: "PATCH", body: JSON.stringify({ cloud_to_cloud: on }) });
 
+// ---- Internet breakout, NAT gateway and firewall (docs/internet-contract.md) ----
+
+/** pop: through ExaCarib's PoP (the default); local: straight out at the site; off: no internet. */
+export type BreakoutMode = "pop" | "local" | "off";
+export type FirewallAction = "allow" | "deny";
+export type FirewallProtocol = "any" | "tcp" | "udp" | "icmp";
+
+export interface InternetSite {
+  id: string;
+  name: string;
+  mode: BreakoutMode;
+  /** The interface or tunnel the site's internet route points at; "" until reported. */
+  via: string | null;
+  /** "Carrier A" for a local uplink, "ExaCarib PoP over Carrier A" for a tunnel. */
+  via_label: string | null;
+  /** The site's carrier links, in failover order. */
+  uplinks: string[];
+  updated_at: string | null;
+}
+
+export interface FirewallRule {
+  id: number;
+  position: number;
+  /** null applies to all sites. */
+  site_id: string | null;
+  site: string | null;
+  action: FirewallAction;
+  src: string[];
+  dst: string[];
+  protocol: FirewallProtocol;
+  ports: string;
+  description: string;
+  enabled: boolean;
+  packets: number | string | null;
+  bytes: number | string | null;
+}
+
+export interface PortForward {
+  id: number;
+  description: string;
+  protocol: "tcp" | "udp";
+  port: number;
+  to_site_id: string;
+  to_site: string | null;
+  to_address: string;
+  /** null forwards to the same port as the public one. */
+  to_port: number | null;
+  allow_from: string[];
+  enabled: boolean;
+  packets: number | string | null;
+  bytes: number | string | null;
+}
+
+export interface InternetState {
+  /** The PoP address port forwards listen on; shared with other customers. */
+  public_address: string | null;
+  sites: InternetSite[];
+  rules: FirewallRule[];
+  forwards: PortForward[];
+  inbound_dropped: number | string | null;
+}
+
+export interface FirewallRuleIn {
+  site_id?: string | null;
+  action?: FirewallAction;
+  src?: string[];
+  dst?: string[];
+  protocol?: FirewallProtocol;
+  ports?: string;
+  description?: string;
+  enabled?: boolean;
+  position?: number;
+}
+
+export interface PortForwardIn {
+  description?: string;
+  protocol?: "tcp" | "udp";
+  port?: number;
+  to_site_id?: string;
+  to_address?: string;
+  to_port?: number | null;
+  allow_from?: string[];
+  enabled?: boolean;
+}
+
+export const internetPaths = {
+  state: (cid: string) => `/customers/${cid}/internet`,
+  site: (cid: string, siteId: string) => `/customers/${cid}/internet/sites/${siteId}`,
+  rules: (cid: string) => `/customers/${cid}/firewall/rules`,
+  rule: (cid: string, id: number) => `/customers/${cid}/firewall/rules/${id}`,
+  order: (cid: string) => `/customers/${cid}/firewall/order`,
+  forwards: (cid: string) => `/customers/${cid}/port-forwards`,
+  forward: (cid: string, id: number) => `/customers/${cid}/port-forwards/${id}`,
+};
+
+export const setBreakout = (cid: string, siteId: string, mode: BreakoutMode) =>
+  api<InternetSite>(internetPaths.site(cid, siteId), { method: "PATCH", body: JSON.stringify({ mode }) });
+
+export const createFirewallRule = (cid: string, body: FirewallRuleIn) =>
+  api<FirewallRule>(internetPaths.rules(cid), { method: "POST", body: JSON.stringify(body) });
+
+export const updateFirewallRule = (cid: string, id: number, body: FirewallRuleIn) =>
+  api<FirewallRule>(internetPaths.rule(cid, id), { method: "PATCH", body: JSON.stringify(body) });
+
+export const deleteFirewallRule = (cid: string, id: number) => api<void>(internetPaths.rule(cid, id), { method: "DELETE" });
+
+/** Sets the order of all the customer's rules; the first match wins. */
+export const orderFirewallRules = (cid: string, ids: number[]) =>
+  api<unknown>(internetPaths.order(cid), { method: "POST", body: JSON.stringify({ ids }) });
+
+export const createPortForward = (cid: string, body: PortForwardIn) =>
+  api<PortForward>(internetPaths.forwards(cid), { method: "POST", body: JSON.stringify(body) });
+
+export const updatePortForward = (cid: string, id: number, body: PortForwardIn) =>
+  api<PortForward>(internetPaths.forward(cid, id), { method: "PATCH", body: JSON.stringify(body) });
+
+export const deletePortForward = (cid: string, id: number) => api<void>(internetPaths.forward(cid, id), { method: "DELETE" });
+
 /** Downloads a file from the API with the session token (a plain link can't send it). */
 export async function download(path: string, filename: string) {
   const token = getToken();

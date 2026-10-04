@@ -14,7 +14,7 @@ from typing import Any
 import psycopg
 from psycopg.types.json import Jsonb
 
-from . import fabric
+from . import fabric, internet
 from .routing import maps
 
 SCHEMA = 1
@@ -67,6 +67,7 @@ def _load(conn: psycopg.Connection, customer_id: Any) -> dict[str, Any]:
         "nodes": {n["site_id"]: n for n in nodes},
         "cloud_to_cloud": bool(customer and customer["cloud_to_cloud"]),
         "circuits": circuits,
+        "internet": internet.load(conn, customer_id),
     }
 
 
@@ -228,6 +229,10 @@ def build(inv: dict[str, Any], site: dict[str, Any]) -> dict[str, Any]:
         "bfd_profiles": BFD_PROFILES,
     }
     body["loopback"] = fabric.loopback(site)
+    own_links = links_by_site.get(site["id"], [])
+    inet = internet.block(inv, site, [t["name"] for t in tunnels], own_links)
+    if inet is not None:
+        body["internet"] = inet
     if site["kind"] == "pop":
         body["reflector"] = {"listen": f":{PROBE_PORT}"}
         circuits = cloud_circuits(inv, site)
