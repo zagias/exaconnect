@@ -173,20 +173,27 @@ class AskError(Exception):
 
 
 def ask(question: str, context: dict, *, api_key: str, base_url: str, model: str, timeout_s: float = 60) -> str:
+    user = "Network snapshot (JSON):\n" + json.dumps(context, separators=(",", ":")) + "\n\nQuestion: " + question
+    return chat(SYSTEM, user, api_key=api_key, base_url=base_url, model=model, timeout_s=timeout_s)
+
+
+def chat(
+    system: str,
+    user: str,
+    *,
+    api_key: str,
+    base_url: str,
+    model: str,
+    max_tokens: int = 700,
+    temperature: float = 0.2,
+    timeout_s: float = 60,
+) -> str:
+    """One chat completion from the configured OpenAI-compatible endpoint."""
     body = {
         "model": model,
-        "temperature": 0.2,
-        "max_tokens": 700,
-        "messages": [
-            {"role": "system", "content": SYSTEM},
-            {
-                "role": "user",
-                "content": "Network snapshot (JSON):\n"
-                + json.dumps(context, separators=(",", ":"))
-                + "\n\nQuestion: "
-                + question,
-            },
-        ],
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
     }
     req = urllib.request.Request(
         f"{base_url}/chat/completions",

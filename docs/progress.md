@@ -267,3 +267,19 @@ settings and each link's carrier next hop; editing a PoP no longer clears
 its cloud settings, and editing a link keeps its shaping speed. Lab check
 `m9-internet.sh`.
 
+
+**Fabric step 4: partner directory and plain-English ordering** (ADR 0011,
+2026-10-04). A new Order screen takes a request in plain English, such as
+"Connect Kingston to AWS us-east-1 at 50 Mbps for 10.100.0.0/16", and
+drafts an order of up to five changes: circuits to clouds or between sites,
+partner connections, bandwidth and internet breakout. The AI service drafts
+when it is configured, with a rules parser as fallback; the controller
+checks every draft against the customer's own sites and circuits, lists any
+problems, the inputs still needed and the change in monthly charge, and
+applies nothing until a person confirms. Confirmation applies every change
+or none, and keys are never kept in the order. A partner directory lists
+the four clouds and two example service partners; admins manage it and
+complete orders that wait on a service partner (Admin, Partners). Lab check
+`m9-order.sh`.
+
+Unit tests: 145 controller tests, agent tests, portal type check and build.

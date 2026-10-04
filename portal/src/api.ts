@@ -601,3 +601,162 @@ export async function download(path: string, filename: string) {
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+// ---- Partner directory and plain-English ordering (docs/ordering-contract.md) ----
+
+export type PartnerCategory = "cloud" | "saas" | "payments" | "internet" | "security" | "content" | "other";
+/** cloud: the customer sets up the VPN in their own cloud console; service: ExaCarib completes the order. */
+export type PartnerKind = "cloud" | "service";
+
+export interface Partner {
+  id: number;
+  slug: string;
+  name: string;
+  category: PartnerCategory;
+  kind: PartnerKind;
+  /** Cloud partners only: the circuit provider preset. */
+  provider: string | null;
+  description: string;
+  website: string | null;
+  regions: string[];
+  /** Service partners only: what the partner advertises. */
+  prefixes: string[];
+  price_per_mbps_month: number | string;
+  listed: boolean;
+  example: boolean;
+}
+
+export interface PartnerIn {
+  slug?: string;
+  name?: string;
+  category?: PartnerCategory;
+  kind?: PartnerKind;
+  provider?: string | null;
+  description?: string;
+  website?: string | null;
+  regions?: string[];
+  prefixes?: string[];
+  price_per_mbps_month?: number;
+  listed?: boolean;
+  example?: boolean;
+}
+
+export type OrderStatus = "draft" | "done" | "pending_partner" | "cancelled" | "failed";
+export type OrderEngine = "ai" | "rules" | "form";
+
+/** One action in an order, normalised by the controller. */
+export type OrderAction =
+  | {
+      action: "cloud_circuit";
+      name?: string;
+      provider?: string;
+      region?: string | null;
+      site?: string | null;
+      bandwidth_mbps?: number;
+      cloud_prefixes?: string[];
+      class_name?: string | null;
+    }
+  | { action: "site_circuit"; name?: string; a_site?: string; b_site?: string; a_vlan?: number; b_vlan?: number; bandwidth_mbps?: number }
+  | {
+      action: "partner_connection";
+      partner: string;
+      site?: string | null;
+      bandwidth_mbps?: number;
+      region?: string | null;
+      cloud_prefixes?: string[];
+    }
+  | { action: "bandwidth"; circuit: string; bandwidth_mbps: number }
+  | { action: "internet_mode"; site: string; mode: BreakoutMode };
+
+export interface OrderNeed {
+  /** Index of the action this input belongs to. */
+  action: number;
+  field: string;
+  label: string;
+  secret: boolean;
+  default?: string | number | null;
+  /** Set on inputs that may be left blank (inside_cidr). */
+  optional?: boolean;
+}
+
+export interface OrderResult {
+  action: number;
+  ok: boolean;
+  circuit_id?: number | null;
+  /** The partner still has to act (service partner connections). */
+  pending?: boolean;
+  message: string;
+}
+
+export interface Order {
+  id: number;
+  status: OrderStatus;
+  engine: OrderEngine;
+  text: string | null;
+  actions: OrderAction[];
+  summary: string[];
+  needs: OrderNeed[];
+  problems: string[];
+  monthly_estimate: number | string | null;
+  results: OrderResult[] | null;
+  created_by: string | null;
+  created_at: string;
+  confirmed_by: string | null;
+  confirmed_at: string | null;
+  /** Admin listings may name the customer. */
+  customer_id?: string;
+  customer?: string | null;
+}
+
+export interface CompleteOrderIn {
+  peer_address: string;
+  peer_asn: number;
+  psk: string;
+  inside_cidr?: string | null;
+  prefixes: string[];
+}
+
+export const orderPaths = {
+  partners: (category = "", q = "") => {
+    const p = new URLSearchParams();
+    if (category) p.set("category", category);
+    if (q) p.set("q", q);
+    const s = p.toString();
+    return `/partners${s ? `?${s}` : ""}`;
+  },
+  list: (cid: string) => `/customers/${cid}/orders`,
+  one: (cid: string, id: number) => `/customers/${cid}/orders/${id}`,
+  adminPartners: "/admin/partners",
+  adminPartner: (id: number) => `/admin/partners/${id}`,
+  adminOrders: (status: OrderStatus) => `/admin/orders?status=${status}`,
+};
+
+/** Drafts an order from plain English. Nothing changes until it is confirmed. */
+export const draftOrder = (cid: string, text: string, engine: "auto" | "rules" = "auto") =>
+  api<Order>(`${orderPaths.list(cid)}/draft`, { method: "POST", body: JSON.stringify({ text, engine }) });
+
+/** Drafts an order from a form (engine "form"). */
+export const createOrder = (cid: string, actions: OrderAction[]) =>
+  api<Order>(orderPaths.list(cid), { method: "POST", body: JSON.stringify({ actions }) });
+
+/** Applies every action, all or nothing; one inputs object per action. */
+export const confirmOrder = (cid: string, id: number, inputs: Record<string, unknown>[]) =>
+  api<Order>(`${orderPaths.one(cid, id)}/confirm`, { method: "POST", body: JSON.stringify({ inputs }) });
+
+export const cancelOrder = (cid: string, id: number) => api<Order>(`${orderPaths.one(cid, id)}/cancel`, { method: "POST" });
+
+export const createPartner = (body: PartnerIn) =>
+  api<Partner>(orderPaths.adminPartners, { method: "POST", body: JSON.stringify(body) });
+
+export const updatePartner = (id: number, body: PartnerIn) =>
+  api<Partner>(orderPaths.adminPartner(id), { method: "PATCH", body: JSON.stringify(body) });
+
+/** Removes a partner, or unlists it if orders refer to it. */
+export const deletePartner = (id: number) => api<unknown>(orderPaths.adminPartner(id), { method: "DELETE" });
+
+export const completeOrder = (id: number, body: CompleteOrderIn) =>
+  api<Order>(`/admin/orders/${id}/complete`, { method: "POST", body: JSON.stringify(body) });
+
+// The PoP checks pre-shared keys the same way (controller fabric.PSK_RE).
+export const PSK_PATTERN = "[A-Za-z1-9._][A-Za-z0-9._]{7,63}";
+export const PSK_HINT = "8 to 64 letters, digits, dots and underscores; it can't start with 0.";

@@ -468,6 +468,67 @@ CREATE TABLE IF NOT EXISTS internet_state (
   updated_at  timestamptz NOT NULL
 );
 
+-- Partner directory and plain-English ordering (ADR 0011).
+CREATE TABLE IF NOT EXISTS partners (
+  id                    bigserial PRIMARY KEY,
+  slug                  text NOT NULL UNIQUE,
+  name                  text NOT NULL,
+  category              text NOT NULL CHECK (category IN ('cloud', 'saas', 'payments', 'internet', 'security',
+                                                          'content', 'other')),
+  kind                  text NOT NULL CHECK (kind IN ('cloud', 'service')),
+  provider              text,
+  description           text NOT NULL DEFAULT '',
+  website               text NOT NULL DEFAULT '',
+  regions               text[] NOT NULL DEFAULT '{}',
+  prefixes              cidr[] NOT NULL DEFAULT '{}',
+  price_per_mbps_month  numeric NOT NULL DEFAULT 2.0,
+  listed                boolean NOT NULL DEFAULT true,
+  example               boolean NOT NULL DEFAULT false,
+  created_at            timestamptz NOT NULL DEFAULT now(),
+  updated_at            timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE circuits ADD COLUMN IF NOT EXISTS partner_id bigint REFERENCES partners(id);
+
+CREATE TABLE IF NOT EXISTS orders (
+  id            bigserial PRIMARY KEY,
+  customer_id   uuid NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  status        text NOT NULL DEFAULT 'draft'
+                CHECK (status IN ('draft', 'done', 'pending_partner', 'cancelled', 'failed')),
+  engine        text NOT NULL CHECK (engine IN ('ai', 'rules', 'form')),
+  text          text NOT NULL DEFAULT '',
+  actions       jsonb NOT NULL DEFAULT '[]',
+  results       jsonb NOT NULL DEFAULT '[]',
+  created_by    text NOT NULL,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  confirmed_by  text,
+  confirmed_at  timestamptz
+);
+CREATE INDEX IF NOT EXISTS orders_customer ON orders (customer_id, id DESC);
+CREATE INDEX IF NOT EXISTS orders_status ON orders (status) WHERE status = 'pending_partner';
+
+-- The directory starts with the clouds ExaConnect connects to, plus two
+-- clearly marked example service partners. Admins edit or unlist them.
+INSERT INTO partners (slug, name, category, kind, provider, description, website, regions, prefixes, example) VALUES
+  ('aws', 'Amazon Web Services', 'cloud', 'cloud', 'aws',
+   'Private connection to your VPCs over a Site-to-Site VPN, with BGP.', 'https://aws.amazon.com',
+   '{us-east-1,us-east-2,us-west-2,sa-east-1,ca-central-1,eu-west-2}', '{}', false),
+  ('azure', 'Microsoft Azure', 'cloud', 'cloud', 'azure',
+   'Private connection to your virtual networks through a VPN gateway, with BGP.', 'https://azure.microsoft.com',
+   '{eastus,eastus2,southcentralus,brazilsouth,canadacentral,uksouth}', '{}', false),
+  ('google-cloud', 'Google Cloud', 'cloud', 'cloud', 'gcp',
+   'Private connection to your VPC networks through HA VPN and Cloud Router.', 'https://cloud.google.com',
+   '{us-east1,us-east4,us-central1,southamerica-east1,northamerica-northeast1}', '{}', false),
+  ('oracle-cloud', 'Oracle Cloud', 'cloud', 'cloud', 'oracle',
+   'Private connection to your VCNs over Site-to-Site VPN, with BGP.', 'https://www.oracle.com/cloud',
+   '{us-ashburn-1,us-phoenix-1,sa-saopaulo-1,ca-toronto-1}', '{}', false),
+  ('example-payments', 'Example Payments Network', 'payments', 'service', NULL,
+   'Sample entry: a card payments network reached privately from your sites.', '',
+   '{}', '{203.0.113.0/25}', true),
+  ('example-erp', 'Example ERP Service', 'saas', 'service', NULL,
+   'Sample entry: a hosted ERP service reached privately from your sites.', '',
+   '{}', '{203.0.113.128/25}', true)
+ON CONFLICT (slug) DO NOTHING;
+
 -- Time series (TimescaleDB hypertables when the extension is available).
 CREATE TABLE IF NOT EXISTS path_metrics (
   time         timestamptz NOT NULL,

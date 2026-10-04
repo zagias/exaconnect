@@ -4,6 +4,8 @@ import {
   createCircuit,
   deleteCircuit,
   num,
+  PSK_HINT,
+  PSK_PATTERN,
   setCloudToCloud,
   updateCircuit,
   useApi,
@@ -46,10 +48,6 @@ const split = (s: string) =>
     .filter(Boolean);
 
 const thisMonth = () => new Date().toISOString().slice(0, 7);
-
-// The PoP checks the key the same way (controller fabric.PSK_RE).
-const PSK_PATTERN = "[A-Za-z1-9._][A-Za-z0-9._]{7,63}";
-const PSK_HINT = "8 to 64 letters, digits, dots and underscores; it can't start with 0.";
 
 export default function Fabric() {
   const { current } = useCustomer();
