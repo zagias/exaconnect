@@ -46,22 +46,33 @@ api DELETE "/customers/$cid/firewall/rules/$rule" >/dev/null
 if wait_for 30 reaches; then ok "deleting the rule lets the pings through again"; else bad "still blocked after deleting the rule"; fi
 
 echo "-- port forward on the PoP's address"
-docker exec "$(node lan-a)" pkill -f "nc -l -p 8080" 2>/dev/null
-docker exec -d "$(node lan-a)" sh -c 'while :; do echo exa-forward | nc -l -p 8080; done'
+# iperf3 makes a TCP server and client that behave the same on every node.
+serve() {
+  docker exec "$(node lan-a)" pkill -f "iperf3 -s -p 8080" 2>/dev/null
+  docker exec -d "$(node lan-a)" iperf3 -s -p 8080
+  sleep 1
+}
+# connects <from node> <address>: a 1-second iperf3 run to <address>:8080 completes.
+connects() { docker exec "$(node "$1")" iperf3 -c "$2" -p 8080 -t 1 --connect-timeout 3000 -J 2>/dev/null | jq -e '.end.sum_received.bytes > 0' >/dev/null; }
+serve
+if connects site-a 192.168.10.10; then note "server on lan-a:8080 answers locally"; else note "server on lan-a:8080 does not answer even from site-a"; fi
 fwd=$(api POST "/customers/$cid/port-forwards" \
   "{\"protocol\": \"tcp\", \"port\": 8080, \"to_site_id\": \"$a\", \"to_address\": \"192.168.10.10\", \"description\": \"lab web\"}" |
   jq -r '.id // empty')
-answered() { docker exec "$(node ix)" sh -c 'nc -w 3 100.64.0.2 8080 </dev/null' 2>/dev/null | grep -q exa-forward; }
+answered() { connects ix 100.64.0.2; }
 if [[ -n $fwd ]] && wait_for 30 answered; then
   ok "a connection to 100.64.0.2:8080 from the internet reaches lan-a"
 else
   bad "port forward 8080 to lan-a did not answer"
+  docker exec "$(node pop-miami)" nft list chain ip exa_inet pre 2>&1 | grep -E 'dnat|Error' | sed 's/^/      /'
+  docker exec "$(node pop-miami)" nft list chain ip exa_inet filter_fwd 2>&1 | grep -E 'pf|inbound' | sed 's/^/      /'
+  docker exec "$(node pop-miami)" conntrack -L -p tcp --orig-port-dst 8080 2>/dev/null | head -3 | sed 's/^/      /'
+  docker exec "$(node site-a)" ip route get 100.64.0.1 from 192.168.10.10 iif eth4 2>&1 | head -1 | sed 's/^/      /'
 fi
-unsolicited() { ! docker exec "$(node ix)" sh -c 'nc -w 2 192.168.10.10 8080 </dev/null' 2>/dev/null | grep -q exa-forward; }
 docker exec "$(node ix)" ip route replace 192.168.10.0/24 via 100.64.0.2
-if unsolicited; then ok "the internet cannot reach lan-a directly through the PoP"; else bad "lan-a answered a connection that was not forwarded"; fi
+if ! connects ix 192.168.10.10; then ok "the internet cannot reach lan-a directly through the PoP"; else bad "lan-a answered a connection that was not forwarded"; fi
 docker exec "$(node ix)" ip route del 192.168.10.0/24 via 100.64.0.2
-docker exec "$(node lan-a)" pkill -f "nc -l -p 8080" 2>/dev/null
+docker exec "$(node lan-a)" pkill -f "iperf3 -s -p 8080" 2>/dev/null
 api DELETE "/customers/$cid/port-forwards/$fwd" >/dev/null
 
 echo "-- straight out at the site"
