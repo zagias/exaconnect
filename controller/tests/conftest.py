@@ -1,4 +1,5 @@
 import os
+import time
 
 import psycopg
 import pytest
@@ -14,8 +15,23 @@ ADMIN = ("admin@example.org", "correct horse battery staple")
 
 
 def _reset(url: str) -> None:
+    # TimescaleDB's background workers (job scheduler, telemetry) can hold
+    # catalog locks while the schema is dropped, which Postgres resolves by
+    # cancelling the DROP as a deadlock. Pause them, and retry if one wins.
     with psycopg.connect(url, autocommit=True) as conn:
-        conn.execute("DROP SCHEMA IF EXISTS public CASCADE")
+        for attempt in range(5):
+            try:
+                if conn.execute("SELECT 1 FROM pg_extension WHERE extname = 'timescaledb'").fetchone():
+                    try:
+                        conn.execute("SELECT _timescaledb_functions.stop_background_workers()")
+                    except psycopg.Error:
+                        pass  # older TimescaleDB or not a superuser: the retry still covers it
+                conn.execute("DROP SCHEMA IF EXISTS public CASCADE")
+                break
+            except psycopg.errors.DeadlockDetected:
+                if attempt == 4:
+                    raise
+                time.sleep(0.5)
         conn.execute("CREATE SCHEMA public")
 
 
