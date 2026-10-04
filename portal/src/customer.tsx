@@ -84,11 +84,23 @@ export function StormSwitch() {
   const [open, setOpen] = useState(false);
   if (!current) return null;
   const on = current.sites.filter((s) => s.storm_mode);
+  const label = on.length === 0 ? "Storm Mode off" : on.length === 1 ? `Storm Mode: ${on[0].name}` : `Storm Mode: ${on.length} sites`;
   return (
     <div className="storm-control">
-      <button className="storm-switch" aria-pressed={on.length > 0} aria-expanded={open} onClick={() => setOpen(!open)}>
+      <button
+        className="storm-switch"
+        aria-pressed={on.length > 0}
+        aria-expanded={open}
+        aria-label={label}
+        title={label}
+        onClick={() => setOpen(!open)}
+      >
         <span className="dot" aria-hidden="true" />
-        {on.length === 0 ? "Storm Mode off" : on.length === 1 ? `Storm Mode: ${on[0].name}` : `Storm Mode: ${on.length} sites`}
+        {/* The shell shows the short label on phones. */}
+        <span className="storm-label">{label}</span>
+        <span className="storm-short" aria-hidden="true">
+          {on.length === 0 ? "Storm" : on.length === 1 ? "Storm on" : `Storm ${on.length}`}
+        </span>
       </button>
       {open && (
         <div className="storm-panel card" role="dialog" aria-label="Storm Mode per site">
