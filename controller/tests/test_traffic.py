@@ -273,3 +273,52 @@ def test_auto_prioritise_applies_known_apps_only(client, admin_headers):
     assert dets["udp:7777"]["status"] == "suggested"
     rules = client.get(f"/api/v1/customers/{cid}/rules", headers=admin_headers).json()
     assert [r["created_by"] for r in rules] == ["system:auto-prioritise"]
+
+
+def test_a_rule_that_covers_a_detection_closes_it(client, admin_headers):
+    seed = _seed()
+    tokens, cid = seed["tokens"], seed["customer_id"]
+    _, a_h = _enrol(client, tokens, "site-a")
+    now = dt.datetime.now(dt.UTC)
+    zoom = dict(proto="udp", dst="192.168.20.10", dport=8801, flows=1, bytes_out=300_000, bytes_in=300_000)
+    zoom.update(pkts_out=3000, pkts_in=3000, **{"class": ""})
+    call = {**zoom, "dport": 7777}
+    body = {"at": now.isoformat(), "flows": _flows(now, 5, **zoom) + _flows(now, 5, **call)}
+    assert client.post("/api/v1/agent/telemetry", headers=a_h, json=body).status_code == 204
+    client.post(f"/api/v1/customers/{cid}/applications/detect", headers=admin_headers)
+
+    def open_keys():
+        return {d["key"] for d in client.get(f"/api/v1/customers/{cid}/applications", headers=admin_headers).json()}
+
+    assert open_keys() == {"app:zoom", "udp:7777"}
+
+    # The customer's own rule for all sites names Zoom among other apps: the Zoom suggestion closes at once,
+    # with no new traffic needed, and points at that rule.
+    rule = client.post(
+        f"/api/v1/customers/{cid}/rules",
+        headers=admin_headers,
+        json={"name": "all voice", "class_name": "voice", "apps": ["teams", "zoom"]},
+    ).json()
+    assert open_keys() == {"udp:7777"}
+    closed = client.get(f"/api/v1/customers/{cid}/applications?include_closed=true", headers=admin_headers).json()
+    z = next(d for d in closed if d["key"] == "app:zoom")
+    assert z["status"] == "applied" and z["rule_id"] == rule["id"]
+
+    # A plain port rule covers the unrecognised call; one narrowed to other addresses does not.
+    narrowed = {"name": "narrow", "class_name": "voice", "ports": "udp:7777", "dst_subnets": ["10.9.9.0/24"]}
+    client.post(f"/api/v1/customers/{cid}/rules", headers=admin_headers, json=narrowed)
+    assert open_keys() == {"udp:7777"}
+    client.post(f"/api/v1/customers/{cid}/rules", headers=admin_headers, json={**narrowed, "dst_subnets": []})
+    assert open_keys() == set()
+
+    # A later detection pass keeps them closed, and disabling the rule reopens Zoom.
+    with db.tx() as conn:
+        detect.detect(conn, {"id": cid, "auto_prioritise": False}, now)
+    assert open_keys() == set()
+    upd = client.put(
+        f"/api/v1/customers/{cid}/rules/{rule['id']}",
+        headers=admin_headers,
+        json={"name": "all voice", "class_name": "voice", "apps": ["teams", "zoom"], "enabled": False},
+    )
+    assert upd.status_code == 200, upd.text
+    assert open_keys() == {"app:zoom"}

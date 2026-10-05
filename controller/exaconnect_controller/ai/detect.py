@@ -28,6 +28,7 @@ import psycopg
 from psycopg.types.json import Jsonb
 
 from .. import audit, traffic
+from ..ports import parse_ports
 from . import apps
 
 log = logging.getLogger("exaconnect.ai.detect")
@@ -116,7 +117,15 @@ def detect(conn: psycopg.Connection, customer: dict, now: dt.datetime) -> list[d
             priority, confidence, why = prof
             label = f"Unrecognised {m['proto'].upper()} {m['dport']}"
         suggested = apps.PRIORITY_CLASS.get(priority)
-        if suggested not in classes or s["current_class"] == suggested:
+        if suggested not in classes:
+            continue
+        if s["current_class"] == suggested:
+            # The traffic already lands in the class: an open suggestion is out of date.
+            conn.execute(
+                "DELETE FROM app_detections WHERE customer_id = %s AND site_id = %s AND key = %s"
+                " AND status = 'suggested'",
+                (cid, site_id, k),
+            )
             continue
         now_in = f"currently in {s['current_class']}" if s["current_class"] else "currently unclassified"
         reason = (
@@ -158,7 +167,48 @@ def detect(conn: psycopg.Connection, customer: dict, now: dt.datetime) -> list[d
                     apply(conn, row, AUTO_ACTOR)
             except traffic.RuleError as e:
                 log.warning("auto-prioritise %s: %s", label, e)
+    reconcile(conn, cid)
     return changed
+
+
+def covering_rule(rules: list[dict], det: dict) -> dict | None:
+    """The first enabled rule that already decides this detection's traffic at
+    its site: one naming the application, or one whose own ports cover it with
+    nothing else narrowing the match. The customer has chosen a class for it,
+    so there is nothing left to suggest."""
+    for r in rules:
+        if not r["enabled"] or not traffic.applies_to(r, det["site_id"]):
+            continue
+        if det["app_id"] and det["app_id"] in (r["apps"] or []):
+            return r
+        narrowed = r["dst_subnets"] or r["src_subnets"] or r["vlans"] or r["domains"] or r["dscp"]
+        if r["ports"] and not narrowed:
+            try:
+                ranges = parse_ports(r["ports"])
+            except ValueError:
+                continue
+            if any(p["proto"] == det["proto"] and p["from"] <= det["dport"] <= p["to"] for p in ranges):
+                return r
+    return None
+
+
+def reconcile(conn: psycopg.Connection, customer_id: Any) -> None:
+    """Keep detections in step with the customer's rules: a suggestion that a
+    rule already covers is closed as applied by that rule, and an applied
+    detection whose rule no longer covers it (disabled or edited) is
+    suggested again unless another rule covers it."""
+    rules = traffic.load_rules(conn, customer_id)
+    dets = conn.execute(
+        """SELECT id, site_id, app_id, proto, dport, status, rule_id FROM app_detections
+           WHERE customer_id = %s AND (status = 'suggested' OR (status = 'applied' AND rule_id IS NOT NULL))""",
+        (customer_id,),
+    ).fetchall()
+    for d in dets:
+        r = covering_rule(rules, d)
+        if r is not None and (d["status"] != "applied" or d["rule_id"] != r["id"]):
+            conn.execute("UPDATE app_detections SET status = 'applied', rule_id = %s WHERE id = %s", (r["id"], d["id"]))
+        elif r is None and d["status"] == "applied":
+            conn.execute("UPDATE app_detections SET status = 'suggested', rule_id = NULL WHERE id = %s", (d["id"],))
 
 
 def apply(conn: psycopg.Connection, det: dict, actor: str, class_name: str | None = None) -> int:

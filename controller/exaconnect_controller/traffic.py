@@ -261,6 +261,7 @@ def save_rule(
         check_limits(compile_matches(rules, served_by_pop if s["kind"] == "pop" else [s["id"]]))
     audit.record(conn, actor, action, row["name"], customer_id, {"id": rule_id, **_jsonable(row)})
     maps.refresh(conn, customer_id)
+    _reconcile_detections(conn, customer_id)
     return rule_id
 
 
@@ -279,6 +280,13 @@ def delete_rule(conn: psycopg.Connection, customer_id: Any, rule_id: int, actor:
         raise LookupError("rule not found")
     audit.record(conn, actor, "rule.delete", row["name"], customer_id, {"id": rule_id})
     maps.refresh(conn, customer_id)
+    _reconcile_detections(conn, customer_id)
+
+
+def _reconcile_detections(conn: psycopg.Connection, customer_id: Any) -> None:
+    from .ai import detect
+
+    detect.reconcile(conn, customer_id)
 
 
 def _jsonable(row: dict) -> dict:
