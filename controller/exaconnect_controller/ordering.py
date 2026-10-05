@@ -346,6 +346,13 @@ def _bandwidth(v: Any, default: int, problems: list[str], notes: list[str]) -> i
     return mbps
 
 
+def _unique_name(ctx: dict[str, Any], name: str, problems: list[str]) -> None:
+    """A draft is checked against the circuits as they are now, so one made on
+    the Fabric page since the draft was written is not created twice."""
+    if any(c["name"].lower() == name.lower() for c in ctx["circuits"]):
+        problems.append(f"You already have a circuit called {name}. Change that one, or give this one another name.")
+
+
 def review(conn: psycopg.Connection, customer_id: Any, raw: list[dict[str, Any]]) -> dict[str, Any]:
     """Normalised actions with a summary, the inputs still needed, problems
     and the change to the monthly charge."""
@@ -409,6 +416,7 @@ def review(conn: psycopg.Connection, customer_id: Any, raw: list[dict[str, Any]]
                 problems.append(f"There is no class called {cls}.")
             p = partners.get(str(a.get("partner") or ""))
             name = str(a.get("name") or "").strip()[:80] or (f"{label} {region}".strip() if region else label)
+            _unique_name(ctx, name, problems)
             actions.append(
                 {
                     "action": "cloud_circuit",
@@ -474,6 +482,7 @@ def review(conn: psycopg.Connection, customer_id: Any, raw: list[dict[str, Any]]
             an = a_site["name"] if a_site else a.get("a_site")
             bn = b_site["name"] if b_site else a.get("b_site")
             name = str(a.get("name") or "").strip()[:80] or f"{an} to {bn}"
+            _unique_name(ctx, name, problems)
             actions.append(
                 {
                     "action": "site_circuit",
@@ -505,6 +514,8 @@ def review(conn: psycopg.Connection, customer_id: Any, raw: list[dict[str, Any]]
             if mbps is None or not 1 <= mbps <= 1000:
                 problems.append("Say the new speed, 1 to 1,000 Mbps.")
                 continue
+            if mbps == c["bandwidth_mbps"]:
+                problems.append(f"{c['name']} already runs at {mbps} Mbps.")
             actions.append({"action": "bandwidth", "circuit": c["name"], "bandwidth_mbps": mbps})
             summary.append(
                 f"Change {c['name']} from {c['bandwidth_mbps']} to {mbps} Mbps, billed by the hour from now."
@@ -518,6 +529,8 @@ def review(conn: psycopg.Connection, customer_id: Any, raw: list[dict[str, Any]]
             if mode not in internet.MODES:
                 problems.append("Internet goes through the PoP, straight out at the site, or off.")
                 continue
+            if site and site["internet_mode"] == mode:
+                problems.append(f"{site['name']} already sends its internet {MODE_WORDS[mode]}.")
             actions.append({"action": "internet_mode", "site": site["name"] if site else a.get("site"), "mode": mode})
             if site:
                 summary.append(

@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from importlib import resources
 from typing import Any
 
-from .insights import raise_insight, resolve_others
+from .insights import note_storm_mode, open_customers, raise_insight, resolve_others
 
 log = logging.getLogger("exaconnect.storms")
 
@@ -131,6 +131,11 @@ def closest_approach(storm: Storm, lat: float, lon: float, horizon_h: int = 72) 
     return best
 
 
+STORM_MODE_ADVICE = (
+    "Consider switching Storm Mode on so the satellite path is warm before the terrestrial links suffer."
+)
+
+
 def assess(storm: Storm, site: str, lat: float, lon: float, policy: Policy = Policy()) -> dict | None:
     """The warning for one storm and one site, or None when it stays clear."""
     km, hours = closest_approach(storm, lat, lon, policy.horizon_h)
@@ -144,7 +149,7 @@ def assess(storm: Storm, site: str, lat: float, lon: float, policy: Policy = Pol
         f"{storm.heading_deg:.0f}°. Projecting that motion forward, it passes about {km:.0f} km from {site} {when}."
     )
     if severity == "critical":
-        detail += " Consider switching Storm Mode on so the satellite path is warm before the terrestrial links suffer."
+        detail += " " + STORM_MODE_ADVICE
     detail += " This is a straight-line projection; check the NHC advisory for the official forecast track."
     return {
         "severity": severity,
@@ -214,6 +219,8 @@ def run_once(conn, doc: dict, example: bool = False, now: dt.datetime | None = N
     by_customer: dict[Any, list[dict]] = {}
     for site in sites:
         by_customer.setdefault(site["customer_id"], []).append(site)
+    for customer_id in open_customers(conn, "storm_warning", example):
+        by_customer.setdefault(customer_id, [])
     seen: dict[Any, set[str]] = {c: set() for c in by_customer}
     for customer_id, csites in by_customer.items():
         for storm in storms:
@@ -221,6 +228,7 @@ def run_once(conn, doc: dict, example: bool = False, now: dt.datetime | None = N
             if not hits:
                 continue
             w = summarise(storm, hits)
+            note_storm_mode(conn, w, STORM_MODE_ADVICE)
             key = f"storm:{storm.id}" + (":example" if example else "")
             raise_insight(
                 conn,

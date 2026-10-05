@@ -263,7 +263,7 @@ export function SitePage() {
 }
 
 function actualCell(c: SteeringRow) {
-  if (!c.reported_at) return <span className="muted">Not reported yet</span>;
+  if (!c.reported_at) return <span className="muted">No report in the last minute</span>;
   if (c.paused) return <StatusPill health="bad">Paused, no allowed path</StatusPill>;
   if (!c.actual) return <span className="muted">Following BGP</span>;
   return (

@@ -89,3 +89,41 @@ def resolve_others(conn: psycopg.Connection, customer_id: Any, kind: str, seen: 
            WHERE customer_id = %s AND kind = %s AND example = %s AND resolved_at IS NULL AND NOT (key = ANY(%s))""",
         (customer_id, kind, example, list(seen)),
     ).rowcount
+
+
+def resolve_kind(conn: psycopg.Connection, kind: str) -> int:
+    """Resolves every open insight of a kind (not example data), for a watch
+    that has been switched off: nothing will refresh them any more."""
+    return conn.execute(
+        "UPDATE insights SET resolved_at = now() WHERE kind = %s AND NOT example AND resolved_at IS NULL", (kind,)
+    ).rowcount
+
+
+def open_customers(conn: psycopg.Connection, kind: str, example: bool) -> list[Any]:
+    """Customers with open insights of this kind, so a pass can resolve them
+    even when the customer no longer has a site it would look at."""
+    return [
+        r["customer_id"]
+        for r in conn.execute(
+            "SELECT DISTINCT customer_id FROM insights WHERE kind = %s AND example = %s AND resolved_at IS NULL",
+            (kind, example),
+        )
+    ]
+
+
+def note_storm_mode(conn: psycopg.Connection, warning: dict, advice: str) -> None:
+    """When every site the warning marks critical is already in Storm Mode,
+    say so instead of advising the customer to switch it on."""
+    critical = [s for s in warning["data"].get("sites", []) if s.get("severity") == "critical"]
+    if not critical:
+        return
+    on = {
+        str(r["id"])
+        for r in conn.execute(
+            "SELECT id FROM sites WHERE id = ANY(%s::uuid[]) AND storm_mode", ([s["id"] for s in critical],)
+        )
+    }
+    if all(s["id"] in on for s in critical):
+        names = ", ".join(s["name"] for s in critical)
+        warning["detail"] = warning["detail"].replace(advice, f"Storm Mode is already on at {names}.")
+        warning["data"]["storm_mode_on"] = True

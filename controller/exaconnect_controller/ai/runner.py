@@ -12,6 +12,7 @@ import time
 from .. import db
 from ..settings import Settings
 from . import anomaly, billshock, detect, hazards, storms
+from .insights import resolve_kind
 
 log = logging.getLogger("exaconnect.ai")
 LOCK_ID = 4245
@@ -60,6 +61,10 @@ async def loop(settings: Settings) -> None:
         await every("detect", 300, _locked, detect.run_once)
         if settings.nhc_url:
             await every("storms", settings.nhc_interval_s, storm_pass, settings.nhc_url)
+        else:  # a watch switched off leaves nothing to refresh its warnings, so close them
+            await every("storms-off", 300, _locked, resolve_kind, "storm_warning")
         if hazard_watch_on(settings):
             await every("hazards", settings.hazard_interval_s, hazard_pass, settings)
+        else:
+            await every("hazards-off", 300, _locked, resolve_kind, "hazard")
         await asyncio.sleep(15)

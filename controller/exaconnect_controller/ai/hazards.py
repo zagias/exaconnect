@@ -39,8 +39,13 @@ from dataclasses import dataclass, field
 from importlib import resources
 from typing import Any
 
-from .insights import RANK, raise_insight, resolve_others
+from .insights import RANK, note_storm_mode, open_customers, raise_insight, resolve_others
 from .storms import distance_km
+
+STORM_MODE_ADVICE = (
+    "Consider switching Storm Mode on for the sites marked critical, so the satellite path is warm "
+    "if terrestrial links fail."
+)
 
 log = logging.getLogger("exaconnect.hazards")
 
@@ -431,10 +436,7 @@ def describe(event: Event, hits: list[tuple[dict, str, float]]) -> dict:
         detail.append("USGS flags it as a large ocean earthquake: watch tsunami.gov for any tsunami message.")
     detail.append("Sites in range: " + ", ".join(f"{s['name']} {k:.0f} km ({sev})" for s, sev, k in hits) + ".")
     if severity == "critical":
-        detail.append(
-            "Consider switching Storm Mode on for the sites marked critical, so the satellite path is warm "
-            "if terrestrial links fail."
-        )
+        detail.append(STORM_MODE_ADVICE)
     detail.append("Distances are straight lines from the reported location; check the source's report.")
     return {
         "severity": severity,
@@ -507,6 +509,8 @@ def run_once(
     by_customer: dict[Any, list[dict]] = {}
     for s in sites:
         by_customer.setdefault(s["customer_id"], []).append(s)
+    for customer_id in open_customers(conn, "hazard", example):
+        by_customer.setdefault(customer_id, [])
     suffix = ":example" if example else ""
     total = 0
     for customer_id, csites in by_customer.items():
@@ -525,6 +529,7 @@ def run_once(
             if key in seen:  # two events claiming one key: give the second its own
                 key = f"hazard:{event.lead.id}{suffix}"
             w = describe(event, hits)
+            note_storm_mode(conn, w, STORM_MODE_ADVICE)
             raise_insight(
                 conn,
                 customer_id,

@@ -39,6 +39,7 @@ AUTO_CONFIDENCE = 0.8
 EPHEMERAL_FROM = 32768  # client-side ports say nothing about the application
 PRIORITY_WORD = {"realtime": "real-time", "interactive": "interactive", "bulk": "bulk", "normal": "normal"}
 AUTO_ACTOR = "system:auto-prioritise"
+STALE_DAYS = 7
 
 
 def _profile(proto: str, s: dict) -> tuple[str, float, str] | None:
@@ -167,6 +168,11 @@ def detect(conn: psycopg.Connection, customer: dict, now: dt.datetime) -> list[d
                     apply(conn, row, AUTO_ACTOR)
             except traffic.RuleError as e:
                 log.warning("auto-prioritise %s: %s", label, e)
+    # A suggestion for traffic not seen for a week is out of date; it comes back if the traffic does.
+    conn.execute(
+        "DELETE FROM app_detections WHERE customer_id = %s AND status = 'suggested' AND last_seen < %s",
+        (cid, now - dt.timedelta(days=STALE_DAYS)),
+    )
     reconcile(conn, cid)
     return changed
 

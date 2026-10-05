@@ -72,6 +72,34 @@ def test_storm_watch_insights_and_example_api(client, admin_headers):
     assert client.get("/api/v1/insights", headers=admin_headers).json() == []
 
 
+def test_storm_warnings_follow_storm_mode_and_lost_coordinates(client, admin_headers):
+    _seed()
+    with db.tx() as conn:
+        storms.run_once(conn, storms.example_feed())
+    w = client.get("/api/v1/insights", headers=admin_headers).json()[0]
+    assert "Consider switching Storm Mode on" in w["detail"]
+
+    # Storm Mode switched on elsewhere: the next pass stops advising it.
+    with db.tx() as conn:
+        conn.execute("UPDATE sites SET storm_mode = true WHERE name = 'site-a'")
+        storms.run_once(conn, storms.example_feed())
+    w = client.get("/api/v1/insights", headers=admin_headers).json()[0]
+    assert "Consider switching" not in w["detail"] and "Storm Mode is already on at site-a." in w["detail"]
+    assert w["data"]["storm_mode_on"] is True
+
+    # The only geolocated site loses its coordinates: the warning still resolves.
+    with db.tx() as conn:
+        conn.execute("UPDATE sites SET latitude = NULL, longitude = NULL")
+        storms.run_once(conn, storms.example_feed())
+    assert client.get("/api/v1/insights", headers=admin_headers).json() == []
+
+    # A watch switched off closes what it left open.
+    with db.tx() as conn:
+        conn.execute("UPDATE sites SET latitude = 18.0, longitude = -76.8 WHERE name = 'site-a'")
+        storms.run_once(conn, storms.example_feed())
+        assert insights.resolve_kind(conn, "storm_warning") == 1
+
+
 def test_one_storm_warning_per_customer_for_several_sites(client, admin_headers):
     _seed()
     with db.tx() as conn:

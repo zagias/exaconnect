@@ -169,6 +169,7 @@ def overview(user: ViewerDep, customer_id: uuid.UUID | None = None) -> dict:
                 LEFT JOIN paths ip ON ip.name = st.path
                 LEFT JOIN nodes n ON n.site_id = s.id
                 LEFT JOIN steering_actual a ON a.node_id = n.id AND a.class_name = c.name AND a.dst = ''
+                    AND a.updated_at > now() - interval '60 seconds'
                 LEFT JOIN paths ap ON ap.name = a.path
                 WHERE s.id = ANY(%s) AND s.kind = 'site'
                 ORDER BY c.ordinal, c.name""",
@@ -373,6 +374,7 @@ def steering_view(conn, site_id) -> list[dict]:
            LEFT JOIN paths ip ON ip.name = st.path
            LEFT JOIN nodes n ON n.site_id = s.id
            LEFT JOIN steering_actual a ON a.node_id = n.id AND a.class_name = c.name AND a.dst = ''
+                    AND a.updated_at > now() - interval '60 seconds'
            LEFT JOIN paths ap ON ap.name = a.path
            WHERE s.id = %s ORDER BY c.ordinal, c.name""",
         (site_id,),

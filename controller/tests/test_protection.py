@@ -131,6 +131,14 @@ def test_ddos_protection_and_the_block_list(client, admin_headers):
     assert "203.0.113.9" not in str(mine)  # customers see counts only
     admin = client.get("/api/v1/admin/protection", headers=admin_headers).json()
     assert admin["auto_blocked"][0]["address"] == "203.0.113.9"
+    # A PoP that stops reporting: its blocks count down from the last report and then go.
+    with db.tx() as conn:
+        conn.execute("UPDATE internet_state SET updated_at = now() - interval '100 seconds'")
+    left = client.get("/api/v1/admin/protection", headers=admin_headers).json()["auto_blocked"][0]["expires_s"]
+    assert 185 <= left <= 190
+    with db.tx() as conn:
+        conn.execute("UPDATE internet_state SET updated_at = now() - interval '10 minutes'")
+    assert client.get("/api/v1/admin/protection", headers=admin_headers).json()["auto_blocked"] == []
 
     client.patch("/api/v1/admin/protection", json={"enabled": False}, headers=admin_headers)
     assert _desired(client, pop_h)["internet"]["protection"]["enabled"] is False

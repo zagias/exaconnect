@@ -4,6 +4,7 @@ PoP, since they share the address."""
 
 from __future__ import annotations
 
+import datetime as dt
 import ipaddress
 from typing import Any
 
@@ -57,7 +58,16 @@ def _view(conn) -> dict[str, Any]:
         for c in p["counters"] or []:
             if c.get("kind") in dropped:
                 dropped[c["kind"]] += int(c.get("packets") or 0)
-        auto += [{**b, "pop": p["name"]} for b in p["auto_blocked"] or []]
+        # Times left are as of the PoP's last report: count them down from then,
+        # and drop blocks that have run out since, so a silent PoP shows nothing stale.
+        age = (dt.datetime.now(dt.UTC) - p["updated_at"]).total_seconds() if p["updated_at"] else 0
+        for b in p["auto_blocked"] or []:
+            left = b.get("expires_s")
+            if left is not None:
+                left = int(left - age)
+                if left <= 0:
+                    continue
+            auto.append({**b, "expires_s": left, "pop": p["name"]})
     return {
         "settings": {k: first[col] for k, col in SETTINGS.items()} if first else None,
         "pops": [p["name"] for p in pops],

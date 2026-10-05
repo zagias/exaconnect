@@ -151,6 +151,29 @@ def test_problems_block_confirmation(client, admin_headers):
     assert r.json()["status"] == "cancelled"
 
 
+def test_drafts_are_checked_against_what_is_already_there(client, admin_headers):
+    seed = _seed()
+    cid = seed["customer_id"]
+    r = client.post(f"/api/v1/customers/{cid}/circuits", json=_cloud(name="AWS prod"), headers=admin_headers)
+    assert r.status_code == 201, r.text
+    site = client.get(f"/api/v1/customers/{cid}/internet", headers=admin_headers).json()["sites"][0]
+    o = client.post(
+        f"/api/v1/customers/{cid}/orders",
+        json={
+            "actions": [
+                {"action": "bandwidth", "circuit": "AWS prod", "bandwidth_mbps": 50},
+                {"action": "internet_mode", "site": site["name"], "mode": site["mode"]},
+                {"action": "cloud_circuit", "provider": "aws", "site": "site-a", "name": "AWS prod"},
+            ]
+        },
+        headers=admin_headers,
+    ).json()
+    problems = " ".join(o["problems"])
+    assert "AWS prod already runs at 50 Mbps." in problems
+    assert f"{site['name']} already sends its internet" in problems
+    assert "You already have a circuit called AWS prod." in problems
+
+
 def test_service_partner_waits_for_exacarib(client, admin_headers):
     cid = _seed()["customer_id"]
     partners = client.get("/api/v1/partners", headers=admin_headers).json()
