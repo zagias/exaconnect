@@ -288,7 +288,7 @@ CREATE TABLE IF NOT EXISTS traffic_rules (
   dscp           int[] NOT NULL DEFAULT '{}',
   enabled        boolean NOT NULL DEFAULT true,
   ordinal        int NOT NULL DEFAULT 100,
-  source         text NOT NULL DEFAULT 'customer' CHECK (source IN ('customer', 'admin', 'detected')),
+  source         text NOT NULL DEFAULT 'customer' CHECK (source IN ('customer', 'admin', 'detected', 'assistant')),
   created_by     text NOT NULL,
   created_at     timestamptz NOT NULL DEFAULT now(),
   updated_at     timestamptz NOT NULL DEFAULT now()
@@ -505,6 +505,30 @@ CREATE TABLE IF NOT EXISTS orders (
 );
 CREATE INDEX IF NOT EXISTS orders_customer ON orders (customer_id, id DESC);
 CREATE INDEX IF NOT EXISTS orders_status ON orders (status) WHERE status = 'pending_partner';
+
+-- Rules the assistant adds are marked as its own (older databases lack the value).
+ALTER TABLE traffic_rules DROP CONSTRAINT IF EXISTS traffic_rules_source_check;
+ALTER TABLE traffic_rules ADD CONSTRAINT traffic_rules_source_check
+  CHECK (source IN ('customer', 'admin', 'detected', 'assistant'));
+
+-- Changes the assistant proposed from Ask (ADR 0015). Nothing applies until a
+-- person confirms; each applied action keeps what is needed to undo it.
+CREATE TABLE IF NOT EXISTS assistant_plans (
+  id           bigserial PRIMARY KEY,
+  customer_id  uuid NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  status       text NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'applied', 'undone', 'cancelled')),
+  question     text NOT NULL DEFAULT '',
+  answer       text NOT NULL DEFAULT '',
+  actions      jsonb NOT NULL DEFAULT '[]',
+  results      jsonb NOT NULL DEFAULT '[]',
+  created_by   text NOT NULL,
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  applied_by   text,
+  applied_at   timestamptz,
+  undone_by    text,
+  undone_at    timestamptz
+);
+CREATE INDEX IF NOT EXISTS assistant_plans_customer ON assistant_plans (customer_id, id DESC);
 
 -- The directory starts with the clouds ExaConnect connects to, plus two
 -- clearly marked example service partners. Admins edit or unlist them.

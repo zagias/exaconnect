@@ -265,6 +265,9 @@ tr.selected td { background: var(--blue-tint); }
 .chat form { display: flex; gap: 8px; }
 .chat form input { flex: 1; font: 400 16px/24px var(--font-body); padding: 8px 12px; border: 1.5px solid var(--line); border-radius: var(--radius-md); background: var(--card); color: var(--ink); }
 .suggestions { display: flex; flex-wrap: wrap; gap: 8px; }
+.card.plan { border-left: 3px solid var(--blue); max-width: 90%; display: grid; gap: 6px; }
+.plan-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.plan .actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .pill.storm { color: var(--ink); }
 .pill.storm::before { background: var(--coral); }
 .form fieldset { border: 1.5px solid var(--line); border-radius: var(--radius-md); padding: 8px 12px 10px; margin: 0; }

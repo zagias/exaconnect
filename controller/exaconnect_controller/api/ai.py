@@ -10,9 +10,9 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from .. import audit, db
+from ..ai import act, hazards, runner, storms
 from ..ai import ask as ask_mod
-from ..ai import hazards, runner, storms
-from .deps import AdminDep, UserDep
+from .deps import AdminDep, UserDep, check_customer
 
 router = APIRouter(tags=["ai"])
 
@@ -104,13 +104,22 @@ def storm_example(user: AdminDep, request: Request, on: bool = True) -> dict:
     return {"open_warnings": n, "open_hazards": h}
 
 
+class Turn(BaseModel):
+    q: str = Field(max_length=500)
+    a: str = Field(default="", max_length=4000)
+
+
 class AskIn(BaseModel):
     question: str = Field(min_length=2, max_length=500)
     customer_id: str | None = None
+    # The last few turns, so "yes, do that" follows on from the answer before it.
+    history: list[Turn] = Field(default_factory=list, max_length=act.MAX_HISTORY)
 
 
 @router.post("/ai/ask")
 async def ask(body: AskIn, user: UserDep, request: Request) -> dict:
+    """Answer from the customer's own data; when asked for a change or a fix,
+    also propose one as a plan that a person confirms (ADR 0015)."""
     s = request.app.state.settings
     if user.role == "carrier":
         raise HTTPException(403, "Not available for this account.")
@@ -132,22 +141,32 @@ async def ask(body: AskIn, user: UserDep, request: Request) -> dict:
             if used >= s.llm_questions_per_hour:
                 raise HTTPException(429, "That's the limit of questions for this hour. Try again later.")
             audit.record(conn, user.actor, "ai.ask", body.question[:200], customer_id)
-            return ask_mod.build_context(conn, customer_id)
+            return ask_mod.build_context(conn, customer_id), act.config(conn, customer_id)
 
-    context = await asyncio.to_thread(prepare)
+    context, config = await asyncio.to_thread(prepare)
     try:
-        answer = await asyncio.to_thread(
-            ask_mod.ask,
-            body.question,
-            context,
+        text = await asyncio.to_thread(
+            ask_mod.chat,
+            act.SYSTEM,
+            act.prompt(body.question, {**context, "configuration": config}, [t.model_dump() for t in body.history]),
             api_key=s.llm_api_key,
             base_url=s.llm_base_url,
             model=s.llm_model,
+            max_tokens=1400,
+            temperature=0.1,
         )
     except ask_mod.AskError as e:
         raise HTTPException(502, str(e)) from None
+    answer, actions = act.parse(text)
+
+    def propose():
+        with db.tx() as conn:
+            return act.create(conn, customer_id, body.question, answer, actions, user.actor)
+
+    plan = await asyncio.to_thread(propose) if actions else None
     return {
         "answer": answer,
+        "plan": plan,
         "model": s.llm_model,
         "based_on": {
             "decisions": len(context.get("routing_decisions_last_7_days_newest_first", [])),
@@ -156,3 +175,61 @@ async def ask(body: AskIn, user: UserDep, request: Request) -> dict:
             "sites": len(context.get("sites", [])),
         },
     }
+
+
+@router.get("/customers/{customer_id}/assistant/plans")
+def list_plans(customer_id: str, user: UserDep, limit: int = 20) -> list[dict]:
+    """Changes the assistant proposed, newest first, with what became of them."""
+    check_customer(user, customer_id)
+    with db.tx() as conn:
+        rows = conn.execute(
+            "SELECT * FROM assistant_plans WHERE customer_id = %s ORDER BY id DESC LIMIT %s",
+            (customer_id, max(1, min(limit, 100))),
+        ).fetchall()
+        return [act.view(conn, r, dry_run=False) for r in rows]
+
+
+def _plan(conn, plan_id: int, user) -> dict:
+    plan = act.get(conn, plan_id, lock=True)
+    if plan is None:
+        raise HTTPException(404, "Not found.")
+    check_customer(user, plan["customer_id"])
+    return plan
+
+
+def _plan_step(plan_id: int, user, step) -> dict:
+    with db.tx() as conn:
+        plan = _plan(conn, plan_id, user)
+        try:
+            with conn.transaction():
+                step(conn, plan, user.actor)
+        except act.PlanError as e:
+            failed = str(e)
+        else:
+            failed = None
+        if failed is None:
+            return act.view(conn, act.get(conn, plan_id))
+    raise HTTPException(400, failed)
+
+
+@router.get("/ai/plans/{plan_id}")
+def get_plan(plan_id: int, user: UserDep) -> dict:
+    with db.tx() as conn:
+        return act.view(conn, _plan(conn, plan_id, user))
+
+
+@router.post("/ai/plans/{plan_id}/apply")
+def apply_plan(plan_id: int, user: UserDep) -> dict:
+    """Apply every proposed change, or none of them."""
+    return _plan_step(plan_id, user, act.apply)
+
+
+@router.post("/ai/plans/{plan_id}/undo")
+def undo_plan(plan_id: int, user: UserDep) -> dict:
+    """Reverse applied changes, last first."""
+    return _plan_step(plan_id, user, act.undo)
+
+
+@router.post("/ai/plans/{plan_id}/cancel")
+def cancel_plan(plan_id: int, user: UserDep) -> dict:
+    return _plan_step(plan_id, user, act.cancel)

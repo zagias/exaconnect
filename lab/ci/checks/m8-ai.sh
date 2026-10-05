@@ -2,7 +2,7 @@
 # AI features (ADR 0006, 0008): live NHC, USGS, GDACS and tsunami.gov feeds,
 # an example hurricane that warns site-a only, an example earthquake reported
 # by three feeds that raises one alert for site-b only, insights from the faults earlier in the run, and one
-# "Ask your network" question when an AI key is configured.
+# "Ask your network" question and one proposed change (applied, then undone) when an AI key is configured.
 # shellcheck source=lab/ci/lib.sh
 source "$(dirname "$0")/../lib.sh"
 COMPOSE=(docker compose -f "$REPO/deploy/docker-compose.yml" --env-file "$REPO/.env")
@@ -50,6 +50,21 @@ if [[ $(api GET /ai/status | jq -r .ask_enabled) == true ]]; then
   cid=$(customer_id)
   ans=$(api POST /ai/ask "$(jq -n --arg c "$cid" '{question: "In one sentence: which path is voice on at site-a now, and why did it last move?", customer_id: $c}')" | jq -r .answer)
   if [[ -n $ans && $ans != null ]]; then ok "answered: ${ans:0:300}"; else bad "no answer from the AI service"; fi
+  # Asked for a change, it proposes one; applying and undoing leave the network as it was.
+  req="Add a traffic rule called lab assistant check that puts udp:7777 in bulk at site-b."
+  out=$(api POST /ai/ask "$(jq -n --arg c "$cid" --arg q "$req" '{question: $q, customer_id: $c}')")
+  pid=$(jq -r '.plan.id // empty' <<<"$out")
+  if [[ -n $pid && $(jq '.plan.problems | length' <<<"$out") == 0 ]]; then
+    ok "proposed: $(jq -r '.plan.summary | join(" ")' <<<"$out")"
+    applied=$(api POST "/ai/plans/$pid/apply" | jq -r .status)
+    has=$(api GET "/customers/$cid/rules" | jq '[.[] | select(.name | test("lab assistant check"; "i"))] | length')
+    undone=$(api POST "/ai/plans/$pid/undo" | jq -r .status)
+    left=$(api GET "/customers/$cid/rules" | jq '[.[] | select(.name | test("lab assistant check"; "i"))] | length')
+    if [[ $applied == applied && $has == 1 && $undone == undone && $left == 0 ]]; then ok "applied, then undone"
+    else bad "apply/undo: applied=$applied rule=$has undone=$undone left=$left"; fi
+  else
+    bad "no usable plan: $(jq -c '{answer, plan: (.plan | if . then {summary, problems} else null end)}' <<<"$out" | head -c 600)"
+  fi
 else
   skip "no AI key on this host (EXA_LLM_API_KEY)"
 fi

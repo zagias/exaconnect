@@ -130,6 +130,11 @@ export function InsightList({
                     Metering
                   </Link>
                 )}
+                {!readOnly && !i.resolved_at && (
+                  <Link className="small" to={`/ask?q=${encodeURIComponent(`What should we do about this: ${i.title}`)}`}>
+                    Ask what to do
+                  </Link>
+                )}
                 {!readOnly &&
                   !i.resolved_at &&
                   (i.acknowledged_by ? (

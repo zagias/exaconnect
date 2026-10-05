@@ -156,7 +156,7 @@ interface Rule {
   dscp: number[];
   enabled: boolean;
   ordinal: number;
-  source: "customer" | "admin" | "detected";
+  source: "customer" | "admin" | "detected" | "assistant";
   created_by: string;
   updated_at: string;
 }
@@ -251,7 +251,7 @@ function Rules() {
                   <td>
                     <strong>{r.name}</strong>
                     <span className="sub">
-                      {r.enabled ? "On" : "Off"} · {r.source === "detected" ? "from a suggestion" : "added"} by {who(r.created_by)}
+                      {r.enabled ? "On" : "Off"} · {r.source === "detected" ? "from a suggestion" : r.source === "assistant" ? "added through Ask" : "added"} by {who(r.created_by)}
                     </span>
                   </td>
                   <td data-label="Traffic" className="small cell-wrap">

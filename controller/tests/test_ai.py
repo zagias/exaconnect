@@ -481,8 +481,9 @@ def test_ask_your_network(client, admin_headers, fake_llm):
     user_msg = sent["body"]["messages"][1]["content"]
     assert "Why did voice move?" in user_msg and "Demo Organisation" in user_msg and "site-a" in user_msg
     # The snapshot is plain JSON.
-    snap = json.loads(user_msg.split("Network snapshot (JSON):\n", 1)[1].split("\n\nQuestion:", 1)[0])
+    snap = json.loads(user_msg.split("(JSON):\n", 1)[1].split("\n\nPerson's message:", 1)[0])
     assert {"customer", "sites", "routing_decisions_last_7_days_newest_first", "metering_this_month"} <= set(snap)
+    assert r.json()["plan"] is None
     actions = [a["action"] for a in client.get("/api/v1/audit", headers=admin_headers).json()]
     assert "ai.ask" in actions
 
