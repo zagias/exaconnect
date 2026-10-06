@@ -32,22 +32,39 @@ def _events(cid, type_):
 
 def _call(client, b, call_id, to, seconds, *, ended=None, ai=0, ext="201"):
     with db.tx() as conn:
-        vu = conn.execute("SELECT id FROM voice_users WHERE customer_id = %s AND extension = %s",
-                          (b["id"], ext)).fetchone()
+        vu = conn.execute(
+            "SELECT id FROM voice_users WHERE customer_id = %s AND extension = %s", (b["id"], ext)
+        ).fetchone()
     ended = ended or dt.datetime.now(dt.UTC)
-    r = client.post(f"{base(b)}/voice/calls", json={
-        "call_id": call_id, "to_number": to, "from_number": ext, "voice_user_id": str(vu["id"]),
-        "started_at": (ended - dt.timedelta(seconds=seconds)).isoformat(), "ended_at": ended.isoformat(),
-        "seconds": seconds, "ai_seconds": ai, "provider_ref": f"prov-{call_id}"}, headers=b["boss"]["h"])
+    r = client.post(
+        f"{base(b)}/voice/calls",
+        json={
+            "call_id": call_id,
+            "to_number": to,
+            "from_number": ext,
+            "voice_user_id": str(vu["id"]),
+            "started_at": (ended - dt.timedelta(seconds=seconds)).isoformat(),
+            "ended_at": ended.isoformat(),
+            "seconds": seconds,
+            "ai_seconds": ai,
+            "provider_ref": f"prov-{call_id}",
+        },
+        headers=b["boss"]["h"],
+    )
     assert r.status_code == 201, r.text
     return r.json()
 
 
 CARD_V2 = {
-    "label": "Example v2", "monthly_user": "12.00", "monthly_number": "3.00", "ai_minute": "0.10",
+    "label": "Example v2",
+    "monthly_user": "12.00",
+    "monthly_number": "3.00",
+    "ai_minute": "0.10",
     "one_time": {"desk_phone": "25.00", "port_number": "10.00"},
-    "destinations": [{"prefix": "1868", "name": "Trinidad and Tobago", "per_minute": "0.0200"},
-                     {"prefix": "", "name": "Rest of world", "per_minute": "0.3000"}],
+    "destinations": [
+        {"prefix": "1868", "name": "Trinidad and Tobago", "per_minute": "0.0200"},
+        {"prefix": "", "name": "Rest of world", "per_minute": "0.3000"},
+    ],
 }
 
 
@@ -76,10 +93,12 @@ def test_rating_keeps_the_rate_card_version(client, admin_headers):
     again = _call(client, b, "c1", "+1 868 555 0199", 90, ai=60)
     assert {c["id"] for c in again["charges"]} == {c["id"] for c in c1["charges"]}
     with db.tx() as conn:
-        n = conn.execute("SELECT count(*) AS n FROM voice_charges WHERE customer_id = %s AND kind = 'call'",
-                         (b["id"],)).fetchone()["n"]
-        used = conn.execute("SELECT sum(quantity) AS q FROM usage_records WHERE customer_id = %s"
-                            " AND meter = 'voice_minute'", (b["id"],)).fetchone()["q"]
+        n = conn.execute(
+            "SELECT count(*) AS n FROM voice_charges WHERE customer_id = %s AND kind = 'call'", (b["id"],)
+        ).fetchone()["n"]
+        used = conn.execute(
+            "SELECT sum(quantity) AS q FROM usage_records WHERE customer_id = %s AND meter = 'voice_minute'", (b["id"],)
+        ).fetchone()["q"]
     assert n == 4 and Decimal(used) == Decimal("5")  # 1.5 + 1.5 + 1 + 1 minutes
     # Version 1 is untouched.
     v1 = client.get(f"{u}/voice/rate-cards", headers=b["boss"]["h"]).json()[-1]
@@ -91,8 +110,11 @@ def test_rating_keeps_the_rate_card_version(client, admin_headers):
 def test_bundle_pooled_with_alerts(client, admin_headers):
     b = setup_voice(client)
     u = base(b)
-    r = client.post(f"{u}/voice/bundles", json={"name": "Local 10", "minutes": "10", "prefixes": ["1868"],
-                                                "alert_pct": 80}, headers=admin_headers)
+    r = client.post(
+        f"{u}/voice/bundles",
+        json={"name": "Local 10", "minutes": "10", "prefixes": ["1868"], "alert_pct": 80},
+        headers=admin_headers,
+    )
     assert r.status_code == 201, r.text
     first = _call(client, b, "b1", "+1 868 555 0101", 7 * 60)["charges"][0]
     assert first["bundle_minutes"] == "7.0000" and first["amount"] == "0.0000"
@@ -116,17 +138,25 @@ def test_fraud_limits_stop_calls(client):
     u = base(b)
 
     def sim(to, seconds=60):
-        r = client.post(f"{u}/voice/calls/simulate", json={"extension": "201", "to": to, "seconds": seconds},
-                        headers=b["boss"]["h"])
+        r = client.post(
+            f"{u}/voice/calls/simulate", json={"extension": "201", "to": to, "seconds": seconds}, headers=b["boss"]["h"]
+        )
         assert r.status_code == 201, r.text
         return r.json()
 
     blocked = sim("+1 900 555 0100")
     assert not blocked["allowed"] and blocked["status"] == "blocked" and blocked["charges"] == []
     assert "1900" in blocked["reason"] and len(_events(b["id"], "voice.call_blocked")) == 1
-    r = client.put(f"{u}/voice/fraud-limits", json={"daily_cap": "0.05", "blocked_prefixes": ["1900", "882"],
-                                                    "international": False, "calls_per_hour_alert": 3},
-                   headers=b["lead"]["h"])
+    r = client.put(
+        f"{u}/voice/fraud-limits",
+        json={
+            "daily_cap": "0.05",
+            "blocked_prefixes": ["1900", "882"],
+            "international": False,
+            "calls_per_hour_alert": 3,
+        },
+        headers=b["lead"]["h"],
+    )
     assert r.status_code == 200 and r.json()["daily_cap"] == "0.05", r.text
     assert client.put(f"{u}/voice/fraud-limits", json={"daily_cap": "100"}, headers=b["ana"]["h"]).status_code == 403
     assert not sim("+44 20 7946 0000")["allowed"]  # international switched off
@@ -143,8 +173,7 @@ def test_invoice_freezes_and_corrections_are_credit_notes(client, admin_headers)
     u = base(b)
     _call(client, b, "i1", "+1 868 555 0199", 600)  # 0.15
     period = dt.date.today().strftime("%Y-%m")
-    assert client.post(f"{u}/voice/invoices/draft", json={"period": period},
-                       headers=b["boss"]["h"]).status_code == 403
+    assert client.post(f"{u}/voice/invoices/draft", json={"period": period}, headers=b["boss"]["h"]).status_code == 403
     r = client.post(f"{u}/voice/invoices/draft", json={"period": period}, headers=admin_headers)
     assert r.status_code == 201, r.text
     draft = r.json()
@@ -177,16 +206,20 @@ def test_invoice_freezes_and_corrections_are_credit_notes(client, admin_headers)
     assert [line["call_id"] for line in d2["lines"]] == ["i2"]
 
     # Corrections are credit notes pointing at the lines they correct.
-    r = client.post(f"{u}/voice/invoices/{draft['id']}/credit",
-                    json={"lines": [{"line_id": call_line["id"], "amount": "0.10"}], "reason": "Dropped call"},
-                    headers=admin_headers)
+    r = client.post(
+        f"{u}/voice/invoices/{draft['id']}/credit",
+        json={"lines": [{"line_id": call_line["id"], "amount": "0.10"}], "reason": "Dropped call"},
+        headers=admin_headers,
+    )
     assert r.status_code == 201, r.text
     note = r.json()
     assert note["kind"] == "credit_note" and note["number"] == f"VC-{today.year}-0001"
     assert note["total"] == "-0.10" and note["lines"][0]["credits_line"] == call_line["id"]
-    r = client.post(f"{u}/voice/invoices/{draft['id']}/credit",
-                    json={"lines": [{"line_id": call_line["id"], "amount": "0.06"}], "reason": "Again"},
-                    headers=admin_headers)
+    r = client.post(
+        f"{u}/voice/invoices/{draft['id']}/credit",
+        json={"lines": [{"line_id": call_line["id"], "amount": "0.06"}], "reason": "Again"},
+        headers=admin_headers,
+    )
     assert r.status_code == 422 and "0.05" in r.json()["detail"]
     same = client.get(f"{u}/voice/invoices/{draft['id']}", headers=b["boss"]["h"]).json()
     assert same["total"] == issued["total"] and same["status"] == "issued"
@@ -198,11 +231,17 @@ def test_removal_stops_charges(client, admin_headers):
     b = setup_voice(client)
     u = base(b)
     with db.tx() as conn:  # Ben has been billed since the 1st; he leaves today
-        conn.execute("UPDATE voice_users SET billing_from = date_trunc('month', now()) WHERE customer_id = %s",
-                     (b["id"],))
-    r = client.post(f"{u}/voice/changes", json={"ops": [{"op": "remove_user", "user": "202"}],
-                                                 "accepted_price": {"monthly_delta": "-12.00", "one_time": "0.00"}},
-                    headers=b["boss"]["h"])
+        conn.execute(
+            "UPDATE voice_users SET billing_from = date_trunc('month', now()) WHERE customer_id = %s", (b["id"],)
+        )
+    r = client.post(
+        f"{u}/voice/changes",
+        json={
+            "ops": [{"op": "remove_user", "user": "202"}],
+            "accepted_price": {"monthly_delta": "-12.00", "one_time": "0.00"},
+        },
+        headers=b["boss"]["h"],
+    )
     assert r.status_code == 201, r.text
     today = dt.date.today()
     if today.day == 1:
@@ -220,8 +259,10 @@ def _order_items():
             {"name": "Gail Ross", "extension": "220", "number": True, "desk_phone": {"mac": "00:15:65:00:00:01"}},
             {"name": "Hal King", "extension": "221", "softphone": True, "team": "Cards"},
         ],
-        "numbers": {"new": 1, "ported": [{"e164": "+1 868 555 0177", "losing_carrier": "Old Telco",
-                                          "switch_date": "2026-11-30"}]},
+        "numbers": {
+            "new": 1,
+            "ported": [{"e164": "+1 868 555 0177", "losing_carrier": "Old Telco", "switch_date": "2026-11-30"}],
+        },
         "features": {"main_ring_group": True, "main_extension": "100", "ai_after_hours": True},
     }
 
@@ -239,8 +280,11 @@ def test_order_fails_at_a_step_and_retries_without_duplicates(client, admin_head
     accepted = {"monthly_delta": "33.00", "one_time": "35.00"}
     r = client.post(f"{u}/voice/orders/{oid}/approve", json={"accepted_price": accepted}, headers=b["lead"]["h"])
     assert r.status_code == 403  # no spend permission
-    r = client.post(f"{u}/voice/orders/{oid}/approve", json={"accepted_price": {**accepted, "one_time": "0.00"}},
-                    headers=b["boss"]["h"])
+    r = client.post(
+        f"{u}/voice/orders/{oid}/approve",
+        json={"accepted_price": {**accepted, "one_time": "0.00"}},
+        headers=b["boss"]["h"],
+    )
     assert r.status_code == 409
     providers.FAULTS["order_number"] = 1  # the provider fails once, mid-step
     r = client.post(f"{u}/voice/orders/{oid}/approve", json={"accepted_price": accepted}, headers=b["boss"]["h"])
@@ -249,11 +293,20 @@ def test_order_fails_at_a_step_and_retries_without_duplicates(client, admin_head
     o = client.get(f"{u}/voice/orders/{oid}", headers=b["boss"]["h"]).json()
     assert o["status"] == "failed" and o["failed_step"] == "numbers" and "Simulated provider failure" in o["error"]
     steps = {s["step"]: s["status"] for s in o["steps"]}
-    assert steps == {"tenant": "done", "numbers": "failed", "devices": "pending", "confirm": "pending",
-                     "billing": "pending"}
+    assert steps == {
+        "tenant": "done",
+        "numbers": "failed",
+        "devices": "pending",
+        "confirm": "pending",
+        "billing": "pending",
+    }
     with db.tx() as conn:  # nothing billed yet
-        assert conn.execute("SELECT count(*) AS n FROM voice_users WHERE order_ref IS NOT NULL"
-                            " AND billing_from IS NOT NULL").fetchone()["n"] == 0
+        assert (
+            conn.execute(
+                "SELECT count(*) AS n FROM voice_users WHERE order_ref IS NOT NULL AND billing_from IS NOT NULL"
+            ).fetchone()["n"]
+            == 0
+        )
     r = client.post(f"{u}/voice/orders/{oid}/retry", headers=b["boss"]["h"])
     assert r.status_code == 200, r.text
     run_jobs()
@@ -267,15 +320,24 @@ def test_order_fails_at_a_step_and_retries_without_duplicates(client, admin_head
     assert len(o["test_calls"]) == 2 and all(t["ok"] for t in o["test_calls"])
     with db.tx() as conn:
         users = conn.execute("SELECT count(*) AS n FROM voice_users WHERE order_ref IS NOT NULL").fetchone()["n"]
-        nums = conn.execute("SELECT source, status, billing_from IS NOT NULL AS billed FROM voice_numbers"
-                            " WHERE customer_id = %s ORDER BY source, e164", (b["id"],)).fetchall()
-        sim = conn.execute("SELECT count(*) AS n FROM voice_sim_provider_numbers WHERE customer_id = %s",
-                           (b["id"],)).fetchone()["n"]
-        fees = conn.execute("SELECT ref, amount FROM voice_charges WHERE customer_id = %s AND kind = 'one_time'"
-                            " ORDER BY ref", (b["id"],)).fetchall()
+        nums = conn.execute(
+            "SELECT source, status, billing_from IS NOT NULL AS billed FROM voice_numbers"
+            " WHERE customer_id = %s ORDER BY source, e164",
+            (b["id"],),
+        ).fetchall()
+        sim = conn.execute(
+            "SELECT count(*) AS n FROM voice_sim_provider_numbers WHERE customer_id = %s", (b["id"],)
+        ).fetchone()["n"]
+        fees = conn.execute(
+            "SELECT ref, amount FROM voice_charges WHERE customer_id = %s AND kind = 'one_time' ORDER BY ref",
+            (b["id"],),
+        ).fetchall()
     assert users == 2 and sim == 2  # no second number from the retried step
     assert [(n["source"], n["status"], n["billed"]) for n in nums] == [
-        ("new", "active", True), ("new", "active", True), ("ported", "porting", False)]
+        ("new", "active", True),
+        ("new", "active", True),
+        ("ported", "porting", False),
+    ]
     assert sorted(str(f["amount"]) for f in fees) == ["0.0000", "0.0000", "0.0000", "10.0000", "25.0000"]
     ov = overview(client, b)
     assert any(g["name"] == "Main line" and len(g["members"]) == 2 for g in ov["ring_groups"])
@@ -285,8 +347,10 @@ def test_order_fails_at_a_step_and_retries_without_duplicates(client, admin_head
     # The port moves on separately and goes live only after its test call.
     port = client.get(f"{u}/voice/ports", headers=b["boss"]["h"]).json()[0]
     assert port["status"] == "submitted" and port["switch_date"] == "2026-11-30"
-    assert client.post(f"{u}/voice/ports/{port['id']}", json={"status": "completed"},
-                       headers=b["boss"]["h"]).status_code == 403
+    assert (
+        client.post(f"{u}/voice/ports/{port['id']}", json={"status": "completed"}, headers=b["boss"]["h"]).status_code
+        == 403
+    )
     r = client.post(f"{u}/voice/ports/{port['id']}", json={"status": "completed"}, headers=admin_headers)
     assert r.status_code == 200 and r.json()["status"] == "completed", r.text
     assert next(n for n in overview(client, b)["numbers"] if n["source"] == "ported")["status"] == "active"
@@ -306,15 +370,19 @@ def test_order_is_active_only_when_test_calls_work(client):
     items = {"site": "Port of Spain", "users": [{"name": "Ivy Dean", "number": True}]}
     o = client.post(f"{u}/voice/orders", json={"items": items}, headers=b["boss"]["h"]).json()
     providers.FAULTS["test_call"] = 1
-    client.post(f"{u}/voice/orders/{o['id']}/approve", json={"accepted_price": {
-        "monthly_delta": o["price"]["monthly_delta"], "one_time": o["price"]["one_time"]}}, headers=b["boss"]["h"])
+    client.post(
+        f"{u}/voice/orders/{o['id']}/approve",
+        json={"accepted_price": {"monthly_delta": o["price"]["monthly_delta"], "one_time": o["price"]["one_time"]}},
+        headers=b["boss"]["h"],
+    )
     run_jobs()
     o = client.get(f"{u}/voice/orders/{o['id']}", headers=b["boss"]["h"]).json()
     assert o["status"] == "failed" and o["failed_step"] == "confirm"
     assert [t["ok"] for t in o["test_calls"]] == [False]  # the failed call is kept on the order
     with db.tx() as conn:
-        row = conn.execute("SELECT status, billing_from FROM voice_numbers WHERE order_ref LIKE %s",
-                           (f"order:{o['id']}:%",)).fetchone()
+        row = conn.execute(
+            "SELECT status, billing_from FROM voice_numbers WHERE order_ref LIKE %s", (f"order:{o['id']}:%",)
+        ).fetchone()
         ivy = conn.execute("SELECT billing_from FROM voice_users WHERE name = 'Ivy Dean'").fetchone()
     assert row["status"] == "pending" and row["billing_from"] is None and ivy["billing_from"] is None
     client.post(f"{u}/voice/orders/{o['id']}/retry", headers=b["boss"]["h"])
@@ -326,8 +394,8 @@ def test_order_is_active_only_when_test_calls_work(client):
 def test_supplier_reconciliation(client, admin_headers):
     b = setup_voice(client)
     u = base(b)
-    _call(client, b, "s1", "+1 868 555 0199", 600)   # billed 0.15
-    _call(client, b, "s2", "+1 876 555 0100", 120)   # billed 0.08
+    _call(client, b, "s1", "+1 868 555 0199", 600)  # billed 0.15
+    _call(client, b, "s2", "+1 876 555 0100", 120)  # billed 0.08
     day = dt.date.today().isoformat()
     csv_text = (
         "call_ref,started_at,destination,seconds,cost\n"

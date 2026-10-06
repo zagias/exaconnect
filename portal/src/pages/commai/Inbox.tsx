@@ -190,7 +190,7 @@ function ConversationPane({
               {c.subject ? ` · ${c.subject}` : ""}
             </div>
           </div>
-          <Handler c={c} internal={internal} busy={act.busy} onTakeOver={() => post("/takeover")} onHandBack={() => post("/handback")} />
+          <Handler c={c} mine={c.handler === "human" && !!user && c.handler_email === user.email} internal={internal} busy={act.busy} onTakeOver={() => post("/takeover")} onHandBack={() => post("/handback")} />
         </header>
 
         {c.handovers.length > 0 && <HandoverNote h={c.handovers[c.handovers.length - 1]} />}
@@ -260,27 +260,31 @@ function statusLabel(s: string): string {
 
 function Handler({
   c,
+  mine,
   internal,
   busy,
   onTakeOver,
   onHandBack,
 }: {
   c: ConversationDetail;
+  mine: boolean;
   internal: boolean;
   busy: boolean;
   onTakeOver: () => void;
   onHandBack: () => void;
 }) {
   const label =
-    c.handler === "ai" ? "The AI agent is handling this" : c.handler === "human" ? `${c.handler_email ?? "Someone"} is handling this` : "Nobody is handling this yet";
+    c.handler === "ai" ? "The AI agent is handling this" : c.handler === "human" ? (mine ? "You are handling this" : `${c.handler_email ?? "Someone"} is handling this`) : "Nobody is handling this yet";
   return (
     <div className="conv-handler">
       <span className={`pill ${c.handler === "ai" ? "warn" : c.handler === "human" ? "ok" : ""}`}>{label}</span>
       {!internal && (
         <div className="conv-handler-actions">
-          <button type="button" className="button small" disabled={busy} onClick={onTakeOver}>
-            Take over
-          </button>
+          {!mine && (
+            <button type="button" className="button small" disabled={busy} onClick={onTakeOver}>
+              Take over
+            </button>
+          )}
           {c.handler !== "ai" && (
             <button type="button" className="button secondary small" disabled={busy} onClick={onHandBack}>
               Hand to the AI

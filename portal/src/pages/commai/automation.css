@@ -1,0 +1,55 @@
+/* CommAI automation screens (ADR 0020): integrations, workflows, reports,
+   set-up and the platform assistant. Brand tokens come from brand.css. */
+
+.auto-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+.auto-app { display: flex; flex-direction: column; gap: 8px; }
+.auto-app h3 { margin: 0; font-weight: 650; letter-spacing: -0.01em; }
+.auto-app .auto-actions-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.auto-kind { display: inline-block; font: 600 12px/18px var(--font-body); padding: 0 6px; border-radius: 4px;
+  border: 1px solid var(--line); color: var(--ink-muted); background: var(--page); }
+.auto-kind.write { color: var(--blue-strong); border-color: var(--blue-tint); background: var(--blue-tint); }
+.auto-kind.sensitive { color: var(--warning); border-color: currentColor; background: transparent; }
+.auto-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; counter-reset: step; }
+.auto-step { border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: var(--card); }
+.auto-step-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.auto-step-head strong::before { counter-increment: step; content: counter(step) ". "; color: var(--ink-muted); }
+.auto-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.auto-row > * { min-width: 0; }
+.auto-fields { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+.auto-fields label { display: grid; gap: 4px; font-weight: 600; font-size: 14px; }
+.auto-fields .wide { grid-column: 1 / -1; }
+.auto-fields input, .auto-fields select, .auto-fields textarea, .auto-text {
+  box-sizing: border-box; width: 100%; font: inherit; padding: 6px 8px; border: 1.5px solid var(--line);
+  border-radius: 5px; background: var(--card); color: var(--ink); }
+.auto-text { min-height: 96px; resize: vertical; }
+.auto-preview { margin: 0; padding-left: 0; list-style: none; display: grid; gap: 4px; }
+.auto-preview li { font-size: 15px; }
+.auto-preview li:first-child { font-weight: 600; }
+.auto-problems { margin: 8px 0; padding-left: 20px; color: var(--danger); }
+.auto-warnings { margin: 8px 0; padding-left: 20px; color: var(--warning); }
+.auto-evidence { margin: 4px 0 0; padding-left: 20px; font-size: 14px; }
+.auto-evidence li { margin: 2px 0; overflow-wrap: anywhere; }
+.auto-log { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.auto-log li { display: grid; grid-template-columns: 110px 1fr; gap: 8px; font-size: 14px; }
+.auto-log li .auto-status { font-weight: 600; }
+.auto-banner { border: 1px solid var(--line); border-left: 4px solid var(--blue); border-radius: 8px;
+  padding: 10px 12px; background: var(--card); margin-bottom: 16px; }
+.auto-banner.bad { border-left-color: var(--danger); }
+.auto-banner.ok { border-left-color: var(--success); }
+.auto-kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 0; font-size: 14px; }
+.auto-kv dt { color: var(--ink-muted); }
+.auto-kv dd { margin: 0; overflow-wrap: anywhere; }
+.auto-stats { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); margin-bottom: 24px; }
+.auto-stat { border: 1px solid var(--line); border-radius: 8px; background: var(--card); padding: 12px; }
+.auto-stat .figure { font: 600 26px/32px var(--font-mono); }
+.auto-stat .label { font-size: 13px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.auto-answer { white-space: pre-wrap; font-size: 16px; line-height: 1.5; }
+.auto-draft { border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: var(--card); display: grid; gap: 8px; }
+.auto-draft pre { white-space: pre-wrap; margin: 0; font-size: 14px; max-height: 200px; overflow: auto; }
+.auto-secret-note { font-size: 14px; color: var(--ink-muted); }
+
+@media (max-width: 640px) {
+  .auto-log li { grid-template-columns: 1fr; }
+  .auto-kv { grid-template-columns: 1fr; }
+  .auto-kv dd { margin-bottom: 6px; }
+}

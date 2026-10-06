@@ -9,6 +9,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "sdk" / "python"))
 
 from exaconnect import ExaConnect, ExaConnectError, verify_webhook  # noqa: E402
+
 from exaconnect_controller.commai import webhooks  # noqa: E402
 
 from .commai_helpers import PASSWORD, business  # noqa: E402

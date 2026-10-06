@@ -22,22 +22,51 @@ def setup_voice(client, name="Voice Bank"):
     u = base(b)
     r = client.put(
         f"{u}/voice/permissions",
-        json={"people": [{"user_id": b["boss"]["id"], "voice_admin": True, "spend": True},
-                         {"user_id": b["lead"]["id"], "voice_admin": True, "spend": False}]},
+        json={
+            "people": [
+                {"user_id": b["boss"]["id"], "voice_admin": True, "spend": True},
+                {"user_id": b["lead"]["id"], "voice_admin": True, "spend": False},
+            ]
+        },
         headers=b["boss"]["h"],
     )
     assert r.status_code == 200, r.text
     team = client.post(f"{u}/teams", json={"name": "Cards"}, headers=b["boss"]["h"])
     assert team.status_code == 201, team.text
     ops = [
-        {"op": "add_site", "name": "Port of Spain", "address_line1": "1 Frederick Street", "city": "Port of Spain",
-         "island": "Trinidad", "country": "TT"},
-        {"op": "add_site", "name": "San Fernando", "address_line1": "5 High Street", "city": "San Fernando",
-         "island": "Trinidad", "country": "TT"},
-        {"op": "add_user", "name": "Ana Lee", "extension": "201", "site": "Port of Spain", "team": "Cards",
-         "email": b["ana"]["email"], "mobile": "+1 868 555 0123", "portal_email": b["ana"]["email"]},
-        {"op": "add_user", "name": "Ben Ali", "extension": "202", "site": "Port of Spain",
-         "portal_email": b["ben"]["email"]},
+        {
+            "op": "add_site",
+            "name": "Port of Spain",
+            "address_line1": "1 Frederick Street",
+            "city": "Port of Spain",
+            "island": "Trinidad",
+            "country": "TT",
+        },
+        {
+            "op": "add_site",
+            "name": "San Fernando",
+            "address_line1": "5 High Street",
+            "city": "San Fernando",
+            "island": "Trinidad",
+            "country": "TT",
+        },
+        {
+            "op": "add_user",
+            "name": "Ana Lee",
+            "extension": "201",
+            "site": "Port of Spain",
+            "team": "Cards",
+            "email": b["ana"]["email"],
+            "mobile": "+1 868 555 0123",
+            "portal_email": b["ana"]["email"],
+        },
+        {
+            "op": "add_user",
+            "name": "Ben Ali",
+            "extension": "202",
+            "site": "Port of Spain",
+            "portal_email": b["ben"]["email"],
+        },
     ]
     save(client, b, ops)
     return b
@@ -51,8 +80,11 @@ def save(client, b, ops, who="boss", **extra):
     price = pv.json()["price_impact"]
     r = client.post(
         f"{u}/voice/changes",
-        json={"ops": ops, "accepted_price": {"monthly_delta": price["monthly_delta"], "one_time": price["one_time"]},
-              **extra},
+        json={
+            "ops": ops,
+            "accepted_price": {"monthly_delta": price["monthly_delta"], "one_time": price["one_time"]},
+            **extra,
+        },
         headers=b[who]["h"],
     )
     assert r.status_code == 201, r.text
@@ -83,9 +115,11 @@ def test_add_user_shows_price_and_needs_spend_permission(client):
     # ...someone with it must have seen the price...
     r = client.post(f"{u}/voice/changes", json={"ops": ops}, headers=b["boss"]["h"])
     assert r.status_code == 409 and "12.00" in r.json()["detail"]
-    r = client.post(f"{u}/voice/changes", json={"ops": ops, "accepted_price": {"monthly_delta": "1.00",
-                                                                              "one_time": "0.00"}},
-                    headers=b["boss"]["h"])
+    r = client.post(
+        f"{u}/voice/changes",
+        json={"ops": ops, "accepted_price": {"monthly_delta": "1.00", "one_time": "0.00"}},
+        headers=b["boss"]["h"],
+    )
     assert r.status_code == 409
     # ...and then it saves.
     r = client.post(f"{u}/voice/changes", json={"ops": ops, "accepted_price": accepted}, headers=b["boss"]["h"])
@@ -94,12 +128,17 @@ def test_add_user_shows_price_and_needs_spend_permission(client):
     r = client.post(f"{u}/voice/changes", json={"ops": ops, "accepted_price": accepted}, headers=b["ana"]["h"])
     assert r.status_code == 403
     # A change that doesn't touch the bill needs no spend permission.
-    r = client.post(f"{u}/voice/changes", json={"ops": [{"op": "save_ring_group", "name": "Sales", "extension": "300",
-                                                          "members": ["201", "202"]}]}, headers=b["lead"]["h"])
+    r = client.post(
+        f"{u}/voice/changes",
+        json={"ops": [{"op": "save_ring_group", "name": "Sales", "extension": "300", "members": ["201", "202"]}]},
+        headers=b["lead"]["h"],
+    )
     assert r.status_code == 201, r.text
     with db.tx() as conn:
-        acts = [r["action"] for r in conn.execute(
-            "SELECT action FROM audit_log WHERE customer_id = %s", (b["id"],)).fetchall()]
+        acts = [
+            r["action"]
+            for r in conn.execute("SELECT action FROM audit_log WHERE customer_id = %s", (b["id"],)).fetchall()
+        ]
     assert acts.count("commai.voice.change") >= 3
 
 
@@ -143,12 +182,35 @@ def test_scheduled_change_runs_at_its_time(client):
 def test_rollback_restores_routing(client):
     b = setup_voice(client)
     u = base(b)
-    v1 = save(client, b, [{"op": "save_ring_group", "name": "Sales", "extension": "300", "members": ["201", "202"],
-                           "strategy": "simultaneous"}])["version"]
+    v1 = save(
+        client,
+        b,
+        [
+            {
+                "op": "save_ring_group",
+                "name": "Sales",
+                "extension": "300",
+                "members": ["201", "202"],
+                "strategy": "simultaneous",
+            }
+        ],
+    )["version"]
     group = overview(client, b)["ring_groups"][0]
-    save(client, b, [{"op": "save_ring_group", "id": group["id"], "name": "Sales", "extension": "300",
-                      "members": ["202"], "strategy": "sequential"},
-                     {"op": "save_queue", "name": "Help", "extension": "400", "members": ["201"]}])
+    save(
+        client,
+        b,
+        [
+            {
+                "op": "save_ring_group",
+                "id": group["id"],
+                "name": "Sales",
+                "extension": "300",
+                "members": ["202"],
+                "strategy": "sequential",
+            },
+            {"op": "save_queue", "name": "Help", "extension": "400", "members": ["201"]},
+        ],
+    )
     ov = overview(client, b)
     assert ov["ring_groups"][0]["strategy"] == "sequential" and len(ov["queues"]) == 1
 
@@ -173,11 +235,11 @@ def test_bulk_csv_validated_row_by_row_before_anything_applies(client):
     bad = (
         "action,name,extension,site,team,mac,kind,email\n"
         "add_user,Dee,210,Port of Spain,Cards,,,\n"
-        "add_user,Eve,201,Port of Spain,,,,\n"           # extension taken
-        "add_user,Fay,211,Nowhere,,,,\n"                 # no such site
+        "add_user,Eve,201,Port of Spain,,,,\n"  # extension taken
+        "add_user,Fay,211,Nowhere,,,,\n"  # no such site
         "move_user,,202,San Fernando,,,,\n"
-        "launch_rocket,,,,,,,\n"                          # unknown action
-        "add_device,,202,,,zz,desk,\n"                   # bad MAC
+        "launch_rocket,,,,,,,\n"  # unknown action
+        "add_device,,202,,,zz,desk,\n"  # bad MAC
     )
     r = client.post(f"{u}/voice/bulk", json={"csv": bad, "apply": True}, headers=b["boss"]["h"])
     assert r.status_code == 200, r.text
@@ -198,8 +260,15 @@ def test_bulk_csv_validated_row_by_row_before_anything_applies(client):
     assert check["errors"] == [] and not check["applied"]
     price = check["price_impact"]
     assert price["monthly_delta"] == "12.00" and price["one_time"] == "25.00"
-    r = client.post(f"{u}/voice/bulk", json={"csv": good, "apply": True, "accepted_price": {
-        "monthly_delta": price["monthly_delta"], "one_time": price["one_time"]}}, headers=b["boss"]["h"])
+    r = client.post(
+        f"{u}/voice/bulk",
+        json={
+            "csv": good,
+            "apply": True,
+            "accepted_price": {"monthly_delta": price["monthly_delta"], "one_time": price["one_time"]},
+        },
+        headers=b["boss"]["h"],
+    )
     assert r.status_code == 200 and r.json()["applied"], r.text
     link = next(x for x in r.json()["results"] if x.get("setup_url"))
     assert link["setup_url"].endswith("/001565aabbcc.cfg")
@@ -219,8 +288,9 @@ def test_staff_change_only_their_own_settings(client):
     b = setup_voice(client)
     u = base(b)
     later = (dt.datetime.now(dt.UTC) + dt.timedelta(hours=3)).isoformat()
-    r = client.patch(f"{u}/voice/me", json={"forward_to": "+1 868 555 0199", "forward_until": later},
-                     headers=b["ana"]["h"])
+    r = client.patch(
+        f"{u}/voice/me", json={"forward_to": "+1 868 555 0199", "forward_until": later}, headers=b["ana"]["h"]
+    )
     assert r.status_code == 200, r.text
     assert r.json()["forward_to"] == "+18685550199" and r.json()["extension"] == "201"
     # Ben's own request only ever touches Ben; there is no way to name Ana.
@@ -242,18 +312,23 @@ def test_staff_change_only_their_own_settings(client):
     # Voicemail to email needs an email on the extension (Ben has none).
     r = client.patch(f"{u}/voice/me", json={"voicemail_to_email": True}, headers=b["ben"]["h"])
     assert r.status_code == 422
-    r = client.patch(f"{u}/voice/me", json={"voicemail_to_email": True, "voicemail_greeting": "Ana here."},
-                     headers=b["ana"]["h"])
+    r = client.patch(
+        f"{u}/voice/me", json={"voicemail_to_email": True, "voicemail_greeting": "Ana here."}, headers=b["ana"]["h"]
+    )
     assert r.json()["voicemail_to_email"] and r.json()["voicemail_greeting"] == "Ana here."
     with db.tx() as conn:
         row = conn.execute(
-            "SELECT detail FROM audit_log WHERE action = 'commai.voice.self' ORDER BY id LIMIT 1").fetchone()
+            "SELECT detail FROM audit_log WHERE action = 'commai.voice.self' ORDER BY id LIMIT 1"
+        ).fetchone()
     assert "+18685550199" not in str(row["detail"])  # personal numbers stay out of the audit detail
 
     # Forwarding "until" ends at that time.
     with db.tx() as conn:
-        conn.execute("UPDATE voice_users SET forward_until = now() - interval '1 second' WHERE extension = '201'"
-                     " AND customer_id = %s", (b["id"],))
+        conn.execute(
+            "UPDATE voice_users SET forward_until = now() - interval '1 second' WHERE extension = '201'"
+            " AND customer_id = %s",
+            (b["id"],),
+        )
     run_jobs()
     assert client.get(f"{u}/voice/me", headers=b["ana"]["h"]).json()["forward_to"] == ""
 
@@ -275,13 +350,21 @@ AT = dt.datetime(2026, 10, 6, 10, 15, tzinfo=TZ)
 @pytest.mark.parametrize(
     "text,changes,summary",
     [
-        ("forward my calls to my mobile until 5", {"forward_to": "+18685550123",
-                                                    "forward_until": "2026-10-06T17:00:00-04:00"},
-         "Forward your calls to your mobile (+18685550123) until 5:00 pm today."),
-        ("Forward calls to +1 868 555 0199 till 9am tomorrow", {"forward_to": "+18685550199",
-                                                                 "forward_until": "2026-10-07T09:00:00-04:00"}, None),
-        ("forward my calls to extension 202 for 2 hours", {"forward_to": "202",
-                                                           "forward_until": "2026-10-06T12:15:00-04:00"}, None),
+        (
+            "forward my calls to my mobile until 5",
+            {"forward_to": "+18685550123", "forward_until": "2026-10-06T17:00:00-04:00"},
+            "Forward your calls to your mobile (+18685550123) until 5:00 pm today.",
+        ),
+        (
+            "Forward calls to +1 868 555 0199 till 9am tomorrow",
+            {"forward_to": "+18685550199", "forward_until": "2026-10-07T09:00:00-04:00"},
+            None,
+        ),
+        (
+            "forward my calls to extension 202 for 2 hours",
+            {"forward_to": "202", "forward_until": "2026-10-06T12:15:00-04:00"},
+            None,
+        ),
         ("stop forwarding my calls", {"forward_to": ""}, "Stop forwarding your calls."),
         ("turn on do not disturb until 3pm", {"dnd": True, "dnd_until": "2026-10-06T15:00:00-04:00"}, None),
         ("turn off dnd", {"dnd": False}, None),
@@ -338,30 +421,63 @@ def _render(client, b):
 
 def test_freeswitch_render_is_deterministic_and_complete(client, tmp_path):
     b = setup_voice(client)
-    save(client, b, [
-        {"op": "save_hours", "name": "Office", "schedule": {"mon": [["08:00", "12:00"], ["13:00", "17:00"]],
-                                                            "fri": [["08:00", "16:00"]]},
-         "holidays": ["2026-12-25"]},
-        {"op": "save_ring_group", "name": "Sales", "extension": "300", "members": ["201", "202"],
-         "strategy": "sequential", "ring_seconds": 15},
-        {"op": "save_queue", "name": "Help", "extension": "400", "members": ["202", "201"]},
-        {"op": "save_menu", "name": "Main", "extension": "500", "greeting": "Welcome to Voice Bank & Co.",
-         "options": {"1": {"type": "ring_group", "id": "300"}, "2": {"type": "queue", "id": "400"}},
-         "hours": "Office", "closed_target": {"type": "ai"}},
-        {"op": "add_number", "target_type": "menu", "target": "500"},
-        {"op": "save_ai_rule", "name": "Nights", "condition": "after_hours", "hours": "Office", "fallback": "queue"},
-    ])
+    save(
+        client,
+        b,
+        [
+            {
+                "op": "save_hours",
+                "name": "Office",
+                "schedule": {"mon": [["08:00", "12:00"], ["13:00", "17:00"]], "fri": [["08:00", "16:00"]]},
+                "holidays": ["2026-12-25"],
+            },
+            {
+                "op": "save_ring_group",
+                "name": "Sales",
+                "extension": "300",
+                "members": ["201", "202"],
+                "strategy": "sequential",
+                "ring_seconds": 15,
+            },
+            {"op": "save_queue", "name": "Help", "extension": "400", "members": ["202", "201"]},
+            {
+                "op": "save_menu",
+                "name": "Main",
+                "extension": "500",
+                "greeting": "Welcome to Voice Bank & Co.",
+                "options": {"1": {"type": "ring_group", "id": "300"}, "2": {"type": "queue", "id": "400"}},
+                "hours": "Office",
+                "closed_target": {"type": "ai"},
+            },
+            {"op": "add_number", "target_type": "menu", "target": "500"},
+            {
+                "op": "save_ai_rule",
+                "name": "Nights",
+                "condition": "after_hours",
+                "hours": "Office",
+                "fallback": "queue",
+            },
+        ],
+    )
     client.patch(f"{base(b)}/voice/me", json={"dnd": True}, headers=b["ben"]["h"])
     files = _render(client, b)
     assert files == _render(client, b)  # same data, same bytes
     tenant = next(iter(files)).split("/")[0]
-    assert sorted(f.split("/")[1] for f in files) == ["agents.xml", "dialplan.xml", "directory.xml", "ivr.xml",
-                                                      "public.xml", "queues.xml", "tiers.xml"]
+    assert sorted(f.split("/")[1] for f in files) == [
+        "agents.xml",
+        "dialplan.xml",
+        "directory.xml",
+        "ivr.xml",
+        "public.xml",
+        "queues.xml",
+        "tiers.xml",
+    ]
     d = files[f"{tenant}/directory.xml"]
     assert '<user id="201">' in d and 'name="a1-hash"' in d and "sip_password" not in d
     with db.tx() as conn:
-        pw = conn.execute("SELECT sip_password FROM voice_users WHERE extension = '201' AND customer_id = %s",
-                          (b["id"],)).fetchone()["sip_password"]
+        pw = conn.execute(
+            "SELECT sip_password FROM voice_users WHERE extension = '201' AND customer_id = %s", (b["id"],)
+        ).fetchone()["sip_password"]
     assert pw not in "".join(files.values())  # no SIP password in any file
     plan = files[f"{tenant}/dialplan.xml"]
     assert "[leg_timeout=15]user/201@" in plan and "|[leg_timeout=15]user/202@" in plan  # sequential
@@ -394,16 +510,33 @@ def test_freeswitch_render_is_deterministic_and_complete(client, tmp_path):
 def test_read_endpoints_and_who_may_use_them(client, admin_headers):
     b = setup_voice(client)
     u = base(b)
-    for path in ("/voice", "/voice/versions", "/voice/orders", "/voice/ports", "/voice/pbx", "/voice/spend",
-                 "/voice/fraud-limits", "/voice/invoices", "/voice/calls", "/voice/rate-cards", "/voice/permissions",
-                 "/voice/bulk/template"):
+    for path in (
+        "/voice",
+        "/voice/versions",
+        "/voice/orders",
+        "/voice/ports",
+        "/voice/pbx",
+        "/voice/spend",
+        "/voice/fraud-limits",
+        "/voice/invoices",
+        "/voice/calls",
+        "/voice/rate-cards",
+        "/voice/permissions",
+        "/voice/bulk/template",
+    ):
         r = client.get(u + path, headers=b["boss"]["h"])
         assert r.status_code == 200, (path, r.text)
         assert client.get(u + path, headers=admin_headers).status_code == 200, path
     pbx = client.get(f"{u}/voice/pbx", headers=b["boss"]["h"]).json()
     assert pbx["live"] is False and any(f.endswith("dialplan.xml") for f in pbx["files"])
-    for path in ("/voice/versions", "/voice/orders", "/voice/pbx", "/voice/spend", "/voice/invoices",
-                 "/voice/permissions"):
+    for path in (
+        "/voice/versions",
+        "/voice/orders",
+        "/voice/pbx",
+        "/voice/spend",
+        "/voice/invoices",
+        "/voice/permissions",
+    ):
         assert client.get(u + path, headers=b["ana"]["h"]).status_code == 403, path
     # Staff can't name voice admins; a voice admin without spend can't hand out spend permission.
     people = {"people": [{"user_id": b["lead"]["id"], "voice_admin": True, "spend": True}]}

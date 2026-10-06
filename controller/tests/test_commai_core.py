@@ -23,8 +23,12 @@ def test_enquiry_reaches_inbox_routed_and_replied(client):
     assert team.status_code == 201, team.text
     r = client.post(
         f"{u}/routing-rules",
-        json={"name": "Card problems", "match": {"keywords": ["card"]}, "team_id": team.json()["id"],
-              "priority": "high"},
+        json={
+            "name": "Card problems",
+            "match": {"keywords": ["card"]},
+            "team_id": team.json()["id"],
+            "priority": "high",
+        },
         headers=b["agent"]["h"],
     )
     assert r.status_code == 201, r.text
@@ -37,8 +41,9 @@ def test_enquiry_reaches_inbox_routed_and_replied(client):
     assert [c["id"] for c in listed["items"]] == [str(conv["id"])]
     assert listed["items"][0]["contact_name"] == "Ana"
 
-    r = client.post(f"{u}/conversations/{conv['id']}/messages", json={"body": "Hi Ana, I can help."},
-                    headers=b["agent"]["h"])
+    r = client.post(
+        f"{u}/conversations/{conv['id']}/messages", json={"body": "Hi Ana, I can help."}, headers=b["agent"]["h"]
+    )
     assert r.status_code == 201, r.text
     assert r.json()["status"] == "sent"  # website chat: the widget collects it
     detail = client.get(f"{u}/conversations/{conv['id']}", headers=b["agent"]["h"]).json()
@@ -57,13 +62,20 @@ def test_notes_never_reach_customer_facing_paths(client):
     b = business(client)
     u = base(b)
     conv = _inbound(b)["conversation"]
-    r = client.post(f"{u}/conversations/{conv['id']}/notes", json={"body": "SECRET: customer is on a watch list"},
-                    headers=b["internal"]["h"])
+    r = client.post(
+        f"{u}/conversations/{conv['id']}/notes",
+        json={"body": "SECRET: customer is on a watch list"},
+        headers=b["internal"]["h"],
+    )
     assert r.status_code == 201, r.text
 
     # Messages, the conversation, the export and the event log never carry the note.
-    for path in (f"/conversations/{conv['id']}", f"/conversations/{conv['id']}/messages",
-                 f"/conversations/{conv['id']}/export", "/events"):
+    for path in (
+        f"/conversations/{conv['id']}",
+        f"/conversations/{conv['id']}/messages",
+        f"/conversations/{conv['id']}/export",
+        "/events",
+    ):
         body = client.get(u + path, headers=b["agent"]["h"]).text
         assert "SECRET" not in body, path
 
@@ -87,8 +99,12 @@ def test_internal_seat_writes_notes_but_cannot_reply(client):
     r = client.post(f"{u}/conversations/{conv['id']}/messages", json={"body": "hi"}, headers=b["internal"]["h"])
     assert r.status_code == 403
     assert client.post(f"{u}/conversations/{conv['id']}/takeover", headers=b["internal"]["h"]).status_code == 403
-    assert client.post(f"{u}/conversations/{conv['id']}/notes", json={"body": "ok"},
-                       headers=b["internal"]["h"]).status_code == 201
+    assert (
+        client.post(
+            f"{u}/conversations/{conv['id']}/notes", json={"body": "ok"}, headers=b["internal"]["h"]
+        ).status_code
+        == 201
+    )
 
 
 def test_tenant_isolation(client):
@@ -125,8 +141,9 @@ def test_one_handler_at_a_time(client):
     # A second person sees who handles it before replying.
     r = client.post(f"{u}/conversations/{conv['id']}/messages", json={"body": "me too"}, headers=b["agent2"]["h"])
     assert r.status_code == 409 and b["agent"]["email"] in r.json()["detail"]
-    r = client.post(f"{u}/conversations/{conv['id']}/messages", json={"body": "me too", "take_over": True},
-                    headers=b["agent2"]["h"])
+    r = client.post(
+        f"{u}/conversations/{conv['id']}/messages", json={"body": "me too", "take_over": True}, headers=b["agent2"]["h"]
+    )
     assert r.status_code == 201
     msgs = client.get(f"{u}/conversations/{conv['id']}/messages", headers=b["agent"]["h"]).json()
     assert [m["body"] for m in msgs] == ["Hello, I need help with my card", "Hello from the AI", "me too"]
@@ -169,8 +186,10 @@ def test_job_dedupe_and_retry(client):
         assert conn.execute("SELECT status FROM jobs WHERE dedupe_key = 'k1'").fetchone()["status"] == "done"
         # A worker that crashed mid-job leaves a lease that expires; the job runs again.
         jobs.enqueue(conn, "test.flaky", dedupe_key="k2")
-        conn.execute("UPDATE jobs SET status = 'running', attempts = 1, locked_until = now() - interval '1 s'"
-                     " WHERE dedupe_key = 'k2'")
+        conn.execute(
+            "UPDATE jobs SET status = 'running', attempts = 1, locked_until = now() - interval '1 s'"
+            " WHERE dedupe_key = 'k2'"
+        )
     run_jobs()
     with db.tx() as conn:
         assert conn.execute("SELECT status FROM jobs WHERE dedupe_key = 'k2'").fetchone()["status"] == "done"
@@ -180,8 +199,9 @@ def test_webhooks_signed_retried_and_deduplicated(client, monkeypatch):
     b = business(client)
     u = base(b)
     monkeypatch.setenv("EXA_WEBHOOK_ALLOW_PRIVATE", "1")
-    r = client.post(f"{u}/webhooks", json={"url": "http://hooks.example/in", "events": ["message.*"]},
-                    headers=b["agent"]["h"])
+    r = client.post(
+        f"{u}/webhooks", json={"url": "http://hooks.example/in", "events": ["message.*"]}, headers=b["agent"]["h"]
+    )
     assert r.status_code == 201, r.text
     secret = r.json()["secret"]
     assert "secret" not in client.get(f"{u}/webhooks", headers=b["agent"]["h"]).json()[0]
@@ -237,23 +257,43 @@ def test_booking_confirmed_only_after_calendar_success_and_never_twice(client):
     inputs = {"start": _tomorrow_10(), "name": "Ana", "contact": "+18685550101"}
     with db.tx() as conn:
         conn.execute("UPDATE conversations SET handler = 'ai' WHERE id = %s", (conv["id"],))
-        run = actions.propose(conn, b["id"], role="customer_agent", app="sim_calendar", action="book", inputs=inputs,
-                              actor="ai", conversation_id=conv["id"],
-                              on_success={"reply": "You're booked for {start}."})
-        again = actions.propose(conn, b["id"], role="customer_agent", app="sim_calendar", action="book",
-                                inputs=inputs, actor="ai", conversation_id=conv["id"])
+        run = actions.propose(
+            conn,
+            b["id"],
+            role="customer_agent",
+            app="sim_calendar",
+            action="book",
+            inputs=inputs,
+            actor="ai",
+            conversation_id=conv["id"],
+            on_success={"reply": "You're booked for {start}."},
+        )
+        again = actions.propose(
+            conn,
+            b["id"],
+            role="customer_agent",
+            app="sim_calendar",
+            action="book",
+            inputs=inputs,
+            actor="ai",
+            conversation_id=conv["id"],
+        )
         assert again["id"] == run["id"]
         # Nothing has told the customer yet: the calendar has not answered.
         assert not [m for m in inbox.messages(conn, b["id"], conv["id"]) if "booked" in m["body"]]
     run_jobs()
     with db.tx() as conn:
-        assert conn.execute("SELECT status FROM action_runs WHERE id = %s", (run["id"],)).fetchone()["status"] == \
-            "succeeded"
+        assert (
+            conn.execute("SELECT status FROM action_runs WHERE id = %s", (run["id"],)).fetchone()["status"]
+            == "succeeded"
+        )
         assert conn.execute("SELECT count(*) AS n FROM sim_records").fetchone()["n"] == 1
         confirm = [m for m in inbox.messages(conn, b["id"], conv["id"]) if "booked" in m["body"]]
         assert len(confirm) == 1
-        assert conn.execute("SELECT count(*) AS n FROM commai_events WHERE type = 'booking.confirmed'").fetchone()[
-            "n"] == 1
+        assert (
+            conn.execute("SELECT count(*) AS n FROM commai_events WHERE type = 'booking.confirmed'").fetchone()["n"]
+            == 1
+        )
         # A retried job with the same key books nothing new.
         jobs.enqueue(conn, "action.execute", {"run_id": str(run["id"])})
         conn.execute("UPDATE action_runs SET status = 'approved' WHERE id = %s", (run["id"],))
@@ -270,14 +310,28 @@ def test_unapproved_and_unlisted_actions_are_blocked(client):
     with db.tx() as conn:
         # Not in the role's list: refused by the service.
         try:
-            actions.propose(conn, b["id"], role="customer_agent", app="sim_calendar", action="book",
-                            inputs={"start": _tomorrow_10(), "name": "A", "contact": "a@b.c"}, actor="ai")
+            actions.propose(
+                conn,
+                b["id"],
+                role="customer_agent",
+                app="sim_calendar",
+                action="book",
+                inputs={"start": _tomorrow_10(), "name": "A", "contact": "a@b.c"},
+                actor="ai",
+            )
             raise AssertionError("an unlisted tool ran")
         except actions.ActionRefused as e:
             assert e.code == 403
         # Sensitive: waits for a person.
-        run = actions.propose(conn, b["id"], role="customer_agent", app="sim_calendar", action="cancel",
-                              inputs={"booking_id": "x"}, actor="ai")
+        run = actions.propose(
+            conn,
+            b["id"],
+            role="customer_agent",
+            app="sim_calendar",
+            action="cancel",
+            inputs={"booking_id": "x"},
+            actor="ai",
+        )
         assert run["status"] == "awaiting_approval"
         try:
             actions.approve(conn, b["id"], run["id"], approver="ai")
@@ -300,9 +354,17 @@ def test_failed_integration_hands_over_with_holding_reply(client):
     allow_tools(b["id"], "customer_agent", ["sim_calendar.book"])
     with db.tx() as conn:
         conn.execute("UPDATE conversations SET handler = 'ai' WHERE id = %s", (conv["id"],))
-        actions.propose(conn, b["id"], role="customer_agent", app="sim_calendar", action="book",
-                        inputs={"start": _tomorrow_10(), "name": "Ana", "contact": "x"}, actor="ai",
-                        conversation_id=conv["id"], on_success={"reply": "Booked"})
+        actions.propose(
+            conn,
+            b["id"],
+            role="customer_agent",
+            app="sim_calendar",
+            action="book",
+            inputs={"start": _tomorrow_10(), "name": "Ana", "contact": "x"},
+            actor="ai",
+            conversation_id=conv["id"],
+            on_success={"reply": "Booked"},
+        )
     run_jobs()
     detail = client.get(f"{base(b)}/conversations/{conv['id']}", headers=b["agent"]["h"]).json()
     assert detail["handler"] == "none" and detail["handovers"]

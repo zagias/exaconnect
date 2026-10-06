@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Route, Routes } from "react-router-dom";
 import { AuthGate, useAuth } from "./auth";
 import { CustomerProvider } from "./customer";
@@ -14,8 +15,10 @@ import OrderPage from "./pages/Order";
 import Overview from "./pages/Overview";
 import { SiteList, SitePage } from "./pages/Sites";
 import Traffic from "./pages/Traffic";
-import CommAI from "./pages/commai";
 import { Shell } from "./shell";
+
+// CommAI loads on first visit, so Connect screens stay light.
+const CommAI = lazy(() => import("./pages/commai"));
 
 export default function App() {
   return (
@@ -54,7 +57,14 @@ function Layout() {
           <Route path="/ask" element={<Ask />} />
           <Route path="/carrier" element={<Metering carrierView />} />
           <Route path="/account" element={<Account />} />
-          <Route path="/commai/*" element={<CommAI />} />
+          <Route
+            path="/commai/*"
+            element={
+              <Suspense fallback={<p className="muted">Loading CommAI…</p>}>
+                <CommAI />
+              </Suspense>
+            }
+          />
           {admin && <Route path="/admin/*" element={<Admin />} />}
           <Route path="*" element={<NotFound />} />
         </Routes>

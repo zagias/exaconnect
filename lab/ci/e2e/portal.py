@@ -37,6 +37,18 @@ SCREENS = [
     ("/admin/partners", "Admin: partners"),
     ("/admin/protection", "Admin: protection"),
     ("/admin/audit", "Admin: audit"),
+    ("/commai", "CommAI: inbox"),
+    ("/commai/contacts", "CommAI: contacts"),
+    ("/commai/channels", "CommAI: channels"),
+    ("/commai/ai", "CommAI: AI agents"),
+    ("/commai/workflows", "CommAI: workflows"),
+    ("/commai/integrations", "CommAI: integrations"),
+    ("/commai/voice", "CommAI: voice"),
+    ("/commai/reports", "CommAI: reports"),
+    ("/commai/assistant", "CommAI: assistant"),
+    ("/commai/setup", "CommAI: set up"),
+    ("/commai/settings", "CommAI: settings"),
+    ("/commai/settings/sign-in", "CommAI: sign-in settings"),
 ]
 failed = 0
 
@@ -66,6 +78,10 @@ def main() -> int:
 
         page.goto(BASE + "/", wait_until="networkidle")
         page.fill('input[type="email"]', os.environ["E2E_EMAIL"])
+        # Email first (ADR 0017): the password box appears once the email is checked.
+        if not page.locator('input[type="password"]').count():
+            page.click('button[type="submit"]')
+            page.wait_for_selector('input[type="password"]', timeout=10000)
         page.fill('input[type="password"]', os.environ["E2E_PASSWORD"])
         page.click('button[type="submit"]')
         try:
