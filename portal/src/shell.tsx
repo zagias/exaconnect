@@ -227,6 +227,8 @@ function navGroups(role: string | undefined): Group[] {
       { to: "/commai/integrations", label: "Integrations", icon: icons.fabric },
       { to: "/commai/voice", label: "Voice", icon: icons.decisions },
       { to: "/commai/reports", label: "Reports", icon: icons.metering },
+      { to: "/commai/assistant", label: "Assistant", icon: icons.ask },
+      { to: "/commai/setup", label: "Set up", icon: icons.order },
       { to: "/commai/settings", label: "Settings", icon: icons.admin },
     ],
   });

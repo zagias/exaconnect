@@ -1,5 +1,7 @@
 import { Route, Routes } from "react-router-dom";
 import AiAgents from "./AiAgents";
+import Assistant from "./Assistant";
+import Onboarding from "./Onboarding";
 import Channels from "./Channels";
 import Contacts from "./Contacts";
 import Inbox from "./Inbox";
@@ -24,6 +26,8 @@ export default function CommAI() {
       <Route path="/voice/*" element={<Voice />} />
       <Route path="/reports/*" element={<Reports />} />
       <Route path="/settings/*" element={<Settings />} />
+      <Route path="/setup/*" element={<Onboarding />} />
+      <Route path="/assistant/*" element={<Assistant />} />
     </Routes>
   );
 }

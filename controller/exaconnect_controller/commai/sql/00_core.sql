@@ -311,3 +311,24 @@ CREATE TABLE IF NOT EXISTS sim_records (
   created_at       timestamptz NOT NULL DEFAULT now(),
   UNIQUE (customer_id, app, idempotency_key)
 );
+
+-- Metered usage per business (messages, AI replies, calls...), with budgets
+-- and hard limits. Prices come later from Dudley's price list.
+CREATE TABLE IF NOT EXISTS usage_records (
+  id           bigserial PRIMARY KEY,
+  customer_id  uuid NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  meter        text NOT NULL,
+  quantity     numeric NOT NULL,
+  ref          text NOT NULL DEFAULT '',
+  detail       jsonb NOT NULL DEFAULT '{}',
+  at           timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS usage_records_customer ON usage_records (customer_id, meter, at);
+CREATE UNIQUE INDEX IF NOT EXISTS usage_records_ref ON usage_records (customer_id, meter, ref) WHERE ref <> '';
+CREATE TABLE IF NOT EXISTS usage_limits (
+  customer_id     uuid NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  meter           text NOT NULL,
+  monthly_alert   numeric,
+  monthly_hard    numeric,
+  PRIMARY KEY (customer_id, meter)
+);

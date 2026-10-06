@@ -5,4 +5,4 @@ audit log and API keys. See docs/adr/0016-commai-foundation.md.
 """
 
 # Importing the modules registers their job handlers, channels and connectors.
-from . import actions, inbox, jobs, webhooks  # noqa: F401
+from . import actions, diagnostics, inbox, jobs, usage, webhooks  # noqa: F401
