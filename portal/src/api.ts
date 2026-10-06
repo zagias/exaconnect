@@ -1,24 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
 
-const TOKEN_KEY = "exa.session";
+// Sessions live in a secure, HttpOnly cookie set by the controller (ADR 0017);
+// the portal never sees or stores the token. Every call carries the
+// X-Requested-With header, which the controller requires on cookie writes.
+const PORTAL_HEADER = { name: "X-Requested-With", value: "exa-portal" };
 
-// The session token lives in localStorage so a reload keeps you signed in.
-// Storage can be blocked (private windows), so every access is guarded.
-export function getToken(): string | null {
-  try {
-    return localStorage.getItem(TOKEN_KEY);
-  } catch {
-    return null;
-  }
+/** Tells the sign-in gate that the session has ended (a 401 from any call). */
+export function signedOut() {
+  window.dispatchEvent(new Event("exa-signed-out"));
 }
 
-export function setToken(token: string | null) {
-  try {
-    if (token) localStorage.setItem(TOKEN_KEY, token);
-    else localStorage.removeItem(TOKEN_KEY);
-  } catch {
-    /* storage unavailable: the session lasts until reload */
-  }
+/** Tells the sign-in gate to look again (after signing in). */
+export function signedIn() {
   window.dispatchEvent(new Event("exa-auth"));
 }
 
@@ -28,14 +21,13 @@ export class ApiError extends Error {
   }
 }
 
-/** Calls the controller API with the session token. A 401 signs the user out. */
+/** Calls the controller API with the session cookie. A 401 signs the user out. */
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
-  const token = getToken();
-  if (token) headers.set("Authorization", `Bearer ${token}`);
+  headers.set(PORTAL_HEADER.name, PORTAL_HEADER.value);
   if (init.body) headers.set("Content-Type", "application/json");
-  const r = await fetch(`/api/v1${path}`, { ...init, headers });
-  if (r.status === 401 && token) setToken(null);
+  const r = await fetch(`/api/v1${path}`, { ...init, headers, credentials: "same-origin" });
+  if (r.status === 401 && !path.startsWith("/auth/")) signedOut();
   if (!r.ok) {
     let msg = `The controller answered ${r.status}.`;
     try {
@@ -266,6 +258,173 @@ export interface User {
   email: string;
   role: "admin" | "customer" | "carrier";
   customer_id: string | null;
+  name?: string;
+  two_step?: boolean;
+  /** null: the full account. A list: what a directory-provisioned account may do. */
+  scopes?: string[] | null;
+}
+
+// ---- Sign-in, two-step and single sign-on (ADR 0017) ----
+
+export interface LoginResult {
+  token?: string;
+  user?: User;
+  mfa_required?: boolean;
+  challenge?: string;
+  methods?: ("totp" | "passkey" | "recovery")[];
+}
+
+export interface SignInProvider {
+  id: string;
+  label: string;
+  start_url: string;
+}
+
+export interface Discovery {
+  method: "password" | "sso";
+  name?: string;
+  password_allowed?: boolean;
+  start_url?: string;
+}
+
+export interface Passkey {
+  id: number;
+  name: string;
+  created_at: string;
+  last_used_at: string | null;
+}
+
+export interface TwoStepStatus {
+  enabled: boolean;
+  enabled_at: string | null;
+  pending: boolean;
+  recovery_codes_left: number;
+  passkeys_available: boolean;
+  passkeys: Passkey[];
+}
+
+export interface SsoDomain {
+  id: number;
+  domain: string;
+  status: "pending" | "approved" | "rejected";
+  decided_at?: string | null;
+}
+
+export interface SsoConnection {
+  id: string;
+  alias: string;
+  protocol: "saml" | "oidc";
+  display_name: string;
+  metadata_url: string;
+  has_metadata_xml: boolean;
+  client_id: string;
+  status: "draft" | "tested" | "enabled" | "disabled";
+  require_sso: boolean;
+  last_test: { ok: boolean; message: string; email: string; at: string } | null;
+  tested_at: string | null;
+  domains: SsoDomain[];
+  provider_setup?: { redirect_uri: string; sp_entity_id: string; sp_metadata_url: string };
+}
+
+export interface SsoConnections {
+  gateway: { configured: boolean; simulated: boolean };
+  callback_url: string;
+  items: SsoConnection[];
+}
+
+export interface DomainClaim extends SsoDomain {
+  customer: string;
+  connection: string;
+  requested_by: string;
+  created_at: string;
+}
+
+export interface ScimToken {
+  id: number;
+  name: string;
+  prefix: string;
+  created_by: string;
+  created_at: string;
+  last_used_at: string | null;
+  token?: string;
+}
+
+export interface DirectoryGroup {
+  id: string;
+  display_name: string;
+  team_id: string | null;
+  team: string | null;
+  seat: "agent" | "internal";
+  business_admin: "none" | "pending" | "approved";
+  admin_requested_by: string | null;
+  admin_approved_by: string | null;
+  members: number;
+}
+
+const b64urlToBuf = (s: string): ArrayBuffer => {
+  const pad = s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4);
+  const bin = atob(pad);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out.buffer;
+};
+
+const bufToB64url = (b: ArrayBuffer): string => {
+  let bin = "";
+  new Uint8Array(b).forEach((c) => (bin += String.fromCharCode(c)));
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+};
+
+export const passkeysSupported = () => typeof window !== "undefined" && "PublicKeyCredential" in window;
+
+type Json = Record<string, unknown>;
+
+/** navigator.credentials.create() from the controller's JSON options; returns JSON for the controller. */
+export async function createPasskey(options: Json): Promise<Json> {
+  const o = options as {
+    challenge: string;
+    user: { id: string; name: string; displayName: string };
+    excludeCredentials?: { id: string; type: string }[];
+  } & Json;
+  const publicKey = {
+    ...o,
+    challenge: b64urlToBuf(o.challenge),
+    user: { ...o.user, id: b64urlToBuf(o.user.id) },
+    excludeCredentials: (o.excludeCredentials ?? []).map((c) => ({ ...c, id: b64urlToBuf(c.id) })),
+  } as unknown as PublicKeyCredentialCreationOptions;
+  const cred = (await navigator.credentials.create({ publicKey })) as PublicKeyCredential | null;
+  if (!cred) throw new Error("No passkey was created.");
+  const r = cred.response as AuthenticatorAttestationResponse;
+  return {
+    id: cred.id,
+    rawId: bufToB64url(cred.rawId),
+    type: cred.type,
+    response: { clientDataJSON: bufToB64url(r.clientDataJSON), attestationObject: bufToB64url(r.attestationObject) },
+  };
+}
+
+/** navigator.credentials.get() from the controller's JSON options; returns JSON for the controller. */
+export async function getPasskey(options: Json): Promise<Json> {
+  const o = options as { challenge: string; allowCredentials?: { id: string; type: string }[] } & Json;
+  const publicKey = {
+    ...o,
+    challenge: b64urlToBuf(o.challenge),
+    allowCredentials: (o.allowCredentials ?? []).map((c) => ({ ...c, id: b64urlToBuf(c.id) })),
+  } as unknown as PublicKeyCredentialRequestOptions;
+  const cred = (await navigator.credentials.get({ publicKey })) as PublicKeyCredential | null;
+  if (!cred) throw new Error("No passkey was used.");
+  const r = cred.response as AuthenticatorAssertionResponse;
+  return {
+    id: cred.id,
+    rawId: bufToB64url(cred.rawId),
+    type: cred.type,
+    response: {
+      clientDataJSON: bufToB64url(r.clientDataJSON),
+      authenticatorData: bufToB64url(r.authenticatorData),
+      signature: bufToB64url(r.signature),
+      userHandle: r.userHandle ? bufToB64url(r.userHandle) : null,
+    },
+  };
 }
 
 export interface MetricInput {
@@ -688,10 +847,13 @@ export const updatePortForward = (cid: string, id: number, body: PortForwardIn) 
 
 export const deletePortForward = (cid: string, id: number) => api<void>(internetPaths.forward(cid, id), { method: "DELETE" });
 
-/** Downloads a file from the API with the session token (a plain link can't send it). */
+/** Downloads a file from the API with the session cookie, saving it under a chosen name. */
 export async function download(path: string, filename: string) {
-  const token = getToken();
-  const r = await fetch(`/api/v1${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  const r = await fetch(`/api/v1${path}`, {
+    headers: { [PORTAL_HEADER.name]: PORTAL_HEADER.value },
+    credentials: "same-origin",
+  });
+  if (r.status === 401) signedOut();
   if (!r.ok) throw new ApiError(r.status, `The controller answered ${r.status}.`);
   const url = URL.createObjectURL(await r.blob());
   const a = document.createElement("a");

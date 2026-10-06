@@ -53,6 +53,23 @@ class Settings:
     )
     llm_model: str = field(default_factory=lambda: _env("EXA_LLM_MODEL", "deepseek-ai/DeepSeek-V4-Flash"))
     llm_questions_per_hour: int = field(default_factory=lambda: int(_env("EXA_LLM_QUESTIONS_PER_HOUR", "30")))
+    # Sign-in (ADR 0017). The session cookie is Secure unless this is "0" (plain-HTTP tests only).
+    cookie_secure: bool = field(default_factory=lambda: _env("EXA_COOKIE_SECURE", "1") not in ("0", "false", "no"))
+    # The sign-in gateway (Keycloak) over OpenID Connect. Off until the issuer and client are set.
+    oidc_issuer: str = field(default_factory=lambda: _env("EXA_OIDC_ISSUER").rstrip("/"))
+    oidc_client_id: str = field(default_factory=lambda: _env("EXA_OIDC_CLIENT_ID"))
+    oidc_client_secret: str = field(default_factory=lambda: _env("EXA_OIDC_CLIENT_SECRET"), repr=False)
+    # Which social sign-in buttons the gateway offers (Keycloak identity provider aliases).
+    # Microsoft is off by default until its email trust is settled (ADR 0017).
+    oidc_idps: str = field(default_factory=lambda: _env("EXA_OIDC_IDPS", "google"))
+    # Where people reach the portal, e.g. https://connect.example.org (for the OIDC redirect).
+    public_url: str = field(default_factory=lambda: _env("EXA_PUBLIC_URL").rstrip("/"))
+    # Keycloak admin REST API (enterprise SSO set-up) through a service-account client.
+    # Without these, SSO connections are kept by a simulated gateway (tests, demos).
+    keycloak_admin_client_id: str = field(default_factory=lambda: _env("EXA_KEYCLOAK_ADMIN_CLIENT_ID"))
+    keycloak_admin_client_secret: str = field(
+        default_factory=lambda: _env("EXA_KEYCLOAK_ADMIN_CLIENT_SECRET"), repr=False
+    )
 
 
 def get_settings() -> Settings:

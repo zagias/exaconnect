@@ -4,6 +4,7 @@ import { api, useApi } from "../../api";
 import { ErrorNote } from "../../components";
 import { Card, PageHead, RowActions, Tabs, useAction } from "../../ui";
 import { CHANNEL_LABEL, useCommaiBase, when } from "./lib";
+import SignIn from "./settings/SignIn";
 import type { Member, Team } from "./types";
 
 /** How the business runs CommAI: service targets, teams, seats, routing and developer access. */
@@ -22,12 +23,14 @@ export default function Settings() {
         <NavLink to="/commai/settings/teams">Teams and people</NavLink>
         <NavLink to="/commai/settings/routing">Routing</NavLink>
         <NavLink to="/commai/settings/developers">Webhooks and keys</NavLink>
+        <NavLink to="/commai/settings/sign-in">Sign-in</NavLink>
       </Tabs>
       <Routes>
         <Route path="/" element={<Service base={base} />} />
         <Route path="/teams" element={<TeamsAndPeople base={base} />} />
         <Route path="/routing" element={<Routing base={base} />} />
         <Route path="/developers" element={<Developers base={base} />} />
+        <Route path="/sign-in" element={<SignIn />} />
       </Routes>
     </>
   );
