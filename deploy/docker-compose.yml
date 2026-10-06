@@ -35,6 +35,24 @@ services:
       EXA_USGS_URL: ${EXA_USGS_URL-https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_day.geojson}
       EXA_GDACS_URL: ${EXA_GDACS_URL-https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH}
       EXA_TSUNAMI_URLS: ${EXA_TSUNAMI_URLS-https://www.tsunami.gov/events/xml/PHEBAtom.xml,https://www.tsunami.gov/events/xml/PAAQAtom.xml}
+      # CommAI voice (ADR 0021): rendered FreeSWITCH config, read by the freeswitch service.
+      EXA_FREESWITCH_DIR: /data/freeswitch
+      EXA_SIP_PROVIDER: ${EXA_SIP_PROVIDER:-simulated}
+      # Sign-in (ADR 0017). Google/Microsoft/enterprise SSO stay off until the gateway is set.
+      EXA_COOKIE_SECURE: ${EXA_COOKIE_SECURE:-1}
+      EXA_PUBLIC_URL: ${EXA_PUBLIC_URL:-}
+      EXA_OIDC_ISSUER: ${EXA_OIDC_ISSUER:-}
+      EXA_OIDC_CLIENT_ID: ${EXA_OIDC_CLIENT_ID:-}
+      EXA_OIDC_CLIENT_SECRET: ${EXA_OIDC_CLIENT_SECRET:-}
+      EXA_KEYCLOAK_ADMIN_CLIENT_ID: ${EXA_KEYCLOAK_ADMIN_CLIENT_ID:-}
+      EXA_KEYCLOAK_ADMIN_CLIENT_SECRET: ${EXA_KEYCLOAK_ADMIN_CLIENT_SECRET:-}
+      # CommAI automation (ADR 0020): encrypted integration tokens; Google/HubSpot stay off until set.
+      EXA_SECRETS_KEY: ${EXA_SECRETS_KEY:-}
+      EXA_PORTAL_URL: ${EXA_PORTAL_URL:-}
+      EXA_GOOGLE_CLIENT_ID: ${EXA_GOOGLE_CLIENT_ID:-}
+      EXA_GOOGLE_CLIENT_SECRET: ${EXA_GOOGLE_CLIENT_SECRET:-}
+      EXA_HUBSPOT_CLIENT_ID: ${EXA_HUBSPOT_CLIENT_ID:-}
+      EXA_HUBSPOT_CLIENT_SECRET: ${EXA_HUBSPOT_CLIENT_SECRET:-}
     volumes:
       - controller-data:/data
     depends_on:
@@ -67,6 +85,78 @@ services:
         ipv4_address: 172.30.0.5
         aliases: [controller]
 
+  # Sign-in gateway (ADR 0017): `docker compose --profile sso up -d`. Its own
+  # Postgres, so the gateway's data never mixes with the controller's. Set KEYCLOAK_DB_PASSWORD,
+  # KEYCLOAK_ADMIN_PASSWORD, EXA_OIDC_CLIENT_SECRET and EXA_KEYCLOAK_ADMIN_CLIENT_SECRET first.
+  keycloak-db:
+    profiles: [sso]
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-}
+    volumes:
+      - keycloak-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 5s
+      retries: 20
+
+  keycloak:
+    profiles: [sso]
+    image: quay.io/keycloak/keycloak:26.0
+    restart: unless-stopped
+    command: ["start", "--import-realm"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-}
+      KC_HOSTNAME: ${EXA_SSO_HOSTNAME:-http://localhost:8081}
+      KC_HTTP_ENABLED: "true"
+      KC_PROXY_HEADERS: xforwarded
+      KC_HEALTH_ENABLED: "true"
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USER:-exa-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-}
+      # Read by the realm import (deploy/keycloak/exacarib-realm.json).
+      EXA_PUBLIC_URL: ${EXA_PUBLIC_URL:-http://localhost:8000}
+      EXA_OIDC_CLIENT_ID: ${EXA_OIDC_CLIENT_ID:-exacarib-connect}
+      EXA_OIDC_CLIENT_SECRET: ${EXA_OIDC_CLIENT_SECRET:-}
+      EXA_KEYCLOAK_ADMIN_CLIENT_ID: ${EXA_KEYCLOAK_ADMIN_CLIENT_ID:-exacarib-controller-admin}
+      EXA_KEYCLOAK_ADMIN_CLIENT_SECRET: ${EXA_KEYCLOAK_ADMIN_CLIENT_SECRET:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-not-configured}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-not-configured}
+      MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-not-configured}
+      MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-not-configured}
+    volumes:
+      - ./keycloak/exacarib-realm.json:/opt/keycloak/data/import/exacarib-realm.json:ro
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    ports:
+      # Loopback only; publish it through the public proxy (deploy/public) for real use.
+      - "127.0.0.1:8081:8080"
+
+  # CommAI voice PBX (ADR 0021): `docker compose --profile voice up -d`. It reads the
+  # configuration the controller renders from the database (/data/freeswitch on the
+  # shared volume). Not live: there is no SIP provider account yet (phase 3), so outside
+  # calls go nowhere; calls between extensions, menus and queues work. SIP and RTP ports
+  # are not published until then. Check the image has an arm64 build before first use.
+  freeswitch:
+    profiles: [voice]
+    image: safarov/freeswitch:1.10.12
+    restart: unless-stopped
+    volumes:
+      - controller-data:/exacarib:ro
+      - ./freeswitch/directory/exacarib.xml:/etc/freeswitch/directory/exacarib.xml:ro
+      - ./freeswitch/dialplan/exacarib.xml:/etc/freeswitch/dialplan/exacarib.xml:ro
+      - ./freeswitch/dialplan/public/exacarib.xml:/etc/freeswitch/dialplan/public/exacarib.xml:ro
+      - ./freeswitch/ivr_menus/exacarib.xml:/etc/freeswitch/ivr_menus/exacarib.xml:ro
+      - ./freeswitch/autoload_configs/callcenter.conf.xml:/etc/freeswitch/autoload_configs/callcenter.conf.xml:ro
+    depends_on:
+      - controller
+
 networks:
   exaconnect-mgmt:
     external: true
@@ -74,3 +164,4 @@ networks:
 volumes:
   db-data:
   controller-data:
+  keycloak-db-data:

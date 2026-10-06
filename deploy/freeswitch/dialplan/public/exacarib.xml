@@ -1,0 +1,4 @@
+<!-- CommAI voice (ADR 0021): inbound numbers into each business's context. -->
+<include>
+  <X-PRE-PROCESS cmd="include" data="/exacarib/freeswitch/*/public.xml"/>
+</include>
