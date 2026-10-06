@@ -645,13 +645,18 @@ def send(
     try:
         ch.check_send(conn, conv, body, template)
     except channels.SendBlocked as e:
-        events.emit(
-            conn,
-            customer_id,
-            "message.blocked",
-            {"conversation_id": str(conv["id"]), "reason": str(e), "author_kind": author_kind},
-            conv["id"],
-        )
+        # Its own transaction: the refusal rolls the caller's work back, but the
+        # block must stay on record for reports and the platform assistant.
+        from .. import db
+
+        with db.tx() as side:
+            events.emit(
+                side,
+                customer_id,
+                "message.blocked",
+                {"conversation_id": str(conv["id"]), "reason": str(e), "author_kind": author_kind},
+                conv["id"],
+            )
         raise InboxError(str(e), 422) from e
     msg = _insert_out(
         conn,

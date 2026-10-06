@@ -4,6 +4,7 @@ import { api, useApi } from "../../api";
 import { useAuth } from "../../auth";
 import { ErrorNote } from "../../components";
 import { useAction } from "../../ui";
+import CopilotPanel from "./CopilotPanel";
 import { CHANNEL_LABEL, STATE_LABEL, useCommaiBase, when, type Page } from "./lib";
 import { useLive } from "./live";
 import type { Conversation, ConversationDetail, Member, Note, Team } from "./types";
@@ -132,6 +133,7 @@ function ConversationPane({
   const teams = useApi<Team[]>(`${base}/teams`, 0);
   const members = useApi<Member[]>(`${base}/members`, 60_000);
   const act = useAction();
+  const [draft, setDraft] = useState<{ text: string; n: number } | null>(null);
   const reload = conv.reload;
   const reloadNotes = notes.reload;
 
@@ -229,6 +231,7 @@ function ConversationPane({
           internal={internal}
           handledByOther={!!handledByOther}
           handlerEmail={c.handler_email}
+          draft={draft}
           onSent={refresh}
         />
         <ErrorNote error={act.error} />
@@ -236,6 +239,7 @@ function ConversationPane({
 
       <aside className="inbox-side card" aria-label="Conversation details">
         <Details c={c} teams={teams.data ?? []} members={members.data ?? []} base={base} internal={internal} onChanged={refresh} />
+        <CopilotPanel base={base} conversationId={c.id} onDraft={(text) => setDraft({ text, n: Date.now() })} />
       </aside>
     </>
   );
@@ -307,6 +311,7 @@ function Composer({
   internal,
   handledByOther,
   handlerEmail,
+  draft,
   onSent,
 }: {
   base: string;
@@ -314,6 +319,7 @@ function Composer({
   internal: boolean;
   handledByOther: boolean;
   handlerEmail: string | null;
+  draft: { text: string; n: number } | null;
   onSent: () => void;
 }) {
   const [mode, setMode] = useState<"reply" | "note">(internal ? "note" : "reply");
@@ -321,6 +327,13 @@ function Composer({
   const [template, setTemplate] = useState("");
   const send = useAction();
   const key = useRef(crypto.randomUUID());
+  // A draft from the copilot lands in the box; a person still presses Send.
+  useEffect(() => {
+    if (draft && !internal) {
+      setMode("reply");
+      setText(draft.text);
+    }
+  }, [draft, internal]);
 
   const submit = (e: FormEvent, takeOver = false) => {
     e.preventDefault();

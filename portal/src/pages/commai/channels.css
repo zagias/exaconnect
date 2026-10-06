@@ -1,0 +1,27 @@
+/* Channels screen (ADR 0018). */
+.ch-code { background: var(--page); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 10px 12px; overflow-x: auto; margin: 8px 0; }
+.ch-code code { font: 400 13px/19px var(--font-mono); white-space: pre-wrap; word-break: break-all; }
+.ch-h3 { font-size: 16px; line-height: 22px; margin: 20px 0 6px; }
+.ch-preview { min-height: 480px; display: flex; justify-content: center; }
+.ch-modes { border: 0; padding: 0; margin: 0; display: grid; gap: 10px; }
+.ch-mode { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+.ch-mode input { margin-top: 4px; }
+.ch-day { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ch-times { display: inline-flex; gap: 6px; align-items: center; }
+.ch-times input { width: 7.5em; }
+.ch-account { margin-bottom: 12px; display: grid; gap: 8px; }
+.ch-account-head { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; }
+.ch-account-head h3 { display: flex; gap: 8px; align-items: center; font-size: 16px; }
+.ch-dl { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 0; font-size: 14px; }
+.ch-dl dt { color: var(--ink-muted); }
+.ch-dl dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.ch-dl .mono.wrap { white-space: normal; }
+.ch-sim summary { cursor: pointer; color: var(--blue-strong, #155EEF); font-weight: 600; font-size: 14px; }
+.ch-sim .form { margin-top: 8px; }
+.ch-steps { margin: 8px 0 12px; padding-left: 20px; display: grid; gap: 8px; }
+.ch-findings { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.ch-findings ul { margin: 4px 0 0; padding-left: 20px; }
+@media (max-width: 720px) {
+  .ch-dl { grid-template-columns: 1fr; }
+  .ch-dl dd { margin-bottom: 4px; }
+}
