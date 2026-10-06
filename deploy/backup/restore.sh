@@ -22,8 +22,12 @@ trap 'rm -rf "$work"' EXIT
 decrypt -in "$file" -out "$work/dump" || die "could not decrypt (wrong EXA_BACKUP_PASSPHRASE?)"
 pglist < "$work/dump" > "$work/toc"
 
+# Tables an extension owns (TimescaleDB's catalog, when the server's template
+# database already has it) do not make a new database "not empty".
 tables="$(pgtool psql "$target" -XAtq -c "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-  WHERE c.relkind IN ('r','p') AND n.nspname NOT IN ('pg_catalog','information_schema')")"
+  WHERE c.relkind IN ('r','p') AND n.nspname NOT IN ('pg_catalog','information_schema')
+    AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.classid = 'pg_class'::regclass
+                    AND d.objid = c.oid AND d.deptype = 'e')")"
 opts=(--no-owner --no-privileges --exit-on-error)
 if [ "$tables" != "0" ]; then
   [ "${EXA_RESTORE_FORCE:-0}" = "1" ] || die "$target is not empty; set EXA_RESTORE_FORCE=1 to restore over it"
