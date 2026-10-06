@@ -1,0 +1,20 @@
+<!--
+  The SIP provider gateway the rendered dial plans use ("exacarib_sip").
+  NOT LIVE: there is no SIP provider account yet (phase 3). When Dudley opens one,
+  copy this to exacarib_sip.xml, mount it at /etc/freeswitch/sip_profiles/external/,
+  and put the credentials in .env (EXA_SIP_USERNAME, EXA_SIP_PASSWORD, EXA_SIP_REALM).
+  Never commit real values. The AI agent gateway ("exacarib_ai") comes with stage 1.
+-->
+<include>
+  <X-PRE-PROCESS cmd="exec-set" data="exa_sip_username=printenv EXA_SIP_USERNAME"/>
+  <X-PRE-PROCESS cmd="exec-set" data="exa_sip_password=printenv EXA_SIP_PASSWORD"/>
+  <X-PRE-PROCESS cmd="exec-set" data="exa_sip_realm=printenv EXA_SIP_REALM"/>
+  <gateway name="exacarib_sip">
+    <param name="username" value="$${exa_sip_username}"/>
+    <param name="password" value="$${exa_sip_password}"/>
+    <param name="realm" value="$${exa_sip_realm}"/>
+    <param name="proxy" value="$${exa_sip_realm}"/>
+    <param name="register" value="true"/>
+    <param name="caller-id-in-from" value="true"/>
+  </gateway>
+</include>

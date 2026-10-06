@@ -304,3 +304,16 @@ metering, decisions and Storm Mode, and is tested against the real API. The
 Terraform provider (`terraform/`) manages circuits, firewall rules, port
 forwards, internet breakout and traffic rules. Publishing to PyPI and the
 Terraform Registry waits for ExaCarib accounts there.
+
+**CommAI phases 0 to 2** (ADRs 0016 to 0021, 2026-10-06). The shared
+inbox with private notes kept in their own table, one handler at a time,
+routing and service targets; a durable Postgres job queue; signed webhooks,
+idempotency keys, scoped API keys and a rate limit; actions that are
+proposed, checked, approved, executed once and confirmed. Sign-in moves to a
+secure cookie, with two-step sign-in, a Keycloak gateway for Google and
+Microsoft, enterprise SSO, SCIM and tested database backups. Website chat,
+WhatsApp, SMS and email; AI agents with knowledge, a copilot, memory,
+multilingual replies and browser calls; integrations (Google Calendar,
+HubSpot), workflows from plain English, AI onboarding, the platform
+assistant and outcome reports; and voice stages 2 to 4. Paid providers are
+simulated until Dudley chooses them; see docs/commai/README.md.

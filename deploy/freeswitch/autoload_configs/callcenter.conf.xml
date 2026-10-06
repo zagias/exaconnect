@@ -1,0 +1,14 @@
+<!-- CommAI voice (ADR 0021): call queues (mod_callcenter), rendered per business. -->
+<configuration name="callcenter.conf" description="CallCenter">
+  <settings>
+  </settings>
+  <queues>
+    <X-PRE-PROCESS cmd="include" data="/exacarib/freeswitch/*/queues.xml"/>
+  </queues>
+  <agents>
+    <X-PRE-PROCESS cmd="include" data="/exacarib/freeswitch/*/agents.xml"/>
+  </agents>
+  <tiers>
+    <X-PRE-PROCESS cmd="include" data="/exacarib/freeswitch/*/tiers.xml"/>
+  </tiers>
+</configuration>

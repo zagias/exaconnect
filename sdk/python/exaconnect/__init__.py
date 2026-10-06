@@ -10,6 +10,7 @@ See docs/automation-contract.md in the ExaConnect repository.
 """
 
 from .client import ExaConnect, ExaConnectError
+from .commai import verify_webhook
 
-__all__ = ["ExaConnect", "ExaConnectError"]
+__all__ = ["ExaConnect", "ExaConnectError", "verify_webhook"]
 __version__ = "0.1.0"

@@ -13,8 +13,10 @@ from . import (
     metering,
     ordering,
     protection,
+    scim,
     security,
     settings,
+    sso,
     traffic,
     views,
 )
@@ -40,3 +42,9 @@ router.include_router(internet.router)
 router.include_router(ordering.router)
 router.include_router(protection.router)
 router.include_router(security.router)
+router.include_router(sso.router)
+router.include_router(scim.router)
+
+from ..commai.api import router as commai_router  # noqa: E402
+
+router.include_router(commai_router)

@@ -1,0 +1,4 @@
+<!-- CommAI voice (ADR 0021): one dial plan context per business, rendered by the controller. -->
+<include>
+  <X-PRE-PROCESS cmd="include" data="/exacarib/freeswitch/*/dialplan.xml"/>
+</include>
