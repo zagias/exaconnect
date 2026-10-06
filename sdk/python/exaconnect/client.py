@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import os
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
 API = "/api/v1"
+
+if TYPE_CHECKING:
+    from .commai import CommAI
 
 
 class ExaConnectError(Exception):
@@ -71,11 +74,23 @@ class ExaConnect:
         self.storm = Storm(self)
         self.api_keys = ApiKeys(self)
 
+    def commai(self, customer_id: str | None = None) -> CommAI:
+        """CommAI for one business (yours by default): contacts, conversations,
+        notes, webhooks, events and actions. See commai.py."""
+        from .commai import CommAI
+
+        return CommAI(self, customer_id or self.me()["customer_id"])
+
     def __repr__(self) -> str:
         return f"ExaConnect({str(self._http.base_url)!r})"  # never the key
 
-    def _request(self, method: str, path: str, *, json: Any = None, params: dict | None = None) -> Any:
-        headers = {"Authorization": f"Bearer {self._token}"} if getattr(self, "_token", None) else {}
+    def _request(
+        self, method: str, path: str, *, json: Any = None, params: dict | None = None, headers: dict | None = None
+    ) -> Any:
+        headers = {
+            **(headers or {}),
+            **({"Authorization": f"Bearer {self._token}"} if getattr(self, "_token", None) else {}),
+        }
         params = {k: v for k, v in (params or {}).items() if v is not None}
         r = self._http.request(method, API + path, json=json, params=params, headers=headers)
         if r.status_code >= 400:
@@ -290,9 +305,10 @@ class ApiKeys(_Resource):
     def list(self) -> list[dict]:
         return self._r("GET", "/auth/api-keys")
 
-    def create(self, name: str, days: int | None = None) -> dict:
-        """The new key is in "token", shown only this once."""
-        return self._r("POST", "/auth/api-keys", json={"name": name, "days": days})
+    def create(self, name: str, days: int | None = None, scopes: list[str] | None = None) -> dict:
+        """The new key is in "token", shown only this once. `scopes` limits it
+        (connect, commai:read, commai:write, commai:notes, commai:admin)."""
+        return self._r("POST", "/auth/api-keys", json={"name": name, "days": days, "scopes": scopes})
 
     def revoke(self, key_id: int) -> None:
         self._r("DELETE", f"/auth/api-keys/{key_id}")
