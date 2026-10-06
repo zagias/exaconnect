@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from . import __version__, db, pki
+from . import __version__, commai, db, pki  # noqa: F401 - commai registers its jobs
 from .api import router as api_router
 from .settings import Settings, get_settings
 
@@ -50,6 +50,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 from .ai import runner as ai_runner
 
                 tasks.append(asyncio.create_task(ai_runner.loop(settings)))
+                from .commai import jobs as commai_jobs
+
+                tasks.append(asyncio.create_task(commai_jobs.loop()))
         yield
         for t in tasks:
             t.cancel()
@@ -65,6 +68,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.settings = settings
+    from .commai.idempotency import Idempotency, RateLimit
+
+    app.add_middleware(Idempotency)
+    app.add_middleware(RateLimit)
     app.state.ca = pki.load_or_create(settings.data_dir, [s.strip() for s in settings.tls_sans.split(",") if s.strip()])
 
     @app.get("/healthz", tags=["ops"])

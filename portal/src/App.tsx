@@ -14,6 +14,7 @@ import OrderPage from "./pages/Order";
 import Overview from "./pages/Overview";
 import { SiteList, SitePage } from "./pages/Sites";
 import Traffic from "./pages/Traffic";
+import CommAI from "./pages/commai";
 import { Shell } from "./shell";
 
 export default function App() {
@@ -53,6 +54,7 @@ function Layout() {
           <Route path="/ask" element={<Ask />} />
           <Route path="/carrier" element={<Metering carrierView />} />
           <Route path="/account" element={<Account />} />
+          <Route path="/commai/*" element={<CommAI />} />
           {admin && <Route path="/admin/*" element={<Admin />} />}
           <Route path="*" element={<NotFound />} />
         </Routes>

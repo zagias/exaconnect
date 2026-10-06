@@ -215,6 +215,21 @@ function navGroups(role: string | undefined): Group[] {
       ],
     },
   ];
+  // CommAI (ADR 0016): customer service on the same sign-in and customers.
+  groups.push({
+    label: "CommAI",
+    items: [
+      { to: "/commai", label: "Inbox", icon: icons.ask, end: true },
+      { to: "/commai/contacts", label: "Contacts", icon: icons.sites },
+      { to: "/commai/channels", label: "Channels", icon: icons.internet },
+      { to: "/commai/ai", label: "AI agents", icon: icons.insights },
+      { to: "/commai/workflows", label: "Workflows", icon: icons.traffic },
+      { to: "/commai/integrations", label: "Integrations", icon: icons.fabric },
+      { to: "/commai/voice", label: "Voice", icon: icons.decisions },
+      { to: "/commai/reports", label: "Reports", icon: icons.metering },
+      { to: "/commai/settings", label: "Settings", icon: icons.admin },
+    ],
+  });
   if (admin) groups.push({ label: "Manage", items: [{ to: "/admin", label: "Admin", icon: icons.admin }] });
   return groups;
 }

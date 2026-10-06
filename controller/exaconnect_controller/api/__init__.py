@@ -40,3 +40,7 @@ router.include_router(internet.router)
 router.include_router(ordering.router)
 router.include_router(protection.router)
 router.include_router(security.router)
+
+from ..commai.api import router as commai_router  # noqa: E402
+
+router.include_router(commai_router)

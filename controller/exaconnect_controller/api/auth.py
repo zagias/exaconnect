@@ -118,12 +118,15 @@ def change_password(body: PasswordIn, user: UserDep, authorization: str = Header
 # ---- API keys (ADR 0013) ----------------------------------------------------
 
 MAX_KEYS = 20
-KEY_COLUMNS = "id, name, prefix, created_at, last_used_at, expires_at"
+KEY_COLUMNS = "id, name, prefix, scopes, created_at, last_used_at, expires_at"
+KEY_SCOPES = ("connect", "commai:read", "commai:write", "commai:notes", "commai:admin")
 
 
 class KeyIn(BaseModel):
     name: str = Field(min_length=1, max_length=60)
     days: int | None = Field(default=None, ge=1, le=730)
+    # None: the key can do whatever you can. A list limits it (ADR 0016).
+    scopes: list[str] | None = Field(default=None, max_length=len(KEY_SCOPES))
 
 
 @router.get("/api-keys")
@@ -140,6 +143,12 @@ def list_keys(user: UserDep) -> list[dict]:
 @router.post("/api-keys", status_code=201)
 def create_key(body: KeyIn, user: UserDep) -> dict:
     """A key that acts as you, for the SDK, Terraform or your own code. Shown once."""
+    if body.scopes is not None:
+        bad = sorted(set(body.scopes) - set(KEY_SCOPES))
+        if bad or not body.scopes:
+            raise HTTPException(
+                422, f"Scopes are {', '.join(KEY_SCOPES)}." + (f" Not {', '.join(bad)}." if bad else "")
+            )
     token = API_KEY_PREFIX + new_token()
     with db.tx() as conn:
         active = conn.execute(
@@ -150,12 +159,20 @@ def create_key(body: KeyIn, user: UserDep) -> dict:
         if active >= MAX_KEYS:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"You have {MAX_KEYS} keys. Revoke one first.")
         row = conn.execute(
-            f"""INSERT INTO api_keys (user_id, name, prefix, token_hash, expires_at)
-                VALUES (%s, %s, %s, %s, CASE WHEN %s::int IS NULL THEN NULL ELSE now() + make_interval(days => %s) END)
+            f"""INSERT INTO api_keys (user_id, name, prefix, token_hash, scopes, expires_at)
+                VALUES (%s, %s, %s, %s, %s,
+                        CASE WHEN %s::int IS NULL THEN NULL ELSE now() + make_interval(days => %s) END)
                 RETURNING {KEY_COLUMNS}""",
-            (user.id, body.name.strip(), token[:12], token_hash(token), body.days, body.days),
+            (user.id, body.name.strip(), token[:12], token_hash(token), body.scopes, body.days, body.days),
         ).fetchone()
-        audit.record(conn, user.actor, "api_key.create", row["prefix"], user.customer_id, {"name": row["name"]})
+        audit.record(
+            conn,
+            user.actor,
+            "api_key.create",
+            row["prefix"],
+            user.customer_id,
+            {"name": row["name"], "scopes": body.scopes},
+        )
     return {**row, "token": token}
 
 

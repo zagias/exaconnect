@@ -20,6 +20,8 @@ class User:
     role: str
     customer_id: Any
     carrier_id: Any
+    # API keys may carry scopes (ADR 0016); None means everything the owner may do.
+    scopes: tuple[str, ...] | None = None
 
     @property
     def actor(self) -> str:
@@ -29,7 +31,7 @@ class User:
 API_KEY_PREFIX = "exa_"
 
 
-def current_user(authorization: Annotated[str | None, Header()] = None) -> User:
+def current_user(request: Request, authorization: Annotated[str | None, Header()] = None) -> User:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Sign in first.")
     token = authorization.removeprefix("Bearer ")
@@ -42,7 +44,7 @@ def current_user(authorization: Annotated[str | None, Header()] = None) -> User:
                      WHERE token_hash = %(h)s AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > now())
                        AND (last_used_at IS NULL OR last_used_at < now() - interval '1 minute')
                      RETURNING user_id)
-                   SELECT u.* FROM users u
+                   SELECT u.*, (SELECT scopes FROM api_keys WHERE token_hash = %(h)s) AS key_scopes FROM users u
                    WHERE u.id = (SELECT user_id FROM k UNION ALL
                                  SELECT user_id FROM api_keys WHERE token_hash = %(h)s AND revoked_at IS NULL
                                    AND (expires_at IS NULL OR expires_at > now()) LIMIT 1)""",
@@ -60,7 +62,21 @@ def current_user(authorization: Annotated[str | None, Header()] = None) -> User:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "This API key has been revoked or has expired.")
     if row is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Your session has ended. Sign in again.")
-    return User(row["id"], row["email"], row["role"], row["customer_id"], row["carrier_id"])
+    scopes = row.get("key_scopes")
+    user = User(
+        row["id"],
+        row["email"],
+        row["role"],
+        row["customer_id"],
+        row["carrier_id"],
+        tuple(scopes) if scopes is not None else None,
+    )
+    if user.scopes is not None and "connect" not in user.scopes:
+        # A key limited to CommAI scopes never reaches the network API.
+        path = request.url.path
+        if not (path.startswith("/api/v1/commai/") or path == "/api/v1/auth/me"):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "This API key is not allowed to use this part of the API.")
+    return user
 
 
 def require_admin(user: Annotated[User, Depends(current_user)]) -> User:

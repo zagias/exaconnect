@@ -35,6 +35,10 @@ def apply_schema(conn: psycopg.Connection) -> None:
         # Serialise concurrent bootstraps (several workers starting at once).
         conn.execute("SELECT pg_advisory_xact_lock(4242)")
         conn.execute(sql)
+        # CommAI (ADR 0016): one file per module, applied in name order.
+        sql_dir = resources.files(__package__).joinpath("commai", "sql")
+        for f in sorted((p for p in sql_dir.iterdir() if p.name.endswith(".sql")), key=lambda p: p.name):
+            conn.execute(f.read_text())
 
 
 @contextmanager
