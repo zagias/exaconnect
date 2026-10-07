@@ -260,6 +260,8 @@ export interface User {
   customer_id: string | null;
   name?: string;
   two_step?: boolean;
+  /** The organisation requires two-step sign-in and it is not set up yet (ADR 0024). */
+  two_step_required?: boolean;
   /** null: the full account. A list: what a directory-provisioned account may do. */
   scopes?: string[] | null;
 }
