@@ -10,7 +10,8 @@ permissions:
 
 jobs:
   agent:
-    runs-on: ubuntu-24.04
+    # arm64 first (CLAUDE.md §3): the arm64 leg runs its tests on an Arm runner, not just a cross-compile.
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     strategy:
       matrix:
         arch: [arm64, amd64]

@@ -27,7 +27,8 @@ def _locked(fn, *args) -> int | None:
 
 def storm_pass(url: str) -> int | None:
     doc = storms.fetch(url)  # outside the transaction: the network can be slow
-    return _locked(storms.run_once, doc)
+    tracks = storms.load_tracks(doc)
+    return _locked(storms.run_once, doc, False, None, tracks)
 
 
 def hazard_pass(settings: Settings) -> int | None:

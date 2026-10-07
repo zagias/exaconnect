@@ -19,7 +19,7 @@ inbound.
 
    It installs FRR, WireGuard and nftables, enrols (the WireGuard private key never
    leaves the box), and starts `exa-agent` under systemd.
-4. **Check.** The node appears under Admin > Nodes with its applied version, and the
+4. **Check.** The node appears under Admin > Agents with its applied version, and the
    site turns green once its tunnels to the PoP are up.
 
 ## Tunnels need a reachable PoP
@@ -34,7 +34,8 @@ server it needs is Dudley's call.
 
 ## Removing a site
 
-Delete the node in Admin > Nodes (its certificate stops working at once), then
-`systemctl disable --now exa-agent` on the box. Forwarding keeps running on the last
+In Admin > Agents, "Revoke certificate" stops the agent at once (or delete the
+whole site in Admin > Sites and links), then run `systemctl disable --now exa-agent`
+on the box. Forwarding keeps running on the last
 state until the box is cleaned up: `wg-quick` interfaces `wg-*`, the `exaconnect`
 nftables table and the FRR config.
