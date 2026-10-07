@@ -1,4 +1,4 @@
-"""Microsoft Dynamics 365 (Dataverse Web API v9.2) connector (ADR 0028):
+"""Microsoft Dynamics 365 (Dataverse Web API v9.2) connector (ADR 0034):
 contacts, leads, opportunities and cases (incidents).
 
 Written from the Dataverse Web API (OData v4): ``GET /contacts?$filter=``

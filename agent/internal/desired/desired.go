@@ -46,6 +46,15 @@ type State struct {
 	// Internet is where the LAN's internet traffic goes (ADR 0010); absent
 	// means the agent removes everything it set up for it.
 	Internet *Internet `json:"internet,omitempty"`
+	// IPFIX, when set, exports the site's flow aggregates to the customer's
+	// collector (ADR 0026); absent means no export.
+	IPFIX *IPFIX `json:"ipfix,omitempty"`
+}
+
+// IPFIX is where a site sends its flow records (RFC 7011 over UDP).
+type IPFIX struct {
+	Collector         string `json:"collector"` // host:port
+	ObservationDomain uint32 `json:"observation_domain"`
 }
 
 // Tunnel is one WireGuard interface over one underlay (carrier) link.
@@ -180,6 +189,15 @@ var proposals = regexp.MustCompile(`^[a-z0-9_-]+(,[a-z0-9_-]+)*$`)
 func (s *State) Validate() error {
 	if s.Schema != Schema {
 		return fmt.Errorf("unsupported schema %d", s.Schema)
+	}
+	if s.IPFIX != nil {
+		host, port, err := net.SplitHostPort(s.IPFIX.Collector)
+		if err != nil || host == "" || port == "0" || strings.ContainsAny(host, " /@") {
+			return fmt.Errorf("bad ipfix collector %q", s.IPFIX.Collector)
+		}
+		if n, err := strconv.Atoi(port); err != nil || n < 1 || n > 65535 {
+			return fmt.Errorf("bad ipfix collector port %q", port)
+		}
 	}
 	if s.Role != RoleSite && s.Role != RolePoP {
 		return fmt.Errorf("bad role %q", s.Role)

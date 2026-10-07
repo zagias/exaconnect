@@ -1,4 +1,4 @@
-"""CalDAV calendars (RFC 4791) with iCalendar events (RFC 5545), ADR 0028.
+"""CalDAV calendars (RFC 4791) with iCalendar events (RFC 5545), ADR 0034.
 
 Works with any CalDAV server: iCloud (caldav.icloud.com), Fastmail
 (caldav.fastmail.com), Nextcloud (/remote.php/dav), Zimbra, Radicale, and
@@ -192,7 +192,7 @@ class CalDAV(DavConnector):
 
     @staticmethod
     def _invite(conn, connection: dict, key: str, result: dict) -> dict:
-        """Add the booking's signed .ics invite link (ADR 0028) for confirmations."""
+        """Add the booking's signed .ics invite link (ADR 0034) for confirmations."""
         from ..standards import ical_feed
 
         url = ical_feed.invite_url_for_key(conn, connection["customer_id"], key)

@@ -1,4 +1,4 @@
-"""The help centre: a public page per business for its own customers (ADR 0031).
+"""The help centre: a public page per business for its own customers (ADR 0037).
 
 What it shows is chosen by the business's admins and is off until they switch
 it on. Articles are knowledge sources a person both approved (for the AI) and

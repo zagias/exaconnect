@@ -1,4 +1,4 @@
-"""Countries and SMS carriers (ADR 0023): the capability matrix, per-country SMS
+"""Countries and SMS carriers (ADR 0029): the capability matrix, per-country SMS
 rules enforced by the gateway, and routing with failover that never sends twice."""
 
 from __future__ import annotations

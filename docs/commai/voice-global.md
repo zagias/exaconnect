@@ -1,6 +1,6 @@
 # CommAI voice stage 5: operator note
 
-See ADR 0027. The code is in `controller/exaconnect_controller/commai/voice/`:
+See ADR 0033. The code is in `controller/exaconnect_controller/commai/voice/`:
 - `countries.py`, `porting.py`, `emergency.py`, `carriers.py`, `fraud.py` and
   `livekit.py`;
 - the provider interface in `provider.py`;

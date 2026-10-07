@@ -1,4 +1,4 @@
-"""Inbox gap fixes (ADR 0032): routing by intent, language and skills; snooze
+"""Inbox gap fixes (ADR 0038): routing by intent, language and skills; snooze
 wake-up; built-in service-target reminders and escalations; tag and priority
 events."""
 

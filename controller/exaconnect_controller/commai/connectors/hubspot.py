@@ -116,7 +116,7 @@ class HubSpot(Connector):
             "create",
             fields=(Field("subject", "Subject"), Field("description", "Description", "text", False)),
         ),
-        # ADR 0028: updates, and webhooks (v3 signatures).
+        # ADR 0034: updates, and webhooks (v3 signatures).
         "update_contact": ActionSpec(
             "update_contact",
             "Update a contact",
@@ -251,7 +251,7 @@ class HubSpot(Connector):
             return {"contact_id": cid, "updated": True}
         raise ConnectorError(f"Unknown action {action}.", "input")
 
-    # ---- webhooks (ADR 0028) ------------------------------------------------------------
+    # ---- webhooks (ADR 0034) ------------------------------------------------------------
 
     def verify_webhook(self, conn, connection: dict, hook: dict, headers: dict, body: bytes, query: dict) -> bool:
         """X-HubSpot-Signature-v3: base64 HMAC-SHA256, keyed with the app's client

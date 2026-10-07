@@ -1,4 +1,4 @@
-"""Zapier, Make and n8n app definitions (ADR 0029): every CommAI endpoint they
+"""Zapier, Make and n8n app definitions (ADR 0035): every CommAI endpoint they
 call exists in the published OpenAPI schema, and the Zapier signature check
 agrees with how CommAI signs webhook deliveries."""
 

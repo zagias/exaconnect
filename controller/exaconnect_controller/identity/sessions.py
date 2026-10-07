@@ -17,13 +17,16 @@ CSRF_VALUE = "exa-portal"
 SAFE_METHODS = ("GET", "HEAD", "OPTIONS")
 
 
-def start(conn: psycopg.Connection, user_id: Any, hours: int, via: str = "password") -> tuple[str, dt.datetime]:
+def start(
+    conn: psycopg.Connection, user_id: Any, hours: int, via: str = "password", customer_id: Any = None
+) -> tuple[str, dt.datetime]:
+    """customer_id: the organisation the session acts for (ADR 0023); None means the primary one."""
     token = new_token()
     expires = dt.datetime.now(dt.UTC) + dt.timedelta(hours=hours)
     conn.execute("DELETE FROM sessions WHERE user_id = %s AND expires_at < now()", (user_id,))
     conn.execute(
-        "INSERT INTO sessions (token_hash, user_id, expires_at, via) VALUES (%s, %s, %s, %s)",
-        (token_hash(token), user_id, expires, via),
+        "INSERT INTO sessions (token_hash, user_id, expires_at, via, customer_id) VALUES (%s, %s, %s, %s, %s)",
+        (token_hash(token), user_id, expires, via, customer_id),
     )
     return token, expires
 

@@ -1,4 +1,4 @@
--- CommAI gap fixes for automation, the assistant and billing (ADR 0033). Idempotent.
+-- CommAI gap fixes for automation, the assistant and billing (ADR 0039). Idempotent.
 
 -- ---- module entitlements --------------------------------------------------------------
 -- Messaging, voice, AI agents and automation are sold separately. No row means

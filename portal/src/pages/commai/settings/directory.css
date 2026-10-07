@@ -1,4 +1,4 @@
-/* Settings > Sign-in > Connect your directory (ADR 0030). */
+/* Settings > Sign-in > Connect your directory (ADR 0036). */
 .dir-picker { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); margin: 12px 0; }
 .dir-tile {
   display: grid; gap: 4px; align-content: start; text-align: left; padding: 12px 14px; min-height: 44px;

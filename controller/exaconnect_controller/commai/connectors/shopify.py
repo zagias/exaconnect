@@ -1,4 +1,4 @@
-"""Shopify connector (ADR 0029): order lookup for a verified customer, and
+"""Shopify connector (ADR 0035): order lookup for a verified customer, and
 refunds and cancellations as sensitive actions.
 
 Written from Shopify's GraphQL Admin API (version 2025-07: orders,

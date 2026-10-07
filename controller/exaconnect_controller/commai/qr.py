@@ -1,4 +1,4 @@
-"""QR codes drawn on the server as SVG (ADR 0033).
+"""QR codes drawn on the server as SVG (ADR 0039).
 
 A small, dependency-free QR Code Model 2 encoder: byte mode, error
 correction level M (about 15% of the code can be damaged), versions 1 to 20

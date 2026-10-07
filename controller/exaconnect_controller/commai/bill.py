@@ -1,4 +1,4 @@
-"""The single ExaCarib bill (ADR 0033).
+"""The single ExaCarib bill (ADR 0039).
 
 Messaging, AI and workflow usage is priced on versioned rate cards, the same
 way voice is (voice/billing.py): every usage record becomes one rated charge

@@ -1,4 +1,4 @@
-"""API rate limits shared by every API process, kept in Postgres (ADR 0032).
+"""API rate limits shared by every API process, kept in Postgres (ADR 0038).
 
 Each caller (a hash of its credentials; the client address when it has none)
 has a budget of requests a minute: EXA_API_RATE_PER_MIN (default 600), or the

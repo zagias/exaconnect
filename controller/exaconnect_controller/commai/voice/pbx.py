@@ -1,4 +1,4 @@
-"""FreeSWITCH asks the controller before each outside call (ADR 0027).
+"""FreeSWITCH asks the controller before each outside call (ADR 0033).
 
 The rendered dial plan (freeswitch.py) calls
 

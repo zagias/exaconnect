@@ -1,4 +1,4 @@
-"""AI quality review against the business's own criteria (ADR 0026).
+"""AI quality review against the business's own criteria (ADR 0032).
 
 The business writes criteria in plain words ("greets the customer by name",
 "never promises refunds"). A review is a durable job ("quality.review") that

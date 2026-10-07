@@ -1,4 +1,4 @@
-"""CommAI voice stage 5 API (ADR 0027): numbers by country, port orders,
+"""CommAI voice stage 5 API (ADR 0033): numbers by country, port orders,
 emergency addresses, fraud protection, carriers and the LiveKit agent.
 
 Who may call what:

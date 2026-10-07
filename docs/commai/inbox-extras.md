@@ -1,6 +1,6 @@
 # CommAI inbox extras: operator note
 
-Decision record: ADR 0032. Code: `commai/inbox_jobs.py`, `commai/presence.py`,
+Decision record: ADR 0038. Code: `commai/inbox_jobs.py`, `commai/presence.py`,
 `commai/attachments.py`, `commai/history.py`, `commai/visitor_calls.py`,
 `commai/ratelimit.py`, `exaconnect_controller/errors.py`,
 `commai/api/inbox_extras.py`. Schema: `commai/sql/69_inbox_extras.sql`.

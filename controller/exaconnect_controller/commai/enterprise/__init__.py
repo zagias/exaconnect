@@ -1,4 +1,4 @@
-"""Enterprise administration and data governance (ADR 0024): organisations
+"""Enterprise administration and data governance (ADR 0030): organisations
 and business calendars, roles, security settings, data governance and abuse
 protection. Importing the package registers its jobs and event types."""
 

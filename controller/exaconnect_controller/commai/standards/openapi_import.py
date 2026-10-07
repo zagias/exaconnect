@@ -1,4 +1,4 @@
-"""Reading a business's OpenAPI 3 document (ADR 0028).
+"""Reading a business's OpenAPI 3 document (ADR 0034).
 
 Only reads: nothing in the document is ever run. We list the operations it
 describes (method, path, parameters, body fields, security) so a business can

@@ -1,4 +1,4 @@
-"""International revenue share fraud protection (ADR 0027), on top of the
+"""International revenue share fraud protection (ADR 0033), on top of the
 stage 4 fraud limits (daily spend cap, blocked premium prefixes, international
 on or off, unusual-volume alerts) in billing.py.
 

@@ -1,4 +1,4 @@
-"""What the CalDAV and CardDAV connectors share (ADR 0028): Basic auth with
+"""What the CalDAV and CardDAV connectors share (ADR 0034): Basic auth with
 an app password, discovery of the user's collections, WebDAV calls, and a
 stand-in DAV server that behaves like iCloud, Fastmail or Nextcloud do for
 the requests CommAI makes (PROPFIND, REPORT, GET, PUT with If-None-Match and

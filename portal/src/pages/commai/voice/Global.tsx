@@ -5,7 +5,7 @@ import { Card, useAction } from "../../../ui";
 import { when } from "../lib";
 import type { VoiceOverview } from "./types";
 
-/* Voice stage 5 screens (ADR 0027): numbers by country, port orders,
+/* Voice stage 5 screens (ADR 0033): numbers by country, port orders,
    emergency addresses, fraud protection and (ExaCarib only) carriers. */
 
 interface Country {

@@ -1,4 +1,4 @@
-"""Module entitlements API (ADR 0033). A business reads its plan; only an
+"""Module entitlements API (ADR 0039). A business reads its plan; only an
 ExaCarib admin changes it."""
 
 from __future__ import annotations

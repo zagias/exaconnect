@@ -1,4 +1,4 @@
-"""Staff-only inbox features (ADR 0026): mentions, files on notes, saved views,
+"""Staff-only inbox features (ADR 0032): mentions, files on notes, saved views,
 staff chat and satisfaction surveys. Includes the proof that staff chat and
 note files are unreachable through the widget, channels, customer API keys,
 exports and the customer AI."""

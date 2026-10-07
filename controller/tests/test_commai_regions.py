@@ -1,4 +1,4 @@
-"""Regional hosting (ADR 0025): a region switches on only when every dependency
+"""Regional hosting (ADR 0031): a region switches on only when every dependency
 has a provider in that region recorded; home region and data location."""
 
 from __future__ import annotations

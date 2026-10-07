@@ -1,4 +1,4 @@
-"""CardDAV address books (RFC 6352) with vCard 4.0 (RFC 6350), ADR 0028.
+"""CardDAV address books (RFC 6352) with vCard 4.0 (RFC 6350), ADR 0034.
 
 Works with iCloud (contacts.icloud.com), Fastmail (carddav.fastmail.com),
 Nextcloud, Google's CardDAV endpoint and other servers. User name and app

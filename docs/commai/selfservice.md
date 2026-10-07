@@ -1,6 +1,6 @@
 # CommAI self-service: operator note
 
-See ADR 0031. Code: `controller/exaconnect_controller/commai/selfservice/`
+See ADR 0037. Code: `controller/exaconnect_controller/commai/selfservice/`
 (`staff.py`, `helpcentre.py`, `enduser.py`, `branding.py`), API
 `commai/api/selfservice.py`, tables `commai/sql/68_self_service.sql`, portal
 `portal/src/pages/me/` (My settings) and `portal/src/pages/help/` (help centre

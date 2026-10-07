@@ -1,4 +1,4 @@
-"""What a proposed action will do, worked out before anyone approves it (ADR 0033).
+"""What a proposed action will do, worked out before anyone approves it (ADR 0039).
 
 When an action has to wait for a person, the service works out its impact at
 propose time and stores it on the run, so the approver sees the change and

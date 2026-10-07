@@ -1,4 +1,4 @@
-"""Support cases reach ExaCarib (ADR 0033).
+"""Support cases reach ExaCarib (ADR 0039).
 
 A business opens a case from the assistant (assistant.open_case attaches the
 configuration, redacted errors, diagnostics and correlation ids). ExaCarib

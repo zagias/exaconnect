@@ -1,4 +1,4 @@
-"""Files staff attach to replies, on every channel (ADR 0032).
+"""Files staff attach to replies, on every channel (ADR 0038).
 
 Staff upload a file for a conversation (POST .../conversations/{id}/files),
 then name it on the reply (`attachments: [file id]`). The file is checked

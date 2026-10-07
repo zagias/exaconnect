@@ -158,7 +158,7 @@ def catalogue(conn: psycopg.Connection, customer_id: Any) -> list[dict]:
         item = kit.describe_any(c)
         row = rows.get(item["app"])
         if isinstance(c, kit.KitConnector):
-            # ADR 0028: the real app needs ExaCarib's registration and go-live;
+            # ADR 0034: the real app needs ExaCarib's registration and go-live;
             # until then a connection runs on the app's stand-in.
             real, reasons = c.real_ready(conn, customer_id)
             ready, why = real, " ".join(reasons)
@@ -207,7 +207,7 @@ def connect(conn: psycopg.Connection, customer_id: Any, app: str, actor: str) ->
         real, reasons = c.real_ready(conn, customer_id)
         out["sign_in_ready"], out["not_live_reason"] = real, " ".join(reasons)
         if row["status"] == "draft" and row["auth_status"] in ("none", "") and not real:
-            # ADR 0028: until the real app is ready, the connection runs on its stand-in.
+            # ADR 0034: until the real app is ready, the connection runs on its stand-in.
             row = conn.execute(
                 """UPDATE integration_connections SET status = 'authorised', auth_status = 'not_needed',
                           auth_method = 'simulated', updated_at = now() WHERE id = %s RETURNING *""",
@@ -283,7 +283,7 @@ def enter_token(conn: psycopg.Connection, customer_id: Any, app: str, token: str
 
 def enter_credentials(conn: psycopg.Connection, customer_id: Any, app: str, creds: dict, actor: str) -> dict:
     """Secure entry of credentials (API key, user name and app password, client
-    id and secret) for apps that use them (ADR 0028). Checked against the
+    id and secret) for apps that use them (ADR 0034). Checked against the
     app's own fields, stored encrypted after one live check, never shown again."""
     c = _connector(app)
     fields = getattr(c, "credentials", ()) or ()

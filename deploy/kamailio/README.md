@@ -1,6 +1,6 @@
 # Kamailio: the voice edge proxy
 
-ADR 0027. Kamailio stands in front of FreeSWITCH. Carriers reach Kamailio only;
+ADR 0033. Kamailio stands in front of FreeSWITCH. Carriers reach Kamailio only;
 FreeSWITCH has no public SIP port.
 
 - **Allow-list**: only carrier signalling addresses (`address.list` group 1) and
@@ -49,7 +49,7 @@ from the example for the edge set in `.env`:
 | `EXA_VOICE_EDGE` | Gateway | Use |
 | --- | --- | --- |
 | `provider` (default) | `exacarib_sip.xml.example`: registers to `EXA_SIP_REALM` with `EXA_SIP_USERNAME` / `EXA_SIP_PASSWORD`. Installed once `EXA_SIP_USERNAME` is set. | One SIP provider (stage 4). Carriers in the controller are ignored on the wire. |
-| `kamailio` | `exacarib_sip.kamailio.xml.example`: `kamailio:5060`, no registration. | Several carriers (ADR 0027). Kamailio holds the carrier list and follows `X-Exa-Route`. |
+| `kamailio` | `exacarib_sip.kamailio.xml.example`: `kamailio:5060`, no registration. | Several carriers (ADR 0033). Kamailio holds the carrier list and follows `X-Exa-Route`. |
 
 With `kamailio`, `make voice-up` also writes `EXA_KAMAILIO_PBX_NETS` to `.env` (the compose network
 FreeSWITCH and Kamailio share) and restarts the controller once, so the rendered `address.list` lets

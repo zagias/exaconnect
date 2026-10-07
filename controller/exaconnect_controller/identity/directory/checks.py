@@ -1,4 +1,4 @@
-"""Connection tests for a directory set-up (ADR 0030): fetch and parse the
+"""Connection tests for a directory set-up (ADR 0036): fetch and parse the
 provider's SAML metadata or OpenID Connect discovery document, and say
 plainly what is wrong. Each check is {"check", "ok", "detail"} and, for
 warnings, "warn": True.

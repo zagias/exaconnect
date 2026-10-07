@@ -1,4 +1,4 @@
-# LiveKit SIP bridge (ADR 0027). FreeSWITCH's "exacarib_ai" gateway sends calls
+# LiveKit SIP bridge (ADR 0033). FreeSWITCH's "exacarib_ai" gateway sends calls
 # for the AI agent here, and each call becomes a room called "call-<id>". The
 # agent worker joins it. Only FreeSWITCH, on the compose network, reaches port 5062.
 # API key and secret come from the environment (LIVEKIT_API_KEY, LIVEKIT_API_SECRET).

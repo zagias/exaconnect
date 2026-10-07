@@ -35,7 +35,7 @@ interface Answer {
   findings: Finding[];
   fixes: Fix[];
   source: string;
-  /** A phone change typed to the assistant: the same proposal and confirm step as Voice (ADR 0033). */
+  /** A phone change typed to the assistant: the same proposal and confirm step as Voice (ADR 0039). */
   voice_change?: {
     understood: boolean;
     message?: string;

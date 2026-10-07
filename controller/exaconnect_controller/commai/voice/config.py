@@ -249,7 +249,9 @@ def _portal_user(conn, cid, email) -> Any:
     if not email:
         return None
     row = conn.execute(
-        "SELECT id FROM users WHERE lower(email) = lower(%s) AND customer_id = %s", (email, cid)
+        """SELECT u.id FROM users u JOIN org_memberships m ON m.user_id = u.id AND m.customer_id = %s
+           WHERE lower(u.email) = lower(%s)""",
+        (cid, email),
     ).fetchone()
     if row is None:
         raise OpError(f"No portal account {email} in your company.")
@@ -296,7 +298,7 @@ class _Run:
                 VALUES (%s, %s, {", ".join(["%s"] * len(SITE_FIELDS))}) RETURNING id""",
             (self.cid, name[:120], *[vals[k] for k in SITE_FIELDS]),
         ).fetchone()
-        self.after.append(("validate_site", str(row["id"])))  # checked with the provider (ADR 0027)
+        self.after.append(("validate_site", str(row["id"])))  # checked with the provider (ADR 0033)
         return {"site_id": str(row["id"])}
 
     def update_site(self, op):
@@ -416,7 +418,7 @@ class _Run:
                 )
             )
             # The new site's address is checked if it hasn't been, and outbound
-            # calling follows the island's rules (ADR 0027).
+            # calling follows the island's rules (ADR 0033).
             self.after.append(("moved", str(vu["id"]), str(moved_site["id"])))
         return out
 
@@ -451,7 +453,7 @@ class _Run:
             site = _site(self.conn, self.cid, str(vu["site_id"]), required=False) if vu["site_id"] else None
         country = str(op.get("country") or "").upper()
         if country or providers.get().live:
-            # Real numbers by country need that country switched on (ADR 0027).
+            # Real numbers by country need that country switched on (ADR 0033).
             try:
                 c = countries.require(self.conn, country, self.cid)
                 area = countries.check_area(c, op.get("area"))

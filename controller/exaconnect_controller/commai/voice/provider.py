@@ -1,4 +1,4 @@
-"""SIP provider interface (ADR 0021, extended for stage 5 in ADR 0027).
+"""SIP provider interface (ADR 0021, extended for stage 5 in ADR 0033).
 
 ExaCarib has no SIP provider account yet, so the working provider is
 `SimulatedProvider`. It behaves like a real one: number search and ordering

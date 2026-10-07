@@ -1,4 +1,4 @@
-"""Shared test helpers for kit connectors (ADR 0028), usable by every connector's tests.
+"""Shared test helpers for kit connectors (ADR 0034), usable by every connector's tests.
 
 - ``FakeHTTP``: a fake transport (method + URL regex routes) whose handlers may
   return (status, body) or (status, body, headers), recording every call.

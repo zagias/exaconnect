@@ -7,20 +7,26 @@ reckoning, an hour at a time) and finds the closest approach. A storm
 forecast to pass close suggests switching Storm Mode on; it never switches
 it on by itself.
 
-Dead reckoning is not the NHC forecast track: it is a simple, explainable
-first warning. Every insight links the NHC advisory for the official track.
+When NHC publishes its forecast track and cone for a storm (KMZ files linked
+from CurrentStorms.json), the warning uses them instead: the closest approach
+along the official track, and whether the site is inside the cone. Dead
+reckoning stays as the fallback when those files are missing or unreadable.
+Every insight links the NHC advisory.
 """
 
 from __future__ import annotations
 
 import datetime as dt
+import io
 import json
 import logging
 import math
 import urllib.request
-from dataclasses import dataclass
+import zipfile
+from dataclasses import dataclass, field
 from importlib import resources
 from typing import Any
+from xml.etree import ElementTree
 
 from .insights import note_storm_mode, open_customers, raise_insight, resolve_others
 
@@ -52,6 +58,8 @@ class Storm:
     speed_kmh: float
     updated: str
     advisory_url: str
+    track_url: str = ""
+    cone_url: str = ""
 
     @property
     def label(self) -> str:
@@ -97,6 +105,8 @@ def parse(doc: dict) -> list[Storm]:
                     speed_kmh=float(s.get("movementSpeed") or 0) * MPH_TO_KMH,
                     updated=str(s.get("lastUpdate", "")),
                     advisory_url=str((s.get("publicAdvisory") or {}).get("url", "")),
+                    track_url=str((s.get("forecastTrack") or {}).get("kmzFile", "")),
+                    cone_url=str((s.get("trackCone") or {}).get("kmzFile", "")),
                 )
             )
         except (KeyError, TypeError, ValueError):
@@ -131,26 +141,143 @@ def closest_approach(storm: Storm, lat: float, lon: float, horizon_h: int = 72) 
     return best
 
 
+# NHC forecast points come at these hours from the advisory (the first is the current position).
+FORECAST_HOURS = [0, 12, 24, 36, 48, 60, 72, 96, 120]
+
+
+@dataclass(frozen=True)
+class Track:
+    """NHC's forecast track (points in time order) and cone (one ring), as (lat, lon)."""
+
+    points: list[tuple[float, float]] = field(default_factory=list)
+    cone: list[tuple[float, float]] = field(default_factory=list)
+
+
+def _coords(text: str) -> list[tuple[float, float]]:
+    out = []
+    for item in text.split():
+        parts = item.split(",")
+        if len(parts) >= 2:
+            out.append((float(parts[1]), float(parts[0])))  # KML is lon,lat[,alt]
+    return out
+
+
+def read_kml(data: bytes) -> tuple[list[tuple[float, float]], list[tuple[float, float]]]:
+    """(points, first polygon ring) from a KML or KMZ file. Point placemarks are the track;
+    the first polygon is the cone."""
+    if data[:2] == b"PK":
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            name = next((n for n in z.namelist() if n.lower().endswith(".kml")), None)
+            if name is None:
+                return [], []
+            data = z.read(name)[:8_000_000]
+    root = ElementTree.fromstring(data)  # noqa: S314 (NHC's file, size-capped, no entity expansion in ElementTree)
+    points: list[tuple[float, float]] = []
+    ring: list[tuple[float, float]] = []
+    for el in root.iter():
+        tag = el.tag.rsplit("}", 1)[-1]
+        if tag == "Point":
+            c = next((x for x in el.iter() if x.tag.rsplit("}", 1)[-1] == "coordinates"), None)
+            if c is not None and c.text:
+                points.extend(_coords(c.text))
+        elif tag == "Polygon" and not ring:
+            c = next((x for x in el.iter() if x.tag.rsplit("}", 1)[-1] == "coordinates"), None)
+            if c is not None and c.text:
+                ring = _coords(c.text)
+    return points, ring
+
+
+def inside(lat: float, lon: float, ring: list[tuple[float, float]]) -> bool:
+    """Point in polygon (ray casting); fine at the size of a forecast cone."""
+    hit = False
+    for (la1, lo1), (la2, lo2) in zip(ring, ring[1:] + ring[:1], strict=True):
+        if (la1 > lat) != (la2 > lat) and lon < (lo2 - lo1) * (lat - la1) / (la2 - la1) + lo1:
+            hit = not hit
+    return hit
+
+
+def track_approach(track: Track, lat: float, lon: float) -> tuple[float, int]:
+    """(distance km, hours from now) of the closest approach along NHC's forecast track,
+    walking each leg in 10 km steps."""
+    pts = track.points
+    best = (distance_km(pts[0][0], pts[0][1], lat, lon), 0)
+    for i in range(len(pts) - 1):
+        (la1, lo1), (la2, lo2) = pts[i], pts[i + 1]
+        h1 = FORECAST_HOURS[min(i, len(FORECAST_HOURS) - 1)]
+        h2 = FORECAST_HOURS[min(i + 1, len(FORECAST_HOURS) - 1)]
+        steps = max(1, int(distance_km(la1, lo1, la2, lo2) / 10))
+        for k in range(1, steps + 1):
+            f = k / steps
+            d = distance_km(la1 + (la2 - la1) * f, lo1 + (lo2 - lo1) * f, lat, lon)
+            if d < best[0]:
+                best = (d, round(h1 + (h2 - h1) * f))
+    return best
+
+
+def fetch_bytes(url: str, timeout_s: float = 20) -> bytes:
+    req = urllib.request.Request(url, headers={"User-Agent": "ExaCarib Connect hurricane watch (exacarib.com)"})
+    with urllib.request.urlopen(req, timeout=timeout_s) as r:  # noqa: S310 (URLs from NHC's own feed)
+        return r.read(8_000_000)
+
+
+def load_tracks(doc: dict, get=fetch_bytes) -> dict[str, Track]:
+    """NHC's track and cone for every storm that has them. Run outside a transaction.
+    Only nhc.noaa.gov URLs are followed; a storm whose files fail keeps dead reckoning."""
+    out: dict[str, Track] = {}
+    for storm in parse(doc):
+        if not storm.track_url.startswith("https://www.nhc.noaa.gov/"):
+            continue
+        try:
+            points, _ = read_kml(get(storm.track_url))
+            cone: list[tuple[float, float]] = []
+            if storm.cone_url.startswith("https://www.nhc.noaa.gov/"):
+                _, cone = read_kml(get(storm.cone_url))
+        except Exception as e:  # noqa: BLE001 (any failure falls back to dead reckoning)
+            log.warning("NHC track for %s unreadable (%s); using its current motion", storm.id, type(e).__name__)
+            continue
+        if len(points) >= 2:
+            out[storm.id] = Track(points=points, cone=cone)
+    return out
+
+
 STORM_MODE_ADVICE = (
     "Consider switching Storm Mode on so the satellite path is warm before the terrestrial links suffer."
 )
 
 
-def assess(storm: Storm, site: str, lat: float, lon: float, policy: Policy = Policy()) -> dict | None:
-    """The warning for one storm and one site, or None when it stays clear."""
-    km, hours = closest_approach(storm, lat, lon, policy.horizon_h)
+def assess(
+    storm: Storm, site: str, lat: float, lon: float, policy: Policy = Policy(), track: Track | None = None
+) -> dict | None:
+    """The warning for one storm and one site, or None when it stays clear. With NHC's
+    track it uses the official forecast and cone; without, the storm's current motion."""
+    official = track is not None and len(track.points) >= 2
+    if official:
+        km, hours = track_approach(track, lat, lon)
+        in_cone = bool(track.cone) and inside(lat, lon, track.cone)
+    else:
+        km, hours = closest_approach(storm, lat, lon, policy.horizon_h)
+        in_cone = False
     critical = policy.critical_km_hurricane if storm.hurricane else policy.critical_km
-    if km > policy.warning_km:
+    if km > policy.warning_km and not in_cone:
         return None
-    severity = "critical" if km <= critical else "warning"
+    severity = "critical" if km <= critical or in_cone else "warning"
     when = "now" if hours == 0 else f"in about {hours} h"
-    detail = (
-        f"{storm.label} ({storm.intensity_kt:.0f} kt) is moving at {storm.speed_kmh:.0f} km/h on a heading of "
-        f"{storm.heading_deg:.0f}°. Projecting that motion forward, it passes about {km:.0f} km from {site} {when}."
-    )
+    if official:
+        detail = (
+            f"{storm.label} ({storm.intensity_kt:.0f} kt): on the NHC forecast track it passes about {km:.0f} km "
+            f"from {site} {when}."
+        )
+        if in_cone:
+            detail += f" {site} is inside the forecast cone."
+    else:
+        detail = (
+            f"{storm.label} ({storm.intensity_kt:.0f} kt) is moving at {storm.speed_kmh:.0f} km/h on a heading of "
+            f"{storm.heading_deg:.0f}°. Projecting that motion forward, it passes about {km:.0f} km from {site} {when}."
+        )
     if severity == "critical":
         detail += " " + STORM_MODE_ADVICE
-    detail += " This is a straight-line projection; check the NHC advisory for the official forecast track."
+    if not official:
+        detail += " This is a straight-line projection; check the NHC advisory for the official forecast track."
     return {
         "severity": severity,
         "title": f"{storm.label} may pass {km:.0f} km from {site} {when}",
@@ -166,12 +293,14 @@ def assess(storm: Storm, site: str, lat: float, lon: float, policy: Policy = Pol
             "advisory_url": storm.advisory_url,
             "storm_position": [storm.lat, storm.lon],
             "nhc_updated": storm.updated,
+            "source": "nhc_track" if official else "dead_reckoning",
+            "in_cone": in_cone,
         },
     }
 
 
 def fetch(url: str, timeout_s: float = 20) -> dict:
-    req = urllib.request.Request(url, headers={"User-Agent": "ExaConnect hurricane watch (exacarib.com)"})
+    req = urllib.request.Request(url, headers={"User-Agent": "ExaCarib Connect hurricane watch (exacarib.com)"})
     with urllib.request.urlopen(req, timeout=timeout_s) as r:  # noqa: S310 (fixed, configured URL)
         return json.loads(r.read(4_000_000))
 
@@ -206,7 +335,9 @@ def summarise(storm: Storm, hits: list[tuple[dict, dict]]) -> dict:
     return w
 
 
-def run_once(conn, doc: dict, example: bool = False, now: dt.datetime | None = None) -> int:
+def run_once(
+    conn, doc: dict, example: bool = False, now: dt.datetime | None = None, tracks: dict[str, Track] | None = None
+) -> int:
     """Raises or refreshes storm warnings for every customer, one per storm
     (not one per site, so a customer hears about a storm once); resolves the
     rest. Returns how many warnings are open."""
@@ -224,7 +355,10 @@ def run_once(conn, doc: dict, example: bool = False, now: dt.datetime | None = N
     seen: dict[Any, set[str]] = {c: set() for c in by_customer}
     for customer_id, csites in by_customer.items():
         for storm in storms:
-            hits = [(s, w) for s in csites if (w := assess(storm, s["name"], s["latitude"], s["longitude"]))]
+            track = (tracks or {}).get(storm.id)
+            hits = [
+                (s, w) for s in csites if (w := assess(storm, s["name"], s["latitude"], s["longitude"], track=track))
+            ]
             if not hits:
                 continue
             w = summarise(storm, hits)

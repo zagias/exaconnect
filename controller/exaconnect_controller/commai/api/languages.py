@@ -1,4 +1,4 @@
-"""Languages API (ADR 0026): catalogues, each person's language, the AI's reply
+"""Languages API (ADR 0032): catalogues, each person's language, the AI's reply
 languages, reviewer sign-off, the widget's strings and the satisfaction form.
 
 - Signed in: /customers/{customer_id}/languages (read; set my language; set the

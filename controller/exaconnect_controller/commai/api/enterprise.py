@@ -1,4 +1,4 @@
-"""Enterprise administration and data governance API (ADR 0024):
+"""Enterprise administration and data governance API (ADR 0030):
 organisation and business calendars, roles, security settings, data
 governance and unusual-use alerts. Every write is audited."""
 

@@ -1,4 +1,4 @@
-"""The public API surface (ADR 0032): one error shape with a code and a
+"""The public API surface (ADR 0038): one error shape with a code and a
 request id, and rate limits shared through Postgres, per key."""
 
 from exaconnect_controller import db

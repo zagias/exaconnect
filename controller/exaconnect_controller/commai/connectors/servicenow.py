@@ -1,4 +1,4 @@
-"""ServiceNow connector (ADR 0029): incidents linked to conversations.
+"""ServiceNow connector (ADR 0035): incidents linked to conversations.
 
 Written from ServiceNow's REST Table API (``/api/now/table/incident`` and
 ``sys_user``). Each business has its own instance; it creates an API key

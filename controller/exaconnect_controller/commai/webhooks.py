@@ -144,7 +144,7 @@ def _deliver(conn: psycopg.Connection, job: dict) -> None:
     from .standards import webhooks_std
 
     ts = int(time.time())
-    # ADR 0028: the endpoint's format (ExaCarib v1 or CloudEvents) and, when
+    # ADR 0034: the endpoint's format (ExaCarib v1 or CloudEvents) and, when
     # asked, Standard Webhooks headers. The v1 signature is always there.
     body, headers = webhooks_std.render(d, event, payload(event), ts)
     try:

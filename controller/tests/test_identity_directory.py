@@ -1,4 +1,4 @@
-"""Directory templates and connectors (ADR 0030): templates per provider, SCIM
+"""Directory templates and connectors (ADR 0036): templates per provider, SCIM
 quirks with real-shaped payloads, connection tests, pull connectors (Microsoft
 Graph, Google Directory API, LDAP/AD), presets, approval and tenant isolation."""
 

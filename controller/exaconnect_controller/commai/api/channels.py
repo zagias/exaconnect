@@ -856,7 +856,7 @@ def widget_config(public_key: str, request: Request):
         s = inbox.settings(c.conn, c.key["customer_id"])
         ws = widget.settings_of(c.key)
         ai = s["mode"] == "ai_first" and inbox.ai_available()
-        brand = branding.public_view(branding.for_customer(c.conn, c.key["customer_id"]))  # ADR 0025
+        brand = branding.public_view(branding.for_customer(c.conn, c.key["customer_id"]))  # ADR 0031
         return {
             "title": ws["title"],
             "greeting": ws["greeting"],

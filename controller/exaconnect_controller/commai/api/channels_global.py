@@ -1,4 +1,4 @@
-"""CommAI phase 3 channels API (ADR 0023): Messenger, Instagram and Telegram
+"""CommAI phase 3 channels API (ADR 0029): Messenger, Instagram and Telegram
 accounts, the country matrix and SMS rules, and SMS routing across carriers.
 
 - `router` (signed in, under /customers/{customer_id}): the business's

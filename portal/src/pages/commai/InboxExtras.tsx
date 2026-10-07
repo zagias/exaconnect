@@ -5,7 +5,7 @@ import { useAction } from "../../ui";
 import { useT } from "./i18n";
 import "./quality.css";
 
-/* Inbox additions (ADR 0026): saved views, files on notes and what the AI read
+/* Inbox additions (ADR 0032): saved views, files on notes and what the AI read
    from a customer's attachments. Shapes from commai/api/team.py and quality.py. */
 
 export type Filters = Record<string, string>;

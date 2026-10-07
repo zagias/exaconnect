@@ -94,7 +94,7 @@ def _check_items(conn, cid, items: dict) -> dict:
 
 
 def _check_countries(conn, cid, items: dict) -> None:
-    """Real numbers by country (ADR 0027). With a country named, or with the
+    """Real numbers by country (ADR 0033). With a country named, or with the
     live provider, numbers and ports need their country switched on. Without
     one, the simulated provider's sandbox numbers are used (stage 3)."""
     nums = items.get("numbers") or {}
@@ -398,7 +398,7 @@ def _numbers(conn, o, prov, calls: list) -> dict:
                 countries.country_of(e164),
             ),
         ).fetchone()
-        # Its own status timeline, documents and switch-over job (ADR 0027).
+        # Its own status timeline, documents and switch-over job (ADR 0033).
         porting.create_from_order(conn, cid, o["id"], num["id"], e164, p, ref, prov)
         ports.append(e164)
     return {"numbers": got, "ports": ports}

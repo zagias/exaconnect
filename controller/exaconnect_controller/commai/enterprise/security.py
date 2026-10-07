@@ -1,4 +1,4 @@
-"""Security settings per business (ADR 0024).
+"""Security settings per business (ADR 0030).
 
 - Require two-step sign-in for everyone: a person without it can still sign
   in with their password, but the session can only set up two-step sign-in

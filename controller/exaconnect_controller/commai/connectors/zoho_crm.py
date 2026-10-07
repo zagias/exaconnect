@@ -1,4 +1,4 @@
-"""Zoho CRM connector (ADR 0028): contacts, leads and deals.
+"""Zoho CRM connector (ADR 0034): contacts, leads and deals.
 
 Written from the Zoho CRM API v6: ``GET /crm/v6/{Module}/search?email=``
 (204 when nothing matches), ``POST /crm/v6/{Module}/upsert`` with

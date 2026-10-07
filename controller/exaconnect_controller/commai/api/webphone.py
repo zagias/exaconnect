@@ -1,4 +1,4 @@
-"""The browser phone for staff (ADR 0033).
+"""The browser phone for staff (ADR 0039).
 
 A signed-in person with a phone extension gets what the portal's dialer
 needs to sign in to FreeSWITCH's Verto endpoint over secure WebSocket

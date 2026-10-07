@@ -16,7 +16,7 @@ interface Info {
 
 const PARAMS = ["client_id", "redirect_uri", "scope", "state", "code_challenge", "code_challenge_method", "response_type"] as const;
 
-/** The OAuth consent page (ADR 0025): /commai/oauth/authorize?client_id=...&code_challenge=... */
+/** The OAuth consent page (ADR 0031): /commai/oauth/authorize?client_id=...&code_challenge=... */
 export default function OAuthConsent() {
   const q = new URLSearchParams(useLocation().search);
   const params = Object.fromEntries(PARAMS.map((p) => [p, q.get(p) ?? ""])) as Record<(typeof PARAMS)[number], string>;

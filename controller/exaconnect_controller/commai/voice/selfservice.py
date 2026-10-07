@@ -455,7 +455,7 @@ def looks_like_change(text: str) -> bool:
 
 
 def propose_text(conn: psycopg.Connection, cid: Any, user: Any, text: str) -> dict:
-    """The same proposal "say what you want" makes (ADR 0033): the platform
+    """The same proposal "say what you want" makes (ADR 0039): the platform
     assistant uses it so a voice change typed there gets the same exact
     change, price impact and confirm step. Nothing changes until the same
     person confirms it at /voice/say/{id}/confirm.

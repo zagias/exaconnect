@@ -1,4 +1,4 @@
-"""Business calendars (ADR 0024): opening hours per location, public holidays
+"""Business calendars (ADR 0030): opening hours per location, public holidays
 per country and one-off closures.
 
 The inbox's service targets count business time only: a conversation that

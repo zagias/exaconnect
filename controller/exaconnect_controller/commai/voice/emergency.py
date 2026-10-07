@@ -1,4 +1,4 @@
-"""Emergency addresses and the rules for each island (ADR 0027).
+"""Emergency addresses and the rules for each island (ADR 0033).
 
 Every site, and every person who works somewhere else (a home worker), has an
 emergency address. The address is checked through the SIP provider (simulated

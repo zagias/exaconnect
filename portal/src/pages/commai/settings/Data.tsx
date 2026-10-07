@@ -41,7 +41,7 @@ const STATUS_WORD: Record<string, string> = {
   not_configured: "Not set up",
 };
 
-/** Retention, legal hold, subject requests, business export and where data is processed (ADR 0024). */
+/** Retention, legal hold, subject requests, business export and where data is processed (ADR 0030). */
 export default function Data({ base }: { base: string }) {
   const s = useApi<DataSettings>(`${base}/data`, 30_000);
   const exports = useApi<Export[]>(`${base}/data/exports`, 10_000);

@@ -1,4 +1,4 @@
-"""Pull connectors (ADR 0030): read a business's people and groups when it
+"""Pull connectors (ADR 0036): read a business's people and groups when it
 prefers pull over SCIM, or has no SCIM (Google Workspace, Active Directory,
 LDAP). Every connector is read-only and returns the same `Snapshot`.
 

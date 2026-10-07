@@ -1,4 +1,4 @@
-"""OAuth 2.0 for partner apps (ADR 0025): authorisation code with PKCE.
+"""OAuth 2.0 for partner apps (ADR 0031): authorisation code with PKCE.
 
 - A partner registers an app (client) with its redirect URIs and the scopes it
   may ask for (the existing API scopes, access.SCOPES).

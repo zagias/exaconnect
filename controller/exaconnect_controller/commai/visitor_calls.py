@@ -1,4 +1,4 @@
-"""A website visitor talks to the AI agent from the widget (ADR 0032).
+"""A website visitor talks to the AI agent from the widget (ADR 0038).
 
 The browser call of ADR 0019 (speech recognised and spoken in the browser,
 text to the controller), started by a visitor rather than staff, through

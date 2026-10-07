@@ -1,5 +1,5 @@
 # ruff: noqa: F811  (pytest fixtures imported from commai_connector_kit)
-"""Vendor connectors (ADR 0028): Salesforce, Dynamics 365, Zoho CRM, Pipedrive,
+"""Vendor connectors (ADR 0034): Salesforce, Dynamics 365, Zoho CRM, Pipedrive,
 Microsoft 365, Gmail and Calendly. Each is tested the same way:
 
 - OAuth sign-in (mocked token endpoint), tokens encrypted, provider fields kept;

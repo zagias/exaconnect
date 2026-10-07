@@ -60,7 +60,7 @@ function stamp(iso: string | null): string {
   return new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
-/** Two-step for everyone, session lifetime, IP allow-list, SSO sign-out, alerts, API keys and the audit view (ADR 0024). */
+/** Two-step for everyone, session lifetime, IP allow-list, SSO sign-out, alerts, API keys and the audit view (ADR 0030). */
 export default function Security({ base }: { base: string }) {
   const s = useApi<SecuritySettings>(`${base}/security`, 0);
   const alerts = useApi<Alert[]>(`${base}/security/alerts?status=all`, 60_000);

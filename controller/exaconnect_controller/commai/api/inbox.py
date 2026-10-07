@@ -13,7 +13,7 @@ from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field
 
 from ... import audit, db
-from ...api.deps import UserDep, current_user
+from ...api.deps import UserDep, check_product, current_user
 from .. import access, attachments, inbox, presence
 from .common import errors, page, page_after
 
@@ -501,7 +501,9 @@ def list_teams(
 def _set_members(conn, customer_id: str, team_id: Any, members: list[str]) -> None:
     for uid in members:
         ok = conn.execute(
-            "SELECT 1 FROM users WHERE id = %s AND (customer_id = %s OR role = 'admin')", (uid, customer_id)
+            """SELECT 1 FROM users u WHERE u.id = %s AND (u.role = 'admin' OR EXISTS (
+                 SELECT 1 FROM org_memberships m WHERE m.user_id = u.id AND m.customer_id = %s))""",
+            (uid, customer_id),
         ).fetchone()
         if not ok:
             raise HTTPException(400, "Every team member must belong to this business.")
@@ -571,9 +573,11 @@ def list_members(
             """SELECT u.id, u.email, COALESCE(m.seat, 'agent') AS seat, COALESCE(m.skills, '{}') AS skills,
                       COALESCE(m.languages, '{en}') AS languages, COALESCE(m.available, true) AS available,
                       (SELECT count(*) FROM conversations c WHERE c.assignee_id = u.id
-                       AND c.state NOT IN ('resolved', 'snoozed')) AS open_conversations
-               FROM users u LEFT JOIN commai_members m ON m.user_id = u.id AND m.customer_id = %(c)s
-               WHERE u.customer_id = %(c)s ORDER BY u.email""",
+                       AND c.state NOT IN ('resolved', 'snoozed')) AS open_conversations,
+                      om.role AS org_role
+               FROM org_memberships om JOIN users u ON u.id = om.user_id
+               LEFT JOIN commai_members m ON m.user_id = u.id AND m.customer_id = %(c)s
+               WHERE om.customer_id = %(c)s ORDER BY u.email""",
             {"c": customer_id},
         ).fetchall()
     return rows if cursor is None else page_after(rows, cursor, limit)
@@ -596,7 +600,9 @@ def update_member(customer_id: str, user_id: str, body: MemberIn, user: UserDep)
             _no_internal(conn, user, customer_id)
         elif body.seat == "agent" and access.seat(conn, user, customer_id) == "internal":
             raise HTTPException(403, "Ask an administrator to change your seat.")
-        ok = conn.execute("SELECT 1 FROM users WHERE id = %s AND customer_id = %s", (user_id, customer_id)).fetchone()
+        ok = conn.execute(
+            "SELECT 1 FROM org_memberships WHERE user_id = %s AND customer_id = %s", (user_id, customer_id)
+        ).fetchone()
         if not ok:
             raise HTTPException(404, "Person not found in this business.")
         row = conn.execute(
@@ -752,6 +758,7 @@ async def live_updates(websocket: WebSocket, customer_id: str) -> None:
         if not auth and cookie_token:
             auth = f"Bearer {cookie_token}"
         user = await asyncio.to_thread(_ws_user, websocket, auth)
+        check_product(user, "commai")
         access.check(user, customer_id, "commai:read")
     except (HTTPException, ValueError, TimeoutError, json.JSONDecodeError):
         await websocket.close(code=4401)
@@ -785,7 +792,7 @@ async def live_updates(websocket: WebSocket, customer_id: str) -> None:
 
 
 async def _send_presence(websocket: WebSocket, customer_id: str, since: dt.datetime) -> dt.datetime:
-    """Typing and viewing changes (ADR 0032): {"type": "presence", "data": {...}}, never a webhook event."""
+    """Typing and viewing changes (ADR 0038): {"type": "presence", "data": {...}}, never a webhook event."""
     rows = await asyncio.to_thread(_presence_after, customer_id, since)
     for r in rows:
         since = max(since, r["seen_at"])
@@ -799,7 +806,7 @@ def _presence_after(customer_id: str, since: dt.datetime) -> list[dict]:
 
 
 def _ws_user(websocket: WebSocket, auth: str | None):
-    class _Req:  # current_user reads the path; the security guard (ADR 0024) the address and app
+    class _Req:  # current_user reads the path; the security guard (ADR 0030) the address and app
         url = websocket.url
         headers = getattr(websocket, "headers", {})
         client = getattr(websocket, "client", None)

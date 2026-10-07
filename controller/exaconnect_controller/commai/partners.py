@@ -1,4 +1,4 @@
-"""Partners: resellers and managed-service providers (ADR 0025).
+"""Partners: resellers and managed-service providers (ADR 0031).
 
 A partner looks after several businesses. The model keeps every existing
 tenant check in force:

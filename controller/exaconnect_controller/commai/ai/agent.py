@@ -63,7 +63,7 @@ def _who(m: dict) -> str:
 
 def history(conn: psycopg.Connection, customer_id: Any, conversation_id: Any, limit: int) -> list[dict]:
     """Customer-facing messages only (inbox.messages never reads notes). A voice
-    note's transcript counts as the customer's words (ADR 0026)."""
+    note's transcript counts as the customer's words (ADR 0032)."""
     msgs = inbox.messages(conn, customer_id, conversation_id)[-limit:]
     spoken = attachments.transcripts(conn, customer_id, msgs)
     out = []
@@ -224,7 +224,7 @@ def _run(conn: psycopg.Connection, customer_id: Any, conv: dict, message_id: Any
         (conv["id"],),
     ).fetchone()
     last_text = last_msg["body"] if last_msg else ""
-    # Attachments and voice notes (ADR 0026): a voice note's words are the
+    # Attachments and voice notes (ADR 0032): a voice note's words are the
     # customer's words; other files go to the model as data.
     files = attachments.for_message(conn, customer_id, last_msg) if last_msg else {"files": [], "unreadable": []}
     if files.get("transcript"):

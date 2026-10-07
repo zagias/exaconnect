@@ -86,7 +86,7 @@ def put_profile(customer_id: str, body: ProfileIn, user: UserDep) -> dict:
         fields["languages"] = sorted({x.strip().lower()[:5] for x in fields["languages"] if x.strip()})
     with db.tx() as conn:
         _admin(conn, user, customer_id)
-        # Tone and instructions go live only after the evaluation suite passes (ADR 0026).
+        # Tone and instructions go live only after the evaluation suite passes (ADR 0032).
         fields, later = governance.split_profile_change(conn, customer_id, fields)
         candidate = None
         if later:

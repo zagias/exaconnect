@@ -1,4 +1,4 @@
-"""Cursor pagination for lists (ADR 0033).
+"""Cursor pagination for lists (ADR 0039).
 
 A list endpoint keeps its old answer (a plain list) when no `cursor` is
 given. Passing `cursor` (empty for the first page) returns

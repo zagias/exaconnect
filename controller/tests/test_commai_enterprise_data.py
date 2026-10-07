@@ -1,4 +1,4 @@
-"""Data governance (ADR 0024): retention with legal hold, subject export and
+"""Data governance (ADR 0030): retention with legal hold, subject export and
 erasure, full business export, processing locations."""
 
 from __future__ import annotations

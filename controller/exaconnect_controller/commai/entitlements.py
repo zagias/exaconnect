@@ -1,4 +1,4 @@
-"""Module entitlements (ADR 0033).
+"""Module entitlements (ADR 0039).
 
 CommAI is sold as four modules: messaging, voice, AI agents and automation.
 The shared inbox, contacts, notes, the developer platform, the platform

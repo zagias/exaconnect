@@ -30,9 +30,9 @@ def _wg() -> str:
     return base64.b64encode(k.public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)).decode()
 
 
-def _seed() -> dict:
+def _seed(sat: str = "leo") -> dict:
     with db.tx() as conn:
-        return seed_lab(conn)
+        return seed_lab(conn, sat)
 
 
 def _enrol(client, tokens, name):

@@ -1,5 +1,5 @@
 # ruff: noqa: F811  (pytest fixtures imported from test_commai_automation_helpers)
-"""ExaCarib's support queue, replies and internal notes (ADR 0033)."""
+"""ExaCarib's support queue, replies and internal notes (ADR 0039)."""
 
 from exaconnect_controller import db
 

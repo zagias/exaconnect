@@ -1,6 +1,6 @@
 # Languages, quality, governance and team: operator note
 
-Decision record: ADR 0026.
+Decision record: ADR 0032.
 
 ## Switching a language on
 

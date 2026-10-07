@@ -1,4 +1,4 @@
-"""AI governance (ADR 0026): evaluation suites run before any model or
+"""AI governance (ADR 0032): evaluation suites run before any model or
 instruction change goes live, results are kept, and daily action limits per role."""
 
 from __future__ import annotations

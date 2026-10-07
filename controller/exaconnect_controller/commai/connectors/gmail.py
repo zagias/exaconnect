@@ -1,4 +1,4 @@
-"""Gmail / Google Workspace mail through the Gmail API v1 (ADR 0028).
+"""Gmail / Google Workspace mail through the Gmail API v1 (ADR 0034).
 
 - Send: ``POST /gmail/v1/users/me/messages/send`` with the RFC 5322 message
   base64url-encoded in ``raw``. The Message-ID is derived from the action's

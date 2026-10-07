@@ -9,7 +9,7 @@ import "./automation.css";
 import "./catalogue.css";
 
 /* Shapes from controller/exaconnect_controller/commai/api/integrations_catalogue.py and
-   automation/catalogue.py (ADR 0028). The page is drawn from the connector registry:
+   automation/catalogue.py (ADR 0034). The page is drawn from the connector registry:
    a new connector appears here with no change to this file. */
 
 interface ActionInfo {

@@ -1,4 +1,4 @@
-"""AI onboarding (ADR 0020, ADR 0033).
+"""AI onboarding (ADR 0020, ADR 0039).
 
 The business gives its website (pasted text, or an address CommAI fetches
 from the public internet only: see website.py), business type, opening

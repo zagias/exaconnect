@@ -1,4 +1,4 @@
-"""Support cases: ExaCarib's queue, and replies on both sides (ADR 0033).
+"""Support cases: ExaCarib's queue, and replies on both sides (ADR 0039).
 
 ExaCarib admins: /exacarib/support/cases (every business). A business's
 admins: /customers/{id}/support-cases/{case}/thread and .../replies; they

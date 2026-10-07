@@ -1,4 +1,4 @@
-"""API versions, deprecation and the changelog (ADR 0025, docs/commai/api-policy.md).
+"""API versions, deprecation and the changelog (ADR 0031, docs/commai/api-policy.md).
 
 - The API version is in the path (/api/v1). Within v1, changes only add.
 - A deprecated endpoint keeps working until its sunset date (at least six

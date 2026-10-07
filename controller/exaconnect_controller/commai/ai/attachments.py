@@ -1,4 +1,4 @@
-"""What the AI reads from attachments and voice notes (ADR 0026).
+"""What the AI reads from attachments and voice notes (ADR 0032).
 
 A file a customer sends (website chat today; channel_files) is read once and
 the result kept in attachment_readings:

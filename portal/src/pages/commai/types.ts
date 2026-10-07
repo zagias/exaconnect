@@ -56,7 +56,7 @@ export interface Attachment {
   size: number;
 }
 
-/** Someone typing in a conversation, from the inbox live feed (ADR 0032). */
+/** Someone typing in a conversation, from the inbox live feed (ADR 0038). */
 export interface Typing {
   name: string;
   who_kind: "user" | "contact";

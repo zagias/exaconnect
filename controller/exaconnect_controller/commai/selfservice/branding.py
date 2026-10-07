@@ -1,8 +1,8 @@
-"""How a business looks on its help centre (ADR 0031).
+"""How a business looks on its help centre (ADR 0037).
 
 Read only through `branding()`. The business's name always shows (its customers
 know it by that). Colour: the help centre's own setting, else the business's
-white-label brand (ADR 0025), else its first website chat key's colour. The logo
+white-label brand (ADR 0031), else its first website chat key's colour. The logo
 is the business's own white-label logo. The "runs on" line names the managing
 partner's product when that partner white-labels the business, else ExaCarib.
 """

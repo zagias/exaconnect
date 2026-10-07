@@ -66,7 +66,7 @@ const SECTIONS = [
   ["keys", "API keys"],
 ] as const;
 
-/** My settings: only the signed-in person's own settings (ADR 0031). */
+/** My settings: only the signed-in person's own settings (ADR 0037). */
 export default function MySettings() {
   const base = useCommaiBase();
   const s = useApi<MySettingsData>(base ? `${base}/me/settings` : null, 0);

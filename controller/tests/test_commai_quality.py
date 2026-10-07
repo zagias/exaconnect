@@ -1,4 +1,4 @@
-"""AI quality (ADR 0026): review against the business's own criteria with
+"""AI quality (ADR 0032): review against the business's own criteria with
 quotes as evidence, the knowledge-gap report with drafted articles, follow-up
 reminders from promises, and what the AI reads from attachments and voice notes."""
 

@@ -1,4 +1,4 @@
-"""The approvals queue and the impact preview worked out at propose time (ADR 0033)."""
+"""The approvals queue and the impact preview worked out at propose time (ADR 0039)."""
 
 import datetime as dt
 

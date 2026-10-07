@@ -1,5 +1,5 @@
 # ruff: noqa: F401, F811  (pytest fixtures imported from the helpers)
-"""Shopify connector (ADR 0029): verified order lookup, refunds and
+"""Shopify connector (ADR 0035): verified order lookup, refunds and
 cancellations as sensitive actions, GraphQL throttling, webhook HMAC."""
 
 import json

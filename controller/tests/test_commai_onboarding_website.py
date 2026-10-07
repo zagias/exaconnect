@@ -1,6 +1,6 @@
 # ruff: noqa: F811  (pytest fixtures imported from test_commai_automation_helpers)
 """Onboarding reads a website by address (public addresses only), structured
-opening hours, and channel set-up drafts (ADR 0033)."""
+opening hours, and channel set-up drafts (ADR 0039)."""
 
 import pytest
 

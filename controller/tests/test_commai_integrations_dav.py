@@ -1,5 +1,5 @@
 # ruff: noqa: F811  (pytest fixtures imported from commai_connector_kit)
-"""CalDAV and CardDAV (ADR 0028), with iCalendar and vCard: the stand-in, a
+"""CalDAV and CardDAV (ADR 0034), with iCalendar and vCard: the stand-in, a
 mock DAV server for the real path, idempotent writes, ETags, sync tokens,
 rate limits, expired sign-in and tenant isolation."""
 

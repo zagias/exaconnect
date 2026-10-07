@@ -1,6 +1,6 @@
 # LiveKit: AI on phone calls
 
-ADR 0027. This is self-hosted LiveKit, run under the compose profile `voice`
+ADR 0033. This is self-hosted LiveKit, run under the compose profile `voice`
 (not started by default):
 
 ```

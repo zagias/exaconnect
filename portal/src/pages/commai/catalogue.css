@@ -1,4 +1,4 @@
-/* The app catalogue (ADR 0028). Brand tokens come from brand.css. */
+/* The app catalogue (ADR 0034). Brand tokens come from brand.css. */
 
 .cat-jump { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 24px; }
 .cat-jump a { border: 1px solid var(--line); border-radius: 5px; padding: 4px 10px; background: var(--card);

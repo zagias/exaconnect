@@ -1,4 +1,4 @@
-"""CommAI self-service (ADR 0031): "My settings" for a business's staff and the
+"""CommAI self-service (ADR 0037): "My settings" for a business's staff and the
 help centre for the business's own customers.
 
 - staff: a person's own profile, language, notifications, availability and

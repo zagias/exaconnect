@@ -7,7 +7,7 @@ import { DraftLabel, useT } from "./i18n";
 import { useCommaiBase } from "./lib";
 import "./quality.css";
 
-/* Shapes from controller/exaconnect_controller/commai/api/quality.py and team.py (ADR 0026). */
+/* Shapes from controller/exaconnect_controller/commai/api/quality.py and team.py (ADR 0032). */
 interface Criterion {
   id: string;
   text: string;

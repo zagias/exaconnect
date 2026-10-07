@@ -1,4 +1,4 @@
-"""The browser phone: own-extension sign-in details and the Verto profile (ADR 0033)."""
+"""The browser phone: own-extension sign-in details and the Verto profile (ADR 0039)."""
 
 import pathlib
 import xml.etree.ElementTree as ET

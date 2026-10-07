@@ -1,4 +1,4 @@
-"""Calendly connector through the Calendly API v2 (ADR 0028).
+"""Calendly connector through the Calendly API v2 (ADR 0034).
 
 - Read: event types (``GET /event_types?user=``) and a customer's scheduled
   events (``GET /scheduled_events?user=&invitee_email=``), following

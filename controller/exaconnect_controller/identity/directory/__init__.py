@@ -1,10 +1,10 @@
-"""Directory templates and connectors (ADR 0030): guided set-ups for Microsoft
+"""Directory templates and connectors (ADR 0036): guided set-ups for Microsoft
 Entra ID, Google Workspace, Okta, JumpCloud, OneLogin, Ping Identity, Auth0,
 on-premises Active Directory and generic LDAP, with pull connectors for
 Microsoft Graph, the Google Directory API and LDAPS.
 
 Each provider is a go-live feature ("directory-<provider>"): it starts off and
-a business can connect it only once ExaCarib has switched it on (ADR 0022)."""
+a business can connect it only once ExaCarib has switched it on (ADR 0028)."""
 
 from ...commai import golive
 from . import sync  # noqa: F401 - registers the "directory.sync" job

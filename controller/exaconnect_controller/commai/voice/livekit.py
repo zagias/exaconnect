@@ -1,4 +1,4 @@
-"""AI on phone calls through LiveKit (ADR 0027).
+"""AI on phone calls through LiveKit (ADR 0033).
 
 How a phone call reaches the AI agent:
 

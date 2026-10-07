@@ -1,4 +1,4 @@
--- More ready-made connectors (ADR 0029): helpdesks, team chat, commerce,
+-- More ready-made connectors (ADR 0035): helpdesks, team chat, commerce,
 -- payments and knowledge sources. Idempotent.
 
 -- A helpdesk ticket linked to a CommAI conversation; the status is synced

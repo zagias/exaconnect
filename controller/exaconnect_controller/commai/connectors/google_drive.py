@@ -1,4 +1,4 @@
-"""Google Drive connector (ADR 0029): folders a business picks become
+"""Google Drive connector (ADR 0035): folders a business picks become
 knowledge sources a person approves.
 
 Written from the Drive API v3 (files.list, files.get alt=media,

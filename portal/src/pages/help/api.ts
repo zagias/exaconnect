@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 // The help centre is public: it doesn't use the staff session. An end user's
 // session is an HttpOnly cookie scoped to /api/v1/commai/help/<slug>, set by
-// the controller (ADR 0031). Writes carry X-Requested-With: exa-help.
+// the controller (ADR 0037). Writes carry X-Requested-With: exa-help.
 
 export class HelpError extends Error {
   constructor(public status: number, message: string) {

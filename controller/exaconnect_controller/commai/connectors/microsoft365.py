@@ -1,4 +1,4 @@
-"""Microsoft 365 / Outlook connector through Microsoft Graph v1.0 (ADR 0028):
+"""Microsoft 365 / Outlook connector through Microsoft Graph v1.0 (ADR 0034):
 calendar free times, bookings and cancellations, and mail.
 
 Microsoft does not offer CalDAV for Exchange Online, so Outlook calendars use

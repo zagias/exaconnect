@@ -1,4 +1,4 @@
-# Self-hosted LiveKit server for AI on phone calls (ADR 0027). Compose profile "voice".
+# Self-hosted LiveKit server for AI on phone calls (ADR 0033). Compose profile "voice".
 # The API key pair comes from the environment (LIVEKIT_KEYS="<key>: <secret>"),
 # never from this file. The controller uses the same pair as EXA_LIVEKIT_API_KEY
 # and EXA_LIVEKIT_API_SECRET.

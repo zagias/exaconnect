@@ -1,4 +1,4 @@
-"""Facebook Messenger, Instagram direct messages and Telegram (ADR 0023).
+"""Facebook Messenger, Instagram direct messages and Telegram (ADR 0029).
 
 Three more channels on the phase 2 interface (ADR 0018): accounts live in
 ``channel_accounts``, inbound messages go through ``messaging.receive_one`` (a

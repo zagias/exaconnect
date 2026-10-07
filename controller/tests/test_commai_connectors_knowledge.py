@@ -1,5 +1,5 @@
 # ruff: noqa: F401, F811  (pytest fixtures imported from the helpers)
-"""Knowledge-source connectors (ADR 0029): Google Drive and OneDrive/SharePoint
+"""Knowledge-source connectors (ADR 0035): Google Drive and OneDrive/SharePoint
 files become knowledge sources a person approves; changes need approving
 again; files the business can no longer see are removed."""
 

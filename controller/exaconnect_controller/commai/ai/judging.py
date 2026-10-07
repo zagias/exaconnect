@@ -1,4 +1,4 @@
-"""Judging a conversation against written criteria (ADR 0026).
+"""Judging a conversation against written criteria (ADR 0032).
 
 Used by quality review (the business's own criteria) and by the evaluation
 suite (expected and forbidden behaviour). The model does the judging; this

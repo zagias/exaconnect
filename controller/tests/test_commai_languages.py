@@ -1,4 +1,4 @@
-"""Languages (ADR 0026): catalogues, the go-live registry gate, reviewer
+"""Languages (ADR 0032): catalogues, the go-live registry gate, reviewer
 sign-off, each person's language, the AI's reply languages and the widget."""
 
 from __future__ import annotations

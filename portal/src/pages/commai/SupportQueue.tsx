@@ -6,7 +6,7 @@ import { Card, EmptyState, PageHead, useAction } from "../../ui";
 import { when } from "./lib";
 import "./automation.css";
 
-/* Shapes from controller/exaconnect_controller/commai/automation/support.py (ADR 0033). */
+/* Shapes from controller/exaconnect_controller/commai/automation/support.py (ADR 0039). */
 
 export interface Reply {
   id: number;

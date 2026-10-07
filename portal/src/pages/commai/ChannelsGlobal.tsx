@@ -5,7 +5,7 @@ import { ErrorNote } from "../../components";
 import { Card, useAction } from "../../ui";
 import { when } from "./lib";
 
-/* Phase 3 channels (ADR 0023): Messenger, Instagram, Telegram, WhatsApp through
+/* Phase 3 channels (ADR 0029): Messenger, Instagram, Telegram, WhatsApp through
    Meta's Cloud API, and click-to-WhatsApp links. Shapes from
    controller/exaconnect_controller/commai/api/channels_global.py. */
 

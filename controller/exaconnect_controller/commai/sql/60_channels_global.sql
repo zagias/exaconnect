@@ -1,4 +1,4 @@
--- CommAI phase 3 (ADR 0023): Messenger, Instagram and Telegram channels, the
+-- CommAI phase 3 (ADR 0029): Messenger, Instagram and Telegram channels, the
 -- country capability matrix's SMS rules, and SMS routing across carriers.
 -- Applied after 55_golive.sql, idempotently, at startup.
 

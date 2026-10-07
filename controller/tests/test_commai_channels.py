@@ -555,7 +555,7 @@ def test_offline_form_callbacks_hours_and_mode(client):
 def test_sms_opt_out_words_and_daily_country_limits(client):
     b = business(client)
     u = base(b)
-    switch_on("country", "TT", b["id"])  # countries start off (ADR 0023)
+    switch_on("country", "TT", b["id"])  # countries start off (ADR 0029)
     sms = _account(client, b, "sms", "+18685550100", settings={"daily_limits": {"TT": 1, "*": 5}})
     _wa_inbound(client, sms, "What's my balance?", "SM1")
     conv = _conv_for(b, "sms")

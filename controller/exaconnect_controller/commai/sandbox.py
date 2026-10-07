@@ -1,4 +1,4 @@
-"""Sandboxes and sandbox keys (ADR 0025).
+"""Sandboxes and sandbox keys (ADR 0031).
 
 A sandbox is a copy of a business: its own customers row (``sandbox_of`` points
 at the real one) with the same CommAI settings and a simulated copy of each
@@ -55,6 +55,12 @@ def _account(conn: psycopg.Connection, sandbox_id: Any) -> dict:
                VALUES (%s, %s, 'customer', %s, %s, 'Sandbox keys', 'sandbox') RETURNING *""",
             (f"sandbox+{sandbox_id}@sandbox.invalid", UNUSABLE_PASSWORD, sandbox_id, SANDBOX_SCOPES),
         ).fetchone()
+        # Sandbox keys set the sandbox up as well (channels, settings): an admin there
+        # (ADR 0023), still limited to the sandbox scopes.
+        conn.execute(
+            "UPDATE org_memberships SET role = 'admin' WHERE customer_id = %s AND user_id = %s",
+            (sandbox_id, row["id"]),
+        )
     return row
 
 

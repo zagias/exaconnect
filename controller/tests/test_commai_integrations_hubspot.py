@@ -1,4 +1,4 @@
-"""HubSpot, extended for ADR 0028: update_contact (PATCH) through the action
+"""HubSpot, extended for ADR 0034: update_contact (PATCH) through the action
 service, and app webhooks checked with X-HubSpot-Signature-v3. HTTP is faked;
 the signature is computed here from HubSpot's published recipe, not our code."""
 

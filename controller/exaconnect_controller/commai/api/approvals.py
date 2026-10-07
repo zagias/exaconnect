@@ -1,4 +1,4 @@
-"""The approvals queue (ADR 0033): every sensitive action and workflow step
+"""The approvals queue (ADR 0039): every sensitive action and workflow step
 waiting for a person, with what it will do. Approving and rejecting use the
 existing endpoints (/actions/{id}/approve, /workflow-runs/{id}/approve)."""
 

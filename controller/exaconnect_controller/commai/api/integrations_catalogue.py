@@ -1,4 +1,4 @@
-"""Integration catalogue and standard interfaces API (ADR 0028).
+"""Integration catalogue and standard interfaces API (ADR 0034).
 
 Signed in, under /api/v1/commai/customers/{customer_id}: the catalogue grouped
 by category, credentials entry, inbound webhooks, the business's own REST

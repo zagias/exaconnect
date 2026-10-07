@@ -1,4 +1,4 @@
--- Go-live registry (ADR 0022): every country, channel, language, carrier and
+-- Go-live registry (ADR 0028): every country, channel, language, carrier and
 -- region starts off, and an ExaCarib admin switches it on only after its
 -- written operating and security criteria are recorded as met.
 

@@ -1,4 +1,4 @@
-"""Module entitlements (ADR 0033): messaging, voice, AI agents and automation
+"""Module entitlements (ADR 0039): messaging, voice, AI agents and automation
 are sold separately and checked on the server for each module's routes."""
 
 from exaconnect_controller import db

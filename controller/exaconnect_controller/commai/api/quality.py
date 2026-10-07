@@ -1,4 +1,4 @@
-"""AI quality and governance API (ADR 0026): quality criteria and reviews,
+"""AI quality and governance API (ADR 0032): quality criteria and reviews,
 flags, the knowledge-gap report with drafted articles, follow-up reminders,
 what the AI read from attachments, evaluation suites, candidates and daily
 action limits.

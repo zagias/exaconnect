@@ -1,4 +1,4 @@
-"""CommAI voice stage 5 (ADR 0027): numbers by country behind the go-live
+"""CommAI voice stage 5 (ADR 0033): numbers by country behind the go-live
 registry, porting with documents, rejection, rescheduling, cut-over and roll
 back, emergency addresses and island rules, carrier routing with failover and
 trunk health, revenue share fraud protection, LiveKit wiring and tenant isolation."""

@@ -1,4 +1,4 @@
-"""Number porting (ADR 0027): a port order with its own status timeline.
+"""Number porting (ADR 0033): a port order with its own status timeline.
 
     draft --submit--> submitted --provider--> documents_needed --upload--> submitted
                                   \\--> rejected --correct and resubmit--> submitted

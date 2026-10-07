@@ -1,4 +1,4 @@
--- CommAI integration catalogue and standard interfaces (ADR 0028). Idempotent.
+-- CommAI integration catalogue and standard interfaces (ADR 0034). Idempotent.
 
 -- Outbound webhooks: the delivery format is a choice per endpoint. 'exacarib'
 -- is the original v1 body; 'cloudevents' is a CloudEvents 1.0 structured JSON

@@ -47,7 +47,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = () => {
-    // A single sign-on session also signs out of the company's provider (ADR 0024).
+    // A single sign-on session also signs out of the company's provider (ADR 0030).
     fetch("/api/v1/auth/logout", { method: "POST", credentials: "same-origin", headers: { "X-Requested-With": "exa-portal" } })
       .then((r) => {
         const next = r.headers.get("X-Exa-Logout-Url");
@@ -289,6 +289,11 @@ function SignIn() {
               {busy ? "Signing in…" : "Sign in"}
             </button>
           </form>
+          <p className="signin-foot">
+            <a className="link" href={`/forgot?email=${encodeURIComponent(email)}`}>
+              Forgotten your password?
+            </a>
+          </p>
         </>
       )}
 
@@ -331,7 +336,7 @@ function SignIn() {
           </p>
         </>
       )}
-      <p className="signin-foot">Need an account or a new password? Ask your ExaCarib administrator.</p>
+      <p className="signin-foot">Need an account? Ask your organisation&apos;s administrator.</p>
     </section>
   );
 }

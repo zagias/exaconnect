@@ -1,4 +1,4 @@
-"""Partners and white-label (ADR 0025): links the business accepts and revokes,
+"""Partners and white-label (ADR 0031): links the business accepts and revokes,
 switching with granted scopes only, tenant isolation, statements, branding
 validation and custom-domain verification."""
 

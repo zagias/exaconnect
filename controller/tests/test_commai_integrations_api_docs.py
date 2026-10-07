@@ -1,4 +1,4 @@
-"""CommAI's published OpenAPI and AsyncAPI documents (ADR 0028): served without
+"""CommAI's published OpenAPI and AsyncAPI documents (ADR 0034): served without
 sign-in, structurally valid, complete, and consistent with what is sent."""
 
 from __future__ import annotations

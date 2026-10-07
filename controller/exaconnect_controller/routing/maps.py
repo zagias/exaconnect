@@ -32,22 +32,45 @@ def class_allows_sat(cls: dict, customer: dict, site: dict) -> bool:
     return bool(cls["allow_satellite"]) or bool(customer["storm_allow_bulk_sat"])
 
 
+def geo_blocks(cls: dict, path: dict) -> bool:
+    """Real-time classes (voice) never use a GEO satellite path: its round
+    trip is 500 ms or more, past what a call can bear (ITU-T G.114) and far
+    past voice's 150 ms SLA, so a call there is worse than no call. Business
+    may still fall back to GEO in Storm Mode. LEO is fine for both."""
+    return path.get("underlay_type") == "geo" and cls.get("priority") == "realtime"
+
+
 def candidates(cls: dict, customer: dict, site: dict, site_paths: list[dict]) -> list[str]:
     """The paths a class may use, in preference order: terrestrial first, the
     class's preferred path (if any) first among equals, then the configured order."""
     pref = cls.get("preferred_path")
     out = []
     for p in sorted(site_paths, key=lambda p: (p["satellite"], p["name"] != pref, p["ordinal"])):
-        if p["satellite"] and not class_allows_sat(cls, customer, site):
+        if p["satellite"] and (not class_allows_sat(cls, customer, site) or geo_blocks(cls, p)):
             continue
         out.append(p["name"])
     return out
 
 
-def pause_if_none(cls: dict, customer: dict, site: dict) -> bool:
-    """A class that may never use satellite pauses when only satellite is
-    left, instead of falling back to BGP (which would put it there)."""
-    return not cls["allow_satellite"] and not (site.get("storm_mode") and customer["storm_allow_bulk_sat"])
+def pause_if_none(cls: dict, customer: dict, site: dict, site_paths: list[dict] | None = None) -> bool:
+    """A class that may not use satellite pauses when only satellite is left,
+    instead of falling back to BGP (which would put it there). That is bulk
+    unless the admin allowed it, and a real-time class at a site whose only
+    satellite is GEO."""
+    if not cls["allow_satellite"] and not (site.get("storm_mode") and customer["storm_allow_bulk_sat"]):
+        return True
+    sats = [p for p in site_paths or [] if p["satellite"]]
+    return bool(sats) and all(geo_blocks(cls, p) for p in sats)
+
+
+def class_sla(cls: dict) -> dict[str, float]:
+    """The class's SLA limits, for the agent's own check while the controller
+    is silent. Only the limits that are set; an older agent ignores the key."""
+    out = {}
+    for key in ("max_latency_ms", "max_jitter_ms", "max_loss_pct"):
+        if cls.get(key) is not None:
+            out[key] = float(cls[key])
+    return out
 
 
 def load(conn: psycopg.Connection, customer_id: Any) -> dict[str, Any]:
@@ -123,7 +146,8 @@ def site_rules(inv: dict[str, Any], site: dict) -> list[dict[str, Any]]:
         cands = candidates(cls, customer, site, inv["links"].get(site["id"], []))
         chosen = None if customer["shadow_mode"] else inv["steering"].get((site["id"], cls["name"]))
         order = ([chosen] if chosen in cands else []) + [c for c in cands if c != chosen]
-        rules.append({"class": cls["name"], "paths": order, "pause_if_none": pause_if_none(cls, customer, site)})
+        pause = pause_if_none(cls, customer, site, inv["links"].get(site["id"], []))
+        rules.append({"class": cls["name"], "paths": order, "pause_if_none": pause})
     return rules
 
 
@@ -134,15 +158,16 @@ def build(inv: dict[str, Any], site: dict) -> dict[str, Any]:
     ]
     classes = []
     for i, c in enumerate(inv["classes"]):
-        classes.append(
-            {
-                "name": c["name"],
-                "mark": MARK_BASE + i + 1,
-                "dscp": sorted(set(c["dscp"] or [])),
-                "ports": parse_ports(c["ports"] or ""),
-                "subnets": [str(s) for s in (c["subnets"] or [])],
-            }
-        )
+        entry: dict[str, Any] = {
+            "name": c["name"],
+            "mark": MARK_BASE + i + 1,
+            "dscp": sorted(set(c["dscp"] or [])),
+            "ports": parse_ports(c["ports"] or ""),
+            "subnets": [str(s) for s in (c["subnets"] or [])],
+        }
+        if sla := class_sla(c):
+            entry["sla"] = sla
+        classes.append(entry)
     storm = bool(site["storm_mode"])
     if site["kind"] == "pop":
         rules = []

@@ -1,4 +1,4 @@
-"""Data exchange in standard formats (ADR 0028): CSV (RFC 4180) and vCard.
+"""Data exchange in standard formats (ADR 0034): CSV (RFC 4180) and vCard.
 
 - Contacts out as CSV or vCard 4.0; contacts in from CSV or vCard (3.0 or
   4.0), matched by email then phone so an import run twice changes nothing.

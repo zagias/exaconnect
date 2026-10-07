@@ -1,4 +1,4 @@
-"""Real-shaped SCIM request sequences per provider (ADR 0030), as each one
+"""Real-shaped SCIM request sequences per provider (ADR 0036), as each one
 sends them: create, look up, update, group membership, switch off. Used by
 the connection test (a dry run rolled back) and by the tests through the
 real SCIM endpoints. {email}, {user_id} and {group_id} are filled in.

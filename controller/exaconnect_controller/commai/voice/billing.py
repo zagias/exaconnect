@@ -273,7 +273,7 @@ def authorise(
 ) -> dict:
     """May this outbound call go ahead? -> {"allowed", "reason", "route"}, and
     "code" when refused (see refused()).
-    Emergency numbers (every island's, ADR 0027) are never stopped. Unusual
+    Emergency numbers (every island's, ADR 0033) are never stopped. Unusual
     patterns raise an alert; revenue share fraud rules (fraud.py) can stop a
     call or suspend international calling. "route" is the carriers to try, in
     order (None: the single provider)."""
@@ -959,7 +959,7 @@ def reconcile(conn, customer_id, period: dt.date) -> dict:
     estimate = Decimal(0)
     prov = providers.get()
     if not prov.live:
-        # A call carried by a named carrier is costed from that carrier's rate sheet (ADR 0027).
+        # A call carried by a named carrier is costed from that carrier's rate sheet (ADR 0033).
         estimate = sum(
             (
                 money(c["carrier_cost"])

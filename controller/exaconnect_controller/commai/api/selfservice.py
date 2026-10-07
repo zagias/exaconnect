@@ -1,4 +1,4 @@
-"""Self-service API (ADR 0031).
+"""Self-service API (ADR 0037).
 
 - `router` (signed in, under /customers/{customer_id}):
   - /me/...: the signed-in person's own settings. The person is always the
@@ -289,7 +289,7 @@ class DataRequestIn(BaseModel):
 @router.post("/help-centre/data-requests/{request_id}")
 def handle_data_request(customer_id: str, request_id: str, body: DataRequestIn, user: UserDep) -> dict:
     """Close a request from the help centre. "done" carries it out through the
-    business's data governance (ADR 0024): a download is recorded as a subject
+    business's data governance (ADR 0030): a download is recorded as a subject
     export, a deletion erases or anonymises the contact. A legal hold refuses it."""
     access.check(user, customer_id, "commai:admin")
     with db.tx() as conn, errors():

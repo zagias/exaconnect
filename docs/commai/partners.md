@@ -1,6 +1,6 @@
 # Partners, white-label, regions and the developer platform
 
-Decision record: ADR 0025. Code: `commai/partners.py`, `branding.py`,
+Decision record: ADR 0031. Code: `commai/partners.py`, `branding.py`,
 `regions.py`, `oauth.py`, `sandbox.py`, `apipolicy.py`, routers in
 `commai/api/partners.py`, `regions.py`, `developer.py`, SQL in
 `commai/sql/62_partners.sql`. Portal: CommAI > Partners (or Partners and apps),

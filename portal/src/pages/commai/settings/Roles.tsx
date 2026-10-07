@@ -37,7 +37,7 @@ interface RolesData {
   people: Person[];
 }
 
-/** Custom roles from a fixed permission list, given per person and optionally per team (ADR 0024). */
+/** Custom roles from a fixed permission list, given per person and optionally per team (ADR 0030). */
 export default function Roles({ base }: { base: string }) {
   const r = useApi<RolesData>(`${base}/roles`, 0);
   const teams = useApi<{ id: string; name: string }[]>(`${base}/teams`, 0);

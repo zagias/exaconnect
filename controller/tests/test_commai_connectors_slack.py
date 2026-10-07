@@ -1,5 +1,5 @@
 # ruff: noqa: F401, F811  (pytest fixtures imported from the helpers)
-"""Slack connector (ADR 0029): sign-in, staff messages that respect the
+"""Slack connector (ADR 0035): sign-in, staff messages that respect the
 business's sharing setting, approval buttons checked with Slack request
 signing and decided by the action service."""
 

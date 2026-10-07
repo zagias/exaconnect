@@ -1,4 +1,4 @@
-"""Salesforce connector (ADR 0028): contacts, leads, opportunities and cases.
+"""Salesforce connector (ADR 0034): contacts, leads, opportunities and cases.
 
 Written from Salesforce's REST API (v61.0): SOQL queries
 (``/query?q=``, following ``nextRecordsUrl``), sObject create

@@ -1,4 +1,4 @@
-"""AI agent and sign-in diagnostics for the platform assistant (ADR 0033).
+"""AI agent and sign-in diagnostics for the platform assistant (ADR 0039).
 
 AI agents: model failures, a high hand-over (escalation) rate, open
 knowledge gaps, and tools the AI tried to use without permission.

@@ -7,7 +7,7 @@ import { useCommaiBase, when, type Page } from "./lib";
 import "./automation.css";
 
 /* Shapes from controller/exaconnect_controller/commai/bill.py, usage.py, ai_supplier.py and
-   api/entitlements.py (ADR 0033). Money arrives as strings and is shown as given. */
+   api/entitlements.py (ADR 0039). Money arrives as strings and is shown as given. */
 
 interface UsageLine {
   family: string;

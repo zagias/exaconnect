@@ -1,5 +1,5 @@
 /*
- * A small Verto client for the browser phone (ADR 0033): JSON-RPC over a
+ * A small Verto client for the browser phone (ADR 0039): JSON-RPC over a
  * secure WebSocket to FreeSWITCH's mod_verto, audio through the browser's
  * WebRTC. Only what a staff phone needs: sign in, call out, answer, hang up,
  * keypad tones and mute. No library from a CDN.

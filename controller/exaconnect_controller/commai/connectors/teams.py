@@ -1,4 +1,4 @@
-"""Microsoft Teams connector (ADR 0029): staff notifications, handover alerts
+"""Microsoft Teams connector (ADR 0035): staff notifications, handover alerts
 and approval requests.
 
 Two Microsoft pieces, both from their public documentation:

@@ -81,6 +81,9 @@ def site_inputs(
             Window(_epoch(r["time"]), r["sent"], r["received"], r["rtt_avg_ms"], r["jitter_ms"])
         )
     use = _utilisation(conn, node_id, now)
+    from ..integrations import notices
+
+    maint = notices.under_maintenance(conn, [lk["link_id"] for lk in links if lk.get("link_id")], now)
     out = {}
     for link in links:
         commit = float(link["commit_mbps"] or 0)
@@ -93,6 +96,7 @@ def site_inputs(
             bfd_down=bfd.get(link["name"]) == "down",
             over_commit=commit > 0 and mbps >= 0.9 * commit,
             windows=windows.get(link["name"], []),
+            maintenance=maint.get(str(link.get("link_id"))),
         )
     return out
 
@@ -117,9 +121,9 @@ def run_customer(
         ).fetchall()
     }
     underlays = {
-        (r["site_id"], r["path"]): r["underlay_interface"]
+        (r["site_id"], r["path"]): r
         for r in conn.execute(
-            "SELECT site_id, path, underlay_interface FROM links WHERE customer_id = %s", (customer_id,)
+            "SELECT id, site_id, path, underlay_interface FROM links WHERE customer_id = %s", (customer_id,)
         )
     }
     made: list[dict] = []
@@ -128,7 +132,12 @@ def run_customer(
             continue
         policy = policy_for(site)
         links = [
-            {**lk, "underlay_interface": underlays[(site["id"], lk["name"])]} for lk in inv["links"].get(site["id"], [])
+            {
+                **lk,
+                "underlay_interface": underlays[(site["id"], lk["name"])]["underlay_interface"],
+                "link_id": underlays[(site["id"], lk["name"])]["id"],
+            }
+            for lk in inv["links"].get(site["id"], [])
         ]
         inputs = site_inputs(conn, site, links, policy, now)
         for cls in inv["classes"]:

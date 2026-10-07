@@ -1,4 +1,4 @@
-"""What the knowledge-source connectors share (ADR 0029): Google Drive and
+"""What the knowledge-source connectors share (ADR 0035): Google Drive and
 OneDrive/SharePoint.
 
 A business picks folders (``folders`` setting); a sync lists them (and

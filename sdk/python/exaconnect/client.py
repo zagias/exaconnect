@@ -78,6 +78,11 @@ class ExaConnect:
         self.decisions = Decisions(self)
         self.storm = Storm(self)
         self.api_keys = ApiKeys(self)
+        self.links = Links(self)
+        self.integrations = Integrations(self)
+        self.hooks = Hooks(self)
+        self.notices = Notices(self)
+        self.onramps = Onramps(self)
 
     def commai(self, customer_id: str | None = None) -> CommAI:
         """CommAI for one business (yours by default): contacts, conversations,
@@ -307,6 +312,9 @@ class Decisions(_Resource):
     def list(self, site_id: str | None = None, class_name: str | None = None, limit: int = 100) -> list[dict]:
         return self._r("GET", "/decisions", params={"site_id": site_id, "class_name": class_name, "limit": limit})
 
+    def get(self, decision_id: int) -> dict:
+        return self._r("GET", f"/decisions/{decision_id}")
+
 
 class Storm(_Resource):
     """Storm Mode, per site."""
@@ -324,5 +332,160 @@ class ApiKeys(_Resource):
         (connect, commai:read, commai:write, commai:notes, commai:admin)."""
         return self._r("POST", "/auth/api-keys", json={"name": name, "days": days, "scopes": scopes})
 
+    def get(self, key_id: int) -> dict:
+        return self._r("GET", f"/auth/api-keys/{key_id}")
+
     def revoke(self, key_id: int) -> None:
         self._r("DELETE", f"/auth/api-keys/{key_id}")
+
+
+class Links(_Resource):
+    """Carrier links: customers their own, carriers theirs."""
+
+    def get(self, link_id: str) -> dict:
+        return self._r("GET", f"/links/{link_id}")
+
+    def for_site(self, site_id: str) -> list[dict]:
+        return self._r("GET", f"/sites/{site_id}/links")
+
+
+class Integrations(_Resource):
+    """Connectors and webhooks (ADR 0026). Secrets are write-only; each is simulated until it is live."""
+
+    def catalogue(self) -> dict:
+        """Event kinds, connectors with the settings each needs, and cloud on-ramp adapters."""
+        return self._r("GET", "/integrations/catalogue")
+
+    def list(self) -> list[dict]:
+        return self._r("GET", "/integrations")
+
+    def get(self, integration_id: int) -> dict:
+        return self._r("GET", f"/integrations/{integration_id}")
+
+    def create(
+        self,
+        provider: str,
+        name: str,
+        *,
+        config: dict | None = None,
+        secrets: dict | None = None,
+        event_types: list[str] | None = None,
+        site_ids: list[str] | None = None,
+        min_severity: str = "info",
+    ) -> dict:
+        """A webhook's signing secret is in "signing_secret", shown only this once."""
+        body = {
+            k: v
+            for k, v in {
+                "provider": provider,
+                "name": name,
+                "config": config,
+                "secrets": secrets,
+                "event_types": event_types,
+                "site_ids": site_ids,
+                "min_severity": min_severity,
+            }.items()
+            if v is not None
+        }
+        return self._r("POST", "/integrations", json=body)
+
+    def update(self, integration_id: int, **changes: Any) -> dict:
+        return self._r("PATCH", f"/integrations/{integration_id}", json=changes)
+
+    def delete(self, integration_id: int) -> None:
+        self._r("DELETE", f"/integrations/{integration_id}")
+
+    def test(self, integration_id: int) -> dict:
+        """Send a test.ping now; returns the delivery."""
+        return self._r("POST", f"/integrations/{integration_id}/test")
+
+    def deliveries(self, integration_id: int, limit: int = 50) -> list[dict]:
+        return self._r("GET", f"/integrations/{integration_id}/deliveries", params={"limit": limit})
+
+    def retry(self, integration_id: int, delivery_id: int) -> dict:
+        return self._r("POST", f"/integrations/{integration_id}/deliveries/{delivery_id}/retry")
+
+    def sync(self, integration_id: int) -> dict:
+        """NetBox: push to or pull from NetBox now."""
+        return self._r("POST", f"/integrations/{integration_id}/sync")
+
+    def metrics(self, openmetrics: bool = False) -> str:
+        """The Prometheus (or OpenMetrics) text for this key's organisation."""
+        accept = "application/openmetrics-text; version=1.0.0" if openmetrics else "text/plain"
+        return self._r("GET", "/metrics", headers={"Accept": accept})
+
+
+class Hooks(_Resource):
+    """REST hooks, as Zapier, Make and n8n use them."""
+
+    def subscribe(self, target_url: str, events: list[str] | None = None, platform: str = "other") -> dict:
+        body = {"target_url": target_url, "platform": platform, **({"events": events} if events else {})}
+        return self._r("POST", "/hooks", json=body)
+
+    def unsubscribe(self, hook_id: int) -> None:
+        self._r("DELETE", f"/hooks/{hook_id}")
+
+    def sample(self, event: str = "path.down") -> list[dict]:
+        return self._r("GET", "/hooks/sample", params={"event": event})
+
+
+class Notices(_Resource):
+    """Carrier fault and maintenance notices. Carriers post about their own links only."""
+
+    def list(self) -> list[dict]:
+        return self._r("GET", "/notices")
+
+    def get(self, notice_id: int) -> dict:
+        return self._r("GET", f"/notices/{notice_id}")
+
+    def post(self, kind: str, title: str, link_ids: list[str], **fields: Any) -> dict:
+        """Carriers: kind is maintenance (give starts_at and ends_at) or fault."""
+        return self._r("POST", "/carrier/notices", json={"kind": kind, "title": title, "link_ids": link_ids, **fields})
+
+    def update(self, notice_id: int, **changes: Any) -> dict:
+        return self._r("PATCH", f"/carrier/notices/{notice_id}", json=changes)
+
+
+class Onramps(_Resource):
+    """Dedicated cloud on-ramps: AWS Direct Connect, Azure ExpressRoute, Google Partner Interconnect, Megaport."""
+
+    def adapters(self) -> list[dict]:
+        return self._r("GET", "/onramps/adapters")
+
+    def list(self, customer_id: str) -> list[dict]:
+        return self._r("GET", f"/customers/{customer_id}/onramps")
+
+    def get(self, customer_id: str, onramp_id: int) -> dict:
+        return self._r("GET", f"/customers/{customer_id}/onramps/{onramp_id}")
+
+    def create(self, customer_id: str, provider: str, bandwidth_mbps: int, **fields: Any) -> dict:
+        body = {"provider": provider, "bandwidth_mbps": bandwidth_mbps, **fields}
+        return self._r("POST", f"/customers/{customer_id}/onramps", json=body)
+
+    def refresh(self, customer_id: str, onramp_id: int) -> dict:
+        return self._r("POST", f"/customers/{customer_id}/onramps/{onramp_id}/refresh")
+
+    def delete(self, customer_id: str, onramp_id: int) -> dict:
+        return self._r("DELETE", f"/customers/{customer_id}/onramps/{onramp_id}")
+
+
+def verify_event(secret: str, headers: dict, body: bytes, tolerance_s: int = 300, now: int | None = None) -> bool:
+    """Check a Connect webhook (a CloudEvent signed per Standard Webhooks): webhook-id,
+    webhook-timestamp and webhook-signature headers, and the raw body."""
+    import base64
+    import hashlib
+    import hmac
+    import time
+
+    h = {k.lower(): v for k, v in headers.items()}
+    msg_id, ts, sigs = h.get("webhook-id", ""), h.get("webhook-timestamp", ""), h.get("webhook-signature", "")
+    try:
+        stamp = int(ts)
+    except ValueError:
+        return False
+    if abs((int(time.time()) if now is None else now) - stamp) > tolerance_s:
+        return False
+    key = base64.b64decode(secret.removeprefix("whsec_"))
+    mac = hmac.new(key, f"{msg_id}.{stamp}.".encode() + body, hashlib.sha256).digest()
+    want = "v1," + base64.b64encode(mac).decode()
+    return any(hmac.compare_digest(want, s) for s in sigs.split())

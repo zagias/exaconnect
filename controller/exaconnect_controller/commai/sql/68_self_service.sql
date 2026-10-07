@@ -1,4 +1,4 @@
--- CommAI self-service (ADR 0031): "My settings" for staff and the help centre
+-- CommAI self-service (ADR 0037): "My settings" for staff and the help centre
 -- for a business's own customers. Idempotent; applied at startup.
 
 -- A person's own CommAI preferences, per business. Only that person changes
@@ -104,6 +104,6 @@ CREATE TABLE IF NOT EXISTS ss_data_requests (
   created_at    timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS ss_data_requests_customer ON ss_data_requests (customer_id, status, created_at DESC);
--- Handled through data governance (ADR 0024): the subject request it became, and why it was refused.
+-- Handled through data governance (ADR 0030): the subject request it became, and why it was refused.
 ALTER TABLE ss_data_requests ADD COLUMN IF NOT EXISTS subject_request_id uuid;
 ALTER TABLE ss_data_requests ADD COLUMN IF NOT EXISTS reason text NOT NULL DEFAULT '';

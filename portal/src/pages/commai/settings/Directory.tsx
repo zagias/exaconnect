@@ -5,7 +5,7 @@ import { Card, useAction } from "../../../ui";
 import "../../identity.css";
 import "./directory.css";
 
-/* Directory templates and connectors (ADR 0030). Provider names are text labels: no third-party logos. */
+/* Directory templates and connectors (ADR 0036). Provider names are text labels: no third-party logos. */
 
 interface ProviderRow {
   provider: string;

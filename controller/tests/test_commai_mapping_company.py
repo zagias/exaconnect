@@ -1,4 +1,4 @@
-"""Field mapping covers the company or account a contact belongs to (ADR 0033)."""
+"""Field mapping covers the company or account a contact belongs to (ADR 0039)."""
 
 from exaconnect_controller import db
 from exaconnect_controller.commai import connectors

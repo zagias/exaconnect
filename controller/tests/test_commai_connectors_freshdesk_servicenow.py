@@ -1,5 +1,5 @@
 # ruff: noqa: F401, F811  (pytest fixtures imported from the helpers)
-"""Freshdesk and ServiceNow connectors (ADR 0029) against a fake HTTP layer
+"""Freshdesk and ServiceNow connectors (ADR 0035) against a fake HTTP layer
 (live mode) and their simulated stand-ins."""
 
 import base64

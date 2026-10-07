@@ -39,7 +39,7 @@ interface WidgetConfig {
   ask_contact: "before" | "after_first" | "never";
   /** The business's (or its partner's) white-label brand; null is ExaCarib's own look. */
   brand?: { product_name: string; colour: string; ink: string; support_email: string; logo_url: string | null } | null;
-  /** Visitors can talk to the AI assistant from the widget (ADR 0032). */
+  /** Visitors can talk to the AI assistant from the widget (ADR 0038). */
   ai_calls?: boolean;
 }
 
@@ -395,7 +395,7 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
       return this.sessionReady;
     }
 
-    // ---- language (ADR 0026) ----------------------------------------------------------------
+    // ---- language (ADR 0032) ----------------------------------------------------------------
 
     /** The widget's words in the visitor's language, when the business has it switched on. */
     private async loadWords() {
@@ -578,7 +578,7 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
       if (this.conversations.length > 1) links.append(this.linkTo(COPY.history, "history"));
       if (links.childNodes.length) this.log.append(links);
       this.panel.append(this.log);
-      // "Our team is writing a reply…", announced politely (ADR 0032).
+      // "Our team is writing a reply…", announced politely (ADR 0038).
       this.typingNote = el("p", { class: "typing", role: "status", "aria-live": "polite" });
       this.panel.append(this.typingNote);
 

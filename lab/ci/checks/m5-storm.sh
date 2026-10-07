@@ -2,7 +2,8 @@
 # M5: Storm Mode (demo step 5), switched per site. Switch site-a on:
 # its satellite is warm and site-b is unaffected; cut both terrestrial
 # links: voice and business continue on satellite and bulk pauses. Switch
-# off: it all reverses.
+# off: it all reverses. With a GEO satellite (SAT_PROFILE=geo) only business
+# goes there; voice pauses like bulk (ADR 0004).
 # shellcheck disable=SC2329  # helpers are called through wait_for
 # shellcheck source=lab/ci/lib.sh
 source "$(dirname "$0")/../lib.sh"
@@ -40,21 +41,38 @@ sleep 3
 lab/faults/cut.sh carrier-a >/dev/null
 lab/faults/cut.sh carrier-b >/dev/null
 sleep 15
-for c in "voice $VOICE" "business $BUSINESS"; do
+on_sat=("business $BUSINESS")
+paused=("bulk $BULK")
+if [[ $SAT_PROFILE == geo ]]; then
+  note "satellite is GEO: voice pauses, business continues"
+  paused+=("voice $VOICE")
+else
+  on_sat=("voice $VOICE" "${on_sat[@]}")
+fi
+for c in "${on_sat[@]}"; do
   read -r name mark <<<"$c"
   p=$(path_of site-a "$mark" "$DST")
   if [[ $p == wg-sat ]]; then ok "$name continues on satellite"; else bad "$name on '${p:-none}', want wg-sat"; fi
 done
-if docker exec "$(node site-a)" ip rule show | grep -q "fwmark 0x103.*blackhole"; then
-  ok "bulk paused (blackhole rule)"
-else
-  bad "bulk not paused: $(path_of site-a $BULK $DST)"
-fi
+for c in "${paused[@]}"; do
+  read -r name mark <<<"$c"
+  if docker exec "$(node site-a)" ip rule show | grep -q "fwmark $mark.*blackhole"; then
+    ok "$name paused (blackhole rule)"
+  else
+    bad "$name not paused: $(path_of site-a "$mark" "$DST")"
+  fi
+done
 sleep 15
 ping_done() { docker exec "$(node lan-a)" grep -q ' received' /tmp/storm-voice.txt; }
 wait_for 30 ping_done || true
 got=$(docker exec "$(node lan-a)" sh -c "grep -o '[0-9]* received' /tmp/storm-voice.txt" | cut -d' ' -f1)
-if [[ -n $got ]] && ((1500 - got < 150)); then ok "voice stream lost $(((1500 - got) * 20)) ms across the double cut"; else bad "voice stream received ${got:-?}/1500"; fi
+if [[ $SAT_PROFILE == geo ]]; then
+  note "voice stream received ${got:-?}/1500 (paused while only GEO is left)"
+elif [[ -n $got ]] && ((1500 - got < 150)); then
+  ok "voice stream lost $(((1500 - got) * 20)) ms across the double cut"
+else
+  bad "voice stream received ${got:-?}/1500"
+fi
 
 echo "-- restore and switch Storm Mode off"
 lab/faults/restore.sh >/dev/null

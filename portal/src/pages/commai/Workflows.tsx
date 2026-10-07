@@ -14,7 +14,7 @@ type Schedule = { every_minutes?: number; at?: string; days?: string[] };
 interface Definition {
   name: string;
   description?: string;
-  /** No type: an event starts it. "schedule": a time. "manual": a person or the API (ADR 0033). */
+  /** No type: an event starts it. "schedule": a time. "manual": a person or the API (ADR 0039). */
   trigger: { type?: "schedule" | "manual"; event: string; conditions: Cond[]; schedule?: Schedule };
   steps: Step[];
   notify_on_failure?: string[];

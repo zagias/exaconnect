@@ -8,7 +8,7 @@ import { contrast } from "./brand";
 import "../automation.css";
 import "./partner.css";
 
-/* Shapes from controller/exaconnect_controller/commai/api/partners.py and developer.py (ADR 0025). */
+/* Shapes from controller/exaconnect_controller/commai/api/partners.py and developer.py (ADR 0031). */
 
 interface Me {
   partner: { id: string; name: string; kind: string } | null;
@@ -99,7 +99,7 @@ async function switchTo(customerId: string) {
   window.location.assign("/commai");
 }
 
-/** Partners (ADR 0025): a partner's businesses, brand, apps and statements; for a business, its partner and apps. */
+/** Partners (ADR 0031): a partner's businesses, brand, apps and statements; for a business, its partner and apps. */
 export default function Partner() {
   const me = useApi<Me>("/commai/partners/me", 0);
   const act = useAction();

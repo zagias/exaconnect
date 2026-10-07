@@ -1,4 +1,4 @@
-"""A business's own REST API from its OpenAPI document (ADR 0028).
+"""A business's own REST API from its OpenAPI document (ADR 0034).
 
 The document is read, never run; actions can only name its operations; a
 person approves; the app runs on a stand-in built from the document until

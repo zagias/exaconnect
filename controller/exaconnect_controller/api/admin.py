@@ -8,9 +8,11 @@ import re
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
+from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field, field_validator
 
 from .. import audit, db, inventory
+from ..identity import orgs
 from ..security import hash_password, new_token
 from .deps import AdminDep, UserDep, ViewerDep, check_customer, customer_scope
 
@@ -122,6 +124,8 @@ class TokenOut(BaseModel):
     expires_at: dt.datetime
     ca_fingerprint: str
     agent_url: str
+    # The agent gateway on the internet (ADR 0024); empty while it is not published.
+    public_agent_url: str = ""
 
 
 @router.post("/enrolment-tokens", status_code=201)
@@ -137,6 +141,7 @@ def issue_token(body: TokenIn, user: AdminDep, request: Request) -> TokenOut:
         expires_at=expires,
         ca_fingerprint=request.app.state.ca.fingerprint,
         agent_url=request.app.state.settings.agent_url,
+        public_agent_url=request.app.state.settings.agent_public_url,
     )
 
 
@@ -147,12 +152,33 @@ def list_nodes(user: ViewerDep) -> list[dict]:
         return conn.execute(
             """SELECT n.id, n.name, s.kind AS role, n.customer_id, n.enrolled_at, n.last_seen,
                       n.applied_version, n.apply_ok, n.apply_error, n.agent_version,
+                      n.cert_serial LIKE 'revoked:%%' AS revoked,
                       (SELECT max(version) FROM desired_states d WHERE d.node_id = n.id) AS desired_version
                FROM nodes n JOIN sites s ON s.id = n.site_id
                WHERE %(c)s::uuid IS NULL OR n.customer_id = %(c)s
                ORDER BY n.name""",
             {"c": scope},
         ).fetchall()
+
+
+@router.post("/nodes/{node_id}/revoke")
+def revoke_node(node_id: str, user: AdminDep) -> dict:
+    """Stop a node's certificate working at once (ADR 0024). The site keeps its
+    inventory; a new enrolment token brings it back with a fresh certificate."""
+    with db.tx() as conn:
+        node = conn.execute(
+            """UPDATE nodes SET cert_serial = 'revoked:' || id::text, prev_cert_serial = NULL
+               WHERE id = %s RETURNING id, name, customer_id""",
+            (node_id,),
+        ).fetchone()
+        if node is None:
+            raise HTTPException(404, "Node not found.")
+        audit.record(conn, user.actor, "node.revoke", node["name"], node["customer_id"])
+        conn.execute(
+            "INSERT INTO events (time, customer_id, node_id, kind, detail) VALUES (now(), %s, %s, 'node_revoked', %s)",
+            (node["customer_id"], node["id"], Jsonb({"node": node["name"], "by": user.actor})),
+        )
+    return {"revoked": True}
 
 
 @router.get("/audit")
@@ -430,5 +456,13 @@ def delete_user(user_id: str, user: AdminDep) -> None:
             and conn.execute("SELECT count(*) AS n FROM users WHERE role = 'admin'").fetchone()["n"] <= 1
         ):
             raise HTTPException(400, "This is the last admin account.")
+        owned = conn.execute(
+            "SELECT customer_id FROM org_memberships WHERE user_id = %s AND role = 'owner'", (user_id,)
+        ).fetchall()
         conn.execute("DELETE FROM users WHERE id = %s", (user_id,))
         audit.record(conn, user.actor, "user.delete", row["email"])
+        # An organisation always keeps an owner (ADR 0023): its longest-standing admin steps up.
+        for o in owned:
+            promoted = orgs.ensure_owner(conn, o["customer_id"])
+            if promoted:
+                audit.record(conn, user.actor, "org.member.role", promoted, o["customer_id"], {"to": "owner"})

@@ -5,9 +5,9 @@ import App from "./App";
 import { applyHostBrand } from "./pages/commai/partner/brand";
 import "./brand.css";
 
-// A partner's verified portal domain shows its brand on sign-in (ADR 0025).
+// A partner's verified portal domain shows its brand on sign-in (ADR 0031).
 applyHostBrand();
-// The public help centre (ADR 0031) lives outside the staff sign-in and shell.
+// The public help centre (ADR 0037) lives outside the staff sign-in and shell.
 const HelpCentre = lazy(() => import("./pages/help/HelpCentre"));
 
 createRoot(document.getElementById("root")!).render(

@@ -1,4 +1,4 @@
-"""Inbox jobs and events the shared inbox needs on its own (ADR 0032).
+"""Inbox jobs and events the shared inbox needs on its own (ADR 0038).
 
 - Snoozed conversations wake at `snoozed_until`: setting a snooze queues a
   durable job for that moment. The job wakes the conversation only if it is

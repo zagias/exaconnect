@@ -1,4 +1,4 @@
-"""Go-live registry (ADR 0022): capabilities start off and switch on only after their criteria are met."""
+"""Go-live registry (ADR 0028): capabilities start off and switch on only after their criteria are met."""
 
 from __future__ import annotations
 

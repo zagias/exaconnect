@@ -138,8 +138,9 @@ def get_permissions(customer_id: str, user: UserDep) -> dict:
         rows = conn.execute(
             """SELECT u.id AS user_id, u.email, coalesce(p.voice_admin, false) AS voice_admin,
                       coalesce(p.spend, false) AS spend
-               FROM users u LEFT JOIN voice_permissions p ON p.user_id = u.id AND p.customer_id = u.customer_id
-               WHERE u.customer_id = %s ORDER BY u.email""",
+               FROM org_memberships m JOIN users u ON u.id = m.user_id
+               LEFT JOIN voice_permissions p ON p.user_id = u.id AND p.customer_id = m.customer_id
+               WHERE m.customer_id = %s ORDER BY u.email""",
             (customer_id,),
         ).fetchall()
         return {"configured": perms.configured(conn, customer_id), "people": rows}
@@ -168,7 +169,7 @@ def put_permissions(customer_id: str, body: PermissionsIn, user: UserDep) -> dic
             raise HTTPException(422, "At least one voice admin must keep spend permission.")
         for p in body.people:
             ok = conn.execute(
-                "SELECT 1 FROM users WHERE id = %s AND customer_id = %s", (p.user_id, customer_id)
+                "SELECT 1 FROM org_memberships WHERE user_id = %s AND customer_id = %s", (p.user_id, customer_id)
             ).fetchone()
             if not ok:
                 raise HTTPException(422, "Everyone must be an account in this company.")
@@ -711,7 +712,7 @@ def simulate_call(customer_id: str, body: SimCallIn, user: UserDep) -> dict:
         call_id = f"sim-{uuid.uuid4().hex[:16]}"
         routed = None
         if verdict["allowed"] and verdict.get("route"):
-            # Several carriers (ADR 0027): try each in order until one takes the call.
+            # Several carriers (ADR 0033): try each in order until one takes the call.
             routed = carriers.connect(conn, customer_id, call_id, to, verdict["route"])
             if not routed["ok"]:
                 verdict = {**verdict, "allowed": False, "reason": routed["reason"]}

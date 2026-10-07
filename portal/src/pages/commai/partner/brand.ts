@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../../../api";
 import "./partner.css";
 
-/** A partner's white-label brand (ADR 0025). null means ExaCarib's own look. */
+/** A partner's white-label brand (ADR 0031). null means ExaCarib's own look. */
 export interface Brand {
   id: string;
   product_name: string;

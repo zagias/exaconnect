@@ -38,7 +38,7 @@ function stamp(iso: string): string {
   return new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
-/** Locations, opening hours, holidays, closures and brands (ADR 0024). Service targets pause outside hours. */
+/** Locations, opening hours, holidays, closures and brands (ADR 0030). Service targets pause outside hours. */
 export default function Organisation({ base }: { base: string }) {
   const org = useApi<Org>(`${base}/organisation`, 60_000);
   const act = useAction();

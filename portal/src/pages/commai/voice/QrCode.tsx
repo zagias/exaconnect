@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useCommaiBase } from "../lib";
 
 /**
- * A QR code for a softphone sign-in link (ADR 0033). The controller draws it
+ * A QR code for a softphone sign-in link (ADR 0039). The controller draws it
  * as SVG (POST, so the link never sits in a URL); it is shown as an image, so
  * nothing in it can run. No outside service sees the link.
  */

@@ -1,5 +1,5 @@
 # ruff: noqa: F401, F811  (pytest fixtures imported from the helpers)
-"""Microsoft Teams connector (ADR 0029): incoming webhook messages, and
+"""Microsoft Teams connector (ADR 0035): incoming webhook messages, and
 approval buttons through the bot with Bot Framework token checks."""
 
 import base64

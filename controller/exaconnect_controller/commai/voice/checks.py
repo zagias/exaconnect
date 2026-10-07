@@ -1,4 +1,4 @@
-"""Voice diagnostics for the platform assistant (ADR 0033).
+"""Voice diagnostics for the platform assistant (ADR 0039).
 
 Read-only checks over the phone system: orders that failed, PBX files that
 are out of date, calls blocked by the fraud limits, number transfers

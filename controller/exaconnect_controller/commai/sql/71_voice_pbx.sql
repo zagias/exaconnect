@@ -1,4 +1,4 @@
--- The PBX's check before each outside call (ADR 0027, voice/pbx.py): one row
+-- The PBX's check before each outside call (ADR 0033, voice/pbx.py): one row
 -- per call with the answer FreeSWITCH got. Refused calls are also kept as
 -- blocked call records (voice_cdrs), as simulated calls are.
 

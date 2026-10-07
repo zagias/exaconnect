@@ -1,4 +1,4 @@
-"""Metered usage, budgets and hard limits (ADR 0016, ADR 0033).
+"""Metered usage, budgets and hard limits (ADR 0016, ADR 0039).
 
 Every billable unit (an AI reply, an outbound WhatsApp message, a call
 minute) is recorded once, keyed by a reference so a retry never counts

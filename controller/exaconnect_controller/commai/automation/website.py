@@ -1,4 +1,4 @@
-"""Reading a business's website for onboarding, and its opening hours (ADR 0033).
+"""Reading a business's website for onboarding, and its opening hours (ADR 0039).
 
 The page is untrusted input. It is fetched only from a public address:
 

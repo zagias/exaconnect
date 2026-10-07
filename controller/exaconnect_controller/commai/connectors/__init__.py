@@ -102,7 +102,7 @@ def register(c: Connector) -> Connector:
 
 
 # Connectors made at run time, such as a business's own REST app described by
-# an OpenAPI document (ADR 0028): each resolver takes an app name and returns
+# an OpenAPI document (ADR 0034): each resolver takes an app name and returns
 # a Connector or None.
 resolvers: list = []
 

@@ -1,4 +1,4 @@
-"""Follow-up reminders from promises made in a conversation (ADR 0026).
+"""Follow-up reminders from promises made in a conversation (ADR 0032).
 
 When the business (a person or the AI) writes "I will call you tomorrow" or
 "we'll email you the form by Friday", the promise becomes a reminder on the

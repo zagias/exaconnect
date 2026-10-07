@@ -1,4 +1,4 @@
-"""Satisfaction surveys after resolution (ADR 0026).
+"""Satisfaction surveys after resolution (ADR 0032).
 
 When a conversation is resolved and the business has surveys switched on,
 the job "csat.send" sends one short message on the conversation's own

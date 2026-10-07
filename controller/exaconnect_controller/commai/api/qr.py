@@ -1,4 +1,4 @@
-"""QR code images, drawn on the server (ADR 0033).
+"""QR code images, drawn on the server (ADR 0039).
 
 The portal posts a softphone sign-in link (shown once) and gets an SVG to
 scan. The text is not stored or logged. POST, so the link never sits in a

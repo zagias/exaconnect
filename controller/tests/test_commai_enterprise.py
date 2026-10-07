@@ -1,4 +1,4 @@
-"""Enterprise administration (ADR 0024): business calendars, roles and
+"""Enterprise administration (ADR 0030): business calendars, roles and
 per-team permissions, security settings, unusual-use protection."""
 
 from __future__ import annotations

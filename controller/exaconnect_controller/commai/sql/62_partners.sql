@@ -1,4 +1,4 @@
--- Partners, white-label, regional hosting and the developer platform (ADR 0025).
+-- Partners, white-label, regional hosting and the developer platform (ADR 0031).
 -- Idempotent; applied after 55_golive.sql.
 
 -- ---- Partners ------------------------------------------------------------------------

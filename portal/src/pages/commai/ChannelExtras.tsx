@@ -3,7 +3,7 @@ import { api } from "../../api";
 import { ErrorNote } from "../../components";
 import { useAction } from "../../ui";
 
-/** Sending limits for one email address (ADR 0032): emails a day in all, and
+/** Sending limits for one email address (ADR 0038): emails a day in all, and
  * a day to any one domain, so a mistake can't burn the address's reputation. */
 export function EmailLimits({ base, a, reload }: { base: string; a: { id: string; settings: Record<string, unknown> }; reload: () => void }) {
   const current = { daily: 2000, per_domain_daily: 300, ...((a.settings.email_limits as Record<string, number> | undefined) ?? {}) };

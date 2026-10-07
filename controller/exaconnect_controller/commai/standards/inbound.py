@@ -1,4 +1,4 @@
-"""Inbound webhooks (ADR 0028).
+"""Inbound webhooks (ADR 0034).
 
 **Generic hooks** let any system (Zapier, Make, n8n, a business's own code)
 start CommAI workflows. Each hook has its own address

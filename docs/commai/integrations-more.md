@@ -1,6 +1,6 @@
 # CommAI connectors: helpdesks, team chat, commerce, files and automation platforms
 
-ADR 0029. Built on the connector kit (ADR 0028), the same way as HubSpot and
+ADR 0035. Built on the connector kit (ADR 0034), the same way as HubSpot and
 Google Calendar. Each connector:
 
 - is listed in the integrations catalogue (`commai/connectors/installed.py`);

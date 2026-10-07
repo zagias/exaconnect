@@ -1,7 +1,7 @@
 """API for the helpdesk, team chat, commerce, payments and knowledge
-connectors (ADR 0029). Setting up an app (connect, sign in, credentials,
+connectors (ADR 0035). Setting up an app (connect, sign in, credentials,
 actions, mapping, test, approve, health) uses the integrations API (ADR 0020,
-ADR 0028); these are the extras:
+ADR 0034); these are the extras:
 
 - set up the app's change notifications (webhooks) from CommAI;
 - tickets linked to a conversation;

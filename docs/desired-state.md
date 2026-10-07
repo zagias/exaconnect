@@ -70,6 +70,19 @@ controller, so a rebooted node forwards without the controller.
 received, loss, RTT avg/min/max, RFC 3550 jitter per path), interface byte
 counters every 60 s, events (`config_applied`, `config_failed`,
 `config_rolled_back`, `bfd_up`, `bfd_down`, `controller_silent`,
-`controller_back`) and per-tunnel state (handshake age, BFD). While the
+`controller_back`, `cert_installed`, `cert_renew_failed`) and per-tunnel state (handshake age, BFD). While the
 controller is unreachable the agent buffers up to 2000 items and sends them
 when it is back.
+
+## Client certificate renewal
+
+Client certificates last 365 days. The agent checks its certificate every
+hour and, once two thirds of its lifetime has passed, sends a new CSR for
+the same node name to `POST /api/v1/agent/renew` over its current
+certificate (mTLS). The controller signs it, replaces `nodes.cert_serial` and
+audits `node.cert_renewed`, so the old certificate stops working at once.
+The agent writes the new certificate beside the old one, checks it (its key,
+its name, the CA, its dates), and only then renames it into place; a failure
+leaves the old certificate in use and is retried at the next check.
+`exa-agent renew` does the same on demand; a running agent notices the new
+file before its next request.

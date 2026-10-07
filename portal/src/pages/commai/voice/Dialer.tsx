@@ -5,7 +5,7 @@ import { Card, EmptyState, useAction } from "../../../ui";
 import { VertoPhone, type CallState } from "./verto";
 import "./dialer.css";
 
-/* Shape from controller/exaconnect_controller/commai/api/webphone.py (ADR 0033). */
+/* Shape from controller/exaconnect_controller/commai/api/webphone.py (ADR 0039). */
 interface WebPhone {
   enabled: boolean;
   extension: string;

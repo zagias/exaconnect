@@ -4,7 +4,9 @@ COPY pyproject.toml ./
 COPY exaconnect_controller ./exaconnect_controller
 RUN pip install --no-cache-dir . && mkdir -p /data && chown nobody:nogroup /data
 USER nobody
-ENV EXA_DATA_DIR=/data
+# The commit this image was built from (ADR 0025), shown in Admin > Releases.
+ARG EXA_BUILD_COMMIT=dev
+ENV EXA_DATA_DIR=/data EXA_BUILD_COMMIT=$EXA_BUILD_COMMIT
 VOLUME /data
 EXPOSE 8000
 HEALTHCHECK --interval=5s --timeout=3s --retries=20 \

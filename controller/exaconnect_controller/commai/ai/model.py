@@ -440,7 +440,7 @@ class SimulatedModel:
             items.append("Resolve the conversation if nothing is outstanding")
         return ModelOutput(items=items, reason="From the conversation state and its actions.")
 
-    # -- quality review and governance (ADR 0026) ---------------------------------------
+    # -- quality review and governance (ADR 0032) ---------------------------------------
 
     def _judge(self, ctx: dict) -> ModelOutput:
         from .judging import simulated_judge

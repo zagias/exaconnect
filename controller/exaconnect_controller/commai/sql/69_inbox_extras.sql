@@ -1,4 +1,4 @@
--- Inbox, channel and API gap fixes for phases 0 to 2 (ADR 0032).
+-- Inbox, channel and API gap fixes for phases 0 to 2 (ADR 0038).
 -- Applied after the other CommAI files, idempotently, at startup.
 
 -- Routing by intent and skills. The AI writes the intent it judged; a rule may

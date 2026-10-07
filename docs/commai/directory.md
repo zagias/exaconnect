@@ -1,6 +1,6 @@
 # Directory templates and connectors (operator note)
 
-Design: [ADR 0030](../adr/0030-directory-templates-and-connectors.md). Builds on
+Design: [ADR 0036](../adr/0036-directory-templates-and-connectors.md). Builds on
 [identity](identity.md) (ADR 0017). Covers sign-in for Connect and CommAI.
 
 Portal: CommAI Settings, "Sign-in" tab, card "Connect your directory"

@@ -1,4 +1,4 @@
-"""A business's own mailbox over IMAP and SMTP (ADR 0028), with fake servers.
+"""A business's own mailbox over IMAP and SMTP (ADR 0034), with fake servers.
 
 Off until ExaCarib switches integration-mailbox on (replies go to the simulated
 outbox); then mail is read by UID once, threaded through the email channel,

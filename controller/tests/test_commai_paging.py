@@ -1,5 +1,5 @@
 # ruff: noqa: F811  (pytest fixtures imported from test_commai_automation_helpers)
-"""Cursor pagination on automation lists; the old plain list without a cursor (ADR 0033)."""
+"""Cursor pagination on automation lists; the old plain list without a cursor (ADR 0039)."""
 
 from exaconnect_controller import db
 

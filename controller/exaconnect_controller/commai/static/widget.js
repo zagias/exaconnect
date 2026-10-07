@@ -302,7 +302,7 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
             });
             return this.sessionReady;
         }
-        // ---- language (ADR 0026) ----------------------------------------------------------------
+        // ---- language (ADR 0032) ----------------------------------------------------------------
         /** The widget's words in the visitor's language, when the business has it switched on. */
         async loadWords() {
             const wanted = (script && script.dataset.lang) || (navigator.languages || [navigator.language]).join(",");
@@ -498,7 +498,7 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
             if (links.childNodes.length)
                 this.log.append(links);
             this.panel.append(this.log);
-            // "Our team is writing a reply…", announced politely (ADR 0032).
+            // "Our team is writing a reply…", announced politely (ADR 0038).
             this.typingNote = el("p", { class: "typing", role: "status", "aria-live": "polite" });
             this.panel.append(this.typingNote);
             const form = el("form", { class: "compose" });

@@ -1,4 +1,4 @@
-"""White-label branding and custom domains (ADR 0025).
+"""White-label branding and custom domains (ADR 0031).
 
 A partner (and, optionally, one of its businesses) sets a product name, a logo,
 two colours and a support email. The portal applies it at run time for that

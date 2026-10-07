@@ -1,5 +1,5 @@
 """Typing and presence in the inbox and the widget, and the website visitor's
-AI browser call (ADR 0032)."""
+AI browser call (ADR 0038)."""
 
 from exaconnect_controller import db
 

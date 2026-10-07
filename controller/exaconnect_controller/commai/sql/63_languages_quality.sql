@@ -1,5 +1,5 @@
 -- Languages, AI quality and governance, and the remaining inbox features
--- (ADR 0026). Idempotent; applied at start-up after the earlier files.
+-- (ADR 0032). Idempotent; applied at start-up after the earlier files.
 
 -- ---- languages -----------------------------------------------------------------------
 

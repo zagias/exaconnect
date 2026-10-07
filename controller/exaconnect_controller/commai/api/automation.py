@@ -154,7 +154,7 @@ def set_integration_settings(customer_id: str, app: str, body: SettingsIn, user:
 
     with db.tx() as conn, _errors():
         _admin(conn, user, customer_id)
-        # The app's own settings and, on a stand-in, simulate_failure (ADR 0028).
+        # The app's own settings and, on a stand-in, simulate_failure (ADR 0034).
         allowed = SAFE_SETTINGS | integrations.extra_settings(conn, customer_id, app)
         bad = sorted(set(body.settings) - allowed)
         if bad:
@@ -514,7 +514,7 @@ class TriggerIn(BaseModel):
 
 @router.post("/workflows/{workflow_id}/trigger", status_code=201)
 def trigger_workflow(customer_id: str, workflow_id: str, body: TriggerIn, user: UserDep) -> dict:
-    """Start a live workflow now (ADR 0033), optionally for one conversation.
+    """Start a live workflow now (ADR 0039), optionally for one conversation.
     `data` is available to its steps as {{event.data.input.<name>}}."""
     access.check(user, customer_id, "commai:write")
     with db.tx() as conn, _errors():
@@ -744,7 +744,7 @@ def ask_assistant(customer_id: str, body: QuestionIn, request: Request, user: Us
 def _voice_change(conn, customer_id: str, text: str, user) -> dict | None:
     """A phone-system change typed to the assistant ("forward my calls to my
     mobile until 5") becomes the same proposal as /voice/say, with the same
-    confirm step (ADR 0033). Questions, and anything the voice parser doesn't
+    confirm step (ADR 0039). Questions, and anything the voice parser doesn't
     recognise, go to the diagnostics as before."""
     from .. import entitlements
     from ..voice import selfservice

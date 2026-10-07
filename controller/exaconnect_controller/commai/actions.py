@@ -103,7 +103,7 @@ def propose(
         refuse(f"{connector.label} has no action called {action}.", 404)
     if not role_may(conn, customer_id, role, app, action):
         refuse(f"The {role.replace('_', ' ')} is not allowed to {spec.label.lower()}.", 403)
-    from .ai import governance  # daily action limits per role (ADR 0026)
+    from .ai import governance  # daily action limits per role (ADR 0032)
 
     if over := governance.over_daily_limit(conn, customer_id, role):
         refuse(over, 429)
@@ -121,7 +121,7 @@ def propose(
         refuse(str(e), 422)
     sensitive = _sensitive(conn, customer_id, spec, app)
     status = "awaiting_approval" if sensitive else "approved"
-    # What the approver sees: the change and its impact, from read-only checks (ADR 0033).
+    # What the approver sees: the change and its impact, from read-only checks (ADR 0039).
     preview = impact.preview(conn, customer_id, connector, {**c, "test": test}, spec, clean) if sensitive else {}
     run = conn.execute(
         """INSERT INTO action_runs (customer_id, conversation_id, role, app, action, inputs, idempotency_key,

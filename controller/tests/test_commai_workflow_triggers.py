@@ -1,6 +1,6 @@
 # ruff: noqa: F811  (pytest fixtures imported from test_commai_automation_helpers)
 """Workflow schedule and manual triggers, the trigger API, and the exception
-path (jump to a handler step, notify on failure) (ADR 0033)."""
+path (jump to a handler step, notify on failure) (ADR 0039)."""
 
 import datetime as dt
 

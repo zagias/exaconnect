@@ -1,4 +1,4 @@
--- Enterprise administration and data governance (ADR 0024). Idempotent;
+-- Enterprise administration and data governance (ADR 0030). Idempotent;
 -- applied after the earlier CommAI files. Every record carries customer_id.
 
 -- ---- Organisation: locations, brands, business calendars --------------------

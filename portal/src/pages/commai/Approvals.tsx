@@ -6,7 +6,7 @@ import { Card, EmptyState, PageHead, useAction } from "../../ui";
 import { useCommaiBase, when } from "./lib";
 import "./automation.css";
 
-/* Shapes from controller/exaconnect_controller/commai/api/approvals.py and impact.py (ADR 0033). */
+/* Shapes from controller/exaconnect_controller/commai/api/approvals.py and impact.py (ADR 0039). */
 
 interface Check {
   label: string;

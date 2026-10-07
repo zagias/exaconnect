@@ -1,4 +1,4 @@
-# Partner custom domains (ADR 0025, docs/commai/partners.md).
+# Partner custom domains (ADR 0031, docs/commai/partners.md).
 # Import at the end of the Caddyfile once the first partner domain is verified:
 #   import Caddyfile.custom-domains
 # Caddy asks the controller before issuing each certificate; the controller

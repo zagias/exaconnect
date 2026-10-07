@@ -8,9 +8,11 @@ from pydantic import BaseModel
 from .. import audit, db, desired
 from ..routing import maps
 from ..storm.service import set_storm
-from .deps import UserDep, check_customer
+from .deps import UserDep, check_customer, customer_scope, require_org_manager
 
 router = APIRouter(tags=["settings"])
+# Shared by both plans (ADR 0023): which organisations this account acts for.
+shared = APIRouter(tags=["settings"])
 
 
 _check = check_customer
@@ -54,8 +56,9 @@ class SettingsIn(BaseModel):
 @router.patch("/customers/{customer_id}/settings")
 def update_settings(customer_id: str, body: SettingsIn, user: UserDep) -> dict:
     """Shadow mode logs routing decisions without acting on them. Switching
-    it either way starts every class from its default path."""
-    _check(user, customer_id)
+    it either way starts every class from its default path. Settings are for
+    the organisation's owners and admins (ADR 0023)."""
+    require_org_manager(user, customer_id)
     if body.storm_allow_bulk_sat is not None and user.role != "admin":
         raise HTTPException(403, "Only an admin can allow bulk traffic on satellite.")
     with db.tx() as conn:
@@ -124,7 +127,7 @@ def site_storm(site_id: str, body: SiteStormIn, user: UserDep) -> dict:
     return get_settings(customer_id, user)
 
 
-@router.get("/customers/mine")
+@shared.get("/customers/mine")
 def my_customers(user: UserDep) -> list[dict]:
     """The customers this account can act for: all for admins, its own for
     customer users, none for carrier users."""
@@ -133,8 +136,8 @@ def my_customers(user: UserDep) -> list[dict]:
     with db.tx() as conn:
         rows = conn.execute(
             """SELECT id, name, shadow_mode, storm_mode, storm_since, storm_by, storm_allow_bulk_sat,
-                      auto_prioritise
+                      auto_prioritise, example
                FROM customers WHERE %(c)s::uuid IS NULL OR id = %(c)s ORDER BY name""",
-            {"c": None if user.role == "admin" else user.customer_id},
+            {"c": customer_scope(user)},
         ).fetchall()
         return _with_sites(conn, rows)

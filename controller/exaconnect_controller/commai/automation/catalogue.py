@@ -1,4 +1,4 @@
-"""The integration catalogue as the portal shows it (ADR 0028): every
+"""The integration catalogue as the portal shows it (ADR 0034): every
 registered connector grouped by category, with its actions, this business's
 status and what ExaCarib still needs to register; plus the standard
 interfaces and the apps reached through them.

@@ -1,5 +1,5 @@
 # ruff: noqa: F401, F811  (pytest fixtures imported from the helpers)
-"""Stripe connector (ADR 0029): payment links (sensitive, idempotent) and
+"""Stripe connector (ADR 0035): payment links (sensitive, idempotent) and
 payment status; Stripe-Signature webhooks; no card data, ever."""
 
 import json

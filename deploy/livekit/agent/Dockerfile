@@ -1,4 +1,4 @@
-# ExaCarib AI phone agent for LiveKit (ADR 0027). Built only with the "voice" profile.
+# ExaCarib AI phone agent for LiveKit (ADR 0033). Built only with the "voice" profile.
 FROM python:3.12-slim
 WORKDIR /app
 COPY requirements.txt .

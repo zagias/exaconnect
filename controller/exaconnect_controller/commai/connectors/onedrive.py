@@ -1,4 +1,4 @@
-"""OneDrive and SharePoint connector (ADR 0029): folders a business picks
+"""OneDrive and SharePoint connector (ADR 0035): folders a business picks
 become knowledge sources a person approves.
 
 Written from Microsoft Graph v1.0 (drives, driveItem children and content,

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useLocation } from "react-router-dom";
-import { Eyebrow } from "./components";
+import { Eyebrow, ExampleTag } from "./components";
+import { useCustomer } from "./customer";
 import { groupOf } from "./nav";
 import "./tables.css";
 
@@ -43,10 +44,20 @@ export function Card({ title, children, note }: { title: string; children: React
 export function PageHead({ eyebrow, title, children }: { eyebrow?: string; title: string; children?: ReactNode }) {
   const { pathname } = useLocation();
   const label = eyebrow ?? groupOf(pathname);
+  // Lab and demo organisations: every screen of theirs says it shows example data (CLAUDE.md 4.6).
+  const example = useCustomer().current?.example;
   return (
     <div className="page-head">
       {label && <Eyebrow>{label}</Eyebrow>}
-      <h1>{title}</h1>
+      <h1>
+        {title}
+        {example && (
+          <>
+            {" "}
+            <ExampleTag />
+          </>
+        )}
+      </h1>
       {children && <p className="muted">{children}</p>}
     </div>
   );

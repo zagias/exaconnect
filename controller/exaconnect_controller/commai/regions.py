@@ -1,6 +1,6 @@
-"""Regional hosting (ADR 0025).
+"""Regional hosting (ADR 0031).
 
-Regions are capabilities of kind "region" in the go-live registry (ADR 0022).
+Regions are capabilities of kind "region" in the go-live registry (ADR 0028).
 Each declares every dependency it needs. A region can be switched on only when
 each dependency has a provider in that region recorded: each dependency is a
 go-live criterion, and a database trigger (sql/62_partners.sql) keeps it unmet

@@ -1,4 +1,4 @@
-"""Data exchange (ADR 0028): contacts in and out as CSV and vCard, conversations
+"""Data exchange (ADR 0034): contacts in and out as CSV and vCard, conversations
 out as CSV, and the iCalendar feed of bookings with signed .ics invites."""
 
 from __future__ import annotations

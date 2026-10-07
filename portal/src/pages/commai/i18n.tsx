@@ -3,7 +3,7 @@ import { api } from "../../api";
 import { useCommaiBase } from "./lib";
 
 /*
- * A small i18n layer for the CommAI screens (ADR 0026). Catalogues live in the
+ * A small i18n layer for the CommAI screens (ADR 0032). Catalogues live in the
  * controller (commai/i18n/*.json); English (en-GB) is the source and fills any
  * key a draft lacks. A language is offered only once ExaCarib switches it on
  * in the go-live registry; drafts show a "Machine-drafted" label until a

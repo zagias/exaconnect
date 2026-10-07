@@ -21,6 +21,9 @@ class Settings:
     agent_url: str = field(default_factory=lambda: _env("EXA_AGENT_URL", "https://172.30.0.5:8443"))
     # Extra names/IPs for the agent-facing TLS certificate, comma separated.
     tls_sans: str = field(default_factory=lambda: _env("EXA_TLS_SANS", "controller,localhost,127.0.0.1,172.30.0.5"))
+    # The agent gateway's public name (ADR 0024): real sites enrol at https://<host>:8443.
+    # Empty keeps the gateway on the private lab network only.
+    agent_public_host: str = field(default_factory=lambda: _env("EXA_AGENT_PUBLIC_HOST"))
     admin_email: str = field(default_factory=lambda: _env("EXA_ADMIN_EMAIL"))
     admin_password: str = field(default_factory=lambda: _env("EXA_ADMIN_PASSWORD"))
     session_hours: int = field(default_factory=lambda: int(_env("EXA_SESSION_HOURS", "12")))
@@ -70,6 +73,17 @@ class Settings:
     keycloak_admin_client_secret: str = field(
         default_factory=lambda: _env("EXA_KEYCLOAK_ADMIN_CLIENT_SECRET"), repr=False
     )
+
+    @property
+    def agent_public_url(self) -> str:
+        return f"https://{self.agent_public_host}:8443" if self.agent_public_host else ""
+
+    def tls_names(self) -> list[str]:
+        """Names on the agent-facing certificate: the lab names plus the public gateway name."""
+        names = [s.strip() for s in self.tls_sans.split(",") if s.strip()]
+        if self.agent_public_host and self.agent_public_host not in names:
+            names.append(self.agent_public_host)
+        return names
 
 
 def get_settings() -> Settings:

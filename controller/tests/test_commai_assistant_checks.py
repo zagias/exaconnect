@@ -1,6 +1,6 @@
 # ruff: noqa: F811  (pytest fixtures imported from test_commai_automation_helpers)
 """Assistant diagnostics for voice, AI agents and sign-in, and phone changes
-typed to the assistant (ADR 0033)."""
+typed to the assistant (ADR 0039)."""
 
 import datetime as dt
 import uuid

@@ -1,4 +1,4 @@
-"""ExaCarib AI phone agent worker for LiveKit (ADR 0027).
+"""ExaCarib AI phone agent worker for LiveKit (ADR 0033).
 
 It joins each phone call's LiveKit room, turns the caller's speech into text,
 asks the ExaCarib controller what to say (the same AI agent, inbox rules and

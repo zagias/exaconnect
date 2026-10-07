@@ -39,7 +39,9 @@ def apply_schema(conn: psycopg.Connection) -> None:
         sql_dir = resources.files(__package__).joinpath("commai", "sql")
         for f in sorted((p for p in sql_dir.iterdir() if p.name.endswith(".sql")), key=lambda p: p.name):
             conn.execute(f.read_text())
-        # Go-live registry (ADR 0022): declared capabilities start off.
+        # Connect integrations (ADR 0026), after CommAI: it uses the job queue.
+        conn.execute(resources.files(__package__).joinpath("integrations", "schema.sql").read_text())
+        # Go-live registry (ADR 0028): declared capabilities start off.
         from .commai import golive
 
         golive.sync(conn)

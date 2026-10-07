@@ -1,6 +1,6 @@
 # Enterprise administration and data governance
 
-Operator note for ADR 0024. Code: `controller/exaconnect_controller/commai/enterprise/`,
+Operator note for ADR 0030. Code: `controller/exaconnect_controller/commai/enterprise/`,
 API `commai/api/enterprise.py`, SQL `commai/sql/61_enterprise.sql`, portal
 CommAI > Settings > Organisation, Roles, Security and Data.
 

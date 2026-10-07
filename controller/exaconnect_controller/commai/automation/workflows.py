@@ -31,7 +31,7 @@ business's time zone) or manual ({"type": "manual"}: started by a person or
 through POST /workflows/{id}/trigger). Each start is recorded as an event
 (workflow.scheduled, workflow.triggered) so a run still happens once per event.
 
-Exceptions (ADR 0033): a step's on_failure is "stop", "continue" or the id
+Exceptions (ADR 0039): a step's on_failure is "stop", "continue" or the id
 of a later step to jump to; steps marked only_on_failure run only after such
 a jump, with {{failure.step}} and {{failure.error}} filled in. A workflow's
 notify_on_failure lists people told when a run fails.
@@ -1381,7 +1381,7 @@ def _execute(conn, run: dict, wf: dict, step: dict, i: int, ctx: dict) -> str:
 
 
 def _send(conn, run: dict, wf: dict, conv_id: Any, body: str) -> dict:
-    """A workflow's message, within the workflow's own budget (ADR 0033)."""
+    """A workflow's message, within the workflow's own budget (ADR 0039)."""
     ch = conn.execute("SELECT channel FROM conversations WHERE id = %s", (conv_id,)).fetchone()
     if ch and not usage.allowed(conn, run["customer_id"], f"message_out:{ch['channel']}", workflow_id=wf["id"]):
         raise inbox.InboxError("This workflow has reached its monthly budget.", 422)
@@ -1781,7 +1781,7 @@ def _dispatch_dead(job: dict, error: str) -> None:
         ensure_dispatcher(conn)
 
 
-# ---- schedules and manual starts (ADR 0033) ------------------------------------------
+# ---- schedules and manual starts (ADR 0039) ------------------------------------------
 
 
 def _tz(conn, customer_id: Any) -> str:

@@ -1,4 +1,4 @@
-"""Directory templates and connectors for a business (ADR 0030).
+"""Directory templates and connectors for a business (ADR 0036).
 
 "Connect your directory": pick a provider, get its guided set-up with the
 values to paste (made for this business), save the provider's details, run

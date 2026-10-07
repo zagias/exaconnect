@@ -1,4 +1,4 @@
-"""Standard interfaces (ADR 0028): iCalendar, vCard, WebDAV (CalDAV and
+"""Standard interfaces (ADR 0034): iCalendar, vCard, WebDAV (CalDAV and
 CardDAV), CloudEvents and Standard Webhooks, OpenAPI import, the published
 OpenAPI and AsyncAPI documents, and CSV data exchange.
 

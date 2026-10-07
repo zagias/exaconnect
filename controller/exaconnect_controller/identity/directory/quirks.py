@@ -1,5 +1,5 @@
 """SCIM request shapes real directories send, brought to the one shape
-`identity.scim` understands (ADR 0030). Provider-agnostic: a quirk found in
+`identity.scim` understands (ADR 0036). Provider-agnostic: a quirk found in
 one provider is handled for all of them.
 
 Handled here:

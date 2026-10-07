@@ -1,4 +1,4 @@
-"""Go-live registry (ADR 0022).
+"""Go-live registry (ADR 0028).
 
 CommAI switches on a country, channel, language, carrier or region only after
 it has been tested there. Each capability has written criteria; an ExaCarib

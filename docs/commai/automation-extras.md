@@ -1,6 +1,6 @@
 # CommAI modules, bill and automation extras: operator note
 
-Decision record: `docs/adr/0033-commai-modules-bill-and-automation-extras.md`.
+Decision record: `docs/adr/0039-commai-modules-bill-and-automation-extras.md`.
 Tables: `controller/exaconnect_controller/commai/sql/70_automation_extras.sql`.
 
 ## What runs where

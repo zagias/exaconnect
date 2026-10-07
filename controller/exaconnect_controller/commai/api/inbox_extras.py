@@ -1,4 +1,4 @@
-"""Inbox, contact and widget extras (ADR 0032): service-target settings,
+"""Inbox, contact and widget extras (ADR 0038): service-target settings,
 contact identities and history, typing and presence, staff attachments, and
 the website visitor's AI browser call."""
 

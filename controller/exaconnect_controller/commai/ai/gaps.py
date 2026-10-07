@@ -1,4 +1,4 @@
-"""The knowledge-gap report (ADR 0026), built on knowledge.record_gap (ADR 0019).
+"""The knowledge-gap report (ADR 0032), built on knowledge.record_gap (ADR 0019).
 
 knowledge_gaps already holds each question the AI could not answer from
 approved sources, counted by exact wording. The report groups similar

@@ -1,4 +1,4 @@
-"""Several carriers at once (ADR 0027): routing, failover, trunk health and rates.
+"""Several carriers at once (ADR 0033): routing, failover, trunk health and rates.
 
 ExaCarib buys calls from carriers (SIP suppliers). Each carrier is a row in
 `voice_carriers`, has a versioned per-minute rate sheet by destination prefix,

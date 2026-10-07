@@ -1,4 +1,4 @@
-"""The single bill, rate cards, money budgets and the AI supplier side (ADR 0033).
+"""The single bill, rate cards, money budgets and the AI supplier side (ADR 0039).
 
 - Businesses read their usage, bills and budgets; business admins set budgets.
 - ExaCarib admins set prices (rate cards), build and issue bills, credit

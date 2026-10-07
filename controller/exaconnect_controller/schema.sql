@@ -598,6 +598,248 @@ CREATE TABLE IF NOT EXISTS api_keys (
 );
 CREATE INDEX IF NOT EXISTS api_keys_user ON api_keys (user_id) WHERE revoked_at IS NULL;
 
+-- Billing phase 1 (ADR 0022): plans per product, versioned price lists,
+-- subscriptions, draft and issued invoices, payments.
+--
+-- Connect and CommAI are sold as separate plans; an organisation (customer)
+-- may hold either or both. Subscriptions are the source of truth for which
+-- products an organisation holds (billing/plans.py keeps customers.products,
+-- when that column exists, in step with them).
+CREATE TABLE IF NOT EXISTS plans (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  product         text NOT NULL CHECK (product IN ('connect', 'commai')),
+  name            text NOT NULL CHECK (length(name) BETWEEN 1 AND 80),
+  description     text NOT NULL DEFAULT '',
+  billing_period  text NOT NULL DEFAULT 'month' CHECK (billing_period IN ('month')),
+  active          boolean NOT NULL DEFAULT true,
+  example         boolean NOT NULL DEFAULT false,
+  created_by      text NOT NULL,
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (product, name)
+);
+INSERT INTO plans (product, name, description, example, created_by) VALUES
+  ('connect', 'Connect Standard', 'Sites, carrier links, Storm Mode and Fabric.', true, 'system:schema'),
+  ('commai', 'CommAI Standard', 'Inbox, channels, AI agents and voice.', true, 'system:schema')
+ON CONFLICT (product, name) DO NOTHING;
+
+-- A plan's prices. Every save is a new version with the date it takes effect;
+-- old versions are never changed, so an invoice can always be explained.
+-- customer_id NULL: the plan's list for everyone; set: one organisation's own
+-- prices on that plan (a negotiated contract), which win over the plan's list.
+-- Connect uses the site, link, satellite and circuit prices; CommAI uses
+-- meter_prices. Both have the monthly plan fee, currency, tax and SLA credits.
+CREATE TABLE IF NOT EXISTS price_lists (
+  id                      uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  plan_id                 uuid NOT NULL REFERENCES plans(id),
+  customer_id             uuid REFERENCES customers(id) ON DELETE CASCADE,
+  version                 int NOT NULL,
+  effective_from          date NOT NULL,
+  label                   text NOT NULL DEFAULT '',
+  currency                text NOT NULL DEFAULT 'USD' CHECK (currency ~ '^[A-Z]{3}$'),
+  tax_rate_pct            numeric(6, 3) NOT NULL DEFAULT 0 CHECK (tax_rate_pct BETWEEN 0 AND 100),
+  monthly_fee             numeric(14, 4) NOT NULL DEFAULT 0 CHECK (monthly_fee >= 0),
+  site_monthly            numeric(14, 4) NOT NULL DEFAULT 0 CHECK (site_monthly >= 0),
+  commit_per_mbps         numeric(14, 4) NOT NULL DEFAULT 0 CHECK (commit_per_mbps >= 0),
+  burst_per_mbps          numeric(14, 4) NOT NULL DEFAULT 0 CHECK (burst_per_mbps >= 0),
+  satellite_per_gb        numeric(14, 4) NOT NULL DEFAULT 0 CHECK (satellite_per_gb >= 0),
+  -- NULL: each virtual circuit's own price per Mbps a month (fabric.py).
+  circuit_per_mbps_month  numeric(14, 4) CHECK (circuit_per_mbps_month >= 0),
+  -- CommAI: {"ai_reply": "0.02", "message_out:whatsapp": "0.01", ...} per unit.
+  meter_prices            jsonb NOT NULL DEFAULT '{}',
+  -- [{"below_pct": 99.9, "credit_pct": 5}, ...]: credit as a share of the site's monthly fee.
+  sla_credits             jsonb NOT NULL DEFAULT '[]',
+  credit_cap_pct          numeric(6, 3) NOT NULL DEFAULT 50 CHECK (credit_cap_pct BETWEEN 0 AND 100),
+  example                 boolean NOT NULL DEFAULT false,
+  created_by              text NOT NULL,
+  created_at              timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS price_lists_version
+  ON price_lists (plan_id, COALESCE(customer_id, '00000000-0000-0000-0000-000000000000'::uuid), version);
+
+-- Each plan starts with a clearly marked example list until ExaCarib agrees prices.
+INSERT INTO price_lists (plan_id, version, effective_from, label, site_monthly, commit_per_mbps, burst_per_mbps,
+                         satellite_per_gb, sla_credits, credit_cap_pct, example, created_by)
+SELECT p.id, 1, DATE '2026-01-01', 'Example prices (not real prices)', 150, 6, 9, 2.5,
+       '[{"below_pct": 99.9, "credit_pct": 5}, {"below_pct": 99.5, "credit_pct": 10},
+         {"below_pct": 99, "credit_pct": 25}]', 50, true, 'system:schema'
+FROM plans p WHERE p.product = 'connect' AND p.name = 'Connect Standard'
+  AND NOT EXISTS (SELECT 1 FROM price_lists x WHERE x.plan_id = p.id AND x.customer_id IS NULL);
+INSERT INTO price_lists (plan_id, version, effective_from, label, monthly_fee, meter_prices, example, created_by)
+SELECT p.id, 1, DATE '2026-01-01', 'Example prices (not real prices)', 49,
+       '{"ai_reply": "0.02", "ai_tokens": "0", "copilot": "0.01", "message_out:whatsapp": "0.01",
+         "message_out:sms": "0.02", "message_out:email": "0"}', true, 'system:schema'
+FROM plans p WHERE p.product = 'commai' AND p.name = 'CommAI Standard'
+  AND NOT EXISTS (SELECT 1 FROM price_lists x WHERE x.plan_id = p.id AND x.customer_id IS NULL);
+
+-- An organisation's plans. ends_on is exclusive; NULL means open-ended. A plan
+-- change ends one subscription on a day and starts the next on the same day.
+CREATE TABLE IF NOT EXISTS subscriptions (
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_id  uuid NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  plan_id      uuid NOT NULL REFERENCES plans(id),
+  product      text NOT NULL CHECK (product IN ('connect', 'commai')),
+  starts_on    date NOT NULL,
+  ends_on      date,
+  status       text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'ended')),
+  created_by   text NOT NULL,
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  ended_by     text,
+  ended_at     timestamptz,
+  CHECK (ends_on IS NULL OR ends_on > starts_on),
+  CHECK ((status = 'ended') = (ends_on IS NOT NULL))
+);
+-- At most one open-ended subscription per organisation and product.
+CREATE UNIQUE INDEX IF NOT EXISTS subscriptions_open
+  ON subscriptions (customer_id, product) WHERE status = 'active';
+CREATE INDEX IF NOT EXISTS subscriptions_customer ON subscriptions (customer_id, product, starts_on);
+
+-- Organisations already using Connect before plans existed keep it: one
+-- subscription each, from the day they were added. Only where none was ever made.
+INSERT INTO subscriptions (customer_id, plan_id, product, starts_on, created_by)
+SELECT c.id, p.id, 'connect', c.created_at::date, 'system:schema'
+FROM customers c JOIN plans p ON p.product = 'connect' AND p.name = 'Connect Standard'
+WHERE EXISTS (SELECT 1 FROM sites s WHERE s.customer_id = c.id)
+  AND NOT EXISTS (SELECT 1 FROM subscriptions x WHERE x.customer_id = c.id AND x.product = 'connect');
+
+-- One invoice per subscription and calendar month (UTC). The period is the
+-- part of the month the subscription covered.
+CREATE TABLE IF NOT EXISTS billing_invoices (
+  id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_id      uuid NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  product          text NOT NULL CHECK (product IN ('connect', 'commai')),
+  subscription_id  uuid NOT NULL REFERENCES subscriptions(id),
+  plan_id          uuid NOT NULL REFERENCES plans(id),
+  plan             text NOT NULL,                -- the plan's name when drafted
+  period_start     date NOT NULL,                -- the first day of the month
+  period_end       date NOT NULL,                -- exclusive: the first day of the next month
+  covered_from     date NOT NULL,                -- the subscription's part of the month
+  covered_to       date NOT NULL,                -- exclusive
+  status           text NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'issued', 'void')),
+  number           text UNIQUE,                  -- EXA-2026-0001, set when issued
+  price_list_id    uuid NOT NULL REFERENCES price_lists(id),
+  currency         text NOT NULL,
+  charges          numeric(14, 2) NOT NULL DEFAULT 0,
+  credits          numeric(14, 2) NOT NULL DEFAULT 0,   -- zero or negative
+  subtotal         numeric(14, 2) NOT NULL DEFAULT 0,
+  tax_rate_pct     numeric(6, 3) NOT NULL DEFAULT 0,
+  tax              numeric(14, 2) NOT NULL DEFAULT 0,
+  total            numeric(14, 2) NOT NULL DEFAULT 0,
+  example          boolean NOT NULL DEFAULT false,
+  created_by       text NOT NULL,
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  generated_at     timestamptz NOT NULL DEFAULT now(),
+  issued_by        text,
+  issued_at        timestamptz,
+  voided_by        text,
+  voided_at        timestamptz,
+  void_reason      text
+);
+-- One live invoice (draft or issued) per subscription and month; voiding one frees it.
+CREATE UNIQUE INDEX IF NOT EXISTS billing_invoices_live
+  ON billing_invoices (subscription_id, period_start) WHERE status IN ('draft', 'issued');
+CREATE INDEX IF NOT EXISTS billing_invoices_customer ON billing_invoices (customer_id, period_start DESC);
+
+CREATE TABLE IF NOT EXISTS billing_invoice_lines (
+  id           bigserial PRIMARY KEY,
+  invoice_id   uuid NOT NULL REFERENCES billing_invoices(id) ON DELETE CASCADE,
+  customer_id  uuid NOT NULL,
+  position     int NOT NULL,
+  product      text NOT NULL,
+  plan         text NOT NULL,                -- the plan's name: every line names its plan
+  kind         text NOT NULL CHECK (kind IN ('plan', 'site', 'commit', 'burst', 'satellite', 'circuit', 'credit',
+                                             'usage', 'voice')),
+  description  text NOT NULL,
+  site_id      uuid,
+  link_id      uuid,
+  circuit_id   bigint,
+  class_name   text,
+  quantity     numeric(18, 6) NOT NULL,
+  unit         text NOT NULL,
+  unit_price   numeric(14, 6) NOT NULL,
+  amount       numeric(14, 2) NOT NULL,
+  inputs       jsonb NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS billing_invoice_lines_invoice ON billing_invoice_lines (invoice_id, position);
+
+-- Issued and void invoices never change: an issued one may only become void, and
+-- lines change only while their invoice is a draft.
+CREATE OR REPLACE FUNCTION billing_invoice_frozen() RETURNS trigger AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF EXISTS (SELECT 1 FROM billing_invoices WHERE id = NEW.invoice_id AND status <> 'draft') THEN
+      RAISE EXCEPTION 'lines of an issued invoice are frozen' USING ERRCODE = 'check_violation';
+    END IF;
+    RETURN NEW;
+  END IF;
+  -- Removing the whole customer (cascade) is the one exception.
+  IF TG_OP = 'DELETE' AND NOT EXISTS (SELECT 1 FROM customers WHERE id = OLD.customer_id) THEN
+    RETURN OLD;
+  END IF;
+  IF TG_TABLE_NAME = 'billing_invoices' THEN
+    IF OLD.status = 'void' THEN
+      RAISE EXCEPTION 'invoice % is void and frozen', COALESCE(OLD.number, OLD.id::text)
+        USING ERRCODE = 'check_violation';
+    END IF;
+    IF OLD.status = 'issued' AND (TG_OP = 'DELETE' OR NEW.status <> 'void'
+        OR (NEW.number, NEW.customer_id, NEW.product, NEW.subscription_id, NEW.plan_id, NEW.plan,
+            NEW.period_start, NEW.period_end, NEW.covered_from, NEW.covered_to, NEW.price_list_id, NEW.currency,
+            NEW.charges, NEW.credits, NEW.subtotal, NEW.tax_rate_pct, NEW.tax, NEW.total, NEW.issued_by,
+            NEW.issued_at, NEW.generated_at)
+           IS DISTINCT FROM
+           (OLD.number, OLD.customer_id, OLD.product, OLD.subscription_id, OLD.plan_id, OLD.plan,
+            OLD.period_start, OLD.period_end, OLD.covered_from, OLD.covered_to, OLD.price_list_id, OLD.currency,
+            OLD.charges, OLD.credits, OLD.subtotal, OLD.tax_rate_pct, OLD.tax, OLD.total, OLD.issued_by,
+            OLD.issued_at, OLD.generated_at)) THEN
+      RAISE EXCEPTION 'invoice % is issued and frozen', OLD.number USING ERRCODE = 'check_violation';
+    END IF;
+  ELSE
+    IF EXISTS (SELECT 1 FROM billing_invoices WHERE id = OLD.invoice_id AND status <> 'draft') THEN
+      RAISE EXCEPTION 'lines of an issued invoice are frozen' USING ERRCODE = 'check_violation';
+    END IF;
+  END IF;
+  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+  RETURN NEW;
+END $$ LANGUAGE plpgsql;
+DROP TRIGGER IF EXISTS billing_invoices_frozen ON billing_invoices;
+CREATE TRIGGER billing_invoices_frozen BEFORE UPDATE OR DELETE ON billing_invoices
+  FOR EACH ROW EXECUTE FUNCTION billing_invoice_frozen();
+DROP TRIGGER IF EXISTS billing_invoice_lines_frozen ON billing_invoice_lines;
+CREATE TRIGGER billing_invoice_lines_frozen BEFORE INSERT OR UPDATE OR DELETE ON billing_invoice_lines
+  FOR EACH ROW EXECUTE FUNCTION billing_invoice_frozen();
+
+-- Online payment of issued invoices (off by default; ADR 0022). A payment never
+-- changes its invoice: the invoice is paid when a payment for it is 'paid', and
+-- only a correctly signed gateway webhook sets that.
+CREATE TABLE IF NOT EXISTS billing_payments (
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  invoice_id   uuid NOT NULL REFERENCES billing_invoices(id) ON DELETE CASCADE,
+  customer_id  uuid NOT NULL,
+  provider     text NOT NULL CHECK (provider IN ('stripe', 'hosted')),
+  mode         text NOT NULL CHECK (mode IN ('simulated', 'live')),
+  reference    text,
+  url          text,
+  amount       numeric(14, 2) NOT NULL,
+  currency     text NOT NULL,
+  status       text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'paid', 'failed', 'mismatch')),
+  event_id     text,
+  detail       jsonb NOT NULL DEFAULT '{}',
+  created_by   text NOT NULL,
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  paid_at      timestamptz
+);
+CREATE INDEX IF NOT EXISTS billing_payments_invoice ON billing_payments (invoice_id, created_at DESC);
+-- Each gateway event is acted on once, however often it is delivered.
+CREATE TABLE IF NOT EXISTS billing_payment_events (
+  provider     text NOT NULL,
+  event_id     text NOT NULL,
+  received_at  timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (provider, event_id)
+);
+
+-- Supplier side: what ExaCarib pays a Fabric partner per Mbps a month for a circuit
+-- (NULL: not agreed yet, shown as unknown rather than zero).
+ALTER TABLE partners ADD COLUMN IF NOT EXISTS cost_per_mbps_month numeric(14, 4);
+
 -- Time series (TimescaleDB hypertables when the extension is available).
 CREATE TABLE IF NOT EXISTS path_metrics (
   time         timestamptz NOT NULL,
@@ -642,6 +884,17 @@ BEGIN
     PERFORM create_hypertable('events', 'time', if_not_exists => TRUE, migrate_data => TRUE);
     PERFORM create_hypertable('flow_stats', 'time', if_not_exists => TRUE, migrate_data => TRUE);
     PERFORM create_hypertable('circuit_metrics', 'time', if_not_exists => TRUE, migrate_data => TRUE);
+    -- Retention: the server's disk is finite. Probe and circuit samples are kept 90 days;
+    -- interface counters and events 13 months, so a full billing year and its disputes
+    -- can be re-run. Metering's 5-minute samples (usage_5m) are not dropped.
+    BEGIN
+      PERFORM add_retention_policy('path_metrics', INTERVAL '90 days', if_not_exists => TRUE);
+      PERFORM add_retention_policy('circuit_metrics', INTERVAL '90 days', if_not_exists => TRUE);
+      PERFORM add_retention_policy('iface_counters', INTERVAL '400 days', if_not_exists => TRUE);
+      PERFORM add_retention_policy('events', INTERVAL '400 days', if_not_exists => TRUE);
+    EXCEPTION WHEN OTHERS THEN
+      RAISE NOTICE 'retention policies not added: %', SQLERRM;
+    END;
   END IF;
 END
 $$;
@@ -651,3 +904,36 @@ INSERT INTO paths (name, label, tunnel, overlay_cidr, pop_port, bfd_profile, loc
   ('carrier-b', 'Carrier B', 'wg-b',   '100.64.2.0/24', 51821, 'terrestrial', 150, 2),
   ('sat',       'Satellite', 'wg-sat', '100.64.3.0/24', 51822, 'satellite',    50, 3)
 ON CONFLICT (name) DO NOTHING;
+
+-- Releases (ADR 0025): written by deploy/release/release.sh on the host, read by Admin > Releases.
+CREATE TABLE IF NOT EXISTS releases (
+  id           bigserial PRIMARY KEY,
+  commit       text NOT NULL,
+  previous     text,
+  started_at   timestamptz NOT NULL DEFAULT now(),
+  finished_at  timestamptz,
+  status       text NOT NULL CHECK (status IN ('deploying', 'live', 'rolled_back', 'failed')),
+  kind         text NOT NULL DEFAULT 'release' CHECK (kind IN ('release', 'rollback')),
+  backup       text,
+  detail       text NOT NULL DEFAULT ''
+);
+
+-- Lab and demo organisations: every screen showing their data carries "Example data" (CLAUDE.md 4.6).
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS example boolean NOT NULL DEFAULT false;
+
+-- Forgotten-password links (api/password_reset.py). Only the hash is stored.
+CREATE TABLE IF NOT EXISTS password_resets (
+  id          bigserial PRIMARY KEY,
+  user_id     uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash  text NOT NULL UNIQUE,
+  ip          text,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  expires_at  timestamptz NOT NULL,
+  used_at     timestamptz
+);
+CREATE INDEX IF NOT EXISTS password_resets_user ON password_resets (user_id, created_at DESC);
+
+-- The certificate a node renewed away from: still accepted until the new one is
+-- first used, so a lost renewal reply doesn't strand the site (api/agent.py).
+ALTER TABLE nodes ADD COLUMN IF NOT EXISTS prev_cert_serial text;
+CREATE INDEX IF NOT EXISTS nodes_prev_cert_serial ON nodes (prev_cert_serial) WHERE prev_cert_serial IS NOT NULL;

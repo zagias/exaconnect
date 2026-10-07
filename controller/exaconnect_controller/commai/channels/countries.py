@@ -1,4 +1,4 @@
-"""Countries: the capability matrix and the SMS rules the gateway enforces (ADR 0023).
+"""Countries: the capability matrix and the SMS rules the gateway enforces (ADR 0029).
 
 Every country is declared in the go-live registry (kind "country", key the ISO
 code) and starts off. The matrix says what research suggests is possible there

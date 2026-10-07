@@ -1,0 +1,46 @@
+/* Billing (ADR 0022): plan charges, invoices and the printable invoice. */
+.bill-note { margin: 0 0 var(--space-3); }
+.bill-running { margin: 0; display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: baseline; }
+.bill-lines td:first-child { min-width: 0; }
+.bill-credit td { color: var(--success); }
+.bill-credit td .muted { color: var(--ink-muted); }
+
+.bill-why { margin-top: var(--space-1); font-size: 13px; }
+.bill-why summary { cursor: pointer; color: var(--blue-strong); }
+.bill-why dl { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: var(--space-1) var(--space-4); margin: var(--space-2) 0 0; }
+.bill-why dt { color: var(--ink-muted); font-size: 12px; }
+.bill-why dd { margin: 0; }
+
+.bill-totals { display: grid; justify-content: end; gap: var(--space-1); margin: var(--space-4) 0 0; }
+.bill-totals div { display: grid; grid-template-columns: minmax(140px, auto) minmax(120px, auto); gap: var(--space-4); }
+.bill-totals dt { color: var(--ink-muted); text-align: right; }
+.bill-totals dd { margin: 0; }
+.bill-total { border-top: 2px solid var(--ink); padding-top: var(--space-1); font-weight: 650; }
+.bill-total dt { color: var(--ink); }
+
+.bill-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--space-3); margin-bottom: var(--space-4); }
+.bill-doc-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-4); margin-bottom: var(--space-4); }
+.bill-doc-meta { text-align: right; }
+.bill-doc-meta h1 { margin: 0 0 var(--space-1); }
+.bill-logo { height: auto; max-width: 100%; }
+.bill-facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: var(--space-3); margin: 0 0 var(--space-4); }
+.bill-facts dt { color: var(--ink-muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+.bill-facts dd { margin: 0; }
+.bill-foot { margin-top: var(--space-4); }
+.bill-pay .form-actions { margin: var(--space-2) 0; }
+
+.bill-figures { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--space-3); margin: 0 0 var(--space-4); }
+.bill-figures dt { color: var(--ink-muted); font-size: 12px; }
+.bill-figures dd { margin: 0; font-family: var(--font-mono); font-size: 18px; }
+
+@media (max-width: 640px) {
+  .bill-doc-meta { text-align: left; }
+  .bill-totals { justify-content: stretch; }
+  .bill-totals div { grid-template-columns: 1fr auto; }
+}
+
+@media print {
+  .no-print, .shell-side, .shell-top, nav { display: none !important; }
+  .bill-doc { border: none; box-shadow: none; }
+  .bill-why { display: none; }
+}

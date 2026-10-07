@@ -1,4 +1,4 @@
-"""Messenger, Instagram and Telegram (ADR 0023): go-live gate, signatures, window
+"""Messenger, Instagram and Telegram (ADR 0029): go-live gate, signatures, window
 and tag rules, receipts, opt-out, secure token entry, notes and tenant isolation."""
 
 from __future__ import annotations

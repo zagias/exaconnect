@@ -1,4 +1,4 @@
-"""Countries for voice numbers (ADR 0027).
+"""Countries for voice numbers (ADR 0033).
 
 What CommAI voice needs to know about each country: its calling code, the
 area codes numbers come from, and which number ranges the simulated provider

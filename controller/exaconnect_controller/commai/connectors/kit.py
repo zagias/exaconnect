@@ -1,4 +1,4 @@
-"""The connector kit (ADR 0028): shared plumbing for every app connector.
+"""The connector kit (ADR 0034): shared plumbing for every app connector.
 
 A connector built on the kit gets, without writing it again:
 

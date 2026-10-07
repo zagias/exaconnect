@@ -1,4 +1,4 @@
-"""Pipedrive connector (ADR 0028): people, leads and deals.
+"""Pipedrive connector (ADR 0034): people, leads and deals.
 
 Written from the Pipedrive API v1: ``GET /persons/search?term=&fields=email
 &exact_match=true`` (cursor paging through

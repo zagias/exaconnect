@@ -168,7 +168,7 @@ def seed(url: str, base: str, agents: int, sms_rate: int = 0) -> dict:
             conn.execute("INSERT INTO commai_members (customer_id, user_id, seat) VALUES (%s, %s, 'agent')", (cid, uid))
             people.append({"id": str(uid), "email": email})
         # SMS to Trinidad and Tobago switched on for this business, as an
-        # ExaCarib admin does once its criteria are met (ADR 0022).
+        # ExaCarib admin does once its criteria are met (ADR 0028).
         from exaconnect_controller.commai import golive
 
         for c in conn.execute(

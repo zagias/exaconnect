@@ -212,6 +212,14 @@ export const icons = {
       <path d="M12 3.8l2.5 5.1 5.6.8-4 3.9 1 5.6-5.1-2.7-5 2.7 1-5.6-4.1-3.9 5.6-.8z" />
     </Icon>
   ),
+  billing: (
+    <Icon>
+      <path d="M6 3h12v18l-3-2-3 2-3-2-3 2z" />
+      <path d="M9 8h6" />
+      <path d="M9 12h6" />
+      <path d="M9 16h3" />
+    </Icon>
+  ),
   receipt: (
     <Icon>
       <path d="M6 3.5h12v17l-2.5-1.5-2 1.5-1.5-1.5-1.5 1.5-2-1.5L6 20.5z" />
@@ -284,11 +292,27 @@ export function matches(i: Item, path: string): boolean {
  * (null while it loads, or when it can't be read): entries for modules the
  * business lacks are left out, and the server refuses their API calls anyway.
  */
-export function navGroups(role: string | undefined, modules: Record<string, boolean> | null = null): Group[] {
-  if (role === "carrier") return [{ label: null, items: [{ to: "/", label: "Carrier view", icon: icons.carrier, end: true }] }];
+export function navGroups(
+  role: string | undefined,
+  modules: Record<string, boolean> | null = null,
+  products: readonly string[] | null = null,
+): Group[] {
+  if (role === "carrier")
+    return [
+      {
+        label: null,
+        items: [
+          { to: "/", label: "Carrier view", icon: icons.carrier, end: true },
+          { to: "/notices", label: "Notices", icon: icons.insights },
+          { to: "/integrations", label: "Integrations", icon: icons.fabric },
+        ],
+      },
+    ];
   const admin = role === "admin";
   const has = (i: Item) => !i.module || !modules || modules[i.module] !== false;
-  const groups: Group[] = [
+  // The plans the current organisation holds (ADR 0023); null: not limited by plan.
+  const plan = (p: string) => !products || products.includes(p);
+  const connect: Group[] = [
     {
       label: "Monitor",
       items: [
@@ -296,6 +320,7 @@ export function navGroups(role: string | undefined, modules: Record<string, bool
         { to: "/sites", label: "Sites", icon: icons.sites },
         { to: "/decisions", label: "Decisions", icon: icons.decisions },
         { to: "/insights", label: "Insights", icon: icons.insights },
+        { to: "/notices", label: "Carrier notices", icon: icons.carrier },
         { to: "/ask", label: "Ask", icon: icons.ask },
       ],
     },
@@ -306,6 +331,7 @@ export function navGroups(role: string | undefined, modules: Record<string, bool
         { to: "/fabric", label: "Fabric", icon: icons.fabric },
         { to: "/internet", label: "Internet", icon: icons.internet },
         { to: "/encryption", label: "Encryption", icon: icons.encryption },
+        { to: "/integrations", label: "Integrations", icon: icons.fabric, keywords: "monitoring ticketing snmp syslog" },
       ],
     },
     {
@@ -313,10 +339,12 @@ export function navGroups(role: string | undefined, modules: Record<string, bool
       items: [
         { to: "/order", label: "Order", icon: icons.order },
         { to: "/metering", label: "Metering", icon: icons.metering },
+        { to: "/billing", label: "Billing", icon: icons.billing, keywords: "invoices payments" },
         ...(admin ? [{ to: "/carrier", label: "Carrier view", icon: icons.carrier }] : []),
       ],
     },
   ];
+  const groups: Group[] = plan("connect") ? connect : [];
   // CommAI (ADR 0016), grouped by task: daily work first, set-up folded away.
   const commai: Group[] = [
     {
@@ -361,7 +389,7 @@ export function navGroups(role: string | undefined, modules: Record<string, bool
       ],
     },
   ];
-  groups.push(...commai.map((g) => ({ ...g, items: g.items.filter(has) })).filter((g) => g.items.length > 0));
+  if (plan("commai")) groups.push(...commai.map((g) => ({ ...g, items: g.items.filter(has) })).filter((g) => g.items.length > 0));
   if (admin)
     groups.push({
       label: "Manage",

@@ -1,4 +1,4 @@
-"""The PBX's own endpoint (ADR 0027): FreeSWITCH asks before each outside call.
+"""The PBX's own endpoint (ADR 0033): FreeSWITCH asks before each outside call.
 
 Not for people and not public: it is under /api/v1/commai/internal/, which the
 public proxy refuses (deploy/public/Caddyfile), and it needs the PBX's keyed

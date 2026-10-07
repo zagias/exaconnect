@@ -1,4 +1,4 @@
-"""Interface languages for the CommAI screens and the chat widget (ADR 0026).
+"""Interface languages for the CommAI screens and the chat widget (ADR 0032).
 
 One message catalogue per locale, as JSON next to this file. English
 (en-GB) is the source: every key exists there, and any key a draft lacks

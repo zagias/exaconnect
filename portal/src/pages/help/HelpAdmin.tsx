@@ -76,7 +76,7 @@ const DAYS: [Day, string][] = [
   ["sun", "Sunday"],
 ];
 
-/** Settings tab: the help centre for the business's own customers (ADR 0031). */
+/** Settings tab: the help centre for the business's own customers (ADR 0037). */
 export default function HelpAdmin() {
   const base = useCommaiBase();
   const a = useApi<Admin>(base ? `${base}/help-centre` : null, 0);

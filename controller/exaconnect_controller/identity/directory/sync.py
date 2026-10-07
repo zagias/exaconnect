@@ -1,4 +1,4 @@
-"""Pull sync and group presets (ADR 0030).
+"""Pull sync and group presets (ADR 0036).
 
 A pull sync turns a directory `Snapshot` into the same accounts, groups and
 rights SCIM makes, through `identity.scim`, so every rule holds: people get

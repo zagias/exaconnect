@@ -1,4 +1,4 @@
-"""Slack connector (ADR 0029): staff notifications, handover alerts and
+"""Slack connector (ADR 0035): staff notifications, handover alerts and
 approval requests with Approve and Reject buttons.
 
 Written from Slack's Web API (oauth.v2.access, auth.test,

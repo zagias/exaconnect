@@ -2,7 +2,7 @@
 .plain-list { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 6px; }
 .row-between { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
 
-/* Contacts and channels on a phone: one column, finger-sized controls (ADR 0032). */
+/* Contacts and channels on a phone: one column, finger-sized controls (ADR 0038). */
 .identity-list li { margin-bottom: 6px; }
 @media (max-width: 600px) {
   .identity-list .linklike { display: inline-block; min-height: 44px; padding: 10px 4px; }

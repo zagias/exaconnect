@@ -1,5 +1,5 @@
 """Pieces shared by the helpdesk, team chat, commerce, payments and knowledge
-connectors (ADR 0029), on top of the connector kit (ADR 0028).
+connectors (ADR 0035), on top of the connector kit (ADR 0034).
 
 - Ticket links: a helpdesk ticket linked to a CommAI conversation, its status
   synced back from the helpdesk's webhook (a note on the conversation and a
@@ -117,7 +117,7 @@ def customer_for(conn, app: str, key: str, ident: str) -> list[Any]:
 
 def app_hook(conn, customer_id: Any, app: str, actor: str = "") -> dict:
     """The business's inbound address for this app's change notifications,
-    made on first use. The generic receiver (ADR 0028) checks each delivery
+    made on first use. The generic receiver (ADR 0034) checks each delivery
     with the connector's verify_webhook."""
     row = conn.execute(
         "SELECT * FROM commai_inbound_hooks WHERE customer_id = %s AND app = %s AND kind = 'app'",

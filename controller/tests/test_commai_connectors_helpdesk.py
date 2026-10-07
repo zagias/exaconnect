@@ -1,5 +1,5 @@
 # ruff: noqa: F401, F811  (pytest fixtures imported from the helpers)
-"""Helpdesk connectors (ADR 0029): Zendesk, Freshdesk and ServiceNow against a
+"""Helpdesk connectors (ADR 0035): Zendesk, Freshdesk and ServiceNow against a
 fake HTTP layer (live mode) and their simulated stand-ins."""
 
 import datetime as dt

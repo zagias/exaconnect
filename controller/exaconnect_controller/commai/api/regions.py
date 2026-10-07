@@ -1,4 +1,4 @@
-"""Regional hosting API (ADR 0025). Regions switch on through the go-live API
+"""Regional hosting API (ADR 0031). Regions switch on through the go-live API
 (/golive/region/{key}/status) once every dependency has a provider recorded here."""
 
 from __future__ import annotations

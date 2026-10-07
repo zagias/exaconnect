@@ -137,7 +137,7 @@ def _due(conn, customer_id: Any, priority: str, team_id: Any = None) -> tuple[dt
     now = dt.datetime.now(dt.UTC)
     first = dt.timedelta(minutes=float(s["first_reply_minutes"].get(priority, 60)))
     resolve = dt.timedelta(hours=float(s["resolve_hours"].get(priority, 24)))
-    # Targets count business time only: they pause outside opening hours (ADR 0024).
+    # Targets count business time only: they pause outside opening hours (ADR 0030).
     return calendar.due(conn, customer_id, team_id, now, first, resolve)
 
 
@@ -208,7 +208,7 @@ def route(conn: psycopg.Connection, conv: dict, text: str) -> dict:
             ).fetchone()
             team_id = team["id"] if team else team_id
     assignee = None
-    # Outside the team's opening hours: the after-hours team, or wait for opening (ADR 0024).
+    # Outside the team's opening hours: the after-hours team, or wait for opening (ADR 0030).
     hours = calendar.after_hours(conn, conv["customer_id"], team_id)
     if hours["reason"]:
         team_id = hours["team_id"]
@@ -482,7 +482,9 @@ def assign(
     conv = get(conn, customer_id, conversation_id, lock=True)
     if assignee_id is not None:
         ok = conn.execute(
-            """SELECT 1 FROM users u WHERE u.id = %s AND (u.customer_id = %s OR u.role = 'admin')
+            """SELECT 1 FROM users u WHERE u.id = %s
+               AND (u.role = 'admin' OR EXISTS (SELECT 1 FROM org_memberships om WHERE om.user_id = u.id
+                                               AND om.customer_id = %s AND om.role <> 'viewer'))
                AND NOT EXISTS (SELECT 1 FROM commai_members m WHERE m.user_id = u.id AND m.customer_id = %s
                                AND m.seat = 'internal')""",
             (assignee_id, customer_id, customer_id),
@@ -718,8 +720,8 @@ def send(
     ch = channels.get(conv["channel"])
     try:
         ch.check_send(conn, conv, body, template)
-        protect.check_send(conn, conv)  # hard monthly limits stop sending (ADR 0024)
-        from . import usage  # the channel's limit and money budgets (ADR 0033)
+        protect.check_send(conn, conv)  # hard monthly limits stop sending (ADR 0030)
+        from . import usage  # the channel's limit and money budgets (ADR 0039)
 
         usage.check_send(conn, conv)
     except channels.SendBlocked as e:

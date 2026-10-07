@@ -1,6 +1,6 @@
 # CommAI phase 3 channels, countries and SMS carriers: operator note
 
-Decision record: `docs/adr/0023-commai-channels-global.md`.
+Decision record: `docs/adr/0029-commai-channels-global.md`.
 
 ## What runs where
 
@@ -14,7 +14,7 @@ Decision record: `docs/adr/0023-commai-channels-global.md`.
 ## Switching things on
 
 Everything starts off. An ExaCarib admin records each criterion with evidence and sets the status through
-`/api/v1/commai/golive` (ADR 0022): `channel/messenger`, `channel/instagram`, `channel/telegram`,
+`/api/v1/commai/golive` (ADR 0028): `channel/messenger`, `channel/instagram`, `channel/telegram`,
 `channel/whatsapp-cloud`, `carrier/sms-sim-a`, `carrier/sms-sim-b`, `carrier/sms-twilio`, `country/<ISO>`.
 
 ## Endpoints

@@ -106,7 +106,7 @@ def gather(conn: psycopg.Connection, cid: Any) -> dict:
                       fallback FROM voice_ai_rules WHERE customer_id = %s AND enabled ORDER BY name"""
         ),
         "blocked_prefixes": sorted(fraud_limits(conn, cid)["blocked_prefixes"]),
-        "emergency_numbers": sorted(emergency.business_numbers(conn, cid)),  # each island's (ADR 0027)
+        "emergency_numbers": sorted(emergency.business_numbers(conn, cid)),  # each island's (ADR 0033)
         # The controller check before outside calls (voice/pbx.py) and, for
         # emergency calls, which never wait for it, every carrier switched on.
         "controller_url": controller_url(),

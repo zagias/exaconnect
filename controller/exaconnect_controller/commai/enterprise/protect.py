@@ -1,4 +1,4 @@
-"""Abuse and account protection (ADR 0024).
+"""Abuse and account protection (ADR 0030).
 
 - Unusual use is watched every five minutes by a durable job: many failed
   sign-ins, a sudden spike in messages sent, a jump in metered usage. An API

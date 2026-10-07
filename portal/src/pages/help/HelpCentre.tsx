@@ -4,7 +4,7 @@ import { clientId, helpApi, useHelp, type HelpHome, type PublicMessage } from ".
 import "./help.css";
 
 /**
- * The help centre a business offers its own customers (ADR 0031), at
+ * The help centre a business offers its own customers (ADR 0037), at
  * /help/<slug>, outside the staff portal: no staff sign-in, the business's
  * own name and colour.
  */

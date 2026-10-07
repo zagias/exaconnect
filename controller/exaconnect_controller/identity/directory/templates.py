@@ -1,4 +1,4 @@
-"""Directory templates (ADR 0030): one guided set-up per identity provider.
+"""Directory templates (ADR 0036): one guided set-up per identity provider.
 
 A template is data. It holds what the provider needs from us (our ACS URL,
 entity ID, redirect URI, SCIM address, generated per business), what we need

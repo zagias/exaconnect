@@ -1,4 +1,4 @@
-"""Customer history (ADR 0032): everything the business has on one contact,
+"""Customer history (ADR 0038): everything the business has on one contact,
 in one place for the inbox and the API.
 
 - conversations: every conversation, newest first

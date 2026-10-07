@@ -91,7 +91,7 @@ def _ops(body: dict) -> list[dict]:
     ops = body.get("Operations")
     if not isinstance(ops, list) or not ops:
         raise ScimError(400, "Operations is required.", "invalidSyntax")
-    return quirks.normalise_ops(ops)  # provider quirks (ADR 0030)
+    return quirks.normalise_ops(ops)  # provider quirks (ADR 0036)
 
 
 def _audit(conn, tok: dict, action: str, target: str, detail: dict | None = None) -> None:

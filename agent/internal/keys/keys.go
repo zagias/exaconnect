@@ -9,6 +9,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/base64"
@@ -19,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 type Store struct{ Dir string }
@@ -133,3 +135,121 @@ func writeSecret(path string, data []byte) error {
 }
 
 func (s Store) ReadCA() ([]byte, error) { return os.ReadFile(s.CAPath()) }
+
+// Cert returns the stored client certificate.
+func (s Store) Cert() (*x509.Certificate, error) {
+	b, err := os.ReadFile(s.CertPath())
+	if err != nil {
+		return nil, err
+	}
+	return parseCert(b)
+}
+
+func parseCert(certPEM []byte) (*x509.Certificate, error) {
+	blk, _ := pem.Decode(certPEM)
+	if blk == nil || blk.Type != "CERTIFICATE" {
+		return nil, fmt.Errorf("not a PEM certificate")
+	}
+	return x509.ParseCertificate(blk.Bytes)
+}
+
+// RenewAt is when a certificate should be renewed: two thirds of the way
+// through its lifetime.
+func RenewAt(c *x509.Certificate) time.Time {
+	life := c.NotAfter.Sub(c.NotBefore)
+	return c.NotBefore.Add(life * 2 / 3)
+}
+
+// InstallCert replaces the client certificate with a renewed one. The new
+// certificate is written beside the old one and checked first: it must parse,
+// be for this node's private key and node name, chain to the stored CA and be
+// valid now. Only then is it renamed over the old one, so a crash or a bad
+// certificate at any point leaves the old certificate in place.
+func (s Store) InstallCert(certPEM []byte, now time.Time) error {
+	old, err := s.Cert()
+	if err != nil {
+		return fmt.Errorf("read current certificate: %w", err)
+	}
+	if err := s.verifyCert(certPEM, old.Subject.CommonName, now); err != nil {
+		return fmt.Errorf("renewed certificate rejected: %w", err)
+	}
+	tmp := s.CertPath() + ".new"
+	if err := writeSynced(tmp, certPEM); err != nil {
+		return err
+	}
+	// Check what is on disk, not what is in memory.
+	saved, err := os.ReadFile(tmp)
+	if err != nil {
+		return err
+	}
+	if err := s.verifyCert(saved, old.Subject.CommonName, now); err != nil {
+		os.Remove(tmp)
+		return fmt.Errorf("saved certificate rejected: %w", err)
+	}
+	if _, err := tls.X509KeyPair(saved, mustRead(s.TLSKeyPath())); err != nil {
+		os.Remove(tmp)
+		return fmt.Errorf("saved certificate does not load with the key: %w", err)
+	}
+	if err := os.Rename(tmp, s.CertPath()); err != nil {
+		return err
+	}
+	return syncDir(s.Dir)
+}
+
+func (s Store) verifyCert(certPEM []byte, name string, now time.Time) error {
+	c, err := parseCert(certPEM)
+	if err != nil {
+		return err
+	}
+	key, err := s.tlsKey()
+	if err != nil {
+		return err
+	}
+	pub, ok := c.PublicKey.(*ecdsa.PublicKey)
+	if !ok || !pub.Equal(&key.PublicKey) {
+		return fmt.Errorf("not issued for this node's key")
+	}
+	if c.Subject.CommonName != name {
+		return fmt.Errorf("issued for %q, not %q", c.Subject.CommonName, name)
+	}
+	ca, err := s.ReadCA()
+	if err != nil {
+		return err
+	}
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(ca) {
+		return fmt.Errorf("bad CA in %s", s.CAPath())
+	}
+	_, err = c.Verify(x509.VerifyOptions{Roots: pool, CurrentTime: now, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}})
+	return err
+}
+
+func mustRead(p string) []byte { b, _ := os.ReadFile(p); return b }
+
+// writeSynced writes a secret file and flushes it to disk before returning.
+func writeSynced(path string, data []byte) error {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
+}
+
+func syncDir(dir string) error {
+	d, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+	// Some filesystems cannot sync a directory; the rename has still happened.
+	_ = d.Sync()
+	return nil
+}

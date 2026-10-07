@@ -1,4 +1,4 @@
-"""The iCalendar feed of a business's bookings, and .ics invites (ADR 0028).
+"""The iCalendar feed of a business's bookings, and .ics invites (ADR 0034).
 
 - Feed: a secret address (``/api/v1/commai/ical/{token}.ics``) any calendar
   app can subscribe to (Google, Outlook, Apple). Only the token's SHA-256 is

@@ -73,6 +73,12 @@ def refresh_rights(conn: psycopg.Connection, customer_id: Any, user_id: Any) -> 
         "UPDATE users SET access_scopes = %s, updated_at = now() WHERE id = %s",
         (None if admin else sso.MEMBER_SCOPES, user_id),
     )
+    # Their role in the organisation follows the directory too (ADR 0023).
+    conn.execute(
+        """UPDATE org_memberships SET role = %s, updated_at = now()
+           WHERE customer_id = %s AND user_id = %s AND managed_by IS NOT NULL AND role <> %s""",
+        ("admin" if admin else "member", customer_id, user_id, "admin" if admin else "member"),
+    )
     conn.execute(
         """INSERT INTO commai_members (customer_id, user_id, seat) VALUES (%s, %s, %s)
            ON CONFLICT (customer_id, user_id) DO UPDATE SET seat = EXCLUDED.seat""",

@@ -1,4 +1,4 @@
--- Directory templates and connectors (ADR 0030). Idempotent.
+-- Directory templates and connectors (ADR 0036). Idempotent.
 
 -- One guided set-up per business and provider. Off until the business connects it.
 CREATE TABLE IF NOT EXISTS directory_setups (

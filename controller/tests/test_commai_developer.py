@@ -1,4 +1,4 @@
-"""Developer platform (ADR 0025): OAuth 2.0 with PKCE for partner apps, sandbox
+"""Developer platform (ADR 0031): OAuth 2.0 with PKCE for partner apps, sandbox
 keys that never send for real, deprecation headers and the changelog."""
 
 from __future__ import annotations
@@ -172,7 +172,7 @@ def test_confidential_client_needs_its_secret(client, admin_headers):
 def test_sandbox_key_never_sends_for_real(client, monkeypatch):
     b = business(client, "Sandbox Co", people=("owner",))
     u = base(b)
-    switch_on("country", "TT")  # SMS destinations start off (ADR 0023)
+    switch_on("country", "TT")  # SMS destinations start off (ADR 0029)
     assert client.post(f"{u}/sandbox/keys", json={}, headers=b["owner"]["h"]).status_code == 409
     sb = client.post(f"{u}/sandbox", headers=b["owner"]["h"])
     assert sb.status_code == 201, sb.text

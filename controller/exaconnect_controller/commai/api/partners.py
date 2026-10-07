@@ -1,4 +1,4 @@
-"""Partners and white-label API (ADR 0025).
+"""Partners and white-label API (ADR 0031).
 
 ExaCarib admins create partners and add their people. A partner asks to manage
 a business; the business accepts, chooses the scopes, and can revoke. Partner

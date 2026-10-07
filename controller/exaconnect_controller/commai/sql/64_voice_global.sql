@@ -1,4 +1,4 @@
--- CommAI voice stage 5 (ADR 0027): real numbers by country, porting, emergency
+-- CommAI voice stage 5 (ADR 0033): real numbers by country, porting, emergency
 -- addresses per island, several carriers with routing and trunk health, and
 -- international revenue share fraud protection. Applied after 50_voice.sql,
 -- idempotently. Business records carry customer_id; carriers, their rates and

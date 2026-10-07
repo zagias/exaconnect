@@ -1,4 +1,4 @@
-"""The PBX's check before each outside call (ADR 0027, voice/pbx.py): the
+"""The PBX's check before each outside call (ADR 0033, voice/pbx.py): the
 internal endpoint FreeSWITCH calls with mod_curl, its keyed digest, its plain
 text answers, tenant isolation, and the rendered dial plan that uses it."""
 

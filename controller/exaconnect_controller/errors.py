@@ -1,4 +1,4 @@
-"""One error shape for the whole API, and a request id on every response (ADR 0032).
+"""One error shape for the whole API, and a request id on every response (ADR 0038).
 
 Every error answers JSON like:
 

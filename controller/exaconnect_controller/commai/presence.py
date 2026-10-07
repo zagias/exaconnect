@@ -1,4 +1,4 @@
-"""Typing indicators and presence (ADR 0032).
+"""Typing indicators and presence (ADR 0038).
 
 Who is typing, or looking at, a conversation right now. Rows are overwritten
 in place and expire on their own (typing after TYPING_S, viewing after

@@ -1,6 +1,6 @@
 # CommAI integration catalogue
 
-Operator note for ADR 0028. Code: `controller/exaconnect_controller/commai/connectors/`
+Operator note for ADR 0034. Code: `controller/exaconnect_controller/commai/connectors/`
 (one file per app; the shared kit is `connectors/kit.py`), `commai/standards/`,
 `commai/channels/mailbox.py` and `commai/api/integrations_catalogue.py`. Portal:
 CommAI → App catalogue (`portal/src/pages/commai/Catalogue.tsx`).
@@ -10,7 +10,7 @@ CommAI → App catalogue (`portal/src/pages/commai/Catalogue.tsx`).
 - **Off until switched on.** Each app declares a go-live capability
   (`kind = feature`, `key = integration-<app>`) with written criteria. Every one
   has `app-registered`, `live-test` and `permissions`, plus its own criteria and the
-  three base criteria from ADR 0022. Until an ExaCarib admin records them as met and
+  three base criteria from ADR 0028. Until an ExaCarib admin records them as met and
   switches the capability to pilot or on, a business's connection runs on the app's
   **stand-in**. The stand-in is an in-process copy of the provider's API that answers
   in the provider's own shapes, keeps records per business, and is labelled

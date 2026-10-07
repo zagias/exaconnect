@@ -1,4 +1,4 @@
-"""The supplier side of AI (ADR 0033): what the model and speech provider
+"""The supplier side of AI (ADR 0039): what the model and speech provider
 (DeepInfra) charges ExaCarib, reconciled against what CommAI recorded and
 billed, with the margin per business.
 

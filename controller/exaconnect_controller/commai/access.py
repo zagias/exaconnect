@@ -18,11 +18,14 @@ Three layers, all enforced by the service, never by a prompt:
   A "customer-facing" key is any key without commai:notes. It can never read
   a note, whatever else it holds.
 
-- Roles (ADR 0024). A person a business admin has given roles needs, as
+- Roles (ADR 0030). A person a business admin has given roles needs, as
   well, the permission the scope and endpoint stand for
   (`enterprise.roles.required`), business-wide or for the team of the
   conversation in question. Roles only narrow; a person without roles keeps
   exactly the rights above.
+- The person's role in the organisation (ADR 0023). commai:admin work
+  (settings) needs an owner or admin; viewers never write (enforced for every
+  write in api/deps.py).
 """
 
 from __future__ import annotations
@@ -32,12 +35,15 @@ from typing import Any
 import psycopg
 from fastapi import HTTPException, status
 
-from ..api.deps import User, check_customer
+from ..api.deps import User, can_manage_org, check_customer
 
-SCOPES = ("connect", "commai:read", "commai:write", "commai:notes", "commai:admin")
+SCOPES = ("connect", "connect:read", "commai:read", "commai:write", "commai:notes", "commai:admin")
+NOT_ORG_ADMIN = "Only this organisation's owners and admins can change these settings."
 
 
 def require_scope(user: User, scope: str) -> None:
+    if scope == "commai:admin" and user.role == "customer" and not can_manage_org(user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, NOT_ORG_ADMIN)
     if user.scopes is None or scope in user.scopes:
         return
     # A write scope implies read for the same records.

@@ -1,6 +1,6 @@
 # Identity and backups (operator note)
 
-Design: [ADR 0017](../adr/0017-identity-and-backups.md). Provider templates and directory connectors: [directory.md](directory.md) (ADR 0030).
+Design: [ADR 0017](../adr/0017-identity-and-backups.md). Provider templates and directory connectors: [directory.md](directory.md) (ADR 0036).
 
 ## What it does
 

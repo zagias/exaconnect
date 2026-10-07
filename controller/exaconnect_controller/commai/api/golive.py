@@ -1,4 +1,4 @@
-"""Go-live registry API (ADR 0022). ExaCarib admins change it; anyone signed in reads it."""
+"""Go-live registry API (ADR 0028). ExaCarib admins change it; anyone signed in reads it."""
 
 from __future__ import annotations
 

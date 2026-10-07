@@ -1,6 +1,6 @@
 # CommAI API: versions, deprecation and changes
 
-This is the published policy for the CommAI and Connect API (ADR 0025). The same
+This is the published policy for the CommAI and Connect API (ADR 0031). The same
 text is served as JSON at `GET /api/v1/commai/api-policy`.
 
 ## Versions

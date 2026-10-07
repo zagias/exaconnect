@@ -1,4 +1,4 @@
-"""CloudEvents 1.0 and Standard Webhooks for CommAI's webhooks (ADR 0028).
+"""CloudEvents 1.0 and Standard Webhooks for CommAI's webhooks (ADR 0034).
 
 Outbound, per endpoint:
 

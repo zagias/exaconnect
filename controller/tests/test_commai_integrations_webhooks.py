@@ -1,4 +1,4 @@
-"""Webhooks as standards (ADR 0028): CloudEvents 1.0 bodies and Standard
+"""Webhooks as standards (ADR 0034): CloudEvents 1.0 bodies and Standard
 Webhooks headers on outbound deliveries; signed inbound webhooks (Standard
 Webhooks or ExaCarib v1, CloudEvents structured or binary, or JSON) that
 start workflows, accepted once, refused when unsigned, wrongly signed or stale."""

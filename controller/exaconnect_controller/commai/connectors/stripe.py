@@ -1,4 +1,4 @@
-"""Stripe connector (ADR 0029): payment links and payment status only.
+"""Stripe connector (ADR 0035): payment links and payment status only.
 
 Written from Stripe's public API (Prices, Payment Links, Checkout Sessions,
 Webhook Endpoints) and Stripe Connect OAuth. ExaCarib registers one Connect

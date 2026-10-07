@@ -1,4 +1,4 @@
-"""The single bill, money budgets and the AI supplier side (ADR 0033)."""
+"""The single bill, money budgets and the AI supplier side (ADR 0039)."""
 
 import datetime as dt
 from decimal import Decimal

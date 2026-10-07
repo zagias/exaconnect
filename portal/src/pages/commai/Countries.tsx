@@ -7,7 +7,7 @@ import { Card, PageHead, useAction } from "../../ui";
 import { useCommaiBase } from "./lib";
 import "./channels.css";
 
-/* Countries (ADR 0023): what CommAI can do where. Shapes from
+/* Countries (ADR 0029): what CommAI can do where. Shapes from
    controller/exaconnect_controller/commai/channels/countries.py (matrix_for). */
 
 interface Fact {

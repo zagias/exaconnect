@@ -1,4 +1,4 @@
-"""SMS routing across more than one carrier (ADR 0023).
+"""SMS routing across more than one carrier (ADR 0029).
 
 ExaCarib keeps a route table: for each destination country, a primary and a
 fallback SMS carrier, with the cost of each per message segment. Carriers are

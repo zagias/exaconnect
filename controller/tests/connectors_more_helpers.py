@@ -1,4 +1,4 @@
-"""Helpers (no tests) for the ADR 0029 connector tests: the kit's fixtures, plus
+"""Helpers (no tests) for the ADR 0035 connector tests: the kit's fixtures, plus
 a business with a conversation, an app hook and a webhook check."""
 
 from __future__ import annotations

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 /*
- * Speech input for the voice change box and the assistant (ADR 0033): the
+ * Speech input for the voice change box and the assistant (ADR 0039): the
  * browser's own speech recognition, where the browser has it. Typing always
  * works; the button only appears when speech is available, and what was
  * heard goes into the text box for the person to check before anything is

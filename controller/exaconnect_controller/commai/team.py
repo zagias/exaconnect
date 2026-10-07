@@ -1,4 +1,4 @@
-"""Staff-only inbox features (ADR 0026): notifications, mentions on notes,
+"""Staff-only inbox features (ADR 0032): notifications, mentions on notes,
 files on notes, saved views and staff chat.
 
 Everything here is internal. Note files live in note_files and staff chat in

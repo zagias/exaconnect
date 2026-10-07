@@ -1,4 +1,4 @@
-"""Developer platform API (ADR 0025): OAuth 2.0 for partner apps, sandboxes and
+"""Developer platform API (ADR 0031): OAuth 2.0 for partner apps, sandboxes and
 sandbox keys, the API policy, changelog and event catalogue."""
 
 from __future__ import annotations

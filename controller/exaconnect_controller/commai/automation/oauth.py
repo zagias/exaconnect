@@ -1,5 +1,5 @@
 """OAuth 2.0 authorisation-code sign-in for connectors, and the access token
-a connector uses for each call (ADR 0020, ADR 0028).
+a connector uses for each call (ADR 0020, ADR 0034).
 
 Client ids and secrets come from the environment. Until Dudley registers
 the apps they are empty and the sign-in button explains what is missing:
@@ -13,7 +13,7 @@ the apps they are empty and the sign-in button explains what is missing:
   Zoho CRM         EXA_ZOHO_CLIENT_ID, EXA_ZOHO_CLIENT_SECRET (Zoho API console, server-based app)
   Pipedrive        EXA_PIPEDRIVE_CLIENT_ID, EXA_PIPEDRIVE_CLIENT_SECRET (Pipedrive Marketplace app)
   Calendly         EXA_CALENDLY_CLIENT_ID, EXA_CALENDLY_CLIENT_SECRET (Calendly developer app)
-  Custom REST      the business's own client id and secret, stored encrypted (ADR 0028)
+  Custom REST      the business's own client id and secret, stored encrypted (ADR 0034)
   All              EXA_PUBLIC_URL, the controller's public https address, used
                    for the redirect URI {EXA_PUBLIC_URL}/api/v1/commai/oauth/{app}/callback
 
@@ -173,7 +173,7 @@ PROVIDERS: dict[str, Provider] = {
     ),
 }
 
-# Providers made at run time (a business's custom REST app, ADR 0028): each
+# Providers made at run time (a business's custom REST app, ADR 0034): each
 # resolver takes an app name and returns a Provider or None.
 resolvers: list[Callable[[str], Provider | None]] = []
 
@@ -374,7 +374,7 @@ def callback(conn: psycopg.Connection, app: str, code: str, state: str) -> dict:
 
 def _leave_simulation(conn, connection: dict) -> None:
     """Moving from the stand-in to the real app starts the checks again:
-    test and approve before it is live (ADR 0028)."""
+    test and approve before it is live (ADR 0034)."""
     conn.execute(
         """UPDATE integration_connections SET status = 'authorised', approved_at = NULL, approved_by = '',
                   last_test_result = '{}', last_test_at = NULL WHERE id = %s""",
@@ -452,7 +452,7 @@ def set_token(conn: psycopg.Connection, connection: dict, token: str) -> None:
 
 def set_credentials(conn: psycopg.Connection, connection: dict, creds: dict) -> None:
     """Credentials a business enters (API key, user name and app password,
-    client id and secret), stored encrypted (ADR 0028)."""
+    client id and secret), stored encrypted (ADR 0034)."""
     if connection.get("auth_method") == "simulated":
         _leave_simulation(conn, connection)
     ref = vault.put(

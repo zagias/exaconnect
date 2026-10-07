@@ -1,4 +1,4 @@
-"""Contacts (ADR 0032): channel identities added, verified and removed through
+"""Contacts (ADR 0038): channel identities added, verified and removed through
 the API; customer history (calls, open requests, linked records, bookings);
 cursor paging on the inbox lists."""
 

@@ -1,7 +1,7 @@
 <!--
   exa-edge: kamailio
   The gateway the rendered dial plans send outside calls to ("exacarib_sip"), for
-  EXA_VOICE_EDGE=kamailio (ADR 0027): FreeSWITCH hands every outside call to Kamailio,
+  EXA_VOICE_EDGE=kamailio (ADR 0033): FreeSWITCH hands every outside call to Kamailio,
   which holds the carrier list (dispatcher sets) and fails over in the order the
   controller gave in X-Exa-Route. No registration and no credentials here: carriers
   trust Kamailio's address, and Kamailio allows FreeSWITCH by address (address.list

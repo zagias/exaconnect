@@ -1,4 +1,4 @@
-"""The server-side QR encoder (ADR 0033).
+"""The server-side QR encoder (ADR 0039).
 
 Each code is read back the way a scanner would: format bits checked and
 decoded, the mask removed, codewords read in the zig-zag order and

@@ -1,4 +1,4 @@
-/* My settings (ADR 0031). Phone first: one column, everything reachable by keyboard. */
+/* My settings (ADR 0037). Phone first: one column, everything reachable by keyboard. */
 .me { max-width: 880px; }
 .me-section { margin-bottom: 24px; scroll-margin-top: 72px; }
 .me-section h2 { margin-bottom: 12px; }

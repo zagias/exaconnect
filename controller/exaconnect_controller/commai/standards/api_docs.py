@@ -1,4 +1,4 @@
-"""Published descriptions of CommAI (ADR 0028).
+"""Published descriptions of CommAI (ADR 0034).
 
 - OpenAPI 3.1: every /api/v1/commai endpoint, taken from the running app's
   own schema (so it never drifts from the code), with only the components

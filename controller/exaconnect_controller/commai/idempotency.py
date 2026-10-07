@@ -7,7 +7,7 @@ repeat with a different body is refused (422) and a repeat that arrives
 while the first is still running gets 409. The caller is identified by a
 hash of its credentials, so two callers never share a key.
 
-Rate limits live in commai/ratelimit.py (shared through Postgres, ADR 0032).
+Rate limits live in commai/ratelimit.py (shared through Postgres, ADR 0038).
 """
 
 from __future__ import annotations

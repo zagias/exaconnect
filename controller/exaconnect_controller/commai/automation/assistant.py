@@ -582,6 +582,6 @@ def open_case(
     return row
 
 
-# Voice, AI agent and sign-in checks register themselves (ADR 0033).
+# Voice, AI agent and sign-in checks register themselves (ADR 0039).
 from .. import assistant_checks as _assistant_checks  # noqa: E402, F401
 from ..voice import checks as _voice_checks  # noqa: E402, F401

@@ -8,7 +8,7 @@ Inbound (each provider's own scheme, through the real HTTP route):
   provider, the email shared secret, Shopify, Pipedrive) rely on the event id
   for replays; that is said per test.
 
-Outbound (commai/webhooks.py, ADR 0016 and 0028): the signature a receiver
+Outbound (commai/webhooks.py, ADR 0016 and 0034): the signature a receiver
 computes from the spec matches, in the ExaCarib v1, CloudEvents and Standard
 Webhooks forms; a stale delivery fails the receiver's check; failures are
 retried with growing delays; after the last attempt the delivery is marked

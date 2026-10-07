@@ -108,6 +108,69 @@ type Class struct {
 	DSCP    []int       `json:"dscp"`
 	Ports   []PortRange `json:"ports"`
 	Subnets []string    `json:"subnets"`
+	// SLA is the class's limits, for the agent's own check while the
+	// controller is silent. Absent in maps from older controllers.
+	SLA *SLA `json:"sla,omitempty"`
+}
+
+// SLA limits a class's path; a nil limit is not checked. Latency is the
+// probe round trip, as the controller scores it.
+type SLA struct {
+	MaxLatencyMS *float64 `json:"max_latency_ms,omitempty"`
+	MaxJitterMS  *float64 `json:"max_jitter_ms,omitempty"`
+	MaxLossPct   *float64 `json:"max_loss_pct,omitempty"`
+}
+
+// Severity is how far a measurement is from the SLA: the largest of value
+// over limit across the limits set, so above 1 is a breach. A window with
+// no replies has no latency or jitter and counts as 100% loss.
+func (s *SLA) Severity(latencyMS, jitterMS, lossPct float64, replies bool) float64 {
+	if s == nil {
+		return 0
+	}
+	worst := 0.0
+	ratio := func(v float64, limit *float64) {
+		if limit == nil {
+			return
+		}
+		r := v / *limit
+		if *limit <= 0 {
+			r = 0
+			if v > 0 {
+				r = 2
+			}
+		}
+		if r > worst {
+			worst = r
+		}
+	}
+	if !replies {
+		if s.MaxLatencyMS == nil && s.MaxJitterMS == nil && s.MaxLossPct == nil {
+			return 0
+		}
+		return 100 // nothing came back: worse than any measured breach
+	}
+	ratio(latencyMS, s.MaxLatencyMS)
+	ratio(jitterMS, s.MaxJitterMS)
+	ratio(lossPct, s.MaxLossPct)
+	return worst
+}
+
+// Breached reports whether a measurement is outside the SLA.
+func (s *SLA) Breached(latencyMS, jitterMS, lossPct float64, replies bool) bool {
+	return s.Severity(latencyMS, jitterMS, lossPct, replies) > 1
+}
+
+func (s *SLA) validate() error {
+	if s == nil {
+		return nil
+	}
+	for _, v := range []*float64{s.MaxLatencyMS, s.MaxJitterMS, s.MaxLossPct} {
+		if v != nil && (*v < 0 || *v != *v) {
+			return fmt.Errorf("negative or invalid SLA limit")
+		}
+	}
+	return nil
 }
 
 type PortRange struct {
@@ -193,6 +256,9 @@ func (m *Map) Validate() error {
 			if _, err := netip.ParsePrefix(s); err != nil {
 				return fmt.Errorf("class %s: subnet %q", c.Name, s)
 			}
+		}
+		if err := c.SLA.validate(); err != nil {
+			return fmt.Errorf("class %s: %w", c.Name, err)
 		}
 		classes[c.Name], marks[c.Mark] = true, true
 	}
@@ -319,14 +385,37 @@ type Choice struct {
 
 // Choose picks the first usable path of each rule.
 func Choose(m *Map, usable func(path string) bool) []Choice {
+	return ChooseHealthy(m, usable, nil, nil)
+}
+
+// ChooseHealthy is Choose with a per-class SLA check. A usable path where
+// healthy(class, path) is false is passed over for a later usable one that
+// is healthy. If every usable path is unhealthy the class is never
+// stranded: it takes the one with the lowest severity (the earliest on a
+// tie). A nil healthy checks nothing; a nil severity keeps the first.
+func ChooseHealthy(m *Map, usable func(path string) bool, healthy func(class, path string) bool, severity func(class, path string) float64) []Choice {
 	out := make([]Choice, 0, len(m.Rules))
 	for _, r := range m.Rules {
 		c := Choice{Class: r.Class, Dst: r.Dst}
+		best, bestSev := -1, 0.0
 		for i, p := range r.Paths {
-			if usable(p) {
+			if !usable(p) {
+				continue
+			}
+			if healthy == nil || healthy(r.Class, p) {
 				c.Path, c.Failover = p, i > 0
 				break
 			}
+			sev := 0.0
+			if severity != nil {
+				sev = severity(r.Class, p)
+			}
+			if best < 0 || sev < bestSev {
+				best, bestSev = i, sev
+			}
+		}
+		if c.Path == "" && best >= 0 {
+			c.Path, c.Failover = r.Paths[best], best > 0
 		}
 		if c.Path == "" {
 			c.Paused = r.PauseIfNone

@@ -1,4 +1,4 @@
-"""Channel gap fixes (ADR 0032): staff attachments on every channel, the
+"""Channel gap fixes (ADR 0038): staff attachments on every channel, the
 hard spend limit before WhatsApp, SMS and email sends, and email sending limits."""
 
 import base64

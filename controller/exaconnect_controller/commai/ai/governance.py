@@ -1,4 +1,4 @@
-"""AI governance (ADR 0026): evaluation suites, candidates that must pass them
+"""AI governance (ADR 0032): evaluation suites, candidates that must pass them
 before going live, and daily action limits per role.
 
 - Evaluation cases: a question, the behaviour expected and the behaviour

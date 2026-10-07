@@ -1,4 +1,4 @@
-"""A business's own REST API as a connector, from its OpenAPI document (ADR 0028).
+"""A business's own REST API as a connector, from its OpenAPI document (ADR 0034).
 
 How it is made:
 1. The business pastes or uploads its OpenAPI 3.0/3.1 document. We read it

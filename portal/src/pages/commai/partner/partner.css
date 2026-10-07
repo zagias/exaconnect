@@ -1,4 +1,4 @@
-/* Partners, branding, go-live and consent (ADR 0025). Colours only from brand tokens. */
+/* Partners, branding, go-live and consent (ADR 0031). Colours only from brand tokens. */
 .form-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 12px; margin: 8px 0; }
 .form-row label { display: grid; gap: 4px; font-weight: 600; font-size: 14px; }
 .partner-scopes { border: 0; padding: 0; margin: 0 0 12px; display: grid; gap: 6px; }

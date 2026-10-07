@@ -1,4 +1,4 @@
-"""WhatsApp directly through Meta's Cloud API, and interactive messages (ADR 0023).
+"""WhatsApp directly through Meta's Cloud API, and interactive messages (ADR 0029).
 
 A third WhatsApp provider beside Twilio and 360dialog (ADR 0018), on the same
 provider interface and under the same rules: the 24-hour service window,

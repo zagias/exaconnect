@@ -1,4 +1,4 @@
-"""What the helpdesk connectors share (ADR 0029): Zendesk, Freshdesk and
+"""What the helpdesk connectors share (ADR 0035): Zendesk, Freshdesk and
 ServiceNow offer the same actions, so AI roles and workflows use them the
 same way.
 

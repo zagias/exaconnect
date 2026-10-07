@@ -1,4 +1,4 @@
-"""Zendesk Support connector (ADR 0029): tickets linked to conversations.
+"""Zendesk Support connector (ADR 0035): tickets linked to conversations.
 
 Written from Zendesk's public Support API v2 (tickets, search, webhooks).
 Sign-in is OAuth at the business's own subdomain

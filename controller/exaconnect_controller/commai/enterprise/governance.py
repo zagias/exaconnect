@@ -1,4 +1,4 @@
-"""Data governance per business (ADR 0024): retention, legal hold, subject
+"""Data governance per business (ADR 0030): retention, legal hold, subject
 requests, full business export and the processing-locations page.
 
 Retention. Each category keeps data for a number of days, or keeps it:

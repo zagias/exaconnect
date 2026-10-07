@@ -1,4 +1,4 @@
-"""A business's own mailbox over IMAP and SMTP (ADR 0028).
+"""A business's own mailbox over IMAP and SMTP (ADR 0034).
 
 This extends the email channel (ADR 0018); it does not duplicate it. An email
 channel account with provider "mailbox" keeps all of the channel's rules

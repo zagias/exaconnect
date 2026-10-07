@@ -7,7 +7,7 @@ import { Card, PageHead, useAction } from "../../../ui";
 import { when } from "../lib";
 import "./partner.css";
 
-/* Shapes from controller/exaconnect_controller/commai/api/golive.py (ADR 0022) and regions.py (ADR 0025). */
+/* Shapes from controller/exaconnect_controller/commai/api/golive.py (ADR 0028) and regions.py (ADR 0031). */
 
 interface Row {
   kind: string;
@@ -48,7 +48,7 @@ const KINDS: [string, string][] = [
 ];
 const STATUS: Record<Row["status"], [string, string]> = { off: ["off", "Off"], pilot: ["warn", "Pilot"], on: ["ok", "On"] };
 
-/** Admin > Go-live (ADR 0022): every country, channel, language, carrier and region, its written criteria with evidence, and its status. */
+/** Admin > Go-live (ADR 0028): every country, channel, language, carrier and region, its written criteria with evidence, and its status. */
 export default function GoLive() {
   const { user } = useAuth();
   const [kind, setKind] = useState("country");

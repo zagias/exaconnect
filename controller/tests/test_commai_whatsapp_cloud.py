@@ -1,4 +1,4 @@
-"""WhatsApp through Meta's Cloud API, interactive messages and click-to-chat (ADR 0023)."""
+"""WhatsApp through Meta's Cloud API, interactive messages and click-to-chat (ADR 0029)."""
 
 from __future__ import annotations
 

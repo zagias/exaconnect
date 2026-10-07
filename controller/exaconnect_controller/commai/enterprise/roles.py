@@ -1,4 +1,4 @@
-"""Roles and per-team permissions (ADR 0024).
+"""Roles and per-team permissions (ADR 0030).
 
 A business admin builds roles from a fixed list of permissions and gives them
 to people, across the business or for one team only. Roles narrow what a

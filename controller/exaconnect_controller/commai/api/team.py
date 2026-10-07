@@ -1,4 +1,4 @@
-"""Staff-only inbox features API (ADR 0026): notifications, files on notes,
+"""Staff-only inbox features API (ADR 0032): notifications, files on notes,
 saved views, staff chat and satisfaction survey settings and results.
 
 Staff chat and notifications belong to the person signed in: API keys are

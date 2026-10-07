@@ -6,10 +6,14 @@ COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 LDFLAGS := -s -w -X github.com/zagias/exaconnect/agent/internal/version.Version=$(VERSION) \
            -X github.com/zagias/exaconnect/agent/internal/version.Commit=$(COMMIT)
 PY ?= python3
+# The satellite profile the lab was brought up with (lab/netem/apply-profiles.sh
+# saves it), unless given: SAT_PROFILE=geo make lab-up demo-seed.
+SAT_PROFILE ?= $(shell . lab/.state/settings 2>/dev/null; echo $${SAT_PROFILE:-leo})
 
 .PHONY: agents-upgrade help build build-agent build-portal test test-agent test-controller test-portal lint \
-        lab-image lab-agent lab-up lab-down lab-smoke lab-routing controller-up controller-down \
-        controller-logs demo-seed agents-start agents-stop agents-status demo lab-ci public-up public-down
+        lab-image lab-agent lab-up lab-down lab-smoke lab-routing controller-up controller-down release rollback releases \
+        controller-logs demo-seed agents-start agents-stop agents-status demo lab-ci public-up public-down \
+        traffic traffic-stop
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-16s %s\n", $$1, $$2}'
@@ -33,13 +37,14 @@ test-agent: ## Go vet and unit tests
 test-controller: ## Controller unit tests (pip install -e 'controller[dev]' first)
 	cd controller && $(PY) -m pytest -q
 
-test-portal: ## Portal type check
-	cd portal && npm run typecheck
+test-portal: ## Portal type check and unit tests
+	cd portal && npm run typecheck && npm test
 
 lint: ## Lint Go, Python and shell
 	cd agent && test -z "$$(gofmt -l .)" || (gofmt -l . && exit 1)
 	cd controller && ruff check . && ruff format --check .
-	shellcheck -x lab/netem/*.sh lab/faults/*.sh lab/scripts/*.sh lab/host/*.sh
+	shellcheck -x lab/netem/*.sh lab/faults/*.sh lab/scripts/*.sh lab/host/*.sh \
+	  lab/ci/checks/*.sh lab/ci/run.sh lab/demo.sh lab/runner/*.sh
 
 # ---- lab (Linux lab host only) ----
 lab-image: ## Build the lab node image (FRR 10 + WireGuard + tools)
@@ -56,7 +61,7 @@ lab-agent: ## Build exa-agent for this host into bin/lab/ (uses Docker if Go is 
 
 lab-up: lab-image lab-agent ## Deploy the containerlab topology, apply underlay profiles, smoke test
 	cd lab && sudo containerlab deploy -t exaconnect.clab.yml --reconfigure
-	lab/netem/apply-profiles.sh
+	SAT_PROFILE=$(SAT_PROFILE) lab/netem/apply-profiles.sh
 	lab/scripts/smoke.sh
 
 lab-down: ## Destroy the lab
@@ -71,10 +76,22 @@ lab-routing: ## M1 check: WireGuard, BGP, BFD and site-to-site ping via the PoP
 
 controller-up: ## Start database, controller and agent TLS proxy (run after lab-up)
 	lab/scripts/init-env.sh
-	docker compose -f deploy/docker-compose.yml --env-file .env up -d --build --wait
+	@# deploy/public/site.env names the agent gateway (ADR 0024); without it the gateway stays private.
+	set -a && { [ ! -s deploy/public/site.env ] || . deploy/public/site.env; } && set +a && \
+	  docker compose -f deploy/docker-compose.yml --env-file .env up -d --build --wait
 	@# Recreate the proxy every time: it re-renders the nginx templates and rejoins
 	@# exaconnect-mgmt, which lab-down/lab-up replace without compose noticing.
-	docker compose -f deploy/docker-compose.yml --env-file .env up -d --force-recreate --no-deps --wait proxy
+	set -a && { [ ! -s deploy/public/site.env ] || . deploy/public/site.env; } && set +a && \
+	  docker compose -f deploy/docker-compose.yml --env-file .env up -d --force-recreate --no-deps --wait proxy
+
+release: ## Build, start and health-check this commit; roll back automatically if unhealthy (ADR 0025)
+	deploy/release/release.sh
+
+rollback: ## Go back to the previous release (or TO=<commit>) without rebuilding
+	deploy/release/release.sh rollback $(TO)
+
+releases: ## List the releases kept on this server
+	deploy/release/release.sh list
 
 voice-up: ## Start the voice SBC (Kamailio, FreeSWITCH) next to the controller; publishes no SIP ports
 	deploy/voice/up.sh
@@ -87,10 +104,10 @@ controller-down: ## Stop controller, proxy and database (data is kept)
 
 PUBLIC_COMPOSE := docker compose -f deploy/docker-compose.yml -f deploy/public/docker-compose.public.yml --env-file .env
 
-public-up: ## Serve the portal over HTTPS at EXA_PUBLIC_HOST (deploy/public/site.env); opens 80 and 443 only
+public-up: ## Serve the portal over HTTPS at EXA_PUBLIC_HOST (deploy/public/site.env); opens 80, 443 and the agent gateway 8443
 	set -a && . deploy/public/site.env && set +a && $(PUBLIC_COMPOSE) up -d --build --wait web
 	@if command -v ufw >/dev/null && sudo ufw status | grep -q "Status: active"; then \
-	  sudo ufw allow 80/tcp && sudo ufw allow 443/tcp && sudo ufw allow 443/udp; fi
+	  sudo ufw allow 80/tcp && sudo ufw allow 443/tcp && sudo ufw allow 443/udp && sudo ufw allow 8443/tcp; fi
 
 public-down: ## Stop serving the portal publicly
 	set -a && . deploy/public/site.env && set +a && $(PUBLIC_COMPOSE) rm -sf web
@@ -101,7 +118,7 @@ controller-logs: ## Follow controller and proxy logs
 demo-seed: ## Seed two sites, one PoP, three paths, three classes; enrol and start the agents
 	mkdir -p lab/.state
 	umask 077 && docker compose -f deploy/docker-compose.yml --env-file .env exec -T controller \
-	  python -m exaconnect_controller.seed --lab > lab/.state/seed.json
+	  python -m exaconnect_controller.seed --lab --sat $(SAT_PROFILE) > lab/.state/seed.json
 	lab/scripts/agents.sh enrol lab/.state/seed.json
 
 lab-ci: ## Bring the lab to this commit and run every lab check (used by the lab runner)
@@ -118,6 +135,12 @@ agents-stop: ## Stop the agents (forwarding keeps running on the last state)
 
 agents-status: ## Show whether each agent is running
 	lab/scripts/agents.sh status
+
+traffic: ## Start voice, business and bulk traffic between the sites (BUSINESS_RATE, BULK_RATE)
+	lab/scripts/traffic.sh start
+
+traffic-stop: ## Stop the lab traffic generators
+	lab/scripts/traffic.sh stop
 
 demo: ## Run the acceptance demo end to end (CLAUDE.md section 5); DEMO_PAUSE=1 to step through
 	lab/demo.sh

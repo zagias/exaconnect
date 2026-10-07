@@ -99,7 +99,7 @@ DEFAULT_PROFILE: dict = {
     "name": "Assistant",
     "tone": "friendly, plain and brief",
     # Extra guidance from the business, added to the prompt. Changing it (or the
-    # tone) creates a candidate that must pass the evaluation suite (ADR 0026).
+    # tone) creates a candidate that must pass the evaluation suite (ADR 0032).
     "instructions": "",
     "greeting": "",
     "business_language": "en",
@@ -223,7 +223,7 @@ def get_model() -> Model:
     s = get_settings()
     if s.llm_api_key:
         # The live model, not necessarily EXA_LLM_MODEL: a new model goes live
-        # only after it passes the evaluation suite (ADR 0026).
+        # only after it passes the evaluation suite (ADR 0032).
         from . import governance
 
         model = governance.live_model(s.llm_model)

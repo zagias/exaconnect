@@ -1,4 +1,4 @@
-"""Freshdesk connector (ADR 0029): tickets linked to conversations.
+"""Freshdesk connector (ADR 0035): tickets linked to conversations.
 
 Written from Freshdesk's public API v2 (tickets, notes, replies, search).
 Freshdesk has no OAuth for API access: the business pastes an agent's API
