@@ -86,7 +86,7 @@ def test_slack_sign_in_and_signing_secret_needed(client, real_env, fake, monkeyp
     assert out["sign_in_ready"], out
     qs = urllib.parse.parse_qs(urllib.parse.urlsplit(out["sign_in_url"]).query)
     assert out["sign_in_url"].startswith("https://slack.com/oauth/v2/authorize?")
-    assert qs["scope"] == ["chat:write,channels:read,groups:read"]
+    assert qs["scope"] == ["chat:write,channels:read,groups:read,channels:history,groups:history"]
     fake.on(
         "POST",
         API + r"oauth\.v2\.access",

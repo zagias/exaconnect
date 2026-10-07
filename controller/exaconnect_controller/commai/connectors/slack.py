@@ -5,7 +5,8 @@ Written from Slack's Web API (oauth.v2.access, auth.test,
 conversations.list, conversations.history, chat.postMessage) and its
 interactivity payloads. ExaCarib registers one Slack app (EXA_SLACK_CLIENT_ID,
 EXA_SLACK_CLIENT_SECRET, EXA_SLACK_SIGNING_SECRET) with the bot scopes
-chat:write, channels:read and groups:read, the redirect URI
+chat:write, channels:read, groups:read, channels:history and
+groups:history (to check a message was not already posted), the redirect URI
 {EXA_PUBLIC_URL}/api/v1/commai/oauth/slack/callback and the interactivity URL
 {EXA_PUBLIC_URL}/api/v1/commai/slack/interactions.
 
@@ -48,7 +49,7 @@ oauth.PROVIDERS["slack"] = oauth.Provider(
     "Slack",
     "https://slack.com/oauth/v2/authorize",
     "https://slack.com/api/oauth.v2.access",
-    ("chat:write", "channels:read", "groups:read"),
+    ("chat:write", "channels:read", "groups:read", "channels:history", "groups:history"),
     "EXA_SLACK",
     scope_sep=",",
     expiring=False,
@@ -130,7 +131,8 @@ class Slack(MoreConnector):
     simulator = SlackSim()
     needs_from_exacarib = (
         "One Slack app (api.slack.com/apps), distributed: EXA_SLACK_CLIENT_ID, EXA_SLACK_CLIENT_SECRET and "
-        "EXA_SLACK_SIGNING_SECRET; bot scopes chat:write, channels:read, groups:read; interactivity on."
+        "EXA_SLACK_SIGNING_SECRET; bot scopes chat:write, channels:read, groups:read, "
+        "channels:history, groups:history; interactivity on."
     )
     webhooks = "Button presses arrive at /api/v1/commai/slack/interactions, checked with Slack request signing."
     docs_url = "https://api.slack.com/web"
