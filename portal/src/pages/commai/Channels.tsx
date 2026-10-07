@@ -6,6 +6,7 @@ import { Card, PageHead, Tabs, useAction } from "../../ui";
 import { SocialChannel, WhatsAppExtras } from "./ChannelsGlobal";
 import { useCommaiBase, when } from "./lib";
 import "./channels.css";
+import { EmailLimits } from "./ChannelExtras";
 
 /* Shapes from controller/exaconnect_controller/commai/api/channels.py (ADR 0018). */
 
@@ -18,6 +19,7 @@ interface WidgetSettings {
   hours: Partial<Record<Day, [string, string] | null>>;
   callbacks: boolean;
   attachments: boolean;
+  ai_calls?: boolean;
   ask_contact: "before" | "after_first" | "never";
 }
 
@@ -571,6 +573,9 @@ function Appearance({ base, k, reload }: { base: string; k: WidgetKey; reload: (
         <label className="check">
           <input type="checkbox" checked={s.attachments} onChange={(e) => set("attachments", e.target.checked)} /> Visitors can attach images, PDFs and text files (up to 2 MB)
         </label>
+        <label className="check">
+          <input type="checkbox" checked={!!s.ai_calls} onChange={(e) => set("ai_calls", e.target.checked)} /> Visitors can talk to the AI assistant (needs the AI agent on)
+        </label>
         <div className="actions wide">
           <button className="button" disabled={save.busy}>
             Save
@@ -1090,7 +1095,7 @@ function Email({ base }: { base: string }) {
  "message_id": "<...>", "in_reply_to": "<...>", "references": "<...> <...>"}`}</code>
         </pre>
       </Card>
-      <Accounts base={base} channel="email" title="Addresses" placeholder="help@example.com" />
+      <Accounts base={base} channel="email" title="Addresses" placeholder="help@example.com" extra={(a, reload) => <EmailLimits base={base} a={a} reload={reload} />} />
       <Outbox base={base} channel="email" />
       <Diagnostics base={base} area="email" />
     </>

@@ -36,7 +36,7 @@ from starlette.concurrency import run_in_threadpool
 
 from ... import audit, db
 from ...api.deps import UserDep
-from .. import access, branding, diagnostics, events, inbox
+from .. import access, branding, diagnostics, events, inbox, visitor_calls
 from ..channels import email as email_ch
 from ..channels import messaging, providers, widget
 from .common import errors
@@ -288,7 +288,14 @@ class AccountPatch(BaseModel):
     settings: dict | None = None
 
 
-ACCOUNT_SETTINGS = {"credentials_env", "daily_limits", "from_name", "status_callback_url", "fail_sends"}
+ACCOUNT_SETTINGS = {
+    "credentials_env",
+    "daily_limits",
+    "from_name",
+    "status_callback_url",
+    "fail_sends",
+    "email_limits",
+}
 
 
 def _account_settings(channel: str, provider: str, s: dict) -> dict:
@@ -301,6 +308,11 @@ def _account_settings(channel: str, provider: str, s: dict) -> dict:
             isinstance(v, int) and 0 <= v <= 1_000_000 and len(k) <= 6 for k, v in lim.items()
         ):
             raise HTTPException(422, 'daily_limits maps a country code (or "*") to a whole number.')
+    if "email_limits" in s:
+        try:
+            email_ch.check_limits_setting(s["email_limits"])
+        except ValueError as e:
+            raise HTTPException(422, str(e)) from e
     if "fail_sends" in s and provider != "simulated":
         raise HTTPException(422, "fail_sends is only for simulated accounts.")
     if "credentials_env" in s:
@@ -529,7 +541,8 @@ def simulated_outbox(customer_id: str, user: UserDep, limit: int = Query(20, ge=
     access.check(user, customer_id, "commai:read")
     with db.tx() as conn:
         return conn.execute(
-            """SELECT id, channel, to_address, body, template, provider_ref, created_at FROM sim_channel_outbox
+            """SELECT id, channel, to_address, body, template, provider_ref, attachments, created_at
+               FROM sim_channel_outbox
                WHERE customer_id = %s ORDER BY id DESC LIMIT %s""",
             (customer_id, limit),
         ).fetchall()
@@ -863,6 +876,7 @@ def widget_config(public_key: str, request: Request):
                 "types": sorted(widget.FILE_TYPES),
             },
             "ask_contact": ws["ask_contact"],
+            "ai_calls": visitor_calls.enabled(c.conn, c.key),
         }
 
     return _widget_call(request, public_key, run, need_session=False)

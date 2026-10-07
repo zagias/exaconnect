@@ -82,6 +82,18 @@
         poweredBy: "ExaCarib CommAI",
         tooBig: "That file is too large.",
         wrongType: "You can send images, PDFs, plain text and voice notes.",
+        teamTyping: "Our team is writing a reply…",
+        talk: "Talk to our assistant",
+        callTitle: "Talking to our assistant",
+        callNote: "Speak after the tone, or type below. Our assistant can pass you to our team.",
+        callStarting: "Connecting…",
+        callListen: "Speak",
+        callListening: "Listening… select to stop",
+        callType: "Or type what you want to say",
+        callSay: "Say",
+        callEnd: "End call",
+        callEnded: "Call ended. You can carry on in the chat.",
+        callHanded: "Our team will take it from here. We'll be in touch.",
     };
     const ICON_CHAT = '<svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path fill="currentColor" d="M4 4h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-5 4v-4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/></svg>';
     const ICON_CLOSE = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg>';
@@ -141,6 +153,11 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
 .foot { text-align: center; font-size: 11px; color: var(--muted); padding: 4px 0 8px; background: #fff; }
 .link { background: none; border: 0; color: var(--exa); cursor: pointer; font: inherit; font-size: 13px; padding: 0; text-decoration: underline; }
 .conv { text-align: left; }
+.typing { margin: 0; padding: 0 14px; min-height: 0; font-size: 12px; color: var(--muted); background: var(--page); }
+.typing:not(:empty) { padding: 2px 14px 6px; }
+.log.call { flex: 0 1 auto; min-height: 160px; border: 1px solid var(--line); border-radius: 8px; }
+.msg.note { color: var(--muted); }
+.row input { border: 1px solid var(--line); border-radius: 5px; padding: 8px 10px; font: inherit; color: var(--ink); min-width: 0; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 `;
     function el(tag, attrs = {}, ...kids) {
@@ -191,6 +208,7 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
         callbacks: true,
         attachments: { enabled: true, max_bytes: 2 * 1024 * 1024, types: ["application/pdf", "image/gif", "image/jpeg", "image/png", "image/webp", "text/plain"] },
         ask_contact: "after_first",
+        ai_calls: false,
     };
     class Chat {
         constructor(key, userToken, previewMode = false) {
@@ -210,6 +228,11 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
             this.conversations = [];
             this.doneText = "";
             this.showContact = false;
+            this.typingNote = null;
+            this.lastTypingPing = 0;
+            this.callId = null;
+            this.callLog = null;
+            this.recogniser = null;
             this.base = `${apiOrigin}/api/v1/commai/widget/${encodeURIComponent(key)}`;
             this.storeKey = `exacarib-chat:${key}`;
             this.stored = previewMode ? {} : load(this.storeKey);
@@ -432,6 +455,8 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
                 p.append(el("div", { class: "form" }, el("p", { role: "status" }, this.doneText), this.backButton()));
             else if (this.view === "history")
                 p.append(this.historyView());
+            else if (this.view === "call")
+                p.append(this.callView());
             else
                 this.renderChat();
             p.append(this.footer());
@@ -466,11 +491,16 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
             const links = el("div", { class: "row" });
             if (this.cfg.callbacks)
                 links.append(this.linkTo(COPY.callback, "callback"));
+            if (this.cfg.ai_calls && !this.previewMode)
+                links.append(this.linkTo(COPY.talk, "call"));
             if (this.conversations.length > 1)
                 links.append(this.linkTo(COPY.history, "history"));
             if (links.childNodes.length)
                 this.log.append(links);
             this.panel.append(this.log);
+            // "Our team is writing a reply…", announced politely (ADR 0032).
+            this.typingNote = el("p", { class: "typing", role: "status", "aria-live": "polite" });
+            this.panel.append(this.typingNote);
             const form = el("form", { class: "compose" });
             this.input = el("textarea", { rows: "1", "aria-label": COPY.placeholder, placeholder: COPY.placeholder, maxlength: "4000" });
             this.input.addEventListener("keydown", (e) => {
@@ -479,12 +509,14 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
                     form.requestSubmit();
                 }
             });
+            this.input.addEventListener("input", () => this.typing(this.input.value.trim() !== ""));
             form.addEventListener("submit", (e) => {
                 e.preventDefault();
                 const text = this.input.value.trim();
                 if (!text)
                     return;
                 this.input.value = "";
+                this.typing(false);
                 this.send(text, []);
             });
             if (this.cfg.attachments.enabled) {
@@ -596,6 +628,153 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
                 this.flash(e.message);
             }
         }
+        /** Tell the team the visitor is typing (at most every 3 seconds; it lapses on its own). */
+        typing(on) {
+            if (!this.stored.conv || !this.session || this.previewMode)
+                return;
+            const now = Date.now();
+            if (on && now - this.lastTypingPing < 3000)
+                return;
+            this.lastTypingPing = on ? now : 0;
+            this.call("POST", "/typing", { conversation_id: this.stored.conv, typing: on })
+                .then((out) => this.showTeamTyping(out.team_typing))
+                .catch(() => undefined);
+        }
+        showTeamTyping(on) {
+            if (this.typingNote)
+                this.typingNote.textContent = on ? COPY.teamTyping : "";
+        }
+        // ---- a call with the AI assistant (speech in the browser, text to us) ----------------------
+        callView() {
+            const box = el("div", { class: "form" });
+            box.append(el("h3", {}, COPY.callTitle), el("p", { class: "note" }, COPY.callNote));
+            this.callLog = el("div", { class: "log call", role: "log", "aria-live": "polite", "aria-label": COPY.callTitle });
+            box.append(this.callLog);
+            const W = window;
+            const Rec = W.SpeechRecognition || W.webkitSpeechRecognition;
+            const row = el("div", { class: "row" });
+            if (Rec) {
+                const mic = el("button", { class: "btn", type: "button", "aria-pressed": "false" }, COPY.callListen);
+                mic.addEventListener("click", () => {
+                    if (this.recogniser) {
+                        this.recogniser.stop();
+                        return;
+                    }
+                    const r = new Rec();
+                    r.lang = document.documentElement.lang || navigator.language || "en";
+                    r.interimResults = false;
+                    r.continuous = false;
+                    r.onresult = (e) => {
+                        const said = Array.from(e.results).map((x) => x[0].transcript).join(" ").trim();
+                        if (said)
+                            this.callSay(said);
+                    };
+                    r.onend = r.onerror = () => {
+                        this.recogniser = null;
+                        mic.textContent = COPY.callListen;
+                        mic.setAttribute("aria-pressed", "false");
+                    };
+                    this.recogniser = r;
+                    mic.textContent = COPY.callListening;
+                    mic.setAttribute("aria-pressed", "true");
+                    r.start();
+                });
+                row.append(mic);
+            }
+            const end = el("button", { class: "btn secondary", type: "button" }, COPY.callEnd);
+            end.addEventListener("click", () => this.endCall(COPY.callEnded));
+            row.append(end);
+            box.append(row);
+            const form = el("form", { class: "row" });
+            const input = el("input", { type: "text", "aria-label": COPY.callType, placeholder: COPY.callType, maxlength: "2000", style: "flex: 1" });
+            form.append(input, el("button", { class: "btn secondary", type: "submit" }, COPY.callSay));
+            form.addEventListener("submit", (e) => {
+                e.preventDefault();
+                const text = input.value.trim();
+                input.value = "";
+                if (text)
+                    this.callSay(text);
+            });
+            box.append(form);
+            if (!this.callId)
+                this.startCall();
+            return box;
+        }
+        callLine(who, text, cls = "them") {
+            if (!this.callLog)
+                return;
+            this.callLog.append(el("div", { class: `msg ${cls}` }, el("span", { class: "who" }, who), text));
+            this.callLog.scrollTop = this.callLog.scrollHeight;
+        }
+        speak(text) {
+            try {
+                if (!("speechSynthesis" in window) || !text)
+                    return;
+                const u = new SpeechSynthesisUtterance(text);
+                u.lang = document.documentElement.lang || navigator.language || "en";
+                window.speechSynthesis.speak(u);
+            }
+            catch (_a) {
+                /* the words are on screen anyway */
+            }
+        }
+        async startCall() {
+            var _a, _b;
+            this.callLine(COPY.assistant, COPY.callStarting, "them note");
+            try {
+                await this.ensureSession();
+                const out = await this.call("POST", "/calls", {});
+                this.callId = out.conversation_id;
+                (_b = (_a = this.callLog) === null || _a === void 0 ? void 0 : _a.lastElementChild) === null || _b === void 0 ? void 0 : _b.remove();
+                this.callLine(COPY.assistant, out.greeting);
+                this.speak(out.greeting);
+            }
+            catch (e) {
+                this.callId = null;
+                this.flashIn(this.callLog, e.message);
+            }
+        }
+        async callSay(text) {
+            if (!this.callId)
+                return;
+            this.callLine(COPY.you, text, "you");
+            try {
+                const out = await this.call("POST", `/calls/${encodeURIComponent(this.callId)}/turns`, { text });
+                if (out.reply) {
+                    this.callLine(COPY.assistant, out.reply);
+                    this.speak(out.reply);
+                }
+                if (out.handed_over)
+                    await this.endCall(COPY.callHanded);
+            }
+            catch (e) {
+                this.flashIn(this.callLog, e.message);
+            }
+        }
+        async endCall(text) {
+            const id = this.callId;
+            this.callId = null;
+            if (this.recogniser)
+                this.recogniser.stop();
+            try {
+                if ("speechSynthesis" in window)
+                    window.speechSynthesis.cancel();
+            }
+            catch (_a) {
+                /* nothing to stop */
+            }
+            if (id)
+                await this.call("POST", `/calls/${encodeURIComponent(id)}/end`, {}).catch(() => undefined);
+            this.doneText = text;
+            this.view = "done";
+            this.render();
+        }
+        flashIn(box, text) {
+            if (!box)
+                return;
+            box.append(el("p", { class: "err", role: "alert" }, text));
+            box.scrollTop = box.scrollHeight;
+        }
         flash(text) {
             if (!this.log)
                 return;
@@ -614,6 +793,11 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
                 const last = [...this.messages].reverse().find((m) => !m.pending && m.at);
                 const q = `?conversation_id=${encodeURIComponent(this.stored.conv)}${last ? `&after=${encodeURIComponent(last.at)}` : ""}`;
                 const out = await this.call("GET", `/messages${q}`);
+                if (this.isOpen && this.view === "chat") {
+                    this.call("GET", `/typing?conversation_id=${encodeURIComponent(this.stored.conv)}`)
+                        .then((t) => this.showTeamTyping(t.team_typing))
+                        .catch(() => undefined);
+                }
                 const known = new Set(this.messages.map((m) => m.id));
                 const fresh = out.items.filter((m) => !known.has(m.id));
                 if (fresh.length) {

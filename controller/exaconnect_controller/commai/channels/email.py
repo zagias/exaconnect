@@ -42,6 +42,9 @@ from .. import channels, inbox, usage
 from . import messaging
 
 UNSUB_WINDOW = dt.timedelta(hours=24)
+# Sending limits per account (settings.email_limits), so one business can't
+# burn its sending reputation: emails a day in all, and a day to one domain.
+DEFAULT_LIMITS = {"daily": 2000, "per_domain_daily": 300}
 MSGID = re.compile(r"<[^<>\s]+>")
 
 
@@ -59,10 +62,24 @@ class SimulatedSender(Sender):
 
     def send(self, conn, account, msg) -> None:
         headers = {k: str(v) for k, v in msg.items()}
+        text = msg.get_body(preferencelist=("plain",))
+        files = [
+            {"name": p.get_filename(), "type": p.get_content_type(), "size": len(p.get_content())}
+            for p in msg.iter_attachments()
+        ]
         conn.execute(
             """INSERT INTO sim_channel_outbox (customer_id, account_id, channel, to_address, body, headers,
-                                                 provider_ref) VALUES (%s, %s, 'email', %s, %s, %s, %s)""",
-            (account["customer_id"], account["id"], msg["To"], msg.get_content(), Jsonb(headers), msg["Message-ID"]),
+                                                 provider_ref, attachments)
+               VALUES (%s, %s, 'email', %s, %s, %s, %s, %s)""",
+            (
+                account["customer_id"],
+                account["id"],
+                msg["To"],
+                text.get_content() if text is not None else "",
+                Jsonb(headers),
+                msg["Message-ID"],
+                Jsonb(files),
+            ),
         )
 
 
@@ -135,8 +152,10 @@ class Email(messaging.ProvidedChannel):
         pass
 
     def check_send(self, conn: psycopg.Connection, conversation: dict, body: str, template: str) -> None:
-        self.account(conn, conversation)
+        acct = self.account(conn, conversation)
         ident = messaging.identity_of(conn, conversation)
+        messaging.check_spend(conn, conversation["customer_id"], self.name, self.label)
+        check_limits(conn, acct, ident["address"])
         if ident["opted_out"]:
             last = conversation.get("last_inbound_at")
             if last is None or dt.datetime.now(dt.UTC) - last > UNSUB_WINDOW:
@@ -184,6 +203,11 @@ class Email(messaging.ProvidedChannel):
             msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
         msg["List-Unsubscribe"] = ", ".join(unsub)
         msg.set_content(message["body"])
+        from ..attachments import files_of
+
+        for f in files_of(conn, message):
+            maintype, _, subtype = f["content_type"].partition("/")
+            msg.add_attachment(bytes(f["data"]), maintype=maintype, subtype=subtype, filename=f["name"])
         try:
             sender.send(conn, acct, msg)
         except Exception as e:
@@ -201,6 +225,48 @@ class Email(messaging.ProvidedChannel):
         messaging.remember_thread(conn, conversation["id"], conversation["customer_id"], acct["id"])
         usage.record(conn, conversation["customer_id"], "message_out:email", 1, ref=str(message["id"]))
         return {"status": "sent", "provider_ref": mid}
+
+
+def limits_of(account: dict) -> dict:
+    return {**DEFAULT_LIMITS, **((account.get("settings") or {}).get("email_limits") or {})}
+
+
+def check_limits_setting(value) -> dict:
+    """Validate settings.email_limits. Raises ValueError with a sentence."""
+    if not isinstance(value, dict) or set(value) - set(DEFAULT_LIMITS):
+        raise ValueError("email_limits takes daily and per_domain_daily.")
+    if not all(isinstance(v, int) and 1 <= v <= 1_000_000 for v in value.values()):
+        raise ValueError("Email limits are whole numbers from 1 to 1,000,000.")
+    return value
+
+
+def sent_today(conn: psycopg.Connection, account: dict, domain: str = "") -> int:
+    """Emails this account actually sent today (UTC), in all or to one domain."""
+    row = conn.execute(
+        """SELECT count(*) AS n FROM messages m
+           JOIN channel_threads t ON t.conversation_id = m.conversation_id
+           JOIN conversations c ON c.id = m.conversation_id
+           JOIN contact_identities ci ON ci.id = c.identity_id
+           WHERE t.account_id = %(a)s AND m.customer_id = %(c)s AND m.direction = 'out'
+             AND m.status IN ('sent', 'delivered', 'read')
+             AND m.created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+             AND (%(d)s = '' OR lower(split_part(ci.address, '@', 2)) = %(d)s)""",
+        {"a": account["id"], "c": account["customer_id"], "d": domain},
+    ).fetchone()
+    return int(row["n"])
+
+
+def check_limits(conn: psycopg.Connection, account: dict, to_address: str) -> None:
+    lim = limits_of(account)
+    if sent_today(conn, account) >= lim["daily"]:
+        raise channels.SendBlocked(
+            f"Today's email limit for {account['address']} ({lim['daily']}) is used up. It resets at midnight UTC."
+        )
+    domain = to_address.rpartition("@")[2].lower()
+    if domain and sent_today(conn, account, domain) >= lim["per_domain_daily"]:
+        raise channels.SendBlocked(
+            f"Today's limit for emails to {domain} ({lim['per_domain_daily']}) is used up. It resets at midnight UTC."
+        )
 
 
 EMAIL = Email("email", "Email")

@@ -20,6 +20,7 @@ from . import (  # noqa: E402
     connectors_more,
     developer,
     enterprise,
+    inbox_extras,
     languages,
     partners,
     quality,
@@ -46,6 +47,7 @@ for _m in (
     quality,
     team,
     connectors_more,
+    inbox_extras,
 ):
     router.include_router(_m.router)
     if hasattr(_m, "public"):

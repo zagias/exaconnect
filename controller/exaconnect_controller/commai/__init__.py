@@ -20,6 +20,7 @@ from . import (  # noqa: F401
     golive,
     i18n,
     inbox,
+    inbox_jobs,
     jobs,
     oauth,
     partners,

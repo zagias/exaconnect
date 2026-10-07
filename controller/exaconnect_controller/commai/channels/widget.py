@@ -53,6 +53,7 @@ DEFAULT_SETTINGS = {
     "callbacks": True,
     "attachments": True,
     "ask_contact": "after_first",  # "before" | "after_first" | "never"
+    "ai_calls": False,  # visitors may talk to the AI agent (commai/visitor_calls.py)
 }
 
 
@@ -87,6 +88,8 @@ def check_settings(s: dict) -> dict:
         raise WidgetError("Position is left or right.")
     if "ask_contact" in out and out["ask_contact"] not in ("before", "after_first", "never"):
         raise WidgetError("ask_contact is before, after_first or never.")
+    if "ai_calls" in out:
+        out["ai_calls"] = bool(out["ai_calls"])
     for k in ("title", "greeting", "offline_message"):
         if k in out:
             out[k] = str(out[k])[:300]

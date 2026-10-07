@@ -17,6 +17,7 @@ controller and portal (ADR 0016).
 | Organisations, calendars, roles, security settings, data governance, abuse protection | `commai/enterprise/` | 0024 | enterprise.md |
 | Messenger, Instagram, Telegram, WhatsApp Cloud API, countries, SMS carriers | `commai/channels/` | 0023 | channels-global.md |
 | Languages, AI quality, attachments, governance, staff chat, surveys | `commai/i18n/`, `commai/ai/`, `commai/team.py`, `commai/csat.py` | 0026 | quality.md |
+| Inbox routing, targets, presence, attachments, contact history, API errors, rate limits | `commai/inbox_jobs.py`, `commai/presence.py`, `commai/attachments.py`, `commai/ratelimit.py` | 0032 | inbox-extras.md |
 
 API: `/api/v1/commai/customers/{customer_id}/...` (OpenAPI at
 `/api/v1/docs`), SCIM at `/api/v1/scim/v2`. Python SDK:
