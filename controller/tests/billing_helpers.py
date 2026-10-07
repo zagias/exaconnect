@@ -8,6 +8,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from exaconnect_controller import db
+from exaconnect_controller.billing import plans
 from exaconnect_controller.security import hash_password
 
 from .test_flow import _enrol, _seed
@@ -56,11 +57,18 @@ def new_customer(conn, name: str, site_created: dt.datetime | None = None) -> st
     return str(cid)
 
 
-def lab(client) -> dict:
-    """The lab inventory (Demo Organisation, on Connect Standard) with enrolled nodes."""
+def lab(client, connect_only: bool = True) -> dict:
+    """The lab inventory (Demo Organisation) with enrolled nodes. The seed gives it
+    both plans; most billing tests want it on Connect Standard alone."""
     seeded = _seed()
     for name in ("pop-miami", "site-a", "site-b"):
         _enrol(client, seeded["tokens"], name)
+    if connect_only:
+        with db.tx() as conn:
+            conn.execute(
+                "DELETE FROM subscriptions WHERE customer_id = %s AND product = 'commai'", (seeded["customer_id"],)
+            )
+            plans.sync_products(conn, seeded["customer_id"])
     return seeded
 
 

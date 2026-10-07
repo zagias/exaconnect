@@ -23,7 +23,7 @@ def test_version(tmp_path):
 def test_openapi_is_published(tmp_path):
     r = client(tmp_path).get("/api/v1/openapi.json")
     assert r.status_code == 200
-    assert r.json()["info"]["title"] == "ExaConnect controller"
+    assert r.json()["info"]["title"] == "ExaCarib Connect API"
 
 
 def test_ca_is_created_once_and_served(tmp_path):

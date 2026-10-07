@@ -19,8 +19,9 @@ def test_plans_and_subscription_lifecycle(client, admin_headers):
     with db.tx() as conn:
         cid = new_customer(conn, "Harbour Bank", start - dt.timedelta(days=400))
         standard, commai = plan_id(conn, "connect"), plan_id(conn, "commai")
-        # Without a customers.products column, syncing is a no-op and nothing breaks.
-        assert plans.has_products_column(conn) is False and plans.sync_products(conn, cid) is None
+        # The organisations work keeps customers.products; a new organisation with
+        # no plan yet is left alone (NULL counts as both products).
+        assert plans.has_products_column(conn) is True and plans.sync_products(conn, cid) is None
 
     # Plans: admins add and change them.
     r = client.post(
@@ -192,10 +193,11 @@ def test_products_column_kept_in_step(client, admin_headers):
     assert column(untouched) == ["connect", "commai"]
 
 
-def test_lab_seed_holds_connect(client, admin_headers):
-    cid = lab(client)["customer_id"]
+def test_lab_seed_holds_both_plans(client, admin_headers):
+    cid = lab(client, connect_only=False)["customer_id"]
     r = client.get(f"/api/v1/customers/{cid}/plans", headers=admin_headers).json()
-    assert r["products"] == ["connect"] and r["subscriptions"][0]["plan"] == "Connect Standard"
+    assert r["products"] == ["connect", "commai"]
+    assert sorted(s["plan"] for s in r["subscriptions"]) == ["CommAI Standard", "Connect Standard"]
 
 
 def test_payables_and_margin(client, admin_headers):
