@@ -1,0 +1,11 @@
+{
+  "name": "exacarib-connect-commai-zapier",
+  "version": "1.0.0",
+  "description": "ExaCarib Connect CommAI app for the Zapier Platform.",
+  "main": "index.js",
+  "private": true,
+  "scripts": { "test": "zapier test" },
+  "engines": { "node": ">=18" },
+  "dependencies": { "zapier-platform-core": "15.19.0" },
+  "devDependencies": { "zapier-platform-cli": "15.19.0" }
+}
