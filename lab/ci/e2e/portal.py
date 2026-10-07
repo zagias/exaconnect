@@ -36,6 +36,7 @@ SCREENS = [
     ("/admin/settings", "Admin: settings"),
     ("/admin/partners", "Admin: partners"),
     ("/admin/protection", "Admin: protection"),
+    ("/admin/releases", "Admin: releases"),
     ("/admin/audit", "Admin: audit"),
     ("/commai", "CommAI: inbox"),
     ("/commai/contacts", "CommAI: contacts"),
