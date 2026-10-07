@@ -17,6 +17,12 @@ Three layers, all enforced by the service, never by a prompt:
 
   A "customer-facing" key is any key without commai:notes. It can never read
   a note, whatever else it holds.
+
+- Roles (ADR 0024). A person a business admin has given roles needs, as
+  well, the permission the scope and endpoint stand for
+  (`enterprise.roles.required`), business-wide or for the team of the
+  conversation in question. Roles only narrow; a person without roles keeps
+  exactly the rights above.
 """
 
 from __future__ import annotations
@@ -41,6 +47,8 @@ def require_scope(user: User, scope: str) -> None:
 
 
 def can_read_notes(user: User) -> bool:
+    if user.permissions is not None and "notes" not in user.permissions:
+        return False
     return user.scopes is None or "commai:notes" in user.scopes
 
 
@@ -50,6 +58,36 @@ def check(user: User, customer_id: Any, scope: str) -> None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Not available for this account.")
     check_customer(user, customer_id)
     require_scope(user, scope)
+    if user.permissions is not None:
+        from .enterprise import roles
+
+        require_permission(user, customer_id, roles.required(scope, user.path))
+
+
+def require_permission(user: User, customer_id: Any, permission: str, conversation_id: Any = None) -> None:
+    """The person's roles include this permission, business-wide or for the
+    team of the conversation (from the path, or the team the list is filtered to)."""
+    if user.role == "admin" or user.permissions is None or permission in user.permissions:
+        return
+    from .enterprise import roles
+
+    teams = {t for t, perms in user.team_permissions.items() if permission in perms}
+    if teams:
+        conv = conversation_id or roles.conversation_in_path(user.path)
+        if conv:
+            from .. import db
+
+            with db.tx() as conn:
+                row = conn.execute(
+                    "SELECT team_id FROM conversations WHERE id = %s AND customer_id = %s", (conv, customer_id)
+                ).fetchone()
+            if row and row["team_id"] is not None and str(row["team_id"]) in teams:
+                return
+        elif user.query_team and user.query_team in teams:
+            return
+    what = roles.PERMISSIONS.get(permission, permission).lower()
+    where = " for this conversation's team" if teams else ""
+    raise HTTPException(status.HTTP_403_FORBIDDEN, f"Your role does not allow you to {what}{where}.")
 
 
 def seat(conn: psycopg.Connection, user: User, customer_id: Any) -> str:

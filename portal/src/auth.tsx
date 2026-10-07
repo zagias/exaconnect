@@ -9,6 +9,7 @@ import {
   type SignInProvider,
   type User,
 } from "./api";
+import Account from "./pages/Account";
 import "./tables.css";
 import "./pages/identity.css";
 
@@ -46,10 +47,35 @@ export function AuthGate({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = () => {
-    api("/auth/logout", { method: "POST" })
+    // A single sign-on session also signs out of the company's provider (ADR 0024).
+    fetch("/api/v1/auth/logout", { method: "POST", credentials: "same-origin", headers: { "X-Requested-With": "exa-portal" } })
+      .then((r) => {
+        const next = r.headers.get("X-Exa-Logout-Url");
+        if (next && next.startsWith("https://")) window.location.assign(next);
+      })
       .catch(() => {})
       .finally(() => setUser(null));
   };
+
+  if (user?.two_step_required)
+    return (
+      <AuthContext.Provider value={{ user, signOut }}>
+        <main id="main" style={{ padding: 24 }}>
+          <p className="callout" role="status">
+            Your organisation requires two-step sign-in. Set it up below, then{" "}
+            <button className="button" onClick={() => window.dispatchEvent(new Event("exa-auth"))}>
+              continue
+            </button>{" "}
+            or{" "}
+            <button className="link" onClick={signOut}>
+              sign out
+            </button>
+            .
+          </p>
+          <Account />
+        </main>
+      </AuthContext.Provider>
+    );
 
   if (checking || !user)
     return (
