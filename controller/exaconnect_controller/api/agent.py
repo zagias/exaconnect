@@ -75,7 +75,7 @@ def _enrol(body: EnrolIn, request: Request) -> EnrolOut:
             """INSERT INTO nodes (customer_id, site_id, name, wg_public_key, cert_serial)
                VALUES (%s, %s, %s, %s, %s)
                ON CONFLICT (site_id) DO UPDATE SET
-                 wg_public_key = EXCLUDED.wg_public_key, cert_serial = EXCLUDED.cert_serial,
+                 wg_public_key = EXCLUDED.wg_public_key, cert_serial = EXCLUDED.cert_serial, prev_cert_serial = NULL,
                  enrolled_at = now(), applied_version = 0, apply_ok = NULL, apply_error = NULL
                RETURNING id""",
             (tok["customer_id"], tok["site_id"], body.node_name, body.wg_public_key, serial),
@@ -99,8 +99,9 @@ class RenewOut(BaseModel):
 @router.post("/agent/renew")
 def renew(body: RenewIn, node: NodeDep, request: Request) -> RenewOut:
     """A new client certificate for the same node, asked for over the current
-    one (mTLS). The node's serial is replaced in the same transaction, so the
-    old certificate stops working as soon as the new one is issued."""
+    one (mTLS). The new serial becomes current at once. The previous one keeps
+    working only until the new certificate is first used, so an agent whose
+    reply was lost can still ask again with the certificate it holds."""
     ca: pki.CA = request.app.state.ca
     try:
         name = pki.csr_common_name(body.csr_pem.encode())
@@ -110,12 +111,15 @@ def renew(body: RenewIn, node: NodeDep, request: Request) -> RenewOut:
     except pki.CSRError as e:
         raise HTTPException(400, str(e)) from None
     # The serial the request came in with (checked by NodeDep). Swapping only
-    # if it is still current means a concurrent renewal or a revocation wins.
+    # if it is still current, or the one just replaced, means a revocation wins.
     old = pki.normalise_serial(request.headers.get("x-ssl-client-serial", ""))
     with db.tx() as conn:
         row = conn.execute(
-            "UPDATE nodes SET cert_serial = %s WHERE id = %s AND cert_serial = %s RETURNING id",
-            (serial, node.id, old),
+            """UPDATE nodes SET prev_cert_serial = CASE WHEN cert_serial = %(old)s THEN %(old)s
+                                                        ELSE prev_cert_serial END,
+                                cert_serial = %(new)s
+               WHERE id = %(id)s AND (cert_serial = %(old)s OR prev_cert_serial = %(old)s) RETURNING id""",
+            {"old": old, "new": serial, "id": node.id},
         ).fetchone()
         if row is None:
             raise HTTPException(401, "unknown or replaced client certificate")

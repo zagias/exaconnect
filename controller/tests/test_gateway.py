@@ -91,14 +91,24 @@ def test_renewal_issues_a_new_certificate_and_retires_the_old_one(client, admin_
     assert cert.serial_number != old_cert.serial_number
     assert cert.not_valid_after_utc >= old_cert.not_valid_after_utc
 
-    # The old certificate stops working at once; the new one works.
+    # Until the new certificate is used, the old one still works: a renewal
+    # reply lost on the way must not strand the site. Asking again replaces
+    # the unused certificate.
+    lost = {**old, "X-SSL-Client-Serial": format(cert.serial_number, "X")}
+    assert client.get("/api/v1/agent/desired-state", headers=old).status_code in (200, 204, 404)
+    r = _renew(client, old, _csr("site-a"))
+    assert r.status_code == 200, r.text
+    cert = x509.load_pem_x509_certificate(r.json()["cert_pem"].encode())
+    assert client.get("/api/v1/agent/desired-state", headers=lost).status_code == 401
+
+    # Once the new certificate is used, the old one stops working.
     new = {**old, "X-SSL-Client-Serial": format(cert.serial_number, "X")}
+    assert client.get("/api/v1/agent/desired-state", headers=new).status_code in (200, 204, 404)
     assert client.get("/api/v1/agent/desired-state", headers=old).status_code == 401
     assert _renew(client, old, _csr("site-a")).status_code == 401
-    assert client.get("/api/v1/agent/desired-state", headers=new).status_code in (200, 204, 404)
 
     audit = [a for a in client.get("/api/v1/audit", headers=admin_headers).json() if a["action"] == "node.cert_renewed"]
-    assert len(audit) == 1 and audit[0]["target"] == "site-a"
+    assert len(audit) == 2 and audit[0]["target"] == "site-a"
     assert audit[0]["detail"]["serial"] == pki.serial_hex(cert.serial_number)
     assert audit[0]["detail"]["old_serial"] == pki.serial_hex(old_cert.serial_number)
 

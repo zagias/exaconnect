@@ -166,7 +166,8 @@ def revoke_node(node_id: str, user: AdminDep) -> dict:
     inventory; a new enrolment token brings it back with a fresh certificate."""
     with db.tx() as conn:
         node = conn.execute(
-            "UPDATE nodes SET cert_serial = 'revoked:' || id::text WHERE id = %s RETURNING name, customer_id",
+            """UPDATE nodes SET cert_serial = 'revoked:' || id::text, prev_cert_serial = NULL
+               WHERE id = %s RETURNING name, customer_id""",
             (node_id,),
         ).fetchone()
         if node is None:

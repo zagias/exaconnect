@@ -1,4 +1,4 @@
-# ADR 0026: The agent checks SLAs itself while the controller is silent
+# ADR 0027: The agent checks SLAs itself while the controller is silent
 
 Date: 2026-10-07 · Status: accepted
 

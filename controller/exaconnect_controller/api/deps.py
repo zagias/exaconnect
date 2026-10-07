@@ -284,8 +284,12 @@ def current_node(
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "client certificate required")
     with db.tx() as conn:
         row = conn.execute(
-            "UPDATE nodes SET last_seen = now() WHERE cert_serial = %s RETURNING id, name, customer_id, site_id",
-            (pki.normalise_serial(x_ssl_client_serial),),
+            # The certificate before a renewal still works until the new one is
+            # first seen (a lost renewal reply must not strand a site).
+            """UPDATE nodes SET last_seen = now(),
+                                prev_cert_serial = CASE WHEN cert_serial = %(s)s THEN NULL ELSE prev_cert_serial END
+               WHERE cert_serial = %(s)s OR prev_cert_serial = %(s)s RETURNING id, name, customer_id, site_id""",
+            {"s": pki.normalise_serial(x_ssl_client_serial)},
         ).fetchone()
     if row is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "unknown or replaced client certificate")
