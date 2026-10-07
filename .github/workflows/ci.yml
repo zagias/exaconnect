@@ -98,6 +98,8 @@ jobs:
           cache: npm
           cache-dependency-path: portal/package-lock.json
       - run: make build-portal
+      - name: unit tests
+        run: cd portal && npm test
 
   lab:
     runs-on: ubuntu-24.04

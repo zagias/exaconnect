@@ -33,8 +33,8 @@ test-agent: ## Go vet and unit tests
 test-controller: ## Controller unit tests (pip install -e 'controller[dev]' first)
 	cd controller && $(PY) -m pytest -q
 
-test-portal: ## Portal type check
-	cd portal && npm run typecheck
+test-portal: ## Portal type check and unit tests
+	cd portal && npm run typecheck && npm test
 
 lint: ## Lint Go, Python and shell
 	cd agent && test -z "$$(gofmt -l .)" || (gofmt -l . && exit 1)
