@@ -21,11 +21,24 @@ from . import (  # noqa: E402
     enterprise,
     partners,
     regions,
+    selfservice,
     voice,
     voice_global,
 )
 
-for _m in (channels, ai, automation, voice, partners, regions, developer, enterprise, channels_global, voice_global):
+for _m in (
+    channels,
+    ai,
+    automation,
+    voice,
+    partners,
+    regions,
+    developer,
+    enterprise,
+    channels_global,
+    voice_global,
+    selfservice,
+):
     router.include_router(_m.router)
     if hasattr(_m, "public"):
         router.include_router(_m.public)

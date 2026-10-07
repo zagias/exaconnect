@@ -9,6 +9,7 @@ import Organisation from "./settings/Organisation";
 import Roles from "./settings/Roles";
 import Security from "./settings/Security";
 import SignIn from "./settings/SignIn";
+import HelpAdmin from "../help/HelpAdmin";
 import type { Member, Team } from "./types";
 
 /** How the business runs CommAI: service targets, teams, seats, routing and developer access. */
@@ -32,6 +33,7 @@ export default function Settings() {
         <NavLink to="/commai/settings/roles">Roles</NavLink>
         <NavLink to="/commai/settings/security">Security</NavLink>
         <NavLink to="/commai/settings/data">Data</NavLink>
+        <NavLink to="/commai/settings/help-centre">Help centre</NavLink>
       </Tabs>
       <Routes>
         <Route path="/" element={<Service base={base} />} />
@@ -43,6 +45,7 @@ export default function Settings() {
         <Route path="/roles" element={<Roles base={base} />} />
         <Route path="/security" element={<Security base={base} />} />
         <Route path="/data" element={<Data base={base} />} />
+        <Route path="/help-centre" element={<HelpAdmin />} />
       </Routes>
     </>
   );

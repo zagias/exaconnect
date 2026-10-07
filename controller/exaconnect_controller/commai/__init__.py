@@ -28,3 +28,4 @@ from . import (  # noqa: F401
     webhooks,
 )
 from .channels import checks, countries, email, messaging, sms_routing, social, whatsapp_cloud, widget  # noqa: F401
+from .selfservice import enduser, helpcentre, staff  # noqa: F401  (self-service, ADR 0031)
