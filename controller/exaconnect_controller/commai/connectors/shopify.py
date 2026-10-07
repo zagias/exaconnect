@@ -53,13 +53,12 @@ ORDER_FIELDS = """id name email createdAt cancelledAt displayFinancialStatus dis
   totalPriceSet { shopMoney { amount currencyCode } }
   totalRefundedSet { shopMoney { amount currencyCode } }
   fulfillments(first: 5) { status trackingInfo(first: 3) { company number url } }"""
-FIND_ORDER = "query($q: String!) { orders(first: 1, query: $q) { nodes { %s } } }" % ORDER_FIELDS
+FIND_ORDER = "query($q: String!) { orders(first: 1, query: $q) { nodes { FIELDS } } }".replace("FIELDS", ORDER_FIELDS)
 REFUND_CONTEXT = (
-    """query($q: String!) { orders(first: 1, query: $q) { nodes { %s
+    """query($q: String!) { orders(first: 1, query: $q) { nodes { FIELDS
   refunds(first: 50) { id note }
   transactions(first: 20) { id kind status gateway amountSet { shopMoney { amount } } } } } }"""
-    % ORDER_FIELDS
-)
+).replace("FIELDS", ORDER_FIELDS)
 REFUND = """mutation($input: RefundInput!) { refundCreate(input: $input) {
   refund { id note totalRefundedSet { shopMoney { amount currencyCode } } } userErrors { field message } } }"""
 CANCEL = """mutation($orderId: ID!) { orderCancel(orderId: $orderId, reason: CUSTOMER, refund: false, restock: true,
