@@ -50,7 +50,7 @@
         assistant: "Assistant",
         poweredBy: "ExaCarib CommAI",
         tooBig: "That file is too large.",
-        wrongType: "You can send images, PDFs and plain text.",
+        wrongType: "You can send images, PDFs, plain text and voice notes.",
     };
     const ICON_CHAT = '<svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path fill="currentColor" d="M4 4h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-5 4v-4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/></svg>';
     const ICON_CLOSE = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg>';
@@ -163,6 +163,7 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
     };
     class Chat {
         constructor(key, userToken, previewMode = false) {
+            this.key = key;
             this.userToken = userToken;
             this.previewMode = previewMode;
             this.cfg = DEFAULTS;
@@ -245,6 +246,27 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
             });
             return this.sessionReady;
         }
+        // ---- language (ADR 0026) ----------------------------------------------------------------
+        /** The widget's words in the visitor's language, when the business has it switched on. */
+        async loadWords() {
+            const wanted = (script && script.dataset.lang) || (navigator.languages || [navigator.language]).join(",");
+            if (!wanted || /^en(-|,|$)/i.test(wanted))
+                return;
+            try {
+                const url = `${apiOrigin}/api/v1/commai/i18n/widget/${encodeURIComponent(this.key)}?lang=${encodeURIComponent(wanted)}`;
+                const r = await fetch(url, { mode: "cors", credentials: "omit" });
+                if (!r.ok)
+                    return;
+                const out = (await r.json());
+                Object.assign(COPY, out.strings);
+                this.host.setAttribute("lang", out.locale);
+                if (this.launcher)
+                    this.launcher.setAttribute("aria-label", COPY.open);
+            }
+            catch (_a) {
+                /* English stays */
+            }
+        }
         // ---- start ----------------------------------------------------------------------------
         async start() {
             this.mount();
@@ -255,6 +277,7 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
                 this.host.remove(); // not allowed on this site, or the key is off: stay invisible
                 return;
             }
+            await this.loadWords();
             this.applyConfig();
             this.heartbeat();
             if (this.stored.conv || this.userToken) {

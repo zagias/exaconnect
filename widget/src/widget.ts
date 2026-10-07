@@ -104,7 +104,7 @@ interface ExaCaribChatApi {
     assistant: "Assistant",
     poweredBy: "ExaCarib CommAI",
     tooBig: "That file is too large.",
-    wrongType: "You can send images, PDFs and plain text.",
+    wrongType: "You can send images, PDFs, plain text and voice notes.",
   };
 
   const ICON_CHAT =
@@ -244,7 +244,7 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
     private doneText = "";
     private showContact = false;
 
-    constructor(key: string, private userToken: string, private previewMode = false) {
+    constructor(private key: string, private userToken: string, private previewMode = false) {
       this.base = `${apiOrigin}/api/v1/commai/widget/${encodeURIComponent(key)}`;
       this.storeKey = `exacarib-chat:${key}`;
       this.stored = previewMode ? {} : load(this.storeKey);
@@ -312,6 +312,25 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
       return this.sessionReady;
     }
 
+    // ---- language (ADR 0026) ----------------------------------------------------------------
+
+    /** The widget's words in the visitor's language, when the business has it switched on. */
+    private async loadWords() {
+      const wanted = (script && script.dataset.lang) || (navigator.languages || [navigator.language]).join(",");
+      if (!wanted || /^en(-|,|$)/i.test(wanted)) return;
+      try {
+        const url = `${apiOrigin}/api/v1/commai/i18n/widget/${encodeURIComponent(this.key)}?lang=${encodeURIComponent(wanted)}`;
+        const r = await fetch(url, { mode: "cors", credentials: "omit" });
+        if (!r.ok) return;
+        const out = (await r.json()) as { locale: string; strings: Partial<typeof COPY> };
+        Object.assign(COPY, out.strings);
+        this.host.setAttribute("lang", out.locale);
+        if (this.launcher) this.launcher.setAttribute("aria-label", COPY.open);
+      } catch {
+        /* English stays */
+      }
+    }
+
     // ---- start ----------------------------------------------------------------------------
 
     async start() {
@@ -322,6 +341,7 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
         this.host.remove(); // not allowed on this site, or the key is off: stay invisible
         return;
       }
+      await this.loadWords();
       this.applyConfig();
       this.heartbeat();
       if (this.stored.conv || this.userToken) {
