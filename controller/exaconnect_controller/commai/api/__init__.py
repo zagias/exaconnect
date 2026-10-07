@@ -2,12 +2,13 @@
 
 from fastapi import APIRouter
 
-from . import inbox, platform
+from . import golive, inbox, platform
 
 router = APIRouter(prefix="/commai")
 router.include_router(inbox.router)
 router.include_router(inbox.live)
 router.include_router(platform.router)
+router.include_router(golive.router)
 
 # Module routers. Each module's file defines `router` (and optionally `public`
 # for unauthenticated endpoints such as the website widget and provider webhooks).

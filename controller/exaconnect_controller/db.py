@@ -39,6 +39,10 @@ def apply_schema(conn: psycopg.Connection) -> None:
         sql_dir = resources.files(__package__).joinpath("commai", "sql")
         for f in sorted((p for p in sql_dir.iterdir() if p.name.endswith(".sql")), key=lambda p: p.name):
             conn.execute(f.read_text())
+        # Go-live registry (ADR 0022): declared capabilities start off.
+        from .commai import golive
+
+        golive.sync(conn)
 
 
 @contextmanager
