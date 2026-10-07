@@ -20,7 +20,8 @@ def _paths(site_id):
 def _customer_headers(client, cid):
     with db.tx() as conn:
         conn.execute(
-            "INSERT INTO users (email, password_hash, role, customer_id) VALUES ('it@demo.example', %s, 'customer', %s)",
+            "INSERT INTO users (email, password_hash, role, customer_id)"
+            " VALUES ('it@demo.example', %s, 'customer', %s)",
             (hash_password("a long customer password"), cid),
         )
     r = client.post("/api/v1/auth/login", json={"email": "it@demo.example", "password": "a long customer password"})
