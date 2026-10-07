@@ -330,6 +330,8 @@ def mode_for(conn, number: str) -> str:
 
 
 def any_enabled(conn, cid: Any) -> bool:
+    if not conn.execute("SELECT 1 FROM voice_carriers LIMIT 1").fetchone():
+        ensure_simulated(conn)
     return any(
         golive.enabled(conn, "carrier", r["key"], cid)
         for r in conn.execute("SELECT key FROM voice_carriers WHERE enabled").fetchall()

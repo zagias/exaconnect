@@ -94,10 +94,11 @@ def norm_mac(mac: str) -> str:
 
 def norm_e164(number: str) -> str:
     d = digits(number)
-    if len(d) == 7:  # a local Trinidad number
-        d = "1868" + d
-    if len(d) == 10:
-        d = "1" + d
+    if not str(number).strip().startswith("+"):  # "+" means it already has its country code
+        if len(d) == 7:  # a local Trinidad number
+            d = "1868" + d
+        if len(d) == 10:
+            d = "1" + d
     if not 8 <= len(d) <= 15:
         raise OpError(f"{number} is not a phone number in international format.")
     return "+" + d
