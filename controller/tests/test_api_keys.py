@@ -40,3 +40,23 @@ def test_expired_and_unknown_keys(client, admin_headers):
     assert r.status_code == 401
     r = client.post("/api/v1/auth/api-keys", json={"name": ""}, headers=admin_headers)
     assert r.status_code == 422
+
+
+def test_read_only_connect_key(client, admin_headers):
+    seed = _seed()
+    cid = seed["customer_id"]
+    body = {"name": "grafana", "scopes": ["connect:read"]}
+    r = client.post("/api/v1/auth/api-keys", json=body, headers=admin_headers)
+    assert r.status_code == 201, r.text
+    h = {"Authorization": f"Bearer {r.json()['token']}"}
+    # Reads work across the network API...
+    assert client.get(f"/api/v1/customers/{cid}/circuits", headers=h).status_code == 200
+    assert client.get("/api/v1/sites", headers=h).status_code == 200
+    # ...but nothing changes, and CommAI stays out of reach.
+    r = client.patch(f"/api/v1/customers/{cid}/settings", json={"shadow_mode": True}, headers=h)
+    assert r.status_code == 403
+    assert client.post("/api/v1/auth/api-keys", json={"name": "more"}, headers=h).status_code == 403
+    assert client.get(f"/api/v1/commai/customers/{cid}/conversations", headers=h).status_code == 403
+    with db.tx() as conn:
+        row = conn.execute("SELECT shadow_mode FROM customers WHERE id = %s", (cid,)).fetchone()
+    assert row["shadow_mode"] is False

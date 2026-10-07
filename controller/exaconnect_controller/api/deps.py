@@ -139,6 +139,9 @@ def current_user(request: Request, authorization: Annotated[str | None, Header()
         # A key limited to CommAI scopes never reaches the network API. A
         # limited account (directory-provisioned) may still manage its own sign-in.
         allowed = path.startswith("/api/v1/commai/") or path == "/api/v1/auth/me"
+        # connect:read reaches the network API for reads only: monitoring and reporting keys.
+        if not allowed and "connect:read" in user.scopes and method in SAFE_METHODS:
+            allowed = True
         if not allowed and user.via != "key":
             allowed = path.startswith(("/api/v1/auth/", "/api/v1/invites/", "/api/v1/orgs/"))
         if not allowed:

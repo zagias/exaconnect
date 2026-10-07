@@ -27,6 +27,7 @@ export default function ApiKeys() {
   const revoke = useAction();
   const [name, setName] = useState("");
   const [days, setDays] = useState("");
+  const [readOnly, setReadOnly] = useState(false);
   const [revoking, setRevoking] = useState<number | null>(null);
   // The new token lives only here, until Done or leaving the page.
   const [created, setCreated] = useState<ApiKeyCreated | null>(null);
@@ -39,11 +40,14 @@ export default function ApiKeys() {
       return;
     }
     create.run(async () => {
-      const body: { name: string; days?: number } = { name: n };
+      const body: { name: string; days?: number; scopes?: string[] } = { name: n };
       if (days) body.days = Number(days);
+      // A read-only key sees the network API but changes nothing: for monitoring and reports.
+      if (readOnly) body.scopes = ["connect:read"];
       setCreated(await createApiKey(body));
       setName("");
       setDays("");
+      setReadOnly(false);
       reload();
     });
   };
@@ -141,6 +145,13 @@ export default function ApiKeys() {
                 {x.label}
               </option>
             ))}
+          </select>
+        </label>
+        <label>
+          Access
+          <select value={readOnly ? "read" : "all"} onChange={(e) => setReadOnly(e.target.value === "read")}>
+            <option value="all">Everything you can do</option>
+            <option value="read">Read only (Connect)</option>
           </select>
         </label>
         <div className="actions">

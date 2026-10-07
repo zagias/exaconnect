@@ -1202,7 +1202,7 @@ export interface ApiKeyCreated {
 
 export const apiKeysPath = "/auth/api-keys";
 
-export const createApiKey = (body: { name: string; days?: number }) =>
+export const createApiKey = (body: { name: string; days?: number; scopes?: string[] }) =>
   api<ApiKeyCreated>(apiKeysPath, { method: "POST", body: JSON.stringify(body) });
 
 export const revokeApiKey = (id: number) => api<void>(`${apiKeysPath}/${id}`, { method: "DELETE" });

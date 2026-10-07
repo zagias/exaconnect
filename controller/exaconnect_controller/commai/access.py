@@ -31,7 +31,7 @@ from fastapi import HTTPException, status
 
 from ..api.deps import User, can_manage_org, check_customer
 
-SCOPES = ("connect", "commai:read", "commai:write", "commai:notes", "commai:admin")
+SCOPES = ("connect", "connect:read", "commai:read", "commai:write", "commai:notes", "commai:admin")
 NOT_ORG_ADMIN = "Only this organisation's owners and admins can change these settings."
 
 
