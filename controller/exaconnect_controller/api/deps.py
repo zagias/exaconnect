@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import hmac
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Annotated, Any
 
 from fastapi import Depends, Header, HTTPException, Request, status
@@ -24,6 +24,13 @@ class User:
     scopes: tuple[str, ...] | None = None
     # How the request signed in: 'session' (Bearer), 'cookie' (portal) or 'key'.
     via: str = "session"
+    # Roles (ADR 0024): None means the person has no roles and keeps their
+    # account's rights; otherwise the business-wide permissions, plus
+    # permissions held for single teams only.
+    permissions: frozenset[str] | None = None
+    team_permissions: dict = field(default_factory=dict)
+    path: str = ""
+    query_team: str | None = None
 
     @property
     def actor(self) -> str:
@@ -63,7 +70,8 @@ def current_user(request: Request, authorization: Annotated[str | None, Header()
                      WHERE token_hash = %(h)s AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > now())
                        AND (last_used_at IS NULL OR last_used_at < now() - interval '1 minute')
                      RETURNING user_id)
-                   SELECT u.*, (SELECT scopes FROM api_keys WHERE token_hash = %(h)s) AS key_scopes FROM users u
+                   SELECT u.*, kk.scopes AS key_scopes, kk.id AS key_id, kk.locked_until AS key_locked_until
+                   FROM users u, (SELECT scopes, id, locked_until FROM api_keys WHERE token_hash = %(h)s) kk
                    WHERE u.id = (SELECT user_id FROM k UNION ALL
                                  SELECT user_id FROM api_keys WHERE token_hash = %(h)s AND revoked_at IS NULL
                                    AND (expires_at IS NULL OR expires_at > now()) LIMIT 1)
@@ -74,7 +82,8 @@ def current_user(request: Request, authorization: Annotated[str | None, Header()
             row = None
         if row is None:
             row = conn.execute(
-                "SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id"
+                "SELECT u.*, s.via AS session_via, s.created_at AS session_created_at, s.token_hash AS session_hash"
+                " FROM sessions s JOIN users u ON u.id = s.user_id"
                 " WHERE s.token_hash = %s AND s.expires_at > now() AND u.disabled_at IS NULL",
                 (token_hash(token),),
             ).fetchone()
@@ -93,6 +102,10 @@ def current_user(request: Request, authorization: Annotated[str | None, Header()
         scopes,
         "key" if is_key else ("cookie" if via_cookie else "session"),
     )
+    # Business security settings and roles (ADR 0024).
+    from ..commai.enterprise import security as enterprise_security
+
+    enterprise_security.guard(request, user, row)
     if user.scopes is not None and "connect" not in user.scopes:
         # A key limited to CommAI scopes never reaches the network API. A
         # limited account (directory-provisioned) may still manage its own sign-in.

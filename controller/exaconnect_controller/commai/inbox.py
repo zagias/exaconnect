@@ -20,6 +20,7 @@ import psycopg
 from psycopg.types.json import Jsonb
 
 from . import channels, events, jobs
+from .enterprise import calendar, protect
 
 STATES = ("open", "awaiting_customer", "awaiting_internal", "snoozed", "resolved", "reopened")
 PRIORITIES = ("low", "normal", "high", "urgent")
@@ -124,12 +125,13 @@ def get(conn: psycopg.Connection, customer_id: Any, conversation_id: Any, *, loc
     return row
 
 
-def _due(conn, customer_id: Any, priority: str) -> tuple[dt.datetime, dt.datetime]:
+def _due(conn, customer_id: Any, priority: str, team_id: Any = None) -> tuple[dt.datetime, dt.datetime]:
     s = settings(conn, customer_id)
     now = dt.datetime.now(dt.UTC)
     first = dt.timedelta(minutes=float(s["first_reply_minutes"].get(priority, 60)))
     resolve = dt.timedelta(hours=float(s["resolve_hours"].get(priority, 24)))
-    return now + first, now + resolve
+    # Targets count business time only: they pause outside opening hours (ADR 0024).
+    return calendar.due(conn, customer_id, team_id, now, first, resolve)
 
 
 def route(conn: psycopg.Connection, conv: dict, text: str) -> dict:
@@ -158,7 +160,12 @@ def route(conn: psycopg.Connection, conv: dict, text: str) -> dict:
         rule_name = r["name"]
         break
     assignee = None
-    if team_id:
+    # Outside the team's opening hours: the after-hours team, or wait for opening (ADR 0024).
+    hours = calendar.after_hours(conn, conv["customer_id"], team_id)
+    if hours["reason"]:
+        team_id = hours["team_id"]
+        rule_name = f"{rule_name}; {hours['reason']}" if rule_name else hours["reason"]
+    if team_id and hours["open"]:
         pick = conn.execute(
             """SELECT tm.user_id FROM commai_team_members tm
                JOIN commai_members m ON m.user_id = tm.user_id AND m.customer_id = %(c)s
@@ -170,7 +177,7 @@ def route(conn: psycopg.Connection, conv: dict, text: str) -> dict:
             {"c": conv["customer_id"], "t": team_id, "lang": conv["language"] or ""},
         ).fetchone()
         assignee = pick["user_id"] if pick else None
-    first_due, resolve_due = _due(conn, conv["customer_id"], priority)
+    first_due, resolve_due = _due(conn, conv["customer_id"], priority, team_id)
     updated = conn.execute(
         """UPDATE conversations SET team_id = %s, queue = %s, priority = %s, assignee_id = %s,
                   first_reply_due = COALESCE(first_reply_due, %s), resolve_due = COALESCE(resolve_due, %s),
@@ -644,6 +651,7 @@ def send(
     ch = channels.get(conv["channel"])
     try:
         ch.check_send(conn, conv, body, template)
+        protect.check_send(conn, conv)  # hard monthly limits stop sending (ADR 0024)
     except channels.SendBlocked as e:
         # Its own transaction: the refusal rolls the caller's work back, but the
         # block must stay on record for reports and the platform assistant.
@@ -751,6 +759,7 @@ def _send_job(conn: psycopg.Connection, job: dict):
     conv = conn.execute("SELECT * FROM conversations WHERE id = %s", (msg["conversation_id"],)).fetchone()
     ch = channels.get(conv["channel"])
     try:
+        protect.check_send(conn, conv)
         out = ch.deliver(conn, conv, msg)
     except channels.SendBlocked as e:
         conn.execute("UPDATE messages SET status = 'blocked', error = %s WHERE id = %s", (str(e), msg["id"]))

@@ -731,8 +731,13 @@ async def live_updates(websocket: WebSocket, customer_id: str) -> None:
 
 
 def _ws_user(websocket: WebSocket, auth: str | None):
-    class _Req:  # current_user only reads the path
+    class _Req:  # current_user reads the path; the security guard (ADR 0024) the address and app
         url = websocket.url
+        headers = getattr(websocket, "headers", {})
+        client = getattr(websocket, "client", None)
+        app = getattr(websocket, "app", None)
+        query_params = getattr(websocket, "query_params", {})
+        method = "GET"
 
     return current_user(_Req(), auth)  # type: ignore[arg-type]
 
