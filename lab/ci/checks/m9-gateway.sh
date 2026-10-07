@@ -70,12 +70,16 @@ else
 fi
 unset token
 mtls="curl -s -o /dev/null -w '%{http_code}' --cacert /state/ca.crt --cert /state/client.crt --key /state/client.key $base/api/v1/agent/desired-state"
-c=$(probe "$mtls" | tail -n 1)
-if [[ $c == 200 || $c == 204 || $c == 404 ]]; then ok "it polls desired state over mutual TLS ($c)"; else bad "desired state over mutual TLS answered $c"; fi
+# The status code, then curl's exit code, so a failure says what happened.
+mtls_try() { probe "$mtls; echo \" curl exit \$?\"" | tr '\n' ' '; }
+res=$(mtls_try)
+c=$(grep -oE '^[0-9]{3}' <<<"$res")
+if [[ $c == 200 || $c == 204 || $c == 404 ]]; then ok "it polls desired state over mutual TLS ($c)"; else bad "desired state over mutual TLS answered ${c:-nothing}: $(cut -c1-200 <<<"$res")"; fi
 node=$(sql "SELECT id FROM nodes WHERE name = 'gw-probe'")
 [[ -n $node ]] && api POST "/nodes/$node/revoke" >/dev/null
-c=$(probe "$mtls" | tail -n 1)
-if [[ $c == 401 || $c == 403 ]]; then ok "after revoking, its certificate is refused ($c)"; else bad "a revoked certificate answered $c"; fi
+res=$(mtls_try)
+c=$(grep -oE '^[0-9]{3}' <<<"$res")
+if [[ $c == 401 || $c == 403 ]]; then ok "after revoking, its certificate is refused ($c)"; else bad "a revoked certificate answered ${c:-nothing}: $(cut -c1-200 <<<"$res")"; fi
 sql "DELETE FROM sites WHERE name = 'gw-probe'" >/dev/null
 rm -f "$tmp"/*.key
 # Last: it trips the limiter for this host's address for a few minutes.

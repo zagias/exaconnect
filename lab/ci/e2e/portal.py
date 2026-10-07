@@ -122,10 +122,15 @@ def main() -> int:
             api_fail.clear()
             page.goto(BASE + path, wait_until="networkidle")
             page.wait_for_timeout(1500)
+            # On a busy host the organisation can load late; give it a moment.
+            for _ in range(10):
+                if "Choose an organisation first" not in page.inner_text("body"):
+                    break
+                page.wait_for_timeout(1000)
             alerts = [a.strip() for a in page.locator('[role="alert"]').all_inner_texts() if a.strip()]
             text = page.locator("main").inner_text() if page.locator("main").count() else page.inner_text("body")
             problems = []
-            if re.search(r"Page not found|Something went wrong", text):
+            if re.search(r"Page not found|Something went wrong|Choose an organisation first", text):
                 problems.append("not found or crashed")
             if len(text.strip()) < 40:
                 problems.append("blank")

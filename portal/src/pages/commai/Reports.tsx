@@ -79,13 +79,22 @@ export default function Reports() {
   const out = useApi<Outcomes>(base && `${base}/reports/outcomes${q}`, 60_000);
   const use = useApi<Usage>(base && `${base}/reports/usage${q}`, 60_000);
   const limits = useApi<Limit[]>(base && `${base}/usage-limits`, 60_000);
-  if (!base) return <p className="muted">Choose an organisation first.</p>;
+  const head = (
+    <PageHead eyebrow="CommAI" title="Reports">
+      Every figure is counted from recorded events, never estimated. Hover a figure to see where it comes from.
+    </PageHead>
+  );
+  if (!base)
+    return (
+      <>
+        {head}
+        <p className="muted">Choose an organisation first.</p>
+      </>
+    );
   const o = out.data;
   return (
     <>
-      <PageHead eyebrow="CommAI" title="Reports">
-        Every figure is counted from recorded events, never estimated. Hover a figure to see where it comes from.
-      </PageHead>
+      {head}
       <div className="segmented" role="group" aria-label="Period" style={{ marginBottom: 16 }}>
         {PERIODS.map(([l, d]) => (
           <button key={d} aria-pressed={days === d} onClick={() => setDays(d)}>
