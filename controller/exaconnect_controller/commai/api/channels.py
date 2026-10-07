@@ -36,7 +36,7 @@ from starlette.concurrency import run_in_threadpool
 
 from ... import audit, db
 from ...api.deps import UserDep
-from .. import access, diagnostics, events, inbox
+from .. import access, branding, diagnostics, events, inbox
 from ..channels import email as email_ch
 from ..channels import messaging, providers, widget
 from .common import errors
@@ -843,10 +843,12 @@ def widget_config(public_key: str, request: Request):
         s = inbox.settings(c.conn, c.key["customer_id"])
         ws = widget.settings_of(c.key)
         ai = s["mode"] == "ai_first" and inbox.ai_available()
+        brand = branding.public_view(branding.for_customer(c.conn, c.key["customer_id"]))  # ADR 0025
         return {
             "title": ws["title"],
             "greeting": ws["greeting"],
-            "colour": ws["colour"],
+            "colour": brand["colour"] if brand and ws["colour"] == widget.DEFAULT_SETTINGS["colour"] else ws["colour"],
+            "brand": brand,
             "position": ws["position"],
             "mode": s["mode"],
             "ai": ai,
