@@ -175,6 +175,8 @@ def security_holders(conn: psycopg.Connection, customer_id: Any) -> int:
         """SELECT count(*) AS n FROM users u
            WHERE u.customer_id = %(c)s AND u.role = 'customer' AND u.disabled_at IS NULL
              AND (u.access_scopes IS NULL OR 'commai:admin' = ANY(u.access_scopes))
+             AND NOT EXISTS (SELECT 1 FROM commai_members m WHERE m.user_id = u.id AND m.customer_id = %(c)s
+                             AND m.seat = 'internal')
              AND (NOT EXISTS (SELECT 1 FROM commai_role_assignments a WHERE a.user_id = u.id AND a.customer_id = %(c)s)
                   OR EXISTS (SELECT 1 FROM commai_role_assignments a JOIN commai_roles r ON r.id = a.role_id
                              WHERE a.user_id = u.id AND a.customer_id = %(c)s AND a.team_id IS NULL
