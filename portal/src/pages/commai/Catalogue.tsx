@@ -39,7 +39,7 @@ interface CatalogueApp {
 interface Catalogue {
   categories: { id: string; label: string; apps: CatalogueApp[] }[];
   standards: { id: string; name: string; spec: string; what: string }[];
-  via_standard: { name: string; category: string; via: string }[];
+  via_standard: { name: string; category: string; via: string; definition?: string; events_in?: string; events_out?: string }[];
 }
 
 interface Operation {
@@ -264,6 +264,12 @@ function Standards({ data }: { data: Catalogue }) {
           {data.via_standard.map((v) => (
             <li key={v.name}>
               {v.name} <span className="muted small">via {data.standards.find((s) => s.id === v.via)?.name ?? v.via}</span>
+              {v.definition && (
+                <span className="muted small">
+                  {" "}
+                  · CommAI app definition <code>{v.definition}</code>, events in through <a href="#hooks">inbound webhooks</a>
+                </span>
+              )}
             </li>
           ))}
         </ul>

@@ -127,7 +127,13 @@ These have no ready-made app here:
 - **Through your own API (OpenAPI):** Acuity Scheduling, Square Appointments,
   SugarCRM, Odoo, Copper, Insightly, Keap, ActiveCampaign, Mailchimp, Airtable,
   Google Sheets and Notion.
-- **Through webhooks:** Zapier, Make and n8n.
+- **Through webhooks:** Zapier, Make and n8n. CommAI's app definitions for them are
+  in `integrations/zapier`, `integrations/make` and `integrations/n8n`. They use the
+  event webhooks (CloudEvents and Standard Webhooks) out, and inbound webhooks in.
+
+A ready-made app that receives webhooks can act on each verified, first-time event
+by implementing `on_webhook_event(conn, connection, event)`. It is a no-op on the kit,
+and a failure inside it never loses the recorded event.
 
 ## What Dudley sets up (placeholders in `.env.example`)
 
@@ -141,7 +147,7 @@ These have no ready-made app here:
 | `EXA_ZOHO_CLIENT_ID`, `EXA_ZOHO_CLIENT_SECRET` | Zoho API console client (server-based) |
 | `EXA_PIPEDRIVE_CLIENT_ID`, `EXA_PIPEDRIVE_CLIENT_SECRET` | Pipedrive Marketplace app |
 | `EXA_GOOGLE_CLIENT_ID`, `EXA_GOOGLE_CLIENT_SECRET` | Google OAuth app for Gmail and Calendar (Gmail needs Google's restricted-scope verification) |
-| `EXA_MS365_CLIENT_ID`, `EXA_MS365_CLIENT_SECRET` | Entra ID multi-tenant app for Outlook mail and calendar |
+| `EXA_MS365_CLIENT_ID`, `EXA_MS365_CLIENT_SECRET` | Entra ID multi-tenant app for Outlook mail and calendar (shared with OneDrive/SharePoint) |
 | `EXA_CALENDLY_CLIENT_ID`, `EXA_CALENDLY_CLIENT_SECRET` | Calendly developer app |
 
 Then, for each app, an ExaCarib admin records its go-live criteria at

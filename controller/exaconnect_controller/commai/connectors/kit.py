@@ -528,6 +528,12 @@ class KitConnector(Connector):
         """The deliveries' events as [{"type": "...", "id": "...", "data": {...}}]."""
         return []
 
+    def on_webhook_event(self, conn: psycopg.Connection, connection: dict, event: dict) -> None:
+        """Called once for each verified, first-time event from ``webhook_events``,
+        after integration.event is recorded. Connectors override it to act on the
+        change; the default does nothing."""
+        return None
+
     def webhook_handshake(self, headers: dict, body: bytes, query: dict) -> tuple[int, str, str] | None:
         """A subscription check the app makes before it sends events
         (status, content type, body), or None."""

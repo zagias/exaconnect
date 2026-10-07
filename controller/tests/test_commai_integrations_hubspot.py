@@ -12,6 +12,7 @@ import time
 import urllib.parse
 
 from exaconnect_controller import db
+from exaconnect_controller.commai import connectors
 
 from .commai_connector_kit import connect_real, fake, propose_and_run, real_env  # noqa: F401
 from .commai_helpers import base, business
@@ -57,6 +58,10 @@ def test_update_contact_patch_and_errors(client, real_env, fake):  # noqa: F811
 def test_hubspot_webhook_v3_good_bad_stale_and_isolated(client, real_env, monkeypatch):  # noqa: F811
     secret = "hs-secret-" + "y" * 12
     monkeypatch.setenv("EXA_HUBSPOT_CLIENT_SECRET", secret)
+    seen: list[dict] = []
+    monkeypatch.setattr(
+        connectors.get("hubspot"), "on_webhook_event", lambda conn, c, ev: seen.append(ev), raising=False
+    )
     b = business(client, "HubSpot Hooks", people=("agent",))
     other = business(client, "HubSpot Other", people=("agent",))
     connect_real(b["id"], "hubspot", ["find_contact"])
@@ -78,6 +83,7 @@ def test_hubspot_webhook_v3_good_bad_stale_and_isolated(client, real_env, monkey
         path, content=body, headers={"Content-Type": "application/json", **hubspot_sign(secret, public, body, now)}
     )
     assert again.json()["events"] == 0
+    assert [e["id"] for e in seen] == ["77"]  # the connector acts once per verified event
 
     bad = client.post(path, content=body, headers=hubspot_sign("wrong-secret", public, body, now))
     stale = client.post(path, content=body, headers=hubspot_sign(secret, public, body, now - 600_000))

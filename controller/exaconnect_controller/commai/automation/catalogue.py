@@ -89,7 +89,26 @@ VIA_STANDARD = [
     {"name": "SugarCRM, Odoo, Copper, Insightly, Keap", "category": "crm", "via": "rest"},
     {"name": "ActiveCampaign, Mailchimp", "category": "crm", "via": "rest"},
     {"name": "Airtable, Google Sheets, Notion", "category": "other", "via": "rest"},
-    {"name": "Zapier, Make, n8n", "category": "automation", "via": "webhooks"},
+]
+
+# Automation platforms: CommAI's own app definitions for them (in the repository,
+# published by ExaCarib to each platform), built on the CloudEvents and Standard
+# Webhooks endpoints (events out: /webhooks; events in: /inbound-hooks).
+_HOOK_ENDPOINTS = {
+    "events_out": "/api/v1/commai/customers/{customer_id}/webhooks",
+    "events_in": "/api/v1/commai/customers/{customer_id}/inbound-hooks",
+    "event_catalogue": "/api/v1/commai/asyncapi.json",
+}
+VIA_STANDARD += [
+    {
+        "name": "Zapier",
+        "category": "automation",
+        "via": "webhooks",
+        "definition": "integrations/zapier",
+        **_HOOK_ENDPOINTS,
+    },
+    {"name": "Make", "category": "automation", "via": "webhooks", "definition": "integrations/make", **_HOOK_ENDPOINTS},
+    {"name": "n8n", "category": "automation", "via": "webhooks", "definition": "integrations/n8n", **_HOOK_ENDPOINTS},
 ]
 
 

@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import secrets
 from typing import Any
 
@@ -38,6 +39,7 @@ from . import webhooks_std
 MAX_BODY = 256_000
 
 events.register("inbound_webhook.received", "integration.event")
+log = logging.getLogger(__name__)
 
 
 class HookError(Exception):
@@ -183,6 +185,19 @@ def receive(conn: psycopg.Connection, token: str, headers: dict, body: bytes, qu
     return 202, "application/json", json.dumps({"ok": True, "event_id": event_id})
 
 
+def _on_event(conn, c, connection: dict, event: dict) -> None:
+    """Let the connector act on one verified, first-time event (for example, sync a
+    ticket). Its failure is logged and never loses the recorded event."""
+    fn = getattr(c, "on_webhook_event", None)
+    if fn is None:
+        return
+    try:
+        with conn.transaction():
+            fn(conn, connection, event)
+    except Exception as e:  # noqa: BLE001 - a connector's follow-up must not refuse the delivery
+        log.warning("%s on_webhook_event failed: %s", c.app, type(e).__name__)
+
+
 def _receive_app(conn, hook: dict, headers: dict, body: bytes, query: dict) -> tuple[int, str, str]:
     try:
         c = connectors.get(hook["app"])
@@ -213,5 +228,6 @@ def _receive_app(conn, hook: dict, headers: dict, body: bytes, query: dict) -> t
                 hook["app"],
             )
         )
+        _on_event(conn, c, connection, it)
     _accepted(conn, hook)
     return 200, "application/json", json.dumps({"ok": True, "events": len(ids)})
