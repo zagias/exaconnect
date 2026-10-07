@@ -6,10 +6,14 @@ COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 LDFLAGS := -s -w -X github.com/zagias/exaconnect/agent/internal/version.Version=$(VERSION) \
            -X github.com/zagias/exaconnect/agent/internal/version.Commit=$(COMMIT)
 PY ?= python3
+# The satellite profile the lab was brought up with (lab/netem/apply-profiles.sh
+# saves it), unless given: SAT_PROFILE=geo make lab-up demo-seed.
+SAT_PROFILE ?= $(shell . lab/.state/settings 2>/dev/null; echo $${SAT_PROFILE:-leo})
 
 .PHONY: agents-upgrade help build build-agent build-portal test test-agent test-controller test-portal lint \
         lab-image lab-agent lab-up lab-down lab-smoke lab-routing controller-up controller-down release rollback releases \
-        controller-logs demo-seed agents-start agents-stop agents-status demo lab-ci public-up public-down
+        controller-logs demo-seed agents-start agents-stop agents-status demo lab-ci public-up public-down \
+        traffic traffic-stop
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-16s %s\n", $$1, $$2}'
@@ -39,7 +43,8 @@ test-portal: ## Portal type check and unit tests
 lint: ## Lint Go, Python and shell
 	cd agent && test -z "$$(gofmt -l .)" || (gofmt -l . && exit 1)
 	cd controller && ruff check . && ruff format --check .
-	shellcheck -x lab/netem/*.sh lab/faults/*.sh lab/scripts/*.sh lab/host/*.sh
+	shellcheck -x lab/netem/*.sh lab/faults/*.sh lab/scripts/*.sh lab/host/*.sh \
+	  lab/ci/checks/*.sh lab/ci/run.sh lab/demo.sh lab/runner/*.sh
 
 # ---- lab (Linux lab host only) ----
 lab-image: ## Build the lab node image (FRR 10 + WireGuard + tools)
@@ -56,7 +61,7 @@ lab-agent: ## Build exa-agent for this host into bin/lab/ (uses Docker if Go is 
 
 lab-up: lab-image lab-agent ## Deploy the containerlab topology, apply underlay profiles, smoke test
 	cd lab && sudo containerlab deploy -t exaconnect.clab.yml --reconfigure
-	lab/netem/apply-profiles.sh
+	SAT_PROFILE=$(SAT_PROFILE) lab/netem/apply-profiles.sh
 	lab/scripts/smoke.sh
 
 lab-down: ## Destroy the lab
@@ -107,7 +112,7 @@ controller-logs: ## Follow controller and proxy logs
 demo-seed: ## Seed two sites, one PoP, three paths, three classes; enrol and start the agents
 	mkdir -p lab/.state
 	umask 077 && docker compose -f deploy/docker-compose.yml --env-file .env exec -T controller \
-	  python -m exaconnect_controller.seed --lab > lab/.state/seed.json
+	  python -m exaconnect_controller.seed --lab --sat $(SAT_PROFILE) > lab/.state/seed.json
 	lab/scripts/agents.sh enrol lab/.state/seed.json
 
 lab-ci: ## Bring the lab to this commit and run every lab check (used by the lab runner)
@@ -124,6 +129,12 @@ agents-stop: ## Stop the agents (forwarding keeps running on the last state)
 
 agents-status: ## Show whether each agent is running
 	lab/scripts/agents.sh status
+
+traffic: ## Start voice, business and bulk traffic between the sites (BUSINESS_RATE, BULK_RATE)
+	lab/scripts/traffic.sh start
+
+traffic-stop: ## Stop the lab traffic generators
+	lab/scripts/traffic.sh stop
 
 demo: ## Run the acceptance demo end to end (CLAUDE.md section 5); DEMO_PAUSE=1 to step through
 	lab/demo.sh

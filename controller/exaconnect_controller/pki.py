@@ -61,6 +61,16 @@ class CA:
         return cert.public_bytes(serialization.Encoding.PEM), serial_hex(serial)
 
 
+def csr_common_name(csr_pem: bytes) -> str:
+    """The common name a CSR asks for; raises CSRError if it is not a valid request."""
+    try:
+        csr = x509.load_pem_x509_csr(csr_pem)
+    except ValueError as e:
+        raise CSRError("not a PEM certificate request") from e
+    names = csr.subject.get_attributes_for_oid(NameOID.COMMON_NAME)
+    return str(names[0].value) if names else ""
+
+
 def serial_hex(serial: int) -> str:
     """Canonical form for comparing with nginx's $ssl_client_serial."""
     return normalise_serial(format(serial, "X"))

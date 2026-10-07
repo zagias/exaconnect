@@ -43,3 +43,18 @@ that site is in Storm Mode. `POST /customers/{id}/storm` still switches every
 site (or the `site_ids` given) at once, and the customer row keeps a summary
 (on while any site is on). Whether bulk may use satellite stays a customer
 setting for admins.
+
+## Revision, 2026-10-07: voice never uses GEO
+
+The lab seed always created the satellite link as LEO, so GEO was never run
+end to end. `seed --lab --sat geo` (or `SAT_PROFILE=geo`, which `make
+demo-seed` passes on from the netem settings) now seeds it as GEO.
+
+A GEO round trip is about 600 ms. Voice's SLA is 150 ms and ITU-T G.114
+puts calls past about 400 ms one way out of bounds, so a call over GEO is
+worse than no call. Real-time classes (priority `realtime`, which voice has)
+therefore never get a GEO path in their steering list, and pause when only
+GEO is left instead of following BGP onto it. Business may still fall back to
+GEO in Storm Mode when both terrestrial paths are down: it breaches its
+250 ms latency SLA there, but an ERP screen at 600 ms beats no ERP. Bulk
+stays as before. LEO (about 45 ms) is unaffected.

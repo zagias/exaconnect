@@ -51,6 +51,10 @@ def test_steering_maps_and_brownout_decision(client, admin_headers):
     assert [c["mark"] for c in m["classes"]] == [0x101, 0x102, 0x103]
     assert m["classes"][0]["ports"][0] == {"proto": "udp", "from": 5060, "to": 5060}
     assert m["classes"][2]["dscp"] == [8]
+    # SLA limits for the agent's own check while the controller is silent.
+    assert m["classes"][0]["sla"] == {"max_latency_ms": 150.0, "max_jitter_ms": 30.0, "max_loss_pct": 1.0}
+    assert m["classes"][1]["sla"] == {"max_latency_ms": 250.0, "max_loss_pct": 2.0}
+    assert m["classes"][2]["sla"] == {"max_loss_pct": 5.0}
     assert {p["name"]: p["table"] for p in m["paths"]} == {"carrier-a": 101, "carrier-b": 102, "sat": 103}
     rules = {r["class"]: r for r in m["rules"]}
     assert rules["voice"]["paths"] == ["carrier-a", "carrier-b"]
