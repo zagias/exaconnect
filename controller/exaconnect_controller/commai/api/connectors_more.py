@@ -227,3 +227,95 @@ async def slack_interactions(request: Request) -> JSONResponse:
         audit.record(conn, approver, f"commai.action.{decision}", run_id, customer_id, {"via": "slack"})
     word = "Approved" if run["status"] == "approved" else "Rejected"
     return _slack_reply(f"{word} by <@{slack_user}> in CommAI.", True)
+
+
+# ---- Microsoft Teams bot -----------------------------------------------------------------
+
+
+@router.post("/connectors/teams/link-code", status_code=201)
+def teams_link_code(customer_id: str, user: UserDep) -> dict:
+    """A one-time code (30 minutes) to send the CommAI bot in a Teams channel:
+    "link <code>". Shown once."""
+    access.check(user, customer_id, "commai:admin")
+    from ..connectors import teams
+
+    with db.tx() as conn:
+        _admin(conn, user, customer_id)
+        if connectors.connection(conn, customer_id, "teams") is None:
+            raise HTTPException(409, "Connect Microsoft Teams first.")
+        code = teams.link_code(conn, customer_id)
+        audit.record(conn, user.actor, "commai.connector.teams_link_code", "teams", customer_id)
+    return {"code": code, "say": f"link {code}", "expires_in_s": teams.LINK_TTL_S}
+
+
+@public.post("/teams/messages", include_in_schema=False)
+async def teams_messages(request: Request) -> JSONResponse:
+    """The Bot Framework messaging endpoint. Each request carries a JWT that
+    must be Microsoft's, for our bot; then: "link <code>" links the channel,
+    and Approve or Reject presses go to the action service."""
+    import hashlib
+    import re
+    import time
+
+    from ..connectors import teams
+
+    try:
+        activity = json.loads(await request.body())
+    except ValueError:
+        raise HTTPException(400, "Not JSON.") from None
+    service_url = str(activity.get("serviceUrl", ""))
+    if not re.fullmatch(teams.SERVICE_URL, service_url):
+        raise HTTPException(401, "Unknown service.")
+    if teams.verify_bot_token(request.headers.get("Authorization", ""), service_url) is None:
+        raise HTTPException(401, "Token check failed.")
+    if activity.get("type") != "message":
+        return JSONResponse({})
+    conv = activity.get("conversation") or {}
+    tenant = str(conv.get("tenantId") or ((activity.get("channelData") or {}).get("tenant") or {}).get("id") or "")
+    sender = str((activity.get("from") or {}).get("aadObjectId") or "")
+    value = activity.get("value") if isinstance(activity.get("value"), dict) else {}
+    text = re.sub(r"<at>.*?</at>", "", str(activity.get("text") or "")).strip()
+    with db.tx() as conn:
+        m = re.fullmatch(r"link\s+([0-9A-Fa-f]{8})", text)
+        if m:
+            digest = hashlib.sha256(m.group(1).upper().encode()).hexdigest()
+            owners = more_common.customer_for(conn, "teams", "link_code", digest)
+            if len(owners) != 1:
+                return JSONResponse({"type": "message", "text": "That code is not valid."})
+            cid = owners[0]
+            code = more_common.state_get(conn, cid, "teams", "link_code")
+            if code.get("expires", 0) < time.time():
+                return JSONResponse({"type": "message", "text": "That code has expired. Make a new one in CommAI."})
+            more_common.state_put(conn, cid, "teams", "link_code", {})
+            more_common.state_put(
+                conn,
+                cid,
+                "teams",
+                "bot_conversation",
+                {"id": tenant, "service_url": service_url, "conversation_id": str(conv.get("id", ""))},
+            )
+            audit.record(conn, f"teams:{sender}", "commai.connector.teams_linked", "teams", cid)
+            connectors.get("teams").bot_reply(conn, cid, "This channel is now linked to CommAI.")
+            return JSONResponse({"type": "message", "text": "This channel is now linked to CommAI."})
+        if value.get("commai") not in ("approve", "reject"):
+            return JSONResponse({})
+        try:
+            customer_id, run_id = str(uuid.UUID(str(value["c"]))), str(uuid.UUID(str(value["r"])))
+        except (ValueError, KeyError):
+            return JSONResponse({"type": "message", "text": "That button is not valid."})
+        linked = more_common.state_get(conn, customer_id, "teams", "bot_conversation")
+        if not tenant or linked.get("id") != tenant:
+            return JSONResponse({"type": "message", "text": "This Teams organisation is not linked to that business."})
+        approver = more_common.person_for(conn, customer_id, "teams", sender)
+        if approver is None:
+            return JSONResponse({"type": "message", "text": "Your Teams user is not linked to a CommAI person."})
+        try:
+            with conn.transaction():
+                run = more_common.decide(conn, customer_id, run_id, value["commai"], approver)
+        except ActionRefused as e:
+            return JSONResponse({"type": "message", "text": f"Not done: {e}"})
+        audit.record(conn, approver, f"commai.action.{value['commai']}", run_id, customer_id, {"via": "teams"})
+        word = "Approved" if run["status"] == "approved" else "Rejected"
+        connectors.get("teams").bot_reply(conn, customer_id, f"{word} in CommAI by {approver[5:]}.")
+    # Bot Framework does not show a reply in the HTTP answer; bot_reply posts it.
+    return JSONResponse({"type": "message", "text": f"{word} in CommAI."})
