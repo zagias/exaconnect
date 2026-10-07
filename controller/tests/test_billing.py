@@ -159,9 +159,8 @@ def test_billing_hand_worked_month(client, admin_headers):
     demo_h = login(client, "it@demo.example")
 
     # Demo takes CommAI from the first day of the billed month.
-    r = client.post(
-        f"/api/v1/customers/{cid}/plans", json={"plan_id": commai, "starts_on": billed.isoformat()}, headers=admin_headers
-    )
+    sub = {"plan_id": commai, "starts_on": billed.isoformat()}
+    r = client.post(f"/api/v1/customers/{cid}/plans", json=sub, headers=admin_headers)
     assert r.status_code == 201, r.text
     held = client.get(f"/api/v1/customers/{cid}/plans", headers=demo_h).json()
     assert held["products"] == ["connect", "commai"] and len(held["subscriptions"]) == 2
@@ -214,7 +213,8 @@ def test_billing_hand_worked_month(client, admin_headers):
         assert client.post("/api/v1/billing/price-lists", json=bad, headers=admin_headers).status_code == 422, bad
     assert (
         client.post(
-            "/api/v1/billing/price-lists", json={**body, "plan_id": "00000000-0000-0000-0000-000000000000"},
+            "/api/v1/billing/price-lists",
+            json={**body, "plan_id": "00000000-0000-0000-0000-000000000000"},
             headers=admin_headers,
         ).status_code
         == 404
@@ -341,9 +341,12 @@ def test_billing_hand_worked_month(client, admin_headers):
         n = conn.execute("SELECT count(*) AS n FROM audit_log WHERE action = 'billing.price_list.create'").fetchone()
         assert n["n"] == 3
         # Voice's monthly fee was made by voice billing itself, once, however often we draft.
-        assert conn.execute(
-            "SELECT count(*) AS n FROM voice_charges WHERE customer_id = %s AND kind = 'monthly_user'", (cid,)
-        ).fetchone()["n"] == 1
+        assert (
+            conn.execute(
+                "SELECT count(*) AS n FROM voice_charges WHERE customer_id = %s AND kind = 'monthly_user'", (cid,)
+            ).fetchone()["n"]
+            == 1
+        )
 
     # Customers never see drafts.
     assert client.get("/api/v1/billing/invoices", headers=demo_h).json() == []
@@ -374,9 +377,8 @@ def test_billing_hand_worked_month(client, admin_headers):
         with pytest.raises(psycopg.errors.CheckViolation), db.tx() as conn:
             conn.execute(sql, (cinv["id"],))
     with db.tx() as conn:
-        assert str(conn.execute("SELECT total FROM billing_invoices WHERE id = %s", (cinv["id"],)).fetchone()["total"]) == (
-            "4343.35"
-        )
+        row = conn.execute("SELECT total FROM billing_invoices WHERE id = %s", (cinv["id"],)).fetchone()
+        assert str(row["total"]) == "4343.35"
 
     # The customer sees them now, with lines, the CSV and the printable page.
     mine = client.get("/api/v1/billing/invoices", headers=demo_h).json()
@@ -430,10 +432,8 @@ def test_billing_hand_worked_month(client, admin_headers):
         f"/api/v1/billing/invoices/{cinv['id']}/void", json={"reason": "Wrong commit on site-b"}, headers=admin_headers
     ).json()
     assert v["status"] == "void" and v["number"] == f"EXA-{year}-0001" and v["void_reason"] == "Wrong commit on site-b"
-    assert (
-        client.post(f"/api/v1/billing/invoices/{cinv['id']}/void", json={"reason": "x"}, headers=admin_headers).status_code
-        == 409
-    )
+    r = client.post(f"/api/v1/billing/invoices/{cinv['id']}/void", json={"reason": "x"}, headers=admin_headers)
+    assert r.status_code == 409
     d3 = client.post("/api/v1/billing/invoices/generate", json=gen, headers=admin_headers).json()["drafts"]
     assert len(d3) == 1 and d3[0]["id"] != cinv["id"] and d3[0]["total"] == "4343.35"
     i3 = client.post(f"/api/v1/billing/invoices/{d3[0]['id']}/issue", headers=admin_headers).json()
@@ -482,7 +482,9 @@ def test_connect_only_commai_only_and_all_at_once(client, admin_headers):
     assert client.get(f"/api/v1/customers/{neither}/plans", headers=admin_headers).json()["products"] == []
 
     out = client.post("/api/v1/billing/invoices/generate", json={"period": period}, headers=admin_headers).json()
-    got = {(d["customer"], d["plan"]): (d["total"], d["example"], [x["kind"] for x in d["lines"]]) for d in out["drafts"]}
+    got = {
+        (d["customer"], d["plan"]): (d["total"], d["example"], [x["kind"] for x in d["lines"]]) for d in out["drafts"]
+    }
     assert got == {
         ("Chat Only Ltd", "CommAI Standard"): ("49.00", True, ["plan"]),
         ("Connect Only Ltd", "Connect Standard"): ("150.00", True, ["site"]),
