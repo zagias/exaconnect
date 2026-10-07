@@ -421,7 +421,11 @@ def _carrier_user(client) -> dict:
     return {"Authorization": f"Bearer {r.json()['token']}"}
 
 
-def test_customer_and_carrier_users_cannot_reach_exacarib_admin_routes(client, two_businesses, admin_headers):
+def test_customer_and_carrier_users_cannot_reach_exacarib_admin_routes(
+    client, two_businesses, admin_headers, monkeypatch
+):
+    # The PBX link set up as on a voice host, so its route refuses on the signature, not for want of a secret.
+    monkeypatch.setenv("EXA_PBX_SECRET", "sweep-" + "x" * 24)
     a, b, ids = two_businesses
     carrier = _carrier_user(client)
     routes = [
