@@ -1136,3 +1136,194 @@ export const createApiKey = (body: { name: string; days?: number }) =>
   api<ApiKeyCreated>(apiKeysPath, { method: "POST", body: JSON.stringify(body) });
 
 export const revokeApiKey = (id: number) => api<void>(`${apiKeysPath}/${id}`, { method: "DELETE" });
+
+// ---- Integrations (ADR 0026) ----
+
+export interface ProviderField {
+  name: string;
+  label: string;
+  secret: boolean;
+  required: boolean;
+  kind: "text" | "url" | "bool" | "int" | "choice" | "list" | "pem";
+  help: string;
+  default?: unknown;
+  choices?: string[];
+}
+
+export interface ProviderInfo {
+  key: string;
+  name: string;
+  category: string;
+  docs: string;
+  api: string;
+  live_needs: string;
+  receives_events: boolean;
+  owners: string[];
+  fields: ProviderField[];
+}
+
+export interface EventKind {
+  name: string;
+  type: string;
+  title: string;
+  description: string;
+  severity: "info" | "warning" | "critical";
+  action: "trigger" | "resolve" | "notify";
+  sent_to_carriers: boolean;
+  in_wildcard: boolean;
+}
+
+export interface OnrampAdapterInfo {
+  key: string;
+  name: string;
+  docs: string;
+  api: string;
+  live_needs: string;
+}
+
+export interface IntegrationCatalogue {
+  events: EventKind[];
+  providers: ProviderInfo[];
+  onramp_adapters: OnrampAdapterInfo[];
+}
+
+export interface Integration {
+  id: number;
+  customer_id: string | null;
+  carrier_id: string | null;
+  provider: string;
+  provider_name: string;
+  category: string;
+  name: string;
+  enabled: boolean;
+  config: Record<string, unknown>;
+  event_types: string[];
+  site_ids: string[];
+  min_severity: "info" | "warning" | "critical";
+  origin: string;
+  platform: string;
+  last_status: string;
+  last_delivery_at: string | null;
+  secrets_set: string[];
+  mode: "live" | "simulated";
+  created_at: string;
+  /** Only in the reply to creating a webhook: shown once. */
+  signing_secret?: string;
+}
+
+export interface IntegrationIn {
+  provider: string;
+  name: string;
+  customer_id?: string;
+  config: Record<string, unknown>;
+  secrets: Record<string, string>;
+  event_types: string[];
+  site_ids?: string[];
+  min_severity: "info" | "warning" | "critical";
+}
+
+export interface Delivery {
+  id: number;
+  event_id: string;
+  event_type: string;
+  status: "pending" | "delivered" | "simulated" | "failed" | "skipped" | "digest";
+  attempts: number;
+  response_code: number | null;
+  last_error: string;
+  test: boolean;
+  created_at: string;
+  delivered_at: string | null;
+  detail: { mode?: string; skipped?: string; requests?: { method: string; url: string }[] };
+}
+
+export const integrationPaths = {
+  catalogue: "/integrations/catalogue",
+  list: (customerId?: string | null) => (customerId ? `/integrations?customer_id=${customerId}` : "/integrations"),
+  deliveries: (id: number) => `/integrations/${id}/deliveries?limit=50`,
+  adminStatus: "/admin/integrations/status",
+};
+
+export const createIntegration = (body: IntegrationIn) =>
+  api<Integration>("/integrations", { method: "POST", body: JSON.stringify(body) });
+export const updateIntegration = (id: number, body: Partial<IntegrationIn> & { enabled?: boolean }) =>
+  api<Integration>(`/integrations/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+export const deleteIntegration = (id: number) => api<void>(`/integrations/${id}`, { method: "DELETE" });
+export const testIntegration = (id: number) => api<Delivery>(`/integrations/${id}/test`, { method: "POST" });
+export const syncIntegration = (id: number) => api<Record<string, unknown>>(`/integrations/${id}/sync`, { method: "POST" });
+export const retryDelivery = (id: number, deliveryId: number) =>
+  api<{ queued: boolean }>(`/integrations/${id}/deliveries/${deliveryId}/retry`, { method: "POST" });
+
+export interface IntegrationsStatus {
+  platform: { name: string; purpose: string; configured: boolean }[];
+  live: boolean;
+  secure_storage: boolean;
+  providers: {
+    key: string;
+    name: string;
+    category: string;
+    in_use: number;
+    enabled: number;
+    live: number;
+    last_delivery: string | null;
+    live_needs: string;
+  }[];
+  onramp_adapters: { key: string; name: string; configured: boolean; mode: "live" | "simulated"; env: string[]; live_needs: string }[];
+  carrier_feeds: {
+    id: string;
+    name: string;
+    notices: number;
+    open: number;
+    last_notice: string | null;
+    outbound: number;
+    accounts: number;
+  }[];
+}
+
+// ---- Carrier notices ----
+
+export interface Notice {
+  id: number;
+  carrier_id: string;
+  carrier: string | null;
+  kind: "maintenance" | "fault";
+  status: "scheduled" | "open" | "in_progress" | "resolved" | "cancelled" | "closed";
+  severity: "info" | "warning" | "critical";
+  title: string;
+  description: string;
+  link_ids: string[];
+  starts_at: string | null;
+  ends_at: string | null;
+  move_traffic: boolean;
+  window_state: string;
+  external_id: string;
+  source: string;
+  created_at: string;
+  updated_at: string;
+  resolved_at: string | null;
+}
+
+export interface NoticeIn {
+  kind: "maintenance" | "fault";
+  title: string;
+  description?: string;
+  link_ids: string[];
+  severity?: "info" | "warning" | "critical";
+  starts_at?: string;
+  ends_at?: string;
+  move_traffic?: boolean;
+  external_id?: string;
+}
+
+export interface LinkRow {
+  id: string;
+  site: string;
+  site_id: string;
+  path: string;
+  label?: string;
+  carrier: string;
+  commit_mbps?: number;
+}
+
+export const postNotice = (body: NoticeIn) => api<Notice>("/carrier/notices", { method: "POST", body: JSON.stringify(body) });
+export const updateNotice = (id: number, body: Partial<NoticeIn> & { status?: Notice["status"] }) =>
+  api<Notice>(`/carrier/notices/${id}`, { method: "PATCH", body: JSON.stringify(body) });

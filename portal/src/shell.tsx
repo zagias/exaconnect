@@ -184,7 +184,17 @@ interface Group {
 }
 
 function navGroups(role: string | undefined): Group[] {
-  if (role === "carrier") return [{ label: null, items: [{ to: "/", label: "Carrier view", icon: icons.carrier, end: true }] }];
+  if (role === "carrier")
+    return [
+      {
+        label: null,
+        items: [
+          { to: "/", label: "Carrier view", icon: icons.carrier, end: true },
+          { to: "/notices", label: "Notices", icon: icons.insights },
+          { to: "/integrations", label: "Integrations", icon: icons.fabric },
+        ],
+      },
+    ];
   const admin = role === "admin";
   const groups: Group[] = [
     {
@@ -194,6 +204,7 @@ function navGroups(role: string | undefined): Group[] {
         { to: "/sites", label: "Sites", icon: icons.sites },
         { to: "/decisions", label: "Decisions", icon: icons.decisions },
         { to: "/insights", label: "Insights", icon: icons.insights },
+        { to: "/notices", label: "Carrier notices", icon: icons.carrier },
         { to: "/ask", label: "Ask", icon: icons.ask },
       ],
     },
@@ -204,6 +215,7 @@ function navGroups(role: string | undefined): Group[] {
         { to: "/fabric", label: "Fabric", icon: icons.fabric },
         { to: "/internet", label: "Internet", icon: icons.internet },
         { to: "/encryption", label: "Encryption", icon: icons.encryption },
+        { to: "/integrations", label: "Integrations", icon: icons.fabric },
       ],
     },
     {

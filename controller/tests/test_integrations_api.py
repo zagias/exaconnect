@@ -1162,6 +1162,9 @@ def test_single_item_reads_and_authorisation(client, L, admin_headers):
     assert client.get(f"/api/v1/links/{a}", headers=L["carrier_a"]).status_code == 200
     assert client.get(f"/api/v1/links/{a}", headers=L["carrier_b"]).status_code == 404
     assert client.get("/api/v1/links/not-a-uuid", headers=h).status_code in (404, 422)
+    assert {x["carrier"] for x in client.get("/api/v1/links", headers=L["carrier_a"]).json()} == {"Carrier A"}
+    assert client.get("/api/v1/links", headers=other["h"]).json() == []
+    assert len(client.get("/api/v1/links", headers=h).json()) == len(L["links"])
     site_a = L["sites"]["site-a"]
     assert {x["path"] for x in client.get(f"/api/v1/sites/{site_a}/links", headers=h).json()} >= {
         "carrier-a",

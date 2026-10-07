@@ -111,6 +111,13 @@ def _link_scope(user) -> dict:
     raise HTTPException(403, "Not available for this account.")
 
 
+@router.get("/links")
+def list_links(user: UserDep) -> list[dict]:
+    """Carrier links: admins all, customers their own, carriers theirs (for posting notices)."""
+    with db.tx() as conn:
+        return conn.execute(LINK_SQL + " ORDER BY s.name, p.ordinal", _link_scope(user)).fetchall()
+
+
 @router.get("/sites/{site_id}/links")
 def site_links(site_id: str, user: UserDep) -> list[dict]:
     """A site's links: customers their own sites, carriers only their own links at a site."""
