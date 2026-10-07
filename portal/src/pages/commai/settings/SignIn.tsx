@@ -13,6 +13,7 @@ import { ErrorNote } from "../../../components";
 import { useCustomer } from "../../../customer";
 import { Card, useAction } from "../../../ui";
 import "../../identity.css";
+import DirectoryPicker from "./Directory";
 
 const STATUS: Record<SsoConnection["status"], { word: string; cls: string }> = {
   draft: { word: "Draft: not tested", cls: "off" },
@@ -64,6 +65,7 @@ export default function SignIn() {
           {result.message || (result.ok ? "Test sign-in worked." : "Test sign-in failed.")}
         </p>
       )}
+      <DirectoryPicker customerId={current.id} />
       <Connections base={base} />
       <Directory base={base} customerId={current.id} />
       {user?.role === "admin" && <DomainApprovals />}
