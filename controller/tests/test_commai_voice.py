@@ -1,4 +1,4 @@
-"""CommAI voice, phone system (ADR 0021): adds, moves and changes, price
+"""Jibsy voice, phone system (ADR 0021): adds, moves and changes, price
 impact and spend permission, scheduled changes, rollback, bulk CSV,
 self-service limits, the "say what you want" parser and FreeSWITCH rendering."""
 

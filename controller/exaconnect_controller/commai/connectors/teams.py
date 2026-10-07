@@ -9,15 +9,15 @@ Two Microsoft pieces, both from their public documentation:
   encrypted and never shown again. Messages are Adaptive Cards.
 - **Bot** (Azure Bot / Bot Framework, ExaCarib's app: EXA_TEAMS_BOT_ID and
   EXA_TEAMS_BOT_PASSWORD) for Approve and Reject buttons. A business links a
-  channel by sending the bot "link <code>" (a one-time code from CommAI).
+  channel by sending the bot "link <code>" (a one-time code from Jibsy).
   Every request to the bot endpoint carries a Bot Framework JWT, checked
   here (RS256 against Microsoft's published keys, issuer, audience = our bot
   id, expiry, and the serviceUrl claim). A press is accepted only from the
-  linked tenant, from a Teams user linked to a CommAI person with a reply
+  linked tenant, from a Teams user linked to a Jibsy person with a reply
   seat, and is decided by the action service.
 
 Without the bot, approval requests go through the webhook with an "Open in
-CommAI" button, and the decision is made in CommAI.
+Jibsy" button, and the decision is made in Jibsy.
 
 Customer data: as for Slack, messages say no more than the ``share`` setting
 allows, and contact details and card numbers are masked.
@@ -283,7 +283,7 @@ class Teams(MoreConnector):
         share = self.settings(connection).get("share") or "none"
         if action == "notify_staff":
             text = inputs["text"] if share == "summary" else mask(inputs["text"])
-            return self._send(conn, connection, key, _card("Message from CommAI", [text], []))
+            return self._send(conn, connection, key, _card("Message from Jibsy", [text], []))
         if action == "handover_alert":
             try:
                 brief = conversation_brief(conn, connection["customer_id"], inputs["conversation_id"], share)
@@ -293,7 +293,7 @@ class Teams(MoreConnector):
             card = _card(
                 head,
                 [mask(x) for x in brief["lines"]],
-                [{"type": "Action.OpenUrl", "title": "Open in CommAI", "url": brief["link"]}],
+                [{"type": "Action.OpenUrl", "title": "Open in Jibsy", "url": brief["link"]}],
             )
             return self._send(conn, connection, key, card)
         if action == "request_approval":
@@ -322,14 +322,14 @@ class Teams(MoreConnector):
                             "style": "destructive",
                             "data": {**data, "commai": "reject"},
                         },
-                        {"type": "Action.OpenUrl", "title": "Open in CommAI", "url": brief["link"]},
+                        {"type": "Action.OpenUrl", "title": "Open in Jibsy", "url": brief["link"]},
                     ],
                 )
                 return self._send(conn, connection, key, card, via_bot=linked)
             card = _card(
                 head,
-                [*lines, "Decide in CommAI."],
-                [{"type": "Action.OpenUrl", "title": "Open in CommAI", "url": brief["link"]}],
+                [*lines, "Decide in Jibsy."],
+                [{"type": "Action.OpenUrl", "title": "Open in Jibsy", "url": brief["link"]}],
             )
             return self._send(conn, connection, key, card)
         raise ConnectorError(f"Unknown action {action}.", "input")

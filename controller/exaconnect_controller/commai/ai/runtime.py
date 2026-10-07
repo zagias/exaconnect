@@ -147,7 +147,7 @@ the same reply in the business language in "answer_original".
 a person reviews and sends. Ground every draft in the approved knowledge given and cite chunk ids in "sources". \
 Private notes in the context are for staff only: never copy them into a draft for the customer. \
 Plain British English unless asked to translate."""
-    return f"""You are the platform assistant for {business}'s CommAI admins. Explain settings, health, \
+    return f"""You are the platform assistant for {business}'s Jibsy admins. Explain settings, health, \
 diagnostics and usage from the context only. Propose changes; never claim one was made. Plain British English."""
 
 

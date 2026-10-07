@@ -104,7 +104,7 @@ def _get(parts: urllib.parse.SplitResult, ip: str) -> Page:
     c = cls(parts.hostname or "", ip, port, TIMEOUT_S)
     path = (parts.path or "/") + (f"?{parts.query}" if parts.query else "")
     try:
-        c.request("GET", path, headers={"User-Agent": "ExaCarib-CommAI-onboarding/1", "Accept": "text/html,text/plain"})
+        c.request("GET", path, headers={"User-Agent": "ExaCarib-Jibsy-onboarding/1", "Accept": "text/html,text/plain"})
         r = c.getresponse()
         body = r.read(MAX_BYTES + 1)
         return Page(parts.geturl(), r.status, r.getheader("Content-Type") or "", body, r.getheader("Location") or "")

@@ -1,5 +1,5 @@
 /*
- * ExaCarib CommAI website chat (ADR 0018).
+ * Jibsy by ExaCarib website chat (ADR 0018).
  *
  * Install with one tag:
  *   <script src="https://HOST/api/v1/commai/widget/v1.js" data-key="wk_..." async></script>
@@ -160,7 +160,7 @@ interface QueueStub {
     you: "You",
     team: "Team",
     assistant: "Assistant",
-    poweredBy: "ExaCarib CommAI",
+    poweredBy: "Jibsy by ExaCarib",
     tooBig: "That file is too large.",
     wrongType: "You can send images, PDFs, plain text and voice notes.",
     teamTyping: "Our team is writing a reply…",

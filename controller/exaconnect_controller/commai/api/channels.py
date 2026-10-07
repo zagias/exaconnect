@@ -1,4 +1,4 @@
-"""CommAI channels API (ADR 0018): website chat, WhatsApp, SMS and email.
+"""Jibsy channels API (ADR 0018): website chat, WhatsApp, SMS and email.
 
 Two routers:
 

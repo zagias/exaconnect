@@ -195,7 +195,7 @@ def test_groups_map_to_teams_and_admin_needs_approval(client, admin_headers):
         "commai:write",
         "commai:notes",
     ]
-    # Member rights: CommAI work only, no network API, no settings, no stronger API key.
+    # Member rights: Jibsy work only, no network API, no settings, no stronger API key.
     assert client.get("/api/v1/sites", headers=ana_h).status_code == 403
     assert client.get(f"/api/v1/customers/{b['id']}/directory-groups", headers=ana_h).status_code == 403
     assert (

@@ -10,7 +10,7 @@ roles existed. The built-in roles describe those rights: a full business
 account is a Business admin, an agent seat is an Agent, an internal seat is
 Internal.
 
-Enforcement is in `commai/access.py`: every CommAI endpoint already calls
+Enforcement is in `commai/access.py`: every Jibsy endpoint already calls
 `access.check(user, customer_id, scope)`; for a person with roles it also
 needs the permission that scope and endpoint stand for (`required`).
 """
@@ -75,7 +75,7 @@ def section(path: str) -> list[str]:
 
 
 def required(scope: str, path: str) -> str:
-    """The permission a CommAI request needs, from its scope and endpoint."""
+    """The permission a Jibsy request needs, from its scope and endpoint."""
     parts = section(path)
     head = parts[0] if parts else ""
     tail = parts[-1] if parts else ""

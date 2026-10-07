@@ -1,5 +1,5 @@
 <!--
-  CommAI browser phone (ADR 0039): FreeSWITCH Verto over secure WebSocket.
+  Jibsy browser phone (ADR 0039): FreeSWITCH Verto over secure WebSocket.
 
   Staff sign in from the portal's dialer with their own extension
   (extension@business-domain) and its SIP password, fetched from

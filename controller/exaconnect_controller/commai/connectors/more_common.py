@@ -1,12 +1,12 @@
 """Pieces shared by the helpdesk, team chat, commerce, payments and knowledge
 connectors (ADR 0035), on top of the connector kit (ADR 0034).
 
-- Ticket links: a helpdesk ticket linked to a CommAI conversation, its status
+- Ticket links: a helpdesk ticket linked to a Jibsy conversation, its status
   synced back from the helpdesk's webhook (a note on the conversation and a
   ``ticket.updated`` event).
 - Staff messages for Slack and Teams that never carry more customer data
   than the business allows (``share`` setting: none, names or summary).
-- Chat identities: a Slack or Teams user linked to a CommAI person, so a
+- Chat identities: a Slack or Teams user linked to a Jibsy person, so a
   button press there approves as that person, through the action service.
 - App hooks: the per-business inbound address a provider sends its change
   notifications to (``commai_inbound_hooks``, kind 'app').
@@ -63,7 +63,7 @@ SHARE_LEVELS = ("none", "names", "summary")
 
 def luhn_card(text: str) -> bool:
     """True when the text holds something shaped like a payment card number.
-    Card data never passes through CommAI, so such inputs are refused."""
+    Card data never passes through Jibsy, so such inputs are refused."""
     # Only a free-standing number counts: digits inside an id (a UUID's
     # "047-5426-4661-9870") pass the Luhn check one time in ten.
     for m in re.finditer(r"(?<![\w-])(?:\d[ -]?){12,18}\d(?![\w-])", text or ""):
@@ -204,7 +204,7 @@ def sync_ticket_status(conn, customer_id: Any, app: str, label: str, ticket_id: 
             conn,
             customer_id,
             row["conversation_id"],
-            author="CommAI",
+            author="Jibsy",
             body=f"{label} ticket {row['number'] or ticket_id} is now {status}.",
         )
     events.emit(
@@ -303,7 +303,7 @@ def approval_brief(conn, customer_id: Any, run_id: Any, share: str) -> dict:
 
 
 def person_for(conn, customer_id: Any, app: str, external_user: str) -> str | None:
-    """The CommAI person (as an actor, user:<email>) linked to a Slack or Teams
+    """The Jibsy person (as an actor, user:<email>) linked to a Slack or Teams
     user, if they may approve for this business (a member with a reply seat)."""
     row = conn.execute(
         """SELECT i.user_email FROM commai_chat_identities i
@@ -344,7 +344,7 @@ def sync_knowledge(
     ``files``: {"id", "name", "version", "url", "allowed": bool, "reason": str}.
     ``fetch(file)`` returns the file's text, or None when it has none.
     With ``complete`` (every chosen folder was listed), files no longer seen
-    are removed: the business can no longer see them, so CommAI must not keep them.
+    are removed: the business can no longer see them, so Jibsy must not keep them.
     """
     from ..ai import knowledge
 
@@ -397,7 +397,7 @@ def sync_knowledge(
         text = fetch(f)
         if not text or not text.strip():
             drop_source(prev)
-            save(f, "skipped", "The file has no text CommAI can read.", None)
+            save(f, "skipped", "The file has no text Jibsy can read.", None)
             counts["skipped"] += 1
             continue
         if len(text) > MAX_BODY:

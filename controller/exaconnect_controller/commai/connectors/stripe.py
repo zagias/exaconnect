@@ -7,8 +7,8 @@ EXA_STRIPE_CLIENT_SECRET = the platform's secret key) with the redirect URI
 {EXA_PUBLIC_URL}/api/v1/commai/oauth/stripe/callback. Each business connects
 its own Stripe account; money goes straight to it.
 
-- No card data ever touches CommAI: customers pay on Stripe's own page.
-  Inputs that look like a card number are refused, and CommAI never asks
+- No card data ever touches Jibsy: customers pay on Stripe's own page.
+  Inputs that look like a card number are refused, and Jibsy never asks
   for, stores or shows card details.
 - A payment link is sensitive: a person approves each one. Creates send
   Stripe's ``Idempotency-Key`` (derived from the action's key), so a retry
@@ -165,9 +165,7 @@ class Stripe(MoreConnector):
     app = "stripe"
     label = "Stripe"
     category = "payments"
-    description = (
-        "Send customers a Stripe payment link and check whether they paid. No card data passes through CommAI."
-    )
+    description = "Send customers a Stripe payment link and check whether they paid. No card data passes through Jibsy."
     auth = "oauth"
     simulator = StripeSim()
     health_path = "/v1/account"
@@ -175,7 +173,7 @@ class Stripe(MoreConnector):
         "A Stripe Connect platform (Standard accounts, OAuth): EXA_STRIPE_CLIENT_ID (ca_...) and "
         "EXA_STRIPE_CLIENT_SECRET (the platform's secret key)."
     )
-    webhooks = "Checkout payments, signed with Stripe-Signature (endpoint set up from CommAI)."
+    webhooks = "Checkout payments, signed with Stripe-Signature (endpoint set up from Jibsy)."
     docs_url = "https://docs.stripe.com/api"
     actions = {
         "payment_status": ActionSpec(
@@ -215,7 +213,7 @@ class Stripe(MoreConnector):
 
     def validate(self, action: str, inputs: dict) -> dict:
         if any(luhn_card(str(v)) for v in inputs.values()):
-            raise ValueError("CommAI never takes card numbers. Send the customer a payment link instead.")
+            raise ValueError("Jibsy never takes card numbers. Send the customer a payment link instead.")
         out = super().validate(action, inputs)
         if action == "create_payment_link":
             cur = str(out["currency"]).strip().lower()
@@ -318,9 +316,9 @@ class Stripe(MoreConnector):
 
     def register_webhooks(self, conn, connection: dict, actor: str) -> dict:
         """An endpoint on the business's own Stripe account; its signing secret
-        (chosen by Stripe) is kept with the CommAI address."""
+        (chosen by Stripe) is kept with the Jibsy address."""
         hook = app_hook(conn, connection["customer_id"], self.app, actor)
-        form: dict = {"url": hook_url(hook), "description": "ExaCarib CommAI: payment status"}
+        form: dict = {"url": hook_url(hook), "description": "Jibsy by ExaCarib: payment status"}
         for i, e in enumerate(EVENTS):
             form[f"enabled_events[{i}]"] = e
         we = self.call(
@@ -374,7 +372,7 @@ class Stripe(MoreConnector):
                 shown = f"{Decimal(amount) / 100:.2f} {d['currency']}"
             word = "received" if event["type"] == "payment.succeeded" else "failed"
             try:
-                inbox.add_note(conn, cid, conv, author="CommAI", body=f"Stripe payment {word}: {shown}.")
+                inbox.add_note(conn, cid, conv, author="Jibsy", body=f"Stripe payment {word}: {shown}.")
             except inbox.InboxError:
                 pass
 

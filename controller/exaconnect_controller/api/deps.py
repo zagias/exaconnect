@@ -43,6 +43,9 @@ class User:
     team_permissions: dict = field(default_factory=dict)
     path: str = ""
     query_team: str | None = None
+    # The apps this person may open in that organisation (ADR 0041): the plans,
+    # narrowed by what an owner or admin gave them. None when not limited.
+    apps: tuple[str, ...] | None = None
 
     @property
     def actor(self) -> str:
@@ -139,6 +142,8 @@ def current_user(request: Request, authorization: Annotated[str | None, Header()
         row["customer_id"],
         products_of(org["products"]) if org else None,
     )
+    if org:
+        user.apps = apps_of(org["products"], org["apps"])
     path = str(request.url.path)
     if customer and user.customer_id is None and not _always_allowed(path):
         raise HTTPException(status.HTTP_403_FORBIDDEN, NO_ORG)
@@ -150,7 +155,7 @@ def current_user(request: Request, authorization: Annotated[str | None, Header()
 
     enterprise_security.guard(request, user, row)
     if user.scopes is not None and "connect" not in user.scopes:
-        # A key limited to CommAI scopes never reaches the network API. A
+        # A key limited to Jibsy scopes never reaches the network API. A
         # limited account (directory-provisioned) may still manage its own sign-in.
         allowed = path.startswith("/api/v1/commai/") or path == "/api/v1/auth/me"
         # connect:read reaches the network API for reads only: monitoring and reporting keys.
@@ -173,7 +178,8 @@ def membership_for(conn: Any, row: dict, is_key: bool) -> dict | None:
     acts in the one the person switched to, else their primary organisation,
     else the first one they joined."""
     rows = conn.execute(
-        """SELECT m.customer_id, m.role, c.products FROM org_memberships m JOIN customers c ON c.id = m.customer_id
+        """SELECT m.customer_id, m.role, m.apps, c.products
+           FROM org_memberships m JOIN customers c ON c.id = m.customer_id
            WHERE m.user_id = %s ORDER BY m.created_at, m.customer_id""",
         (row["id"],),
     ).fetchall()
@@ -205,7 +211,7 @@ def require_admin(user: Annotated[User, Depends(current_user)]) -> User:
 
 
 PRODUCTS = ("connect", "commai")
-PRODUCT_NAMES = {"connect": "Connect", "commai": "CommAI"}
+PRODUCT_NAMES = {"connect": "Connect", "commai": "Jibsy"}
 
 
 def products_of(value: Any) -> tuple[str, ...]:
@@ -213,16 +219,30 @@ def products_of(value: Any) -> tuple[str, ...]:
     return PRODUCTS if value is None else tuple(p for p in PRODUCTS if p in value)
 
 
+def apps_of(products: Any, member_apps: Any) -> tuple[str, ...]:
+    """The apps a member may open: the organisation's plans, narrowed by the
+    member's own access when an owner or admin set it (NULL: all of them)."""
+    held = products_of(products)
+    return held if member_apps is None else tuple(p for p in held if p in member_apps)
+
+
 def check_product(user: User, product: str) -> None:
-    """403 unless the organisation the request acts for holds this plan. ExaCarib
-    admins are not limited by plan; carrier accounts keep their Connect carrier view."""
-    if user.role != "customer" or user.products is None or product in user.products:
+    """403 unless the organisation the request acts for holds this plan and the
+    person has been given that app (ADR 0041). ExaCarib admins are not limited by
+    plan; carrier accounts keep their Connect carrier view."""
+    if user.role != "customer" or user.products is None:
         return
     name = PRODUCT_NAMES[product]
-    raise HTTPException(
-        status.HTTP_403_FORBIDDEN,
-        f"Your organisation doesn't have the {name} plan. Ask your ExaCarib account manager to add it.",
-    )
+    if product not in user.products:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            f"Your organisation doesn't have the {name} plan. An owner or admin can ask ExaCarib to add it.",
+        )
+    if user.apps is not None and product not in user.apps:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            f"You don't have access to {name}. Ask an owner or admin of your organisation to give you access.",
+        )
 
 
 def require_product(product: str):

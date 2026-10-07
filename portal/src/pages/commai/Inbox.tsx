@@ -332,7 +332,7 @@ function sizeLabel(n: number): string {
 
 function authorLabel(kind: string, author: string): string {
   if (kind === "ai") return "AI agent";
-  if (kind === "system") return "CommAI";
+  if (kind === "system") return "Jibsy";
   if (kind === "workflow") return "Workflow";
   return author;
 }

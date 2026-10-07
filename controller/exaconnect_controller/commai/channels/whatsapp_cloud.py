@@ -670,7 +670,7 @@ def submit_template(conn: psycopg.Connection, account: dict, tpl: dict) -> dict:
 
 
 def sync_templates(conn: psycopg.Connection, account: dict) -> dict:
-    """Pull every template's status from the WABA into CommAI's template list."""
+    """Pull every template's status from the WABA into Jibsy's template list."""
     prov = PROVIDERS[account["provider"]]
     changed = 0
     remote = prov.list_templates(conn, account)

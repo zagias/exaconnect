@@ -1,4 +1,4 @@
-"""CommAI API under /api/v1/commai (ADR 0016). Each module owns its router."""
+"""Jibsy API under /api/v1/commai (ADR 0016). Each module owns its router."""
 
 from fastapi import APIRouter, Depends
 
@@ -6,7 +6,7 @@ from ...api.deps import require_product
 from . import golive, inbox, platform
 
 router = APIRouter(prefix="/commai")
-# Signed-in endpoints need the organisation to hold the CommAI plan (ADR 0023).
+# Signed-in endpoints need the organisation to hold the Jibsy plan (ADR 0023).
 # Public endpoints (the website widget, provider webhooks) and the live socket,
 # which signs in by itself and checks the plan there, sit outside it.
 _planned = APIRouter(dependencies=[Depends(require_product("commai"))])
@@ -72,7 +72,7 @@ for _m in (
     qr,
     webphone,
 ):
-    # Module routes need the CommAI plan and check the business has that module (ADR 0039).
+    # Module routes need the Jibsy plan and check the business has that module (ADR 0039).
     _planned.include_router(_m.router, dependencies=dependencies_for(_m.__name__))
     if hasattr(_m, "public"):
         router.include_router(_m.public)

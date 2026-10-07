@@ -1,6 +1,6 @@
 """Channels: every way a conversation reaches the business (ADR 0016).
 
-A channel turns its provider's format into CommAI messages and back, and
+A channel turns its provider's format into Jibsy messages and back, and
 enforces its own rules before anything is sent. Modules register their
 channel with `register()`; the inbox only ever talks to this interface.
 """

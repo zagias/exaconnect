@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { APP_INFO, type AppId } from "./apps";
 
 /* The portal's menu: icons, groups, and every screen and tab for the jump-to search. */
 
@@ -267,7 +268,7 @@ export interface Item {
   end?: boolean;
   /** Other paths that belong to this entry (it shows as current on them too). */
   also?: string[];
-  /** The CommAI module a business needs for this entry (commai/entitlements.py). */
+  /** The Jibsy module a business needs for this entry (commai/entitlements.py). */
   module?: string;
   /** Other words the jump-to search should match. */
   keywords?: string;
@@ -275,8 +276,8 @@ export interface Item {
 export interface Group {
   label: string | null;
   items: Item[];
-  /** A product heading drawn above this group, such as "CommAI". */
-  section?: string;
+  /** The app this group belongs to (ADR 0041); none for shared groups. */
+  app?: AppId;
   /** Folded away until opened (or until one of its screens is current). */
   collapsible?: boolean;
 }
@@ -288,14 +289,16 @@ export function matches(i: Item, path: string): boolean {
 }
 
 /**
- * The portal menu. `modules` is the CommAI plan of the business in view
+ * The portal menu for every app this person may open; the sidebar shows one
+ * app's groups at a time. `modules` is the Jibsy plan of the business in view
  * (null while it loads, or when it can't be read): entries for modules the
  * business lacks are left out, and the server refuses their API calls anyway.
+ * `apps` is what the person may open (null: everything).
  */
 export function navGroups(
   role: string | undefined,
   modules: Record<string, boolean> | null = null,
-  products: readonly string[] | null = null,
+  apps: readonly string[] | null = null,
 ): Group[] {
   if (role === "carrier")
     return [
@@ -310,10 +313,11 @@ export function navGroups(
     ];
   const admin = role === "admin";
   const has = (i: Item) => !i.module || !modules || modules[i.module] !== false;
-  // The plans the current organisation holds (ADR 0023); null: not limited by plan.
-  const plan = (p: string) => !products || products.includes(p);
+  // The apps this person may open (ADR 0023, 0041); null: not limited.
+  const plan = (p: string) => !apps || apps.includes(p);
   const connect: Group[] = [
     {
+      app: "connect",
       label: "Monitor",
       items: [
         { to: "/", label: "Overview", icon: icons.overview, end: true },
@@ -325,6 +329,7 @@ export function navGroups(
       ],
     },
     {
+      app: "connect",
       label: "Network",
       items: [
         { to: "/traffic", label: "Traffic", icon: icons.traffic },
@@ -335,20 +340,19 @@ export function navGroups(
       ],
     },
     {
+      app: "connect",
       label: "Commercial",
       items: [
         { to: "/order", label: "Order", icon: icons.order },
         { to: "/metering", label: "Metering", icon: icons.metering },
-        { to: "/billing", label: "Billing", icon: icons.billing, keywords: "invoices payments" },
         ...(admin ? [{ to: "/carrier", label: "Carrier view", icon: icons.carrier }] : []),
       ],
     },
   ];
   const groups: Group[] = plan("connect") ? connect : [];
-  // CommAI (ADR 0016), grouped by task: daily work first, set-up folded away.
+  // Jibsy (ADR 0016), grouped by task: daily work first, set-up folded away.
   const commai: Group[] = [
     {
-      section: "CommAI",
       label: "Conversations",
       items: [
         { to: "/commai", label: "Inbox", icon: icons.inbox, end: true, also: ["/commai/c"], keywords: "conversations messages chats" },
@@ -389,7 +393,10 @@ export function navGroups(
       ],
     },
   ];
-  if (plan("commai")) groups.push(...commai.map((g) => ({ ...g, items: g.items.filter(has) })).filter((g) => g.items.length > 0));
+  if (plan("commai"))
+    groups.push(
+      ...commai.map((g) => ({ ...g, app: "commai" as const, items: g.items.filter(has) })).filter((g) => g.items.length > 0),
+    );
   if (admin)
     groups.push({
       label: "Manage",
@@ -402,10 +409,34 @@ export function navGroups(
   return groups;
 }
 
+/** The shared account pages: one sidebar for both apps (ADR 0041). */
+export function accountGroups(opts: { carrier: boolean; jibsy: boolean }): Group[] {
+  if (opts.carrier)
+    return [{ label: "Your account", items: [{ to: "/account", label: "Profile and sign-in", icon: icons.account, end: true }] }];
+  return [
+    {
+      label: "Your account",
+      items: [
+        { to: "/account", label: "Profile and sign-in", icon: icons.account, end: true, keywords: "password two-step api keys" },
+        ...(opts.jibsy ? [{ to: "/commai/me", label: "My settings", icon: icons.admin, keywords: "notifications phone" }] : []),
+      ],
+    },
+    {
+      label: "Organisation",
+      items: [
+        { to: "/account/people", label: "People", icon: icons.people, keywords: "members invite roles access" },
+        { to: "/account/apps", label: "Apps and plans", icon: icons.apps, keywords: "plan subscription add jibsy connect" },
+        { to: "/billing", label: "Billing", icon: icons.billing, keywords: "invoices payments" },
+      ],
+    },
+  ];
+}
+
 /** The menu group a path belongs to ("Conversations", "Set up"...), for page eyebrows. */
 export function groupOf(path: string): string | null {
   if (path === "/commai/me" || path.startsWith("/commai/me/")) return "Your account";
-  for (const g of navGroups("admin")) for (const i of g.items) if (matches(i, path)) return g.label;
+  for (const g of [...navGroups("admin"), ...accountGroups({ carrier: false, jibsy: true })])
+    for (const i of g.items) if (matches(i, path)) return g.label;
   return null;
 }
 
@@ -497,7 +528,7 @@ export function destinations(groups: Group[], extra: Destination[] = []): Destin
   const out: Destination[] = [];
   for (const g of groups)
     for (const i of g.items) {
-      const where = [g.section, g.label].filter(Boolean).join(" · ");
+      const where = [g.app ? APP_INFO[g.app].name : null, g.label].filter(Boolean).join(" · ");
       out.push({ to: i.to, label: i.label, where, keywords: i.keywords ?? "" });
       for (const [to, label, kw] of TABS[i.to] ?? []) out.push({ to, label, where: i.label, keywords: kw ?? "" });
     }

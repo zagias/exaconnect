@@ -1,4 +1,4 @@
-"""Shared pieces for the CommAI routers."""
+"""Shared pieces for the Jibsy routers."""
 
 from __future__ import annotations
 

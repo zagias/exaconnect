@@ -1,12 +1,12 @@
 """The supplier side of AI (ADR 0039): what the model and speech provider
-(DeepInfra) charges ExaCarib, reconciled against what CommAI recorded and
+(DeepInfra) charges ExaCarib, reconciled against what Jibsy recorded and
 billed, with the margin per business.
 
 The supplier reports usage per day and model, for all of ExaCarib, not per
 business. So reconciliation works in two steps:
 
 1. For each day, model and kind (tokens, speech seconds), compare the
-   supplier's quantity with the total CommAI recorded for every business.
+   supplier's quantity with the total Jibsy recorded for every business.
    A difference is listed as an issue (the supplier counted usage we did not
    record, or the other way round).
 2. Share the supplier's cost for that day and model between businesses by
@@ -14,7 +14,7 @@ business. So reconciliation works in two steps:
    billed for AI (bill.py and voice AI minutes) less its share of the cost.
 
 The usage comes from a `UsageSource`. The simulated source builds the
-supplier's view from CommAI's own records at example supplier prices, so the
+supplier's view from Jibsy's own records at example supplier prices, so the
 whole path runs without an account. The DeepInfra source refuses to run
 until EXA_DEEPINFRA_API_KEY is set (Dudley's account) and its usage endpoint
 has been confirmed against DeepInfra's documentation.
@@ -52,7 +52,7 @@ def _period(period: dt.date) -> tuple[dt.datetime, dt.datetime]:
 
 
 def _recorded(conn, start: dt.datetime, end: dt.datetime, customer_id: Any = None) -> list[dict]:
-    """CommAI's own AI usage per day, model and kind (one business, or all)."""
+    """Jibsy's own AI usage per day, model and kind (one business, or all)."""
     return conn.execute(
         """SELECT (at AT TIME ZONE 'UTC')::date AS day,
                   CASE WHEN meter = 'ai_tokens' THEN coalesce(nullif(detail->>'model', ''), 'unknown')
@@ -76,7 +76,7 @@ class UsageSource:
 
 
 class SimulatedDeepInfra(UsageSource):
-    """The supplier's view built from CommAI's records at example prices."""
+    """The supplier's view built from Jibsy's records at example prices."""
 
     name = "deepinfra"
     simulated = True
@@ -190,7 +190,7 @@ def reconcile(conn: psycopg.Connection, customer_id: Any, period: dt.date, suppl
                     "day": day.isoformat(),
                     "model": model,
                     "issue": f"Supplier counted {bill.s(Decimal(sup['quantity']).normalize())} {unit}, "
-                    f"CommAI recorded {bill.s(rec.normalize())}",
+                    f"Jibsy recorded {bill.s(rec.normalize())}",
                 }
             )
     lines, cost = [], Decimal(0)

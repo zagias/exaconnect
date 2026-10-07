@@ -7,7 +7,7 @@ password, stored encrypted; the address book is found by discovery or given.
 Actions: look up a contact by email (addressbook-query), create (PUT of a new
 card, UID from the idempotency key, If-None-Match: *), update (If-Match on
 the card's ETag, so another person's change is never overwritten), delete
-(sensitive) and sync into CommAI contacts (sync-collection, RFC 6578, keeping
+(sensitive) and sync into Jibsy contacts (sync-collection, RFC 6578, keeping
 the sync token so each run fetches only what changed).
 
 Off until ExaCarib switches ``feature/integration-carddav`` on; until then a
@@ -33,7 +33,7 @@ def uid_for(key: str) -> str:
 
 
 def upsert_contact(conn: psycopg.Connection, customer_id: Any, card: vcard.Card, source: str) -> str:
-    """Create or update a CommAI contact from a card, matched by email (then phone).
+    """Create or update a Jibsy contact from a card, matched by email (then phone).
     Returns 'created', 'updated' or 'skipped'."""
     email, phone = card.email.strip().lower(), card.phone.strip()
     if not email and not phone:
@@ -84,7 +84,7 @@ class CardDAV(DavConnector):
         "find_contact": ActionSpec(
             "find_contact", "Look up a contact", "read", fields=(Field("email", "Email", "email"),)
         ),
-        "sync_contacts": ActionSpec("sync_contacts", "Sync contacts into CommAI", "read"),
+        "sync_contacts": ActionSpec("sync_contacts", "Sync contacts into Jibsy", "read"),
         "create_contact": ActionSpec(
             "create_contact",
             "Create a contact",
@@ -236,7 +236,7 @@ class CardDAV(DavConnector):
         raise ConnectorError(f"Unknown action {action}.", "input")
 
     def sync(self, conn, connection: dict, url: str) -> dict:
-        """Fetch what changed since the last sync token and update CommAI contacts."""
+        """Fetch what changed since the last sync token and update Jibsy contacts."""
         token = (connection.get("settings") or {}).get("sync_token", "")
         r = self.dav(
             conn,
@@ -258,7 +258,7 @@ class CardDAV(DavConnector):
         counts = {"created": 0, "updated": 0, "skipped": 0, "removed_upstream": 0}
         for x in res:
             if x.status == 404:
-                counts["removed_upstream"] += 1  # kept in CommAI: a contact is never deleted by a sync
+                counts["removed_upstream"] += 1  # kept in Jibsy: a contact is never deleted by a sync
                 continue
             data = x.text(dav.CARDDAV, "address-data")
             for card in vcard.read(data) if data else []:

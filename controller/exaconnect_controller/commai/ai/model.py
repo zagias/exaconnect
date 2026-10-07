@@ -6,7 +6,7 @@ Every AI role calls `Model.complete(ModelInput) -> ModelOutput`. Two models:
   default), configured by EXA_LLM_API_KEY / EXA_LLM_BASE_URL / EXA_LLM_MODEL,
   the same settings as Connect's Ask. It is asked for one JSON object.
 - `SimulatedModel`: deterministic and free. Used when no key is set (tests,
-  the lab, a business trying CommAI). It answers from retrieved knowledge,
+  the lab, a business trying Jibsy). It answers from retrieved knowledge,
   recognises booking requests and escalates when unsure. It never invents
   facts: anything it says comes from the input it was given.
 

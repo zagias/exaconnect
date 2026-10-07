@@ -1,4 +1,4 @@
--- CommAI voice (ADR 0021): phone system, provisioning and billing.
+-- Jibsy voice (ADR 0021): phone system, provisioning and billing.
 -- Applied after 00_core.sql, idempotently, at startup. Every record carries customer_id.
 -- Money is numeric everywhere, never float.
 

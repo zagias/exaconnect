@@ -1,4 +1,4 @@
-# CommAI AI agents: operator note
+# Jibsy AI agents: operator note
 
 The customer AI agent, the employee copilot, knowledge with sources, customer
 memory, languages and browser calls. Decision record:
@@ -13,7 +13,7 @@ memory, languages and browser calls. Decision record:
 - `controller/exaconnect_controller/commai/api/ai.py`: the API.
 - `controller/exaconnect_controller/commai/sql/30_ai.sql`: `knowledge_sources`,
   `knowledge_chunks`, `knowledge_gaps`, `ai_runs`, `contact_memory`, `ai_calls`.
-- Portal: CommAI → AI agents (`portal/src/pages/commai/AiAgents.tsx`) and the
+- Portal: Jibsy → AI agents (`portal/src/pages/commai/AiAgents.tsx`) and the
   copilot panel beside a conversation (`CopilotPanel.tsx`).
 - The business's AI profile lives in `commai_settings.config["ai"]`. Whether
   new conversations go to the AI is the inbox mode (`ai_first`).

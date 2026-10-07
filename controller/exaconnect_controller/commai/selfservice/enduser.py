@@ -477,7 +477,7 @@ def _follow_up(conn: psycopg.Connection, job: dict):
                         conn,
                         ch["customer_id"],
                         old["conversation_id"],
-                        author="CommAI",
+                        author="Jibsy",
                         body=f"Rescheduled by the customer; release the old time by hand ({e}).",
                     )
         return None
@@ -486,9 +486,9 @@ def _follow_up(conn: psycopg.Connection, job: dict):
         text = "We couldn't move your booking, so your original time is unchanged."
         try:
             channels.get(conv["channel"]).check_send(conn, conv, text, "")
-            inbox._insert_out(conn, conv, text, "system", "CommAI")
+            inbox._insert_out(conn, conv, text, "system", "Jibsy")
         except channels.SendBlocked as e:
-            inbox.add_note(conn, conv["customer_id"], conv["id"], author="CommAI", body=f"Not sent ({e}): {text}")
+            inbox.add_note(conn, conv["customer_id"], conv["id"], author="Jibsy", body=f"Not sent ({e}): {text}")
     return None
 
 

@@ -32,7 +32,7 @@ ORDER = [
     "example",
 ]
 
-# Standard interfaces CommAI speaks, so any system that speaks them can connect.
+# Standard interfaces Jibsy speaks, so any system that speaks them can connect.
 STANDARDS = [
     {
         "id": "caldav",
@@ -66,9 +66,9 @@ STANDARDS = [
     },
     {
         "id": "openapi",
-        "name": "CommAI's API",
+        "name": "Jibsy's API",
         "spec": "OpenAPI 3.1, AsyncAPI 3.0",
-        "what": "Published descriptions of every CommAI endpoint and of the event stream.",
+        "what": "Published descriptions of every Jibsy endpoint and of the event stream.",
     },
     {
         "id": "csv",
@@ -91,7 +91,7 @@ VIA_STANDARD = [
     {"name": "Airtable, Google Sheets, Notion", "category": "other", "via": "rest"},
 ]
 
-# Automation platforms: CommAI's own app definitions for them (in the repository,
+# Automation platforms: Jibsy's own app definitions for them (in the repository,
 # published by ExaCarib to each platform), built on the CloudEvents and Standard
 # Webhooks endpoints (events out: /webhooks; events in: /inbound-hooks).
 _HOOK_ENDPOINTS = {

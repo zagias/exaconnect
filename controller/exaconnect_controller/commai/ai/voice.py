@@ -184,7 +184,7 @@ def start_call(
         )
     else:
         msg = inbox._insert_out(
-            conn, conv, "Thanks for calling. A member of our team will be with you shortly.", "system", "CommAI"
+            conn, conv, "Thanks for calling. A member of our team will be with you shortly.", "system", "Jibsy"
         )
     return {"call": call, "conversation_id": str(conv["id"]), "greeting": msg["body"], "handler": conv["handler"]}
 

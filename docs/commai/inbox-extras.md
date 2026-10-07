@@ -1,4 +1,4 @@
-# CommAI inbox extras: operator note
+# Jibsy inbox extras: operator note
 
 Decision record: ADR 0038. Code: `commai/inbox_jobs.py`, `commai/presence.py`,
 `commai/attachments.py`, `commai/history.py`, `commai/visitor_calls.py`,

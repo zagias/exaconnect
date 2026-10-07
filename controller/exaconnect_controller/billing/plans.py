@@ -1,6 +1,6 @@
 """Products, plans and subscriptions (ADR 0022).
 
-Connect and CommAI are sold as separate plans. An organisation (a customer
+Connect and Jibsy are sold as separate plans. An organisation (a customer
 record) holds a product while one of its subscriptions to a plan for that
 product covers the day. Subscriptions are the source of truth; the
 ``customers.products`` column used for access gating is kept in step with
@@ -19,7 +19,7 @@ import psycopg
 from .. import audit
 from .core import BillingError
 
-PRODUCTS = {"connect": "Connect", "commai": "CommAI"}
+PRODUCTS = {"connect": "Connect", "commai": "Jibsy"}
 
 
 def _today() -> dt.date:
@@ -85,6 +85,11 @@ def sync_products(conn: psycopg.Connection, customer_id: Any) -> list[str] | Non
         return None
     held = products(conn, customer_id)
     conn.execute("UPDATE customers SET products = %s WHERE id = %s", (held, customer_id))
+    # A request to add an app (ADR 0041) is answered once the plan holds it.
+    if conn.execute("SELECT to_regclass('customer_app_requests') AS t").fetchone()["t"]:
+        conn.execute(
+            "DELETE FROM customer_app_requests WHERE customer_id = %s AND product = ANY(%s)", (customer_id, held)
+        )
     return held
 
 
@@ -124,7 +129,7 @@ def get_plan(conn: psycopg.Connection, plan_id: Any) -> dict:
 def create_plan(conn: psycopg.Connection, values: dict, actor: str) -> dict:
     product = values.get("product")
     if product not in PRODUCTS:
-        raise BillingError("A plan is for Connect or CommAI.")
+        raise BillingError("A plan is for Connect or Jibsy.")
     name = str(values.get("name") or "").strip()
     if not name or len(name) > 80:
         raise BillingError("Give the plan a name of up to 80 characters.")
@@ -371,7 +376,7 @@ def ensure_plan(
         "SELECT 1 FROM subscriptions WHERE customer_id = %s AND product = %s", (customer_id, product)
     ).fetchone():
         return
-    name = {"connect": "Connect Standard", "commai": "CommAI Standard"}[product]
+    name = {"connect": "Connect Standard", "commai": "Jibsy Standard"}[product]
     plan = conn.execute("SELECT id FROM plans WHERE product = %s AND name = %s", (product, name)).fetchone()
     if plan is None:
         return

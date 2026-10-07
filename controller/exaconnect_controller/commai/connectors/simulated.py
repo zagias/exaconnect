@@ -1,5 +1,5 @@
 """Simulated calendar and CRM: real behaviour, stored in sim_records, for test
-mode, the lab and businesses trying CommAI before they connect a real app.
+mode, the lab and businesses trying Jibsy before they connect a real app.
 
 Bookings respect business hours and existing bookings, so the AI cannot
 "invent availability". A connection can be told to fail

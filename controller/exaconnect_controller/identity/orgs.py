@@ -4,7 +4,7 @@ A customer account can belong to several organisations (customers), with a
 role in each:
 
   owner    everything an admin can do, and hand ownership on
-  admin    manage people and settings (SSO, SCIM, CommAI settings)
+  admin    manage people and settings (SSO, SCIM, Jibsy settings)
   member   make changes (classes, traffic rules, Storm Mode, conversations)
   viewer   read only
 
@@ -58,7 +58,7 @@ def membership(conn: psycopg.Connection, customer_id: Any, user_id: Any, lock: b
 
 def members(conn: psycopg.Connection, customer_id: Any) -> list[dict]:
     return conn.execute(
-        """SELECT u.id AS user_id, u.email, u.display_name AS name, m.role, m.managed_by, m.created_at,
+        """SELECT u.id AS user_id, u.email, u.display_name AS name, m.role, m.managed_by, m.created_at, m.apps,
                   u.disabled_at IS NOT NULL AS disabled, u.customer_id = m.customer_id AS primary_org
            FROM org_memberships m JOIN users u ON u.id = m.user_id
            WHERE m.customer_id = %s ORDER BY (m.role = 'owner') DESC, lower(u.email)""",
@@ -108,7 +108,7 @@ def set_role(conn: psycopg.Connection, customer_id: Any, user_id: Any, role: str
 
 def remove(conn: psycopg.Connection, customer_id: Any, user_id: Any, *, by_role: str | None, leaving: bool) -> dict:
     """Take someone out of an organisation (or let them leave). Their sessions stop
-    acting for it, keys made in it are revoked, and their CommAI seat, teams and
+    acting for it, keys made in it are revoked, and their Jibsy seat, teams and
     voice rights there go. Their account, and other memberships, stay."""
     m = _target(conn, customer_id, user_id)
     if m["managed_by"]:

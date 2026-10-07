@@ -1,4 +1,4 @@
-"""CommAI voice stage 5 (ADR 0033): numbers by country behind the go-live
+"""Jibsy voice stage 5 (ADR 0033): numbers by country behind the go-live
 registry, porting with documents, rejection, rescheduling, cut-over and roll
 back, emergency addresses and island rules, carrier routing with failover and
 trunk health, revenue share fraud protection, LiveKit wiring and tenant isolation."""
@@ -113,7 +113,7 @@ def test_numbers_by_country_need_go_live_and_a_test_call_each(client, admin_head
     golive.declare("country", "JM", "Jamaica")
     switch_on("feature", "voice-numbers-JM")
     r = client.get(f"{u}/voice/numbers/search", params={"country": "JM"}, headers=b["boss"]["h"])
-    assert r.status_code == 409 and "CommAI is not switched on in Jamaica" in r.json()["detail"]
+    assert r.status_code == 409 and "Jibsy is not switched on in Jamaica" in r.json()["detail"]
     switch_on("country", "JM")
     found = client.get(f"{u}/voice/numbers/search", params={"country": "JM", "area": "658"}, headers=b["boss"]["h"])
     assert found.json()["numbers"][0]["e164"].startswith("+165855501")

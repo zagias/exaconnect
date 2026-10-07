@@ -3,7 +3,7 @@ const { api } = require('../lib');
 module.exports = {
   key: 'create_contact',
   noun: 'Contact',
-  display: { label: 'Create Contact', description: 'Adds a contact to CommAI.' },
+  display: { label: 'Create Contact', description: 'Adds a contact to Jibsy.' },
   operation: {
     inputFields: [
       { key: 'name', label: 'Name' },

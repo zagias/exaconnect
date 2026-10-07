@@ -1,7 +1,7 @@
 """Sandboxes and sandbox keys (ADR 0031).
 
 A sandbox is a copy of a business: its own customers row (``sandbox_of`` points
-at the real one) with the same CommAI settings and a simulated copy of each
+at the real one) with the same Jibsy settings and a simulated copy of each
 channel account. Sandbox keys belong to the sandbox's own account, so tenant
 checks keep them inside the sandbox: they can never read or change the real
 business.
@@ -81,7 +81,7 @@ def create(conn: psycopg.Connection, customer_id: Any) -> dict:
         "INSERT INTO customers (name, sandbox_of) VALUES (%s, %s) RETURNING id, name, sandbox_of, created_at",
         (name, customer_id),
     ).fetchone()
-    # The business's CommAI settings, so the sandbox behaves the same.
+    # The business's Jibsy settings, so the sandbox behaves the same.
     cols = [
         r["column_name"]
         for r in conn.execute(

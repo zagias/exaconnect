@@ -1,4 +1,4 @@
-"""CommAI voice API (ADR 0021): phone system, self-service, orders and billing.
+"""Jibsy voice API (ADR 0021): phone system, self-service, orders and billing.
 
 Who may call what:
 - staff (any account of the business): /voice/me..., /voice/say...

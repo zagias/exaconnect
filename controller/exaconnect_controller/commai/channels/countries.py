@@ -96,7 +96,7 @@ def _caribbean(
         "numbers": _fact(
             numbers
             or "Local numbers may be available through the national operators; no number provider for "
-            "CommAI is arranged yet."
+            "Jibsy is arranged yet."
         ),
         "porting": _fact(
             porting or "Not known whether numbers can be moved between operators. Check with the regulator."
@@ -114,7 +114,7 @@ def _caribbean(
             "WhatsApp Business Platform appears to be available; not on Meta's restricted list as far as known."
         ),
         "calling": _fact("Needs a number from a voice carrier that serves this country; none arranged yet."),
-        "emergency": _fact(f"Emergency numbers reported as {emergency}. CommAI does not place emergency calls."),
+        "emergency": _fact(f"Emergency numbers reported as {emergency}. Jibsy does not place emergency calls."),
         "restrictions": _fact("; ".join(restrictions)),
     }
 
@@ -403,7 +403,7 @@ def check_sms(
     rules = sms_rules(conn, code)
     if rules is None:
         raise channels.SendBlocked(
-            f"SMS to {code or 'this number'} is not offered: the country is not in CommAI's country list yet."
+            f"SMS to {code or 'this number'} is not offered: the country is not in Jibsy's country list yet."
         )
     name = name_of(code)
     if not golive.enabled(conn, "country", code, customer_id):

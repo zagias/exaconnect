@@ -64,7 +64,7 @@ class MeSettingsIn(BaseModel):
 
 def _me_check(conn, user, customer_id: str) -> None:
     if user.role == "customer" and access.seat(conn, user, customer_id) not in ("agent", "internal"):
-        raise HTTPException(403, "You don't have a CommAI seat in this business.")
+        raise HTTPException(403, "You don't have a Jibsy seat in this business.")
 
 
 @router.get("/me/settings")

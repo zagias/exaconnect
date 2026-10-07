@@ -40,7 +40,7 @@ services:
       EXA_USGS_URL: ${EXA_USGS_URL-https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_day.geojson}
       EXA_GDACS_URL: ${EXA_GDACS_URL-https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH}
       EXA_TSUNAMI_URLS: ${EXA_TSUNAMI_URLS-https://www.tsunami.gov/events/xml/PHEBAtom.xml,https://www.tsunami.gov/events/xml/PAAQAtom.xml}
-      # CommAI voice (ADR 0021): rendered FreeSWITCH config, read by the freeswitch service.
+      # Jibsy voice (ADR 0021): rendered FreeSWITCH config, read by the freeswitch service.
       EXA_FREESWITCH_DIR: /data/freeswitch
       EXA_SIP_PROVIDER: ${EXA_SIP_PROVIDER:-simulated}
       # Voice stage 5 (ADR 0033): the real provider's API, Kamailio's carrier lists, LiveKit.
@@ -64,7 +64,7 @@ services:
       EXA_OIDC_CLIENT_SECRET: ${EXA_OIDC_CLIENT_SECRET:-}
       EXA_KEYCLOAK_ADMIN_CLIENT_ID: ${EXA_KEYCLOAK_ADMIN_CLIENT_ID:-}
       EXA_KEYCLOAK_ADMIN_CLIENT_SECRET: ${EXA_KEYCLOAK_ADMIN_CLIENT_SECRET:-}
-      # CommAI automation (ADR 0020): encrypted integration tokens; Google/HubSpot stay off until set.
+      # Jibsy automation (ADR 0020): encrypted integration tokens; Google/HubSpot stay off until set.
       EXA_SECRETS_KEY: ${EXA_SECRETS_KEY:-}
       EXA_PORTAL_URL: ${EXA_PORTAL_URL:-}
       EXA_GOOGLE_CLIENT_ID: ${EXA_GOOGLE_CLIENT_ID:-}
@@ -175,7 +175,7 @@ services:
       # Loopback only; publish it through the public proxy (deploy/public) for real use.
       - "127.0.0.1:8081:8080"
 
-  # CommAI voice PBX (ADR 0021): `docker compose --profile voice up -d`. It reads the
+  # Jibsy voice PBX (ADR 0021): `docker compose --profile voice up -d`. It reads the
   # configuration the controller renders from the database (/data/freeswitch on the
   # shared volume). Not live: there is no SIP provider account yet (phase 3), so outside
   # calls go nowhere; calls between extensions, menus and queues work. SIP and RTP ports

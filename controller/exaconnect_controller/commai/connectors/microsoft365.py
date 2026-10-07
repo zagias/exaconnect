@@ -16,7 +16,7 @@ Graph:
   sent twice. ``GET /me/messages`` finds recent mail from an address.
 - Change notifications: Graph checks the address with ``validationToken``
   (echoed back as text) and every notification carries the ``clientState``
-  CommAI set, checked on arrival.
+  Jibsy set, checked on arrival.
 
 Errors are ``{"error": {"code", "message"}}``: InvalidAuthenticationToken is
 an expired sign-in, ErrorAccessDenied or Authorization_RequestDenied a
@@ -231,7 +231,7 @@ class Microsoft365(KitConnector):
                 "subject": f"{inputs.get('reason') or 'Appointment'}: {inputs['name']}",
                 "body": {
                     "contentType": "text",
-                    "content": f"Contact: {inputs['contact']}\nBooked through ExaCarib CommAI.",
+                    "content": f"Contact: {inputs['contact']}\nBooked through Jibsy by ExaCarib.",
                 },
                 "start": _graph_time(start),
                 "end": _graph_time(finish),
@@ -299,7 +299,7 @@ class Microsoft365(KitConnector):
                 connection,
                 "POST",
                 f"/me/events/{urllib.parse.quote(bid, safe='')}/cancel",
-                json_body={"comment": "Cancelled through ExaCarib CommAI."},
+                json_body={"comment": "Cancelled through Jibsy by ExaCarib."},
                 ok=(202, 200, 204),
                 allow=(404,),
             )

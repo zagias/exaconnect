@@ -1,4 +1,4 @@
-"""CommAI phase 3 channels API (ADR 0029): Messenger, Instagram and Telegram
+"""Jibsy phase 3 channels API (ADR 0029): Messenger, Instagram and Telegram
 accounts, the country matrix and SMS rules, and SMS routing across carriers.
 
 - `router` (signed in, under /customers/{customer_id}): the business's
@@ -57,7 +57,7 @@ NEEDS: dict[str, list[str]] = {
     "telegram": [
         "Create a bot with @BotFather in Telegram and copy its token.",
         "Enter the token through secure entry here. It is stored encrypted and never shown again.",
-        "Connect: CommAI sets the bot's webhook with a secret only Telegram and CommAI know.",
+        "Connect: Jibsy sets the bot's webhook with a secret only Telegram and Jibsy know.",
         "People must start the bot first. /stop, or blocking the bot, opts them out.",
     ],
 }
@@ -223,7 +223,7 @@ def save_token(customer_id: str, account_id: str, body: TokenIn, user: UserDep) 
 
 @router.post("/social-accounts/{account_id}/connect")
 def connect_social(customer_id: str, account_id: str, request: Request, user: UserDep) -> dict:
-    """Point the platform at CommAI's webhook (Telegram setWebhook; Meta page
+    """Point the platform at Jibsy's webhook (Telegram setWebhook; Meta page
     subscription). Real platforms need the token first and the channel switched on."""
     access.check(user, customer_id, "commai:admin")
     with db.tx() as conn:
@@ -676,7 +676,7 @@ WA_CLOUD_NEEDS = [
     "Your business completes Meta business verification and has a WhatsApp Business Account, or creates one "
     "during sign-up.",
     "A number that can receive a verification code by SMS or call and is not in use on the WhatsApp app.",
-    "You connect through Meta's Embedded Signup window; CommAI keeps the business token encrypted and never shows it.",
+    "You connect through Meta's Embedded Signup window; Jibsy keeps the business token encrypted and never shows it.",
     "Templates are submitted to Meta from here; their approval comes back from Meta.",
 ]
 

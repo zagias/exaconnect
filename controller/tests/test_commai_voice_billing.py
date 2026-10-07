@@ -1,4 +1,4 @@
-"""CommAI voice, provisioning and billing (ADR 0021): orders with safe
+"""Jibsy voice, provisioning and billing (ADR 0021): orders with safe
 retries, rating with rate card versions, bundles, fraud limits, invoices
 that freeze, credit notes and the supplier side."""
 

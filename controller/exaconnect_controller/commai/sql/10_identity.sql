@@ -101,7 +101,7 @@ CREATE TABLE IF NOT EXISTS scim_tokens (
   revoked_at    timestamptz
 );
 
--- Directory groups and how they map to CommAI teams, seats and rights.
+-- Directory groups and how they map to Jibsy teams, seats and rights.
 CREATE TABLE IF NOT EXISTS scim_groups (
   id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   customer_id    uuid NOT NULL REFERENCES customers(id) ON DELETE CASCADE,

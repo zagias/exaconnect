@@ -12,7 +12,7 @@ import SignIn from "./settings/SignIn";
 import HelpAdmin from "../help/HelpAdmin";
 import type { Member, Team } from "./types";
 
-/** How the business runs CommAI: service targets, teams, seats, routing and developer access. */
+/** How the business runs Jibsy: service targets, teams, seats, routing and developer access. */
 export default function Settings() {
   const base = useCommaiBase();
   if (!base) return null;
@@ -479,7 +479,7 @@ function Developers({ base }: { base: string }) {
     <>
       <Card title="Webhooks">
         <p className="muted small">
-          CommAI posts each event to your address, signed with your secret (header X-ExaCarib-Signature, HMAC-SHA256 of
+          Jibsy posts each event to your address, signed with your secret (header X-ExaCarib-Signature, HMAC-SHA256 of
           "timestamp.body"). Failed deliveries are retried. The event id never changes, so you can ignore repeats.
         </p>
         <ErrorNote error={hooks.error} />
@@ -588,7 +588,7 @@ function Developers({ base }: { base: string }) {
           </div>
         )}
       </Card>
-      <Card title="API keys for CommAI">
+      <Card title="API keys for Jibsy">
         <p className="muted small">
           A key with scopes can only do what you tick. A key for a customer-facing app should never have private notes.
           Writes accept an Idempotency-Key header, so a retried request never sends twice.

@@ -6,7 +6,7 @@ How it is made:
 2. It chooses operations as actions. The kind comes from the HTTP method
    (GET read, POST create, PUT/PATCH update, DELETE delete); deletes always
    need a person's approval. Each action's fields are the operation's own
-   parameters; CommAI fields (email, phone, name...) map onto them, with
+   parameters; Jibsy fields (email, phone, name...) map onto them, with
    suggestions. A draft can be suggested for it, but only from operations the
    document has: an action naming anything else is refused.
 3. A person approves the app (commai_rest_apps.status = 'approved'). Any

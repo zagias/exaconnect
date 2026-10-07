@@ -1,7 +1,7 @@
-# CommAI
+# Jibsy
 
-ExaCarib CommAI is the AI communications and customer-service platform
-scoped in "ExaCarib CommAI architecture and scope" (5 October 2026). Phases
+Jibsy by ExaCarib is the AI communications and customer-service platform
+scoped in "Jibsy by ExaCarib architecture and scope" (5 October 2026). Phases
 0, 1 and 2 of its build order are in this repository, inside the Connect
 controller and portal (ADR 0016).
 
@@ -22,7 +22,7 @@ controller and portal (ADR 0016).
 
 API: `/api/v1/commai/customers/{customer_id}/...` (OpenAPI at
 `/api/v1/docs`), SCIM at `/api/v1/scim/v2`. Python SDK:
-`ExaConnect(...).commai()`. Portal: the CommAI group in the sidebar.
+`ExaConnect(...).commai()`. Portal: the Jibsy group in the sidebar.
 
 ## Acceptance tests (plan, phase 1)
 

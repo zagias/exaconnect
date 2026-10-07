@@ -88,7 +88,7 @@ function PlansCard({ onDone }: { onDone: (m: string) => void }) {
       plans.reload();
     });
   return (
-    <Card title="Plans" note={<span className="muted small">Connect and CommAI are sold as separate plans.</span>}>
+    <Card title="Plans" note={<span className="muted small">Connect and Jibsy are sold as separate plans.</span>}>
       <ErrorNote error={plans.error ?? act.error} />
       {plans.data && (
         <div className="table-wrap">
@@ -150,7 +150,7 @@ function PlansCard({ onDone }: { onDone: (m: string) => void }) {
           Product
           <select value={f.product} onChange={(e) => setF({ ...f, product: e.target.value as Product })}>
             <option value="connect">Connect</option>
-            <option value="commai">CommAI</option>
+            <option value="commai">Jibsy</option>
           </select>
         </label>
         <label>
@@ -640,7 +640,7 @@ function MarginCard() {
   const SOURCE: Record<string, string> = { issued: "issued", draft: "draft", estimate: "worked out now", unavailable: "unavailable" };
   return (
     <Card title="Margin" note={<MonthPicker value={month} onChange={setMonth} />}>
-      <p className="muted small">Billed less what ExaCarib owes carriers and partners, in USD. CommAI supply cost is not counted yet.</p>
+      <p className="muted small">Billed less what ExaCarib owes carriers and partners, in USD. Jibsy supply cost is not counted yet.</p>
       <ErrorNote error={m.error} />
       {m.data && (
         <>

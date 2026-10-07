@@ -11,7 +11,7 @@ from typing import Any
 
 import psycopg
 
-# Directory-provisioned and SSO-created people start with these rights: CommAI
+# Directory-provisioned and SSO-created people start with these rights: Jibsy
 # work (read, write, private notes), no network API and no business settings.
 MEMBER_SCOPES = ["commai:read", "commai:write", "commai:notes"]
 UNUSABLE_PASSWORD = "!sso"  # verify_password() never accepts it

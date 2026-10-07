@@ -124,7 +124,7 @@ export default function CatalogueScreen() {
   return (
     <>
       <PageHead title="Apps">
-        Every app CommAI can work with, what it may do there, and what ExaCarib still has to set up before it can go
+        Every app Jibsy can work with, what it may do there, and what ExaCarib still has to set up before it can go
         live. Apps not yet live run on a stand-in with example data, so you can try them safely.
       </PageHead>
       <AppsTabs />
@@ -189,7 +189,7 @@ function AppCard({ a }: { a: CatalogueApp }) {
       </p>
       {reads.length > 0 && <ActionList title="Reads" items={reads} />}
       {writes.length > 0 && <ActionList title="Changes" items={writes} />}
-      {a.webhooks && <p className="small muted" style={{ margin: 0 }}>Tells CommAI about changes: {a.webhooks}</p>}
+      {a.webhooks && <p className="small muted" style={{ margin: 0 }}>Tells Jibsy about changes: {a.webhooks}</p>}
       {!a.sign_in_ready && (needs.reason || needs.env.length > 0 || needs.app_registration) && (
         <details className="cat-needs">
           <summary>What ExaCarib still needs</summary>
@@ -244,7 +244,7 @@ function ActionList({ title, items }: { title: string; items: ActionInfo[] }) {
 function Standards({ data }: { data: Catalogue }) {
   return (
     <section id="standards" className="cat-section">
-      <Card title="Standards CommAI speaks">
+      <Card title="Standards Jibsy speaks">
         <p className="small muted">
           Any system that speaks one of these connects without a ready-made app. Machine-readable descriptions:{" "}
           <a href="/api/v1/commai/openapi.json">OpenAPI</a> and <a href="/api/v1/commai/asyncapi.json">AsyncAPI</a>.
@@ -269,7 +269,7 @@ function Standards({ data }: { data: Catalogue }) {
               {v.definition && (
                 <span className="muted small">
                   {" "}
-                  · CommAI app definition <code>{v.definition}</code>, events in through <a href="#hooks">inbound webhooks</a>
+                  · Jibsy app definition <code>{v.definition}</code>, events in through <a href="#hooks">inbound webhooks</a>
                 </span>
               )}
             </li>
@@ -306,8 +306,8 @@ function OwnApis({ base }: { base: string }) {
     <section id="own-api" className="cat-section">
       <Card title="Your own API (OpenAPI)">
         <p className="small muted">
-          Paste or upload your API's OpenAPI 3 document. CommAI lists its operations; you choose which become actions
-          and how fields map, and a person approves. Nothing in the document runs, and CommAI only calls operations it
+          Paste or upload your API's OpenAPI 3 document. Jibsy lists its operations; you choose which become actions
+          and how fields map, and a person approves. Nothing in the document runs, and Jibsy only calls operations it
           describes.
         </p>
         <ErrorNote error={list.error ?? act.error} />

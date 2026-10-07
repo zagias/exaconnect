@@ -14,7 +14,7 @@ Retries never create twice:
    description.
 
 Field mapping: connection.mapping {"contact": {"name": "firstname", ...},
-"deal": {...}, "ticket": {...}} maps CommAI fields to HubSpot properties.
+"deal": {...}, "ticket": {...}} maps Jibsy fields to HubSpot properties.
 A property HubSpot doesn't know is reported as a mapping problem.
 
 In test mode, reads run for real and creates are checked and shown but not

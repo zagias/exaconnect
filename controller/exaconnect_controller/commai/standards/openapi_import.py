@@ -3,7 +3,7 @@
 Only reads: nothing in the document is ever run. We list the operations it
 describes (method, path, parameters, body fields, security) so a business can
 choose some as actions. An action can only name an operation that is in the
-document, so CommAI never invents an endpoint.
+document, so Jibsy never invents an endpoint.
 
 Supported: OpenAPI 3.0.x and 3.1.x, as JSON (or YAML when PyYAML is
 installed). Local references (``#/components/...``) are followed; remote
@@ -197,7 +197,7 @@ def servers(doc: dict) -> list[str]:
 
 
 def security_schemes(doc: dict) -> list[dict]:
-    """The schemes the document declares that CommAI can sign in with."""
+    """The schemes the document declares that Jibsy can sign in with."""
     out = []
     for name, s in ((doc.get("components") or {}).get("securitySchemes") or {}).items():
         s = resolve(doc, s)
@@ -232,7 +232,7 @@ def security_schemes(doc: dict) -> list[dict]:
     return out
 
 
-# Words in parameter names that say which CommAI field fits.
+# Words in parameter names that say which Jibsy field fits.
 HINTS = {
     "email": ("email", "e_mail", "mail"),
     "phone": ("phone", "mobile", "tel", "msisdn"),
@@ -246,7 +246,7 @@ HINTS = {
 
 
 def suggest_mapping(op: dict) -> dict[str, str]:
-    """CommAI field -> the operation's parameter that most likely holds it."""
+    """Jibsy field -> the operation's parameter that most likely holds it."""
     names = {f["name"]: _slug(f["name"]) for f in op["params"] + op["body"]}
     out: dict[str, str] = {}
     for field, words in HINTS.items():

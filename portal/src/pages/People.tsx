@@ -7,12 +7,15 @@ import {
   type OrgMember,
   type OrgMembers,
   type OrgRole,
+  type Product,
 } from "../api";
+import { APP_INFO, APP_ORDER, AppMark } from "../apps";
 import { useAuth } from "../auth";
 import { ErrorNote } from "../components";
 import { useCustomer } from "../customer";
 import { PageHead, RowActions, useAction, type RowAction } from "../ui";
 import "./identity.css";
+import "./account-apps.css";
 
 const ROLE_LABEL: Record<OrgRole, string> = {
   owner: "Owner",
@@ -53,11 +56,12 @@ export default function People() {
     30_000,
   );
   const act = useAction();
+  const [changed, setChanged] = useState<Record<string, Product[]>>({});
 
   if (!cid)
     return (
       <>
-        <PageHead eyebrow="Account" title="People" />
+        <PageHead eyebrow="Organisation" title="People" />
         <div className="empty">
           <p>
             You are not a member of an organisation. Ask an owner to invite you.
@@ -154,12 +158,30 @@ export default function People() {
   };
 
   const people = members.data?.members ?? [];
+  // Which apps each person may open (ADR 0041); worth a column only with two apps on the plan.
+  const plan = APP_ORDER.filter((a) => members.data?.products.includes(a));
+  const appsColumn = plan.length > 1;
+  const canSetApps = (m: OrgMember) => manage && !m.you && (m.role !== "owner" || owner);
+  // What the server answered, shown at once while the list reloads.
+  const appsOf = (m: OrgMember) => changed[m.user_id] ?? m.apps;
+
+  const setApp = (m: OrgMember, app: Product, on: boolean) =>
+    act.run(async () => {
+      const now = appsOf(m);
+      const apps = on ? [...now, app] : now.filter((a) => a !== app);
+      const r = await api<{ apps: Product[] }>(`/orgs/${cid}/members/${m.user_id}/apps`, {
+        method: "PUT",
+        body: JSON.stringify({ apps }),
+      });
+      setChanged((c) => ({ ...c, [m.user_id]: r.apps }));
+      members.reload();
+    });
 
   return (
     <>
-      <PageHead eyebrow="Account" title="People">
+      <PageHead eyebrow="Organisation" title="People">
         Everyone in {members.data?.organisation.name ?? "your organisation"},
-        their roles and pending invitations.
+        their roles, the apps they may open and pending invitations.
       </PageHead>
 
       <section
@@ -183,6 +205,7 @@ export default function People() {
                 <tr>
                   <th scope="col">Person</th>
                   <th scope="col">Role</th>
+                  {appsColumn && <th scope="col">Apps</th>}
                   <th scope="col">Joined</th>
                   <th scope="col" className="actions">
                     <span className="sr-only">Actions</span>
@@ -212,6 +235,31 @@ export default function People() {
                           </span>
                         )}
                       </td>
+                      {appsColumn && (
+                        <td data-label="Apps">
+                          <div className="people-apps">
+                            {plan.map((a) =>
+                              canSetApps(m) ? (
+                                <label key={a}>
+                                  <input
+                                    type="checkbox"
+                                    checked={appsOf(m).includes(a)}
+                                    disabled={act.busy}
+                                    onChange={(e) => setApp(m, a, e.target.checked)}
+                                    aria-label={`${m.email} may open ${APP_INFO[a].name}`}
+                                  />
+                                  {APP_INFO[a].name}
+                                </label>
+                              ) : appsOf(m).includes(a) ? (
+                                <span key={a} className="people-app-tag">
+                                  <AppMark app={a} size={20} /> {APP_INFO[a].name}
+                                </span>
+                              ) : null,
+                            )}
+                            {!canSetApps(m) && appsOf(m).length === 0 && <span className="muted small">None</span>}
+                          </div>
+                        </td>
+                      )}
                       <td data-label="Joined" className="mono">
                         {day(m.created_at)}
                       </td>

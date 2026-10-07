@@ -15,7 +15,7 @@
   "clients": [
     {
       "clientId": "${EXA_OIDC_CLIENT_ID}",
-      "name": "ExaCarib Connect and CommAI",
+      "name": "ExaCarib Connect and Jibsy",
       "enabled": true,
       "protocol": "openid-connect",
       "publicClient": false,

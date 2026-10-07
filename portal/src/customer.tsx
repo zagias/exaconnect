@@ -37,7 +37,7 @@ export function CustomerProvider({ children }: { children: ReactNode }) {
       api<CustomerSettings[]>("/customers/mine")
         .then((c) => !cancelled && setCustomers(c))
         .catch(() => {
-          // An account limited to CommAI (a partner acting for a business, a
+          // An account limited to Jibsy (a partner acting for a business, a
           // directory-provisioned person) can't read Connect's customer list:
           // it still acts for its own business.
           if (!cancelled && own)

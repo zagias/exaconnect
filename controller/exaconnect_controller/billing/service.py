@@ -2,7 +2,7 @@
 calendar month (UTC), SLA credits, and draft, issued and void invoices; the
 supplier side (carrier and partner payables) and margin.
 
-Charges are worked out on demand from inventory, metering and CommAI's own
+Charges are worked out on demand from inventory, metering and Jibsy's own
 usage and voice rating; nothing is stored until a draft invoice is generated.
 Every line names its plan and keeps its inputs (quantities, prices, the
 samples behind a 95th percentile, the SLA windows behind a credit) so a
@@ -44,7 +44,7 @@ from .core import (
 )
 
 SATELLITE = ("leo", "geo")
-# CommAI meters rated by CommAI Voice itself (commai/voice/billing.py); their
+# Jibsy meters rated by Jibsy Voice itself (commai/voice/billing.py); their
 # money comes onto the plan's invoice from voice_charges, never re-rated here.
 VOICE_METERS = ("voice_minute", "ai_voice_minute")
 METER_RE = re.compile(r"^[a-z][a-z0-9_]{0,40}(:[a-z0-9_*]{1,40})?$")
@@ -177,9 +177,9 @@ def create_price_list(
     meters = _meter_prices(values.get("meter_prices"))
     if plan["product"] == "commai":
         if any(prices[k] for k in MONEY_FIELDS) or circuit is not None or table:
-            raise BillingError("A CommAI price list has a monthly fee and meter prices only.")
+            raise BillingError("A Jibsy price list has a monthly fee and meter prices only.")
     elif meters:
-        raise BillingError("Meter prices belong on a CommAI price list.")
+        raise BillingError("Meter prices belong on a Jibsy price list.")
     eff = values.get("effective_from")
     if isinstance(eff, str):
         try:
@@ -614,8 +614,8 @@ def _price_for(meter: str, prices: dict) -> tuple[Decimal | None, str | None]:
 
 
 def _commai_lines(conn, customer_id, pl: dict, frm: dt.date, to: dt.date) -> list[dict]:
-    """CommAI usage (commai/usage.py's records) at the plan's meter prices, then
-    CommAI Voice's own rated charges (commai/voice/billing.py) as they are."""
+    """Jibsy usage (commai/usage.py's records) at the plan's meter prices, then
+    Jibsy Voice's own rated charges (commai/voice/billing.py) as they are."""
     s_dt, e_dt = at_midnight(frm), at_midnight(to)
     prices = pl["meter_prices"] or {}
     out = []
@@ -816,7 +816,7 @@ def generate(
     now = _today(now)
     _check_period(start, now)
     if product is not None and product not in plans_mod.PRODUCTS:
-        raise BillingError("Choose Connect or CommAI.")
+        raise BillingError("Choose Connect or Jibsy.")
     plans_mod.sync_all(conn)
     end = next_month(start)
     if customer_id is not None:
@@ -1084,8 +1084,8 @@ SERVICE_LABELS = {
     "connectivity": "Carrier links (commit, burst at the 95th percentile, satellite data)",
     "fabric": "Fabric virtual circuits (hourly)",
     "credits": "SLA credits",
-    "commai_usage": "CommAI usage",
-    "voice": "CommAI Voice",
+    "commai_usage": "Jibsy usage",
+    "voice": "Jibsy Voice",
 }
 
 

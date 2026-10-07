@@ -3,7 +3,7 @@ import { api } from "../../api";
 import { useCommaiBase } from "./lib";
 
 /*
- * A small i18n layer for the CommAI screens (ADR 0032). Catalogues live in the
+ * A small i18n layer for the Jibsy screens (ADR 0032). Catalogues live in the
  * controller (commai/i18n/*.json); English (en-GB) is the source and fills any
  * key a draft lacks. A language is offered only once ExaCarib switches it on
  * in the go-live registry; drafts show a "Machine-drafted" label until a
@@ -78,7 +78,7 @@ function make(locale: string, messages: Messages, english: Messages, machineDraf
 
 const Ctx = createContext<I18n>(make("en-GB", {}, {}, false, false, () => {}));
 
-/** Use inside the CommAI screens. */
+/** Use inside the Jibsy screens. */
 export const useT = () => useContext(Ctx);
 
 export function I18nProvider({ children }: { children: ReactNode }) {

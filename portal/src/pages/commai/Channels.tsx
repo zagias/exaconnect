@@ -880,20 +880,20 @@ function WhatsApp({ base }: { base: string }) {
       "Through the provider's Embedded Signup (Twilio or 360dialog). ExaCarib hasn't chosen the provider yet, so this step isn't open.",
       real.length ? "done" : "todo",
     ],
-    ["Number live in CommAI", "The provider's credentials are set on the server and the number is set live.", liveReal ? "done" : "todo"],
+    ["Number live in Jibsy", "The provider's credentials are set on the server and the number is set live.", liveReal ? "done" : "todo"],
     ["At least one approved template", "Needed to message a customer who hasn't written in the last 24 hours.", approved ? "done" : "todo"],
   ];
   return (
     <>
       <Card title="What it takes">
         <p className="muted">
-          CommAI uses the official WhatsApp Business Platform through an approved provider. You can reply freely within 24 hours of a customer's last message; after that, only an
+          Jibsy uses the official WhatsApp Business Platform through an approved provider. You can reply freely within 24 hours of a customer's last message; after that, only an
           approved template can be sent. WhatsApp calling is a separate feature and isn't included.
         </p>
         <ol className="ch-steps">
           {steps.map(([title, help, state]) => (
             <li key={title}>
-              <Pill word={state === "done" ? "Done" : state === "outside" ? "Outside CommAI" : "To do"} health={state === "done" ? "ok" : "warn"} /> <strong>{title}</strong>
+              <Pill word={state === "done" ? "Done" : state === "outside" ? "Outside Jibsy" : "To do"} health={state === "done" ? "ok" : "warn"} /> <strong>{title}</strong>
               <span className="muted small"> {help}</span>
             </li>
           ))}

@@ -1,4 +1,4 @@
--- Connect integrations (ADR 0026). Applied after schema.sql and the CommAI files,
+-- Connect integrations (ADR 0026). Applied after schema.sql and the Jibsy files,
 -- so the durable job queue (jobs) already exists.
 
 -- Every event Connect publishes, as a CloudEvent. The id is stable, so a

@@ -57,7 +57,7 @@ export default function Onboarding() {
   return (
     <>
       <PageHead title="Getting started">
-        Tell CommAI about your business. It drafts a profile, teams, knowledge, routing and starter workflows; you review and approve each one before
+        Tell Jibsy about your business. It drafts a profile, teams, knowledge, routing and starter workflows; you review and approve each one before
         anything goes live.
       </PageHead>
       <SetupForm base={base} onDone={(d, n) => {
@@ -72,7 +72,7 @@ export default function Onboarding() {
       )}
       {dropped.length > 0 && (
         <div className="auto-banner bad" role="status">
-          <strong>Left out of the drafts:</strong> these lines in your website text read like instructions to an AI, so CommAI ignored them.
+          <strong>Left out of the drafts:</strong> these lines in your website text read like instructions to an AI, so Jibsy ignored them.
           <ul className="auto-evidence">
             {dropped.map((l) => (
               <li key={l}>{l}</li>
@@ -116,7 +116,7 @@ function SetupForm({ base, onDone }: { base: string; onDone: (dropped: string[],
       });
       const notes = [
         out.fetched ? `Read your website at ${out.fetched.url}.` : "",
-        out.hours_need_a_person ? "CommAI couldn't read your opening hours into days. Tick “Set hours day by day” above and draft again." : "",
+        out.hours_need_a_person ? "Jibsy couldn't read your opening hours into days. Tick “Set hours day by day” above and draft again." : "",
       ].filter(Boolean);
       onDone(out.dropped_lines, notes.join(" ") || null);
     });
@@ -142,7 +142,7 @@ function SetupForm({ base, onDone }: { base: string; onDone: (dropped: string[],
             Opening hours
             <input value={f.hours} onChange={(e) => set("hours", e.target.value)} placeholder="Mon–Fri 8am–5pm, Sat 9–1, Sun closed" maxLength={500} aria-describedby="hours-hint" />
             <span id="hours-hint" className="small muted">
-              CommAI reads this into days; check it on the profile draft.
+              Jibsy reads this into days; check it on the profile draft.
             </span>
           </label>
         )}
@@ -203,7 +203,7 @@ function SetupForm({ base, onDone }: { base: string; onDone: (dropped: string[],
           Website address
           <input type="url" value={f.website_url} onChange={(e) => set("website_url", e.target.value)} placeholder="https://" maxLength={300} aria-describedby="site-hint" />
           <span id="site-hint" className="small muted">
-            Leave the text below empty and CommAI reads this page itself (public websites only).
+            Leave the text below empty and Jibsy reads this page itself (public websites only).
           </span>
         </label>
         <label className="wide">
@@ -246,7 +246,7 @@ function Drafts({ base, drafts, reload }: { base: string; drafts: Draft[]; reloa
     <>
       <div className="auto-banner" role="status">
         {pending ? `${pending} draft(s) waiting for your review. Approve teams before their routing rules.` : "Everything has been reviewed."}
-        {drafts[0]?.source === "model" ? " Drafted with the AI." : " Drafted by CommAI's rules."}
+        {drafts[0]?.source === "model" ? " Drafted with the AI." : " Drafted by Jibsy's rules."}
       </div>
       <ErrorNote error={act.error} />
       {kinds.map((k) => {

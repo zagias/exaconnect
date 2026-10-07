@@ -1,11 +1,11 @@
-# CommAI for n8n
+# Jibsy for n8n
 
 An n8n community node package (`n8n-nodes-exacarib-commai`) with two nodes and
-one credential type. It uses only the public CommAI API.
+one credential type. It uses only the public Jibsy API.
 
-| Node / operation          | CommAI endpoint                                             |
+| Node / operation          | Jibsy endpoint                                             |
 | ------------------------- | ----------------------------------------------------------- |
-| CommAI Trigger            | `POST /webhooks` on activate, `DELETE /webhooks/{id}` on deactivate, `GET /webhooks` to check, `GET /event-types` for the list |
+| Jibsy Trigger            | `POST /webhooks` on activate, `DELETE /webhooks/{id}` on deactivate, `GET /webhooks` to check, `GET /event-types` for the list |
 | Create Contact            | `POST /contacts`                                            |
 | Find Contacts             | `GET /contacts?q=`                                          |
 | Start Conversation        | `POST /conversations`                                       |
@@ -20,7 +20,7 @@ delivery's `X-ExaCarib-Signature` (HMAC-SHA256 of `<timestamp>.<body>`,
 five-minute window) before the workflow runs.
 
 A test in `controller/tests/test_commai_automation_apps.py` checks that every
-endpoint used here exists in the CommAI OpenAPI schema.
+endpoint used here exists in the Jibsy OpenAPI schema.
 
 ## Building and publishing (Dudley)
 

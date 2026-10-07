@@ -116,7 +116,7 @@ def request_link(
     scopes = check_scopes(scopes)
     cust = conn.execute("SELECT id FROM customers WHERE id = %s AND sandbox_of IS NULL", (customer_id,)).fetchone()
     if cust is None:
-        raise PartnerError("No business with that id. Ask the business for its id in CommAI settings.", 404)
+        raise PartnerError("No business with that id. Ask the business for its id in Jibsy settings.", 404)
     if conn.execute(
         """SELECT 1 FROM commai_partner_links WHERE partner_id = %s AND customer_id = %s
            AND status IN ('pending', 'active')""",

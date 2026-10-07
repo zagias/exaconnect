@@ -1,4 +1,4 @@
--- CommAI AI agents (ADR 0019): knowledge, knowledge gaps, AI runs with their
+-- Jibsy AI agents (ADR 0019): knowledge, knowledge gaps, AI runs with their
 -- sources, customer memory and browser calls. Idempotent; applied at startup.
 
 -- Approved business content. Only approved sources are ever given to the AI.

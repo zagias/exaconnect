@@ -1,4 +1,4 @@
-"""CommAI self-service (ADR 0037): staff "My settings" and the help centre for a
+"""Jibsy self-service (ADR 0037): staff "My settings" and the help centre for a
 business's own customers: magic links, end-user isolation, bookings through the
 action service, opt-outs, published articles only, tenant isolation."""
 

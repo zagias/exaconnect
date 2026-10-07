@@ -7,7 +7,7 @@
 - Read: ``GET /messages?q=from:<address> newer_than:30d`` (paged by
   ``nextPageToken``), then ``GET /messages/{id}?format=metadata``.
 - Push: Gmail ``users.watch`` publishes to a Google Cloud Pub/Sub topic whose
-  push subscription calls CommAI's app hook address; the subscription URL
+  push subscription calls Jibsy's app hook address; the subscription URL
   carries the hook's token as ``?token=`` (checked on every delivery). The
   notification names the mailbox and a ``historyId``.
 

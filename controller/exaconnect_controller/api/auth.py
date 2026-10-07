@@ -58,6 +58,8 @@ class UserOut(BaseModel):
     # The plans the current organisation holds ('connect', 'commai'); None: not
     # limited by plan (ExaCarib admins and carrier accounts).
     products: list[str] | None = None
+    # The apps this person may open there (ADR 0041); None: not limited.
+    apps: list[str] | None = None
 
 
 class MembershipOut(BaseModel):
@@ -247,6 +249,7 @@ def me(user: UserDep, request: Request) -> UserOut:
             for m in mine
         ]
         out.products = list(user.products) if user.products is not None else None
+        out.apps = list(user.apps) if user.apps is not None else None
         out.organisation = next((m.name for m in out.memberships if m.customer_id == out.customer_id), None)
     return out
 

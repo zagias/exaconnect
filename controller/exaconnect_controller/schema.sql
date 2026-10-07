@@ -601,7 +601,7 @@ CREATE INDEX IF NOT EXISTS api_keys_user ON api_keys (user_id) WHERE revoked_at 
 -- Billing phase 1 (ADR 0022): plans per product, versioned price lists,
 -- subscriptions, draft and issued invoices, payments.
 --
--- Connect and CommAI are sold as separate plans; an organisation (customer)
+-- Connect and Jibsy are sold as separate plans; an organisation (customer)
 -- may hold either or both. Subscriptions are the source of truth for which
 -- products an organisation holds (billing/plans.py keeps customers.products,
 -- when that column exists, in step with them).
@@ -619,14 +619,14 @@ CREATE TABLE IF NOT EXISTS plans (
 );
 INSERT INTO plans (product, name, description, example, created_by) VALUES
   ('connect', 'Connect Standard', 'Sites, carrier links, Storm Mode and Fabric.', true, 'system:schema'),
-  ('commai', 'CommAI Standard', 'Inbox, channels, AI agents and voice.', true, 'system:schema')
+  ('commai', 'Jibsy Standard', 'Inbox, channels, AI agents and voice.', true, 'system:schema')
 ON CONFLICT (product, name) DO NOTHING;
 
 -- A plan's prices. Every save is a new version with the date it takes effect;
 -- old versions are never changed, so an invoice can always be explained.
 -- customer_id NULL: the plan's list for everyone; set: one organisation's own
 -- prices on that plan (a negotiated contract), which win over the plan's list.
--- Connect uses the site, link, satellite and circuit prices; CommAI uses
+-- Connect uses the site, link, satellite and circuit prices; Jibsy uses
 -- meter_prices. Both have the monthly plan fee, currency, tax and SLA credits.
 CREATE TABLE IF NOT EXISTS price_lists (
   id                      uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -644,7 +644,7 @@ CREATE TABLE IF NOT EXISTS price_lists (
   satellite_per_gb        numeric(14, 4) NOT NULL DEFAULT 0 CHECK (satellite_per_gb >= 0),
   -- NULL: each virtual circuit's own price per Mbps a month (fabric.py).
   circuit_per_mbps_month  numeric(14, 4) CHECK (circuit_per_mbps_month >= 0),
-  -- CommAI: {"ai_reply": "0.02", "message_out:whatsapp": "0.01", ...} per unit.
+  -- Jibsy: {"ai_reply": "0.02", "message_out:whatsapp": "0.01", ...} per unit.
   meter_prices            jsonb NOT NULL DEFAULT '{}',
   -- [{"below_pct": 99.9, "credit_pct": 5}, ...]: credit as a share of the site's monthly fee.
   sla_credits             jsonb NOT NULL DEFAULT '[]',
@@ -668,7 +668,7 @@ INSERT INTO price_lists (plan_id, version, effective_from, label, monthly_fee, m
 SELECT p.id, 1, DATE '2026-01-01', 'Example prices (not real prices)', 49,
        '{"ai_reply": "0.02", "ai_tokens": "0", "copilot": "0.01", "message_out:whatsapp": "0.01",
          "message_out:sms": "0.02", "message_out:email": "0"}', true, 'system:schema'
-FROM plans p WHERE p.product = 'commai' AND p.name = 'CommAI Standard'
+FROM plans p WHERE p.product = 'commai' AND p.name = 'Jibsy Standard'
   AND NOT EXISTS (SELECT 1 FROM price_lists x WHERE x.plan_id = p.id AND x.customer_id IS NULL);
 
 -- An organisation's plans. ends_on is exclusive; NULL means open-ended. A plan

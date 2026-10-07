@@ -231,7 +231,7 @@ function RequestLink({ base, reload }: { base: string; reload: () => void }) {
   };
   return (
     <Card title="Ask to manage a business">
-      <p className="muted small">The business gives you its id from CommAI. It then accepts in its own portal and chooses what you may do.</p>
+      <p className="muted small">The business gives you its id from Jibsy. It then accepts in its own portal and chooses what you may do.</p>
       <form className="form" onSubmit={submit}>
         <label>
           Business id

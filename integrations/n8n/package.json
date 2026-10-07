@@ -1,7 +1,7 @@
 {
   "name": "n8n-nodes-exacarib-commai",
   "version": "1.0.0",
-  "description": "n8n community nodes for ExaCarib Connect CommAI.",
+  "description": "n8n community nodes for Jibsy by ExaCarib.",
   "keywords": ["n8n-community-node-package"],
   "license": "MIT",
   "main": "index.js",

@@ -1,5 +1,5 @@
 -- Inbox, channel and API gap fixes for phases 0 to 2 (ADR 0038).
--- Applied after the other CommAI files, idempotently, at startup.
+-- Applied after the other Jibsy files, idempotently, at startup.
 
 -- Routing by intent and skills. The AI writes the intent it judged; a rule may
 -- match on it, and a rule may require skills of the person (and team) it picks.

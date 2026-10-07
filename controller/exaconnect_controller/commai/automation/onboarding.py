@@ -1,9 +1,9 @@
 """AI onboarding (ADR 0020, ADR 0039).
 
-The business gives its website (pasted text, or an address CommAI fetches
+The business gives its website (pasted text, or an address Jibsy fetches
 from the public internet only: see website.py), business type, opening
 hours (per day, or written out and read into days), locations, channels and
-teams. CommAI drafts a profile, teams, knowledge
+teams. Jibsy drafts a profile, teams, knowledge
 entries, routing rules and starter workflows. Nothing goes live until a
 person approves each draft.
 

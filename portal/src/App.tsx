@@ -1,8 +1,11 @@
 import { lazy, Suspense, useEffect } from "react";
-import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { Link, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { PRODUCT_NAMES } from "./api";
+import { APP_INFO, areaFor, myApps, type AppId } from "./apps";
 import { AuthGate, useAuth } from "./auth";
 import { CustomerProvider } from "./customer";
 import Account from "./pages/Account";
+import AppsAndPlans from "./pages/AppsAndPlans";
 import Ask from "./pages/Ask";
 import Insights from "./pages/Insights";
 import InvitePage, { inviteToken, PENDING_INVITE } from "./pages/Invite";
@@ -22,9 +25,10 @@ import Overview from "./pages/Overview";
 import { SiteList, SitePage } from "./pages/Sites";
 import Traffic from "./pages/Traffic";
 import { Shell } from "./shell";
+import { PageHead } from "./ui";
 
-// CommAI loads on first visit, so Connect screens stay light.
-const CommAI = lazy(() => import("./pages/commai"));
+// Jibsy loads on first visit, so Connect screens stay light.
+const Jibsy = lazy(() => import("./pages/commai"));
 
 export default function App() {
   // An invitation link works signed out, so it sits outside the sign-in gate.
@@ -59,11 +63,18 @@ function Layout() {
     }
     if (pending) navigate(`/invite/${encodeURIComponent(pending)}`);
   }, [navigate]);
-  // An organisation with CommAI but not Connect starts in CommAI.
-  const connect = !user?.products || user.products.includes("connect");
+  // Someone with Jibsy but not Connect starts in Jibsy (ADR 0041).
+  const path = useLocation().pathname;
+  const mine = myApps(user);
+  const connect = mine.includes("connect");
+  const area = areaFor(path);
+  // A screen of an app the person can't open says why, instead of failing call by call.
+  const blocked = !carrier && !admin && area !== "account" && !mine.includes(area) && !(path === "/" && mine.length > 0);
   return (
     <Shell>
-      {carrier ? (
+      {blocked ? (
+        <NoAccess app={area as AppId} mine={mine} />
+      ) : carrier ? (
         <Routes>
           <Route path="/account" element={<Account />} />
           <Route path="/notices" element={<Notices />} />
@@ -90,11 +101,12 @@ function Layout() {
           <Route path="/carrier" element={<Metering carrierView />} />
           <Route path="/account" element={<Account />} />
           <Route path="/account/people" element={<People />} />
+          <Route path="/account/apps" element={<AppsAndPlans />} />
           <Route
             path="/commai/*"
             element={
-              <Suspense fallback={<p className="muted">Loading CommAI…</p>}>
-                <CommAI />
+              <Suspense fallback={<p className="muted">Loading Jibsy…</p>}>
+                <Jibsy />
               </Suspense>
             }
           />
@@ -103,6 +115,38 @@ function Layout() {
         </Routes>
       )}
     </Shell>
+  );
+}
+
+/** A screen of an app the person can't open: why, and where to go instead. */
+function NoAccess({ app, mine }: { app: AppId; mine: AppId[] }) {
+  const { user } = useAuth();
+  const onPlan = !user?.products || user.products.includes(app);
+  const manager = user?.org_role === "owner" || user?.org_role === "admin";
+  const name = PRODUCT_NAMES[app];
+  const org = user?.organisation ?? "Your organisation";
+  return (
+    <>
+      <PageHead eyebrow={APP_INFO[app].full} title={onPlan ? `You don't have access to ${name}` : `${name} isn't on your plan`}>
+        {onPlan
+          ? `${org} has ${name}, but you haven't been given it. Ask an owner or admin of your organisation.`
+          : manager
+            ? `${org} doesn't have ${name} yet. You can ask ExaCarib to add it.`
+            : `${org} doesn't have ${name}. An owner or admin can ask ExaCarib to add it.`}
+      </PageHead>
+      <div className="actions" style={{ justifyContent: "flex-start", marginTop: 16 }}>
+        {mine.map((a) => (
+          <Link key={a} className="button" to={APP_INFO[a].home}>
+            Go to {APP_INFO[a].name}
+          </Link>
+        ))}
+        {!onPlan && manager && (
+          <Link className="button secondary" to="/account/apps">
+            Apps and plans
+          </Link>
+        )}
+      </div>
+    </>
   );
 }
 

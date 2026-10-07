@@ -1,6 +1,6 @@
-// REST hook: subscribing adds a CommAI webhook endpoint for one event type;
+// REST hook: subscribing adds a Jibsy webhook endpoint for one event type;
 // unsubscribing deletes it. Each delivery is checked against the signing
-// secret CommAI returned when the endpoint was made.
+// secret Jibsy returned when the endpoint was made.
 const { api, verify } = require('../lib');
 
 const tidy = (e) => ({ id: e.id, type: e.type, created_at: e.created_at || e.at, data: e.data || {} });
@@ -10,7 +10,7 @@ module.exports = {
   noun: 'Event',
   display: {
     label: 'New Event',
-    description: 'Triggers when something happens in CommAI, such as a new conversation or a handover.',
+    description: 'Triggers when something happens in Jibsy, such as a new conversation or a handover.',
   },
   operation: {
     type: 'hook',
@@ -25,7 +25,7 @@ module.exports = {
     perform: async (z, bundle) => {
       const raw = bundle.rawRequest || {};
       if (!verify(bundle.subscribeData.secret, raw.headers, raw.content)) {
-        throw new z.errors.HaltedError('The delivery was not signed by CommAI.');
+        throw new z.errors.HaltedError('The delivery was not signed by Jibsy.');
       }
       return [tidy(bundle.cleanedRequest)];
     },

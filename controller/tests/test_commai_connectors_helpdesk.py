@@ -164,7 +164,7 @@ def test_zendesk_webhook_signature_and_status_sync(client, real_env, fake):
         {"subject": "S", "description": "D", "email": "a@example.com", "conversation_id": conv},
         "k1",
     )
-    # Webhook set-up from CommAI: the signing secret is Zendesk's.
+    # Webhook set-up from Jibsy: the signing secret is Zendesk's.
     fake.on("POST", ZD + r"/api/v2/webhooks$", (201, {"webhook": {"id": "01HW"}}))
     fake.on(
         "GET",

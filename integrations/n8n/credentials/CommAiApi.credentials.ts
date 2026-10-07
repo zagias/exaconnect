@@ -2,7 +2,7 @@ import type { IAuthenticateGeneric, ICredentialTestRequest, ICredentialType, INo
 
 export class CommAiApi implements ICredentialType {
   name = 'commAiApi';
-  displayName = 'ExaCarib Connect CommAI API';
+  displayName = 'Jibsy by ExaCarib API';
   properties: INodeProperties[] = [
     {
       displayName: 'Connect address',
@@ -18,7 +18,7 @@ export class CommAiApi implements ICredentialType {
       type: 'string',
       typeOptions: { password: true },
       default: '',
-      description: 'A CommAI API key from the portal (Admin, API keys). It starts with exa_.',
+      description: 'A Jibsy API key from the portal (Admin, API keys). It starts with exa_.',
       required: true,
     },
   ];

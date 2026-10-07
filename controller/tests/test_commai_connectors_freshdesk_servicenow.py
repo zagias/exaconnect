@@ -97,11 +97,11 @@ def test_freshdesk_tickets_paging_idempotency_and_webhook(client, real_env, fake
 
     r = client.post(f"{base(b)}/connectors/freshdesk/webhooks", headers=b["agent"]["h"])
     assert r.status_code == 200 and r.json()["manual"]
-    secret = r.json()["headers"]["X-CommAI-Token"]
+    secret = r.json()["headers"]["X-Jibsy-Token"]
     body = json.dumps({"ticket_id": "55", "status": "Resolved", "id": "55-Resolved"}).encode()
-    assert deliver(b["id"], "freshdesk", {"X-CommAI-Token": "wrong"}, body) is None
+    assert deliver(b["id"], "freshdesk", {"X-Jibsy-Token": "wrong"}, body) is None
     assert deliver(b["id"], "freshdesk", {}, body) is None
-    evs = deliver(b["id"], "freshdesk", {"X-CommAI-Token": secret}, body)
+    evs = deliver(b["id"], "freshdesk", {"X-Jibsy-Token": secret}, body)
     assert evs[0]["data"]["status"] == "solved"
     assert q("SELECT status FROM commai_ticket_links WHERE ticket_id = '55'")[0]["status"] == "solved"
 
@@ -141,8 +141,8 @@ def test_servicenow_incident_lifecycle_and_signed_rule(client, real_env, fake):
     secret = hook(b["id"], "servicenow")["secret"]
     assert secret in r.json()["business_rule"]
     body = json.dumps({"id": f"{SYS}-3", "sys_id": SYS, "number": "INC0010001", "state": "7"}).encode()
-    assert deliver(b["id"], "servicenow", {"X-CommAI-Signature": kit.hmac_b64("other", body)}, body) is None
-    evs = deliver(b["id"], "servicenow", {"X-CommAI-Signature": kit.hmac_b64(secret, body)}, body)
+    assert deliver(b["id"], "servicenow", {"X-Jibsy-Signature": kit.hmac_b64("other", body)}, body) is None
+    evs = deliver(b["id"], "servicenow", {"X-Jibsy-Signature": kit.hmac_b64(secret, body)}, body)
     assert evs[0]["data"] == {"ticket_id": SYS, "status": "closed"}
 
 

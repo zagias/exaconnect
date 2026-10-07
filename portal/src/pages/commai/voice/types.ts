@@ -1,4 +1,4 @@
-/** Shapes returned by the CommAI voice API (ADR 0021). Money is always a string. */
+/** Shapes returned by the Jibsy voice API (ADR 0021). Money is always a string. */
 
 export interface PriceImpact {
   currency: string;

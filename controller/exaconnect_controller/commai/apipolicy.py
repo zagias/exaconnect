@@ -8,7 +8,7 @@
     Link: <successor>; rel="successor-version", <policy>; rel="deprecation"
 - Every change is in the changelog, served at /api/v1/commai/changelog.
 
-`apply(router)` marks the routes listed in DEPRECATIONS before the CommAI
+`apply(router)` marks the routes listed in DEPRECATIONS before the Jibsy
 router is mounted, so the headers come from one place.
 """
 
@@ -97,7 +97,7 @@ def check(deprecations: list[Deprecation] = DEPRECATIONS) -> None:
 
 
 def apply(router, mount_prefix: str = "/api/v1") -> int:
-    """Mark deprecated routes on the CommAI router (before it is included in /api/v1)."""
+    """Mark deprecated routes on the Jibsy router (before it is included in /api/v1)."""
     check()
     return _walk(router.routes, mount_prefix)
 

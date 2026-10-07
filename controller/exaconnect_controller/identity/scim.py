@@ -4,10 +4,10 @@ People created here are 'customer' accounts of the token's business with an
 unusable password: they sign in through the business's SSO. Their rights come
 from their directory groups:
 
-- every group maps to a CommAI team (made on first sight) and a seat
+- every group maps to a Jibsy team (made on first sight) and a seat
   ('agent' replies to customers, 'internal' reads and writes notes only);
 - a group can be asked to grant business-admin rights (the full customer
-  account: Connect, CommAI settings, sign-in set-up). That stays pending until
+  account: Connect, Jibsy settings, sign-in set-up). That stays pending until
   a different business admin, or an ExaCarib admin, approves it.
 
 Without an approved admin group a provisioned person has MEMBER_SCOPES only.
@@ -460,7 +460,7 @@ def service_provider_config(base: str) -> dict:
             {
                 "type": "oauthbearertoken",
                 "name": "Bearer token",
-                "description": "A SCIM token made by the business admin in ExaCarib CommAI settings.",
+                "description": "A SCIM token made by the business admin in Jibsy by ExaCarib settings.",
                 "primary": True,
             }
         ],
@@ -529,7 +529,7 @@ def schemas(base: str) -> list[dict]:
         {
             "id": GROUP,
             "name": "Group",
-            "description": "A directory group; maps to a CommAI team",
+            "description": "A directory group; maps to a Jibsy team",
             "attributes": [
                 _attr("displayName", required=True, uniqueness="server"),
                 _attr("externalId"),

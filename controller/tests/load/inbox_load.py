@@ -1,4 +1,4 @@
-"""CommAI inbox load test (not collected by pytest).
+"""Jibsy inbox load test (not collected by pytest).
 
 Drives the real controller (uvicorn on a local port, its own job worker
 running in-process as in production) against a database you name, with:
@@ -115,7 +115,7 @@ def start_server(url: str, port: int, data_dir: str, log_path: str = "") -> subp
         "EXA_PROXY_SECRET": secrets.token_hex(16),
         "EXA_ADMIN_EMAIL": "admin@loadtest.example",
         "EXA_ADMIN_PASSWORD": secrets.token_urlsafe(16),
-        "EXA_ROUTING_INTERVAL_S": "10",  # > 0 runs the CommAI job worker in-process, as in production
+        "EXA_ROUTING_INTERVAL_S": "10",  # > 0 runs the Jibsy job worker in-process, as in production
         "EXA_NHC_URL": "",
         "EXA_USGS_URL": "",
         "EXA_GDACS_URL": "",

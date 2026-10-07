@@ -1,9 +1,9 @@
 """Inbound webhooks (ADR 0034).
 
 **Generic hooks** let any system (Zapier, Make, n8n, a business's own code)
-start CommAI workflows. Each hook has its own address
+start Jibsy workflows. Each hook has its own address
 (``/api/v1/commai/hooks/<token>``) and secret. A delivery must be signed one
-of two ways, the same ways CommAI signs its own webhooks:
+of two ways, the same ways Jibsy signs its own webhooks:
 
 - Standard Webhooks: ``webhook-id``, ``webhook-timestamp``,
   ``webhook-signature: v1,<base64 HMAC-SHA256 of "<id>.<timestamp>.<body>">``

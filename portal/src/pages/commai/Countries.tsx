@@ -7,7 +7,7 @@ import { Card, PageHead, useAction } from "../../ui";
 import { useCommaiBase } from "./lib";
 import "./channels.css";
 
-/* Countries (ADR 0029): what CommAI can do where. Shapes from
+/* Countries (ADR 0029): what Jibsy can do where. Shapes from
    controller/exaconnect_controller/commai/channels/countries.py (matrix_for). */
 
 interface Fact {
@@ -99,7 +99,7 @@ export default function Countries() {
   return (
     <>
       <PageHead title="Countries">
-        What CommAI can do in each country. A country is switched on only after its written checks pass.
+        What Jibsy can do in each country. A country is switched on only after its written checks pass.
       </PageHead>
       <p className="callout small">
         <strong>Unverified research.</strong> The details below come from desk research and have not yet been checked by someone who knows each country's rules. Treat them as a guide, not as

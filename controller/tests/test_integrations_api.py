@@ -80,7 +80,7 @@ def test_prometheus_is_scoped_to_the_keys_organisation(client, L):
     # The other organisation sees only itself.
     theirs = client.get("/api/v1/metrics", headers=_key(client, other["h"], ["metrics"])).text
     assert 'site="harbour"' in theirs and mine not in theirs and "site-a" not in theirs
-    # A metrics-only key reaches nothing else; a CommAI-only key can't scrape.
+    # A metrics-only key reaches nothing else; a Jibsy-only key can't scrape.
     assert client.get("/api/v1/sites", headers=key).status_code == 403
     assert client.get("/api/v1/metrics", headers=_key(client, L["customer"], ["commai:read"])).status_code == 403
     assert client.get("/api/v1/metrics").status_code == 401

@@ -211,6 +211,6 @@ def reject_action(customer_id: str, run_id: str, body: RejectIn, user: UserDep) 
 
 @router.get("/connectors")
 def catalogue(customer_id: str, user: UserDep) -> list[dict]:
-    """Every app CommAI can connect to and the exact actions each supports."""
+    """Every app Jibsy can connect to and the exact actions each supports."""
     access.check(user, customer_id, "commai:read")
     return connectors.catalogue()

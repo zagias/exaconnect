@@ -52,7 +52,7 @@ def test_read_only_connect_key(client, admin_headers):
     # Reads work across the network API...
     assert client.get(f"/api/v1/customers/{cid}/circuits", headers=h).status_code == 200
     assert client.get("/api/v1/sites", headers=h).status_code == 200
-    # ...but nothing changes, and CommAI stays out of reach.
+    # ...but nothing changes, and Jibsy stays out of reach.
     r = client.patch(f"/api/v1/customers/{cid}/settings", json={"shadow_mode": True}, headers=h)
     assert r.status_code == 403
     assert client.post("/api/v1/auth/api-keys", json={"name": "more"}, headers=h).status_code == 403

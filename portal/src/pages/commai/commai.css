@@ -1,4 +1,4 @@
-/* Shared bits for CommAI screens. */
+/* Shared bits for Jibsy screens. */
 .plain-list { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 6px; }
 .row-between { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
 

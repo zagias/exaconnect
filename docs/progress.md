@@ -377,3 +377,11 @@ controller-outage check (demo step 7) stopped the shared controller on every lab
 run, so the live portal answered 502 for about two minutes after each merge. The
 check now cuts the lab agents' route to the controller instead, and confirms the
 live controller stayed up.
+
+**One portal, two apps** (ADR 0041, 2026-10-07). Connect and Jibsy by ExaCarib
+(formerly CommAI; code names stay `commai`) share one portal with an app
+switcher; the sidebar shows one app's menu at a time and Account is shared.
+Owners and admins choose which apps each person may open on People and can ask
+ExaCarib to add an app on Apps and plans. Checked in a browser as an ExaCarib
+admin, an owner with both apps, a Connect-only person, a Jibsy-only person, and
+the owner and a member of a Connect-only organisation: 184 checks pass.

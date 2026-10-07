@@ -1,21 +1,21 @@
 {
   "name": "exacarib-connect-commai",
-  "label": "ExaCarib Connect CommAI",
-  "description": "Conversations, contacts, notes and approved actions in ExaCarib Connect CommAI.",
+  "label": "Jibsy by ExaCarib",
+  "description": "Conversations, contacts, notes and approved actions in Jibsy by ExaCarib.",
   "language": "en",
   "base": {
     "baseUrl": "{{connection.baseUrl}}/api/v1/commai/customers/{{connection.customerId}}",
     "headers": { "Authorization": "Bearer {{connection.apiKey}}" },
     "response": {
       "error": {
-        "message": "CommAI said: {{ifempty(body.detail, statusMessage)}}",
-        "429": { "type": "RateLimitError", "message": "CommAI asked us to slow down." }
+        "message": "Jibsy said: {{ifempty(body.detail, statusMessage)}}",
+        "429": { "type": "RateLimitError", "message": "Jibsy asked us to slow down." }
       }
     }
   },
   "connection": {
     "type": "basic",
-    "label": "CommAI API key",
+    "label": "Jibsy API key",
     "parameters": [
       { "name": "baseUrl", "type": "url", "label": "Connect address", "required": true },
       { "name": "apiKey", "type": "password", "label": "API key (starts with exa_)", "required": true }
@@ -34,7 +34,7 @@
   "webhooks": {
     "commai_events": {
       "type": "dedicated",
-      "label": "CommAI events",
+      "label": "Jibsy events",
       "parameters": [
         { "name": "events", "type": "array", "label": "Events", "spec": { "type": "text" }, "required": true }
       ],

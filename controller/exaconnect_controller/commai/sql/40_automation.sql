@@ -1,4 +1,4 @@
--- CommAI automation (ADR 0020): integration setup, workflows, onboarding,
+-- Jibsy automation (ADR 0020): integration setup, workflows, onboarding,
 -- the platform assistant, support cases and outcome reports. Idempotent.
 
 -- Integration setup as a product. The token itself is never in this table:

@@ -463,7 +463,7 @@ def contact(
                 conn,
                 cid,
                 conv["id"],
-                author="CommAI",
+                author="Jibsy",
                 body=(
                     f"Sent from the help centre without signing in. The email address ({email}) was typed, "
                     "not checked: reply by starting an email conversation to it."

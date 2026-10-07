@@ -1,7 +1,7 @@
 -- More ready-made connectors (ADR 0035): helpdesks, team chat, commerce,
 -- payments and knowledge sources. Idempotent.
 
--- A helpdesk ticket linked to a CommAI conversation; the status is synced
+-- A helpdesk ticket linked to a Jibsy conversation; the status is synced
 -- back from the helpdesk's webhook.
 CREATE TABLE IF NOT EXISTS commai_ticket_links (
   customer_id      uuid NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS commai_ticket_links (
 CREATE INDEX IF NOT EXISTS commai_ticket_links_conv ON commai_ticket_links (conversation_id);
 
 -- A staff member's Slack or Teams user, linked by a business admin to their
--- CommAI sign-in, so a button press there acts as that person.
+-- Jibsy sign-in, so a button press there acts as that person.
 CREATE TABLE IF NOT EXISTS commai_chat_identities (
   customer_id    uuid NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
   app            text NOT NULL,

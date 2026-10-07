@@ -1,4 +1,4 @@
-"""CommAI foundation: inbox, notes isolation, one handler at a time, durable
+"""Jibsy foundation: inbox, notes isolation, one handler at a time, durable
 jobs, idempotency, webhooks and safe actions (ADR 0016)."""
 
 import datetime as dt

@@ -367,7 +367,7 @@ function NewPort({ base, onMade }: { base: string; onMade: (id: string) => void 
     </label>
   );
   return (
-    <Card title="Bring a number to ExaCarib Connect">
+    <Card title="Bring a number to Jibsy">
       <p className="muted small">The number keeps working with your current provider until the agreed switch-over date.</p>
       <form className="voice-when" onSubmit={submit}>
         {field("e164", "Number (+country code)")}

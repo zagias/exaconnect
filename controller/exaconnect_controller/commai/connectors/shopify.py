@@ -7,7 +7,7 @@ apps. ExaCarib registers one Shopify app in the Partner Dashboard
 (EXA_SHOPIFY_CLIENT_ID, EXA_SHOPIFY_CLIENT_SECRET) with the scopes
 read_orders and write_orders, the redirect URI
 {EXA_PUBLIC_URL}/api/v1/commai/oauth/shopify/callback, and the mandatory
-privacy webhooks pointed at CommAI. Each shop signs in at
+privacy webhooks pointed at Jibsy. Each shop signs in at
 https://{shop}.myshopify.com/admin/oauth/authorize; offline tokens don't expire.
 
 - Verified customer: an order is shown only when the order number and the
@@ -226,7 +226,7 @@ class Shopify(MoreConnector):
         "One Shopify app in the Partner Dashboard: EXA_SHOPIFY_CLIENT_ID and EXA_SHOPIFY_CLIENT_SECRET, scopes "
         "read_orders and write_orders, the privacy webhooks, and Shopify's app review before public listing."
     )
-    webhooks = "Order and refund updates, signed with X-Shopify-Hmac-Sha256 (set up from CommAI)."
+    webhooks = "Order and refund updates, signed with X-Shopify-Hmac-Sha256 (set up from Jibsy)."
     docs_url = "https://shopify.dev/docs/api/admin-graphql"
     actions = {
         "find_order": ActionSpec(
@@ -340,7 +340,7 @@ class Shopify(MoreConnector):
             )
             if parent is None:
                 raise ConnectorError("The order has no captured payment to refund.", "input")
-            note = f"{inputs.get('reason') or 'Refund'} (CommAI {ref})"
+            note = f"{inputs.get('reason') or 'Refund'} (Jibsy {ref})"
             payload = {
                 "orderId": o["id"],
                 "note": note,
@@ -453,7 +453,7 @@ class Shopify(MoreConnector):
                 f"shopify:{event['data'].get('order', '')}",
             )
         elif event["type"] == "commerce.privacy_request" and event["data"]["topic"] == "shop/redact":
-            # The shop removed the app: forget its sign-in. CommAI keeps no shop customer records.
+            # The shop removed the app: forget its sign-in. Jibsy keeps no shop customer records.
             oauth.sign_out(conn, connection)
 
 

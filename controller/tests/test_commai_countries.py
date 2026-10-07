@@ -113,7 +113,7 @@ def test_sms_to_a_country_not_switched_on_is_refused_with_a_reason(client):
     # A country outside the matrix (Sint Maarten, +1 721).
     _inbound(client, b, sms, "+17215550100")
     r = _reply(client, b, _conv(b, "+17215550100"))
-    assert r.status_code == 422 and "not in CommAI's country list" in r.json()["detail"]
+    assert r.status_code == 422 and "not in Jibsy's country list" in r.json()["detail"]
     # Switched on for b only: another business is still refused.
     other = business(client, "Other Bank", ("agent",))
     osms = _sms_account(client, other, "+18685550200")

@@ -1,5 +1,5 @@
 """Shared accounts (ADR 0023), enforcement: tenant isolation across a broad
-sample of Connect and CommAI endpoints, viewers are read-only everywhere,
+sample of Connect and Jibsy endpoints, viewers are read-only everywhere,
 switching organisation changes what you see, product plans, and people
 provisioned by a business's directory (SCIM)."""
 
@@ -77,7 +77,7 @@ def world(client, admin_headers):
     }
     out["h_a"] = _login(client, "owner@a.example")
     out["h_b"] = _login(client, "owner@b.example")
-    # One CommAI contact in each, made through the API.
+    # One Jibsy contact in each, made through the API.
     for k, h, cid in (("contact_a", out["h_a"], a), ("contact_b", out["h_b"], b)):
         r = client.post(
             f"{API}/commai/customers/{cid}/contacts",
@@ -110,7 +110,7 @@ def test_every_organisation_scoped_read_refuses_another_organisation(client, wor
     """A member of org A asks for org B on every organisation-scoped GET: each
     one refuses, and none of B's records come back."""
     paths = _customer_gets(client)
-    assert len(paths) >= 50  # a broad sample: Connect, sign-in, people and CommAI
+    assert len(paths) >= 50  # a broad sample: Connect, sign-in, people and Jibsy
     assert any(p.startswith("/api/v1/commai/") for p in paths)
     assert any(p.startswith("/api/v1/customers/") for p in paths)
     allowed_own = 0
@@ -169,7 +169,7 @@ def test_another_organisations_objects_are_out_of_reach(client, world):
         assert r.status_code in (403, 404), r.text
     r = client.get(f"{API}/inventory", params={"customer_id": b}, headers=h)
     assert r.status_code in (200, 403) and b not in r.text and CUSTOMER not in r.text
-    # CommAI records: by B's path refused; by A's path, B's contact isn't there.
+    # Jibsy records: by B's path refused; by A's path, B's contact isn't there.
     assert client.get(f"{API}/commai/customers/{b}/contacts/{world['contact_b']}", headers=h).status_code == 403
     assert (
         client.get(f"{API}/commai/customers/{world['a']}/contacts/{world['contact_b']}", headers=h).status_code == 404
@@ -333,11 +333,11 @@ def test_connect_only_and_commai_only_organisations(client, world, admin_headers
         assert client.get(p, headers=world["h_a"]).status_code == 200, p
     for p in (f"{API}/commai/customers/{a}/contacts", f"{API}/commai/customers/{a}/conversations"):
         r = client.get(p, headers=world["h_a"])
-        assert r.status_code == 403 and "CommAI plan" in r.json()["detail"], p
+        assert r.status_code == 403 and "Jibsy plan" in r.json()["detail"], p
     r = client.post(f"{API}/commai/customers/{a}/contacts", json={"name": "x"}, headers=world["h_a"])
-    assert r.status_code == 403 and "CommAI plan" in r.json()["detail"]
+    assert r.status_code == 403 and "Jibsy plan" in r.json()["detail"]
 
-    # B holds CommAI only.
+    # B holds Jibsy only.
     assert client.get(f"{API}/commai/customers/{b}/contacts", headers=world["h_b"]).status_code == 200
     for p in (
         f"{API}/classes",
@@ -372,7 +372,7 @@ def test_connect_only_and_commai_only_organisations(client, world, admin_headers
 
 
 def test_switching_between_plans(client, world, admin_headers):
-    """A person in a Connect-only and a CommAI-only organisation gets each plan
+    """A person in a Connect-only and a Jibsy-only organisation gets each plan
     only while acting for the organisation that holds it."""
     a, b = world["a"], world["b"]
     _set_products(client, admin_headers, a, ["connect"])
@@ -382,7 +382,7 @@ def test_switching_between_plans(client, world, admin_headers):
     assert client.post(f"{API}/invites/{r.json()['token']}/accept", json={}, headers=h).status_code == 200
     me = client.get(f"{API}/auth/me", headers=h).json()
     assert {m["name"]: m["products"] for m in me["memberships"]} == {"Org A": ["connect"], CUSTOMER: ["commai"]}
-    # Accepting moved the session into B: CommAI yes, Connect no.
+    # Accepting moved the session into B: Jibsy yes, Connect no.
     assert client.get(f"{API}/commai/customers/{b}/contacts", headers=h).status_code == 200
     assert client.get(f"{API}/classes", headers=h).status_code == 403
     client.post(f"{API}/auth/organisation", json={"customer_id": a}, headers=h)
@@ -479,7 +479,7 @@ def test_scim_provisioned_people_are_unaffected(client, world):
     assert m == {"role": "member", "managed_by": "scim"}
     h = _sign_in_as("ana@b.example")
     me = client.get(f"{API}/auth/me", headers=h).json()
-    # Same rights as before shared accounts: CommAI work, no network API.
+    # Same rights as before shared accounts: Jibsy work, no network API.
     assert me["scopes"] == ["commai:read", "commai:write", "commai:notes"]
     assert me["memberships"][0]["managed_by"] == "scim" and me["org_role"] == "member"
     assert client.get(f"{API}/commai/customers/{b}/contacts", headers=h).status_code == 200

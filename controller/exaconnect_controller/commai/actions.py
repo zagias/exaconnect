@@ -211,10 +211,10 @@ def _confirm(conn, run: dict, result: dict) -> None:
         channels.get(conv["channel"]).check_send(conn, conv, body, "")
     except channels.SendBlocked as e:
         inbox.add_note(
-            conn, conv["customer_id"], conv["id"], author="CommAI", body=f"Confirmation not sent ({e}): {body}"
+            conn, conv["customer_id"], conv["id"], author="Jibsy", body=f"Confirmation not sent ({e}): {body}"
         )
         return
-    inbox._insert_out(conn, conv, body, "system", "CommAI")
+    inbox._insert_out(conn, conv, body, "system", "Jibsy")
 
 
 def _fail(conn, run: dict, error: str, cause: str) -> None:

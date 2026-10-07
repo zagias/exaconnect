@@ -1,9 +1,9 @@
-# CommAI integration catalogue
+# Jibsy integration catalogue
 
 Operator note for ADR 0034. Code: `controller/exaconnect_controller/commai/connectors/`
 (one file per app; the shared kit is `connectors/kit.py`), `commai/standards/`,
 `commai/channels/mailbox.py` and `commai/api/integrations_catalogue.py`. Portal:
-CommAI → App catalogue (`portal/src/pages/commai/Catalogue.tsx`).
+Jibsy → App catalogue (`portal/src/pages/commai/Catalogue.tsx`).
 
 ## How every app works
 
@@ -75,7 +75,7 @@ appear in the same catalogue.
 | IMAP and SMTP (RFC 9051, 2177, 6409) | Any mailbox as an email channel account (provider `mailbox`): new mail by polling or IDLE, replies by SMTP | `channels/mailbox.py` |
 | CloudEvents 1.0 and Standard Webhooks | Event webhooks in either format, signed with ExaCarib v1 and optionally the Standard Webhooks headers; signed inbound webhooks that start workflows | `standards/webhooks_std.py`, `standards/inbound.py` |
 | OpenAPI 3.0 and 3.1 | A business's own REST API as an app (below) | `standards/openapi_import.py`, `connectors/rest_generic.py` |
-| OpenAPI 3.1 and AsyncAPI 3.0 documents | CommAI's own endpoints and event stream, at `/api/v1/commai/openapi.json` and `/api/v1/commai/asyncapi.json`, checked by tests | `standards/api_docs.py` |
+| OpenAPI 3.1 and AsyncAPI 3.0 documents | Jibsy's own endpoints and event stream, at `/api/v1/commai/openapi.json` and `/api/v1/commai/asyncapi.json`, checked by tests | `standards/api_docs.py` |
 | CSV (RFC 4180) | Contacts in and out; conversations out (one row per message) | `standards/exchange.py` |
 
 ### Inbound webhooks (Zapier, Make, n8n, anything)
@@ -92,7 +92,7 @@ signatures use `POST /integrations/{app}/hook`, and each delivery records
 ### A business's own REST API
 
 1. `POST /rest-apps` with the OpenAPI document (JSON, or YAML when PyYAML is
-   installed). CommAI only reads the document. Remote `$ref`s are refused.
+   installed). Jibsy only reads the document. Remote `$ref`s are refused.
 2. `POST /rest-apps/{id}/draft` suggests actions and field mapping. A suggestion can
    only name operations that are in the document.
 3. `PUT /rest-apps/{id}` saves the chosen operations, the field mapping and the
@@ -127,7 +127,7 @@ These have no ready-made app here:
 - **Through your own API (OpenAPI):** Acuity Scheduling, Square Appointments,
   SugarCRM, Odoo, Copper, Insightly, Keap, ActiveCampaign, Mailchimp, Airtable,
   Google Sheets and Notion.
-- **Through webhooks:** Zapier, Make and n8n. CommAI's app definitions for them are
+- **Through webhooks:** Zapier, Make and n8n. Jibsy's app definitions for them are
   in `integrations/zapier`, `integrations/make` and `integrations/n8n`. They use the
   event webhooks (CloudEvents and Standard Webhooks) out, and inbound webhooks in.
 

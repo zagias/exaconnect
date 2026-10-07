@@ -1,4 +1,4 @@
-# CommAI automation: operator note
+# Jibsy automation: operator note
 
 Integrations, workflows, AI onboarding, the platform assistant, and outcome
 and usage reports. Decision record: `docs/adr/0020-commai-automation.md`.
@@ -12,7 +12,7 @@ and usage reports. Decision record: `docs/adr/0020-commai-automation.md`.
   `assistant.py`, `reports.py`, `llm.py`, `redact.py`.
 - `commai/connectors/google_calendar.py` and `commai/connectors/hubspot.py`.
 - `commai/api/automation.py`: the API. `commai/sql/40_automation.sql`: tables.
-- Portal: CommAI → Integrations, Workflows, Set up, Assistant, Reports.
+- Portal: Jibsy → Integrations, Workflows, Set up, Assistant, Reports.
 - Jobs: `workflow.dispatch` (one chain, every 2 s while a workflow is live)
   and `workflow.step`.
 

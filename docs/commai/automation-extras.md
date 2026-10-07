@@ -1,4 +1,4 @@
-# CommAI modules, bill and automation extras: operator note
+# Jibsy modules, bill and automation extras: operator note
 
 Decision record: `docs/adr/0039-commai-modules-bill-and-automation-extras.md`.
 Tables: `controller/exaconnect_controller/commai/sql/70_automation_extras.sql`.
@@ -16,7 +16,7 @@ Tables: `controller/exaconnect_controller/commai/sql/70_automation_extras.sql`.
 - `commai/automation/support.py`, `api/support.py`: ExaCarib support queue.
 - `commai/qr.py`, `api/qr.py`: QR codes. `api/webphone.py` and
   `deploy/freeswitch/autoload_configs/verto.conf.xml`: browser phone.
-- Portal: CommAI → Approvals, Usage and bill, Support queue (ExaCarib),
+- Portal: Jibsy → Approvals, Usage and bill, Support queue (ExaCarib),
   Voice → Browser phone; QR codes on Phone system; speech input on the
   voice change box and the assistant.
 

@@ -1,4 +1,4 @@
-"""Interface languages for the CommAI screens and the chat widget (ADR 0032).
+"""Interface languages for the Jibsy screens and the chat widget (ADR 0032).
 
 One message catalogue per locale, as JSON next to this file. English
 (en-GB) is the source: every key exists there, and any key a draft lacks
@@ -37,7 +37,7 @@ LOCALES: dict[str, tuple[str, str, str]] = {
 
 LANGUAGE_CRITERIA = {
     "catalogue-reviewed": "A fluent reviewer has signed off the interface and chat widget catalogue in Connect.",
-    "formats": "Dates, numbers and currency checked on the CommAI screens in this locale.",
+    "formats": "Dates, numbers and currency checked on the Jibsy screens in this locale.",
     "support": "Someone on the support rota can answer customers in this language.",
 }
 
@@ -48,7 +48,7 @@ for _code, (_en, _native, _ai) in LOCALES.items():
             _code,
             f"{_en} ({_native})",
             LANGUAGE_CRITERIA,
-            {"locale": _code, "covers": "CommAI screens and the website chat widget"},
+            {"locale": _code, "covers": "Jibsy screens and the website chat widget"},
         )
 
 

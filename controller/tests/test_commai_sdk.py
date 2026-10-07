@@ -1,4 +1,4 @@
-"""The Python SDK's CommAI part against the real API (ADR 0016)."""
+"""The Python SDK's Jibsy part against the real API (ADR 0016)."""
 
 import sys
 import time
@@ -41,7 +41,7 @@ def test_sdk_commai(client, monkeypatch):
 
 
 def test_sdk_commai_coverage(client, monkeypatch):
-    """The SDK reaches the rest of the CommAI API (ADR 0038)."""
+    """The SDK reaches the rest of the Jibsy API (ADR 0038)."""
     b = business(client, people=("agent",))
     monkeypatch.delenv("EXACONNECT_API_KEY", raising=False)
     me = ExaConnect(client=client, email=b["agent"]["email"], password=PASSWORD)

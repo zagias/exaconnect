@@ -297,7 +297,7 @@ function AddConnection({ base, onDone }: { base: string; onDone: () => void }) {
             Client secret
             <input type="password" autoComplete="off" value={secret} onChange={(e) => setSecret(e.target.value)} />
           </label>
-          <p className="muted small wide">The secret goes to the sign-in gateway only. ExaCarib Connect does not keep it.</p>
+          <p className="muted small wide">The secret goes to the sign-in gateway only. ExaCarib does not keep it.</p>
         </>
       )}
       <div className="actions wide">
@@ -365,7 +365,7 @@ function Directory({ base, customerId }: { base: string; customerId: string }) {
     <Card title="Directory sync (SCIM)">
       <p className="muted small" style={{ marginTop: 0 }}>
         Your directory adds, changes and removes people and groups here automatically. Someone removed or switched off
-        there is signed out of ExaCarib at once and their API keys stop working. New people can use CommAI; they get
+        there is signed out of ExaCarib at once and their API keys stop working. New people can use Jibsy; they get
         admin rights only through a group mapping that a second admin approves.
       </p>
       <ErrorNote error={tokens.error} />
@@ -518,7 +518,7 @@ function Directory({ base, customerId }: { base: string; customerId: string }) {
         </div>
       )}
       <p className="muted small">
-        Admin rights give the whole organisation account: Connect, CommAI settings, sign-in settings and API keys. The
+        Admin rights give the whole organisation account: Connect, Jibsy settings, sign-in settings and API keys. The
         person who asks can't approve their own request.
       </p>
       <ErrorNote error={act.error} />

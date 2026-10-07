@@ -1,4 +1,4 @@
-"""Helpers (no tests) for the CommAI automation tests (ADR 0020): a fake HTTP layer for
+"""Helpers (no tests) for the Jibsy automation tests (ADR 0020): a fake HTTP layer for
 the Google Calendar and HubSpot connectors, secure-storage keys, and a job
 runner that fires only what a test asks for (so timers don't fire early)."""
 

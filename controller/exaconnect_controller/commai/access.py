@@ -1,9 +1,9 @@
-"""Who may do what in CommAI (ADR 0016).
+"""Who may do what in Jibsy (ADR 0016).
 
 Three layers, all enforced by the service, never by a prompt:
 
 - The account role (admin, customer, carrier) and the customer it belongs to.
-  Carrier accounts never reach CommAI. Customer accounts reach their own
+  Carrier accounts never reach Jibsy. Customer accounts reach their own
   business only.
 - The seat: 'agent' (the default) replies to customers; 'internal' reads
   conversations and writes private notes but never replies.
