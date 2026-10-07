@@ -46,6 +46,7 @@ def _fail_if_told(connection: dict) -> None:
 class SimulatedCalendar(Connector):
     app = "sim_calendar"
     label = "Example calendar"
+    category = "example"
     description = "A built-in calendar for trying bookings before connecting Google Calendar."
     actions = {
         "find_slots": ActionSpec(
@@ -163,6 +164,7 @@ class SimulatedCalendar(Connector):
 class SimulatedCRM(Connector):
     app = "sim_crm"
     label = "Example CRM"
+    category = "example"
     description = "A built-in CRM for trying leads and tickets before connecting HubSpot."
     actions = {
         "find_contact": ActionSpec(

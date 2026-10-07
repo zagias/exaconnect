@@ -68,6 +68,7 @@ class HubSpot(Connector):
     label = "HubSpot"
     description = "Find and create contacts, leads, deals and tickets in HubSpot CRM."
     auth = "oauth"  # or a private-app token
+    category = "crm"
     actions = {
         "find_contact": ActionSpec(
             "find_contact", "Look up a contact", "read", fields=(Field("email", "Email", "email"),)

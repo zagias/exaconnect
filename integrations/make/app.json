@@ -1,0 +1,167 @@
+{
+  "name": "exacarib-connect-commai",
+  "label": "ExaCarib Connect CommAI",
+  "description": "Conversations, contacts, notes and approved actions in ExaCarib Connect CommAI.",
+  "language": "en",
+  "base": {
+    "baseUrl": "{{connection.baseUrl}}/api/v1/commai/customers/{{connection.customerId}}",
+    "headers": { "Authorization": "Bearer {{connection.apiKey}}" },
+    "response": {
+      "error": {
+        "message": "CommAI said: {{ifempty(body.detail, statusMessage)}}",
+        "429": { "type": "RateLimitError", "message": "CommAI asked us to slow down." }
+      }
+    }
+  },
+  "connection": {
+    "type": "basic",
+    "label": "CommAI API key",
+    "parameters": [
+      { "name": "baseUrl", "type": "url", "label": "Connect address", "required": true },
+      { "name": "apiKey", "type": "password", "label": "API key (starts with exa_)", "required": true }
+    ],
+    "communication": {
+      "url": "{{parameters.baseUrl}}/api/v1/auth/me",
+      "method": "GET",
+      "headers": { "Authorization": "Bearer {{parameters.apiKey}}" },
+      "response": {
+        "error": { "message": "The API key was not accepted." },
+        "data": { "customerId": "{{body.customer_id}}" },
+        "metadata": { "type": "email", "value": "{{body.email}}" }
+      }
+    }
+  },
+  "webhooks": {
+    "commai_events": {
+      "type": "dedicated",
+      "label": "CommAI events",
+      "parameters": [
+        { "name": "events", "type": "array", "label": "Events", "spec": { "type": "text" }, "required": true }
+      ],
+      "attach": {
+        "url": "/webhooks",
+        "method": "POST",
+        "body": { "url": "{{webhook.url}}", "description": "Make", "events": "{{parameters.events}}" },
+        "response": { "data": { "id": "{{body.id}}" } }
+      },
+      "detach": { "url": "/webhooks/{{webhook.id}}", "method": "DELETE" }
+    }
+  },
+  "rpcs": {
+    "eventTypes": {
+      "url": "/event-types",
+      "method": "GET",
+      "response": { "iterate": "{{body}}", "output": { "label": "{{item}}", "value": "{{item}}" } }
+    }
+  },
+  "modules": {
+    "watchEvents": {
+      "type": "instant_trigger",
+      "label": "Watch events",
+      "webhook": "commai_events",
+      "communication": {
+        "output": "{{body}}",
+        "response": { "uid": "{{body.id}}" }
+      },
+      "interface": [
+        { "name": "id", "type": "text", "label": "Event id" },
+        { "name": "type", "type": "text", "label": "Type" },
+        { "name": "created_at", "type": "date", "label": "When" },
+        { "name": "data", "type": "any", "label": "Data" }
+      ]
+    },
+    "listEvents": {
+      "type": "trigger",
+      "label": "Watch events (polling)",
+      "communication": {
+        "url": "/events",
+        "method": "GET",
+        "qs": { "type": "{{parameters.type}}", "after": "{{ifempty(epoch.after, 0)}}", "limit": 100 },
+        "response": {
+          "iterate": "{{body.items}}",
+          "output": "{{item}}",
+          "trigger": { "id": "{{item.seq}}", "date": "{{item.at}}", "type": "id", "order": "asc" }
+        }
+      },
+      "parameters": [{ "name": "type", "type": "select", "label": "Event", "options": "rpc://eventTypes" }]
+    },
+    "createContact": {
+      "type": "action",
+      "label": "Create a contact",
+      "communication": { "url": "/contacts", "method": "POST", "body": "{{omit(parameters, '')}}", "response": { "output": "{{body}}" } },
+      "parameters": [
+        { "name": "name", "type": "text", "label": "Name" },
+        { "name": "email", "type": "email", "label": "Email" },
+        { "name": "phone", "type": "text", "label": "Phone (international format)" },
+        { "name": "external_ref", "type": "text", "label": "Your reference" }
+      ]
+    },
+    "findContacts": {
+      "type": "search",
+      "label": "Find contacts",
+      "communication": {
+        "url": "/contacts",
+        "method": "GET",
+        "qs": { "q": "{{parameters.q}}", "limit": 10 },
+        "response": { "iterate": "{{body.items}}", "output": "{{item}}" }
+      },
+      "parameters": [{ "name": "q", "type": "text", "label": "Name, email or phone", "required": true }]
+    },
+    "startConversation": {
+      "type": "action",
+      "label": "Start a conversation",
+      "communication": { "url": "/conversations", "method": "POST", "body": "{{parameters}}", "response": { "output": "{{body}}" } },
+      "parameters": [
+        { "name": "channel", "type": "select", "label": "Channel", "options": [
+          { "label": "Email", "value": "email" }, { "label": "SMS", "value": "sms" },
+          { "label": "WhatsApp", "value": "whatsapp" }, { "label": "Web chat", "value": "webchat" }
+        ], "default": "email" },
+        { "name": "address", "type": "text", "label": "Email address or phone number", "required": true },
+        { "name": "name", "type": "text", "label": "Name" },
+        { "name": "subject", "type": "text", "label": "Subject" },
+        { "name": "body", "type": "text", "label": "Message", "multiline": true },
+        { "name": "external_id", "type": "text", "label": "Your reference (never starts two conversations)" }
+      ]
+    },
+    "sendMessage": {
+      "type": "action",
+      "label": "Send a message",
+      "communication": {
+        "url": "/conversations/{{parameters.conversation_id}}/messages",
+        "method": "POST",
+        "body": { "body": "{{parameters.body}}", "template": "{{parameters.template}}" },
+        "response": { "output": "{{body}}" }
+      },
+      "parameters": [
+        { "name": "conversation_id", "type": "text", "label": "Conversation", "required": true },
+        { "name": "body", "type": "text", "label": "Message", "multiline": true },
+        { "name": "template", "type": "text", "label": "Template (WhatsApp outside 24 hours)" }
+      ]
+    },
+    "addNote": {
+      "type": "action",
+      "label": "Add an internal note",
+      "communication": {
+        "url": "/conversations/{{parameters.conversation_id}}/notes",
+        "method": "POST",
+        "body": { "body": "{{parameters.body}}" },
+        "response": { "output": "{{body}}" }
+      },
+      "parameters": [
+        { "name": "conversation_id", "type": "text", "label": "Conversation", "required": true },
+        { "name": "body", "type": "text", "label": "Note", "multiline": true, "required": true }
+      ]
+    },
+    "proposeAction": {
+      "type": "action",
+      "label": "Propose an action",
+      "communication": { "url": "/actions", "method": "POST", "body": "{{parameters}}", "response": { "output": "{{body}}" } },
+      "parameters": [
+        { "name": "app", "type": "text", "label": "App (such as zendesk)", "required": true },
+        { "name": "action", "type": "text", "label": "Action (such as create_ticket)", "required": true },
+        { "name": "inputs", "type": "any", "label": "Inputs" },
+        { "name": "conversation_id", "type": "text", "label": "Conversation" }
+      ]
+    }
+  }
+}

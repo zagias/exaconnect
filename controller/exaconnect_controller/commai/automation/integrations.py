@@ -20,7 +20,7 @@ import psycopg
 from psycopg.types.json import Jsonb
 
 from .. import actions, connectors, diagnostics, events, jobs
-from ..connectors import google_calendar, hubspot  # noqa: F401 - registers the real connectors
+from ..connectors import google_calendar, hubspot, installed, kit  # noqa: F401 - registers the real connectors
 from . import llm, oauth
 from .redact import redact
 
@@ -142,14 +142,23 @@ def catalogue(conn: psycopg.Connection, customer_id: Any) -> list[dict]:
         for r in conn.execute("SELECT * FROM integration_connections WHERE customer_id = %s", (customer_id,))
     }
     out = []
-    for item in connectors.catalogue():
-        c = connectors.get(item["app"])
-        ready, why = (True, "") if c.auth == "none" else oauth.ready(item["app"])
+    for c in sorted(connectors.all_connectors(), key=lambda c: c.label):
+        item = kit.describe_any(c)
+        row = rows.get(item["app"])
+        if isinstance(c, kit.KitConnector):
+            # ADR 0028: the real app needs ExaCarib's registration and go-live;
+            # until then a connection runs on the app's stand-in.
+            real, reasons = c.real_ready(conn, customer_id)
+            ready, why = real, " ".join(reasons)
+            simulated = (row is None and not real) or bool(row and row.get("auth_method") == "simulated")
+        else:
+            ready, why = (True, "") if c.auth == "none" else oauth.ready(item["app"])
+            simulated = item["app"].startswith("sim_")
         token_entry = item["app"] == "hubspot"
         out.append(
             {
                 **item,
-                "simulated": item["app"].startswith("sim_"),
+                "simulated": simulated,
                 "sign_in_ready": ready,
                 "not_live_reason": why,
                 "token_entry": token_entry,
@@ -182,6 +191,23 @@ def connect(conn: psycopg.Connection, customer_id: Any, app: str, actor: str) ->
             (row["id"],),
         ).fetchone()
     out: dict = {"connection": public(row)}
+    if isinstance(c, kit.KitConnector) and c.auth != "none":
+        real, reasons = c.real_ready(conn, customer_id)
+        out["sign_in_ready"], out["not_live_reason"] = real, " ".join(reasons)
+        if row["status"] == "draft" and row["auth_status"] in ("none", "") and not real:
+            # ADR 0028: until the real app is ready, the connection runs on its stand-in.
+            row = conn.execute(
+                """UPDATE integration_connections SET status = 'authorised', auth_status = 'not_needed',
+                          auth_method = 'simulated', updated_at = now() WHERE id = %s RETURNING *""",
+                (row["id"],),
+            ).fetchone()
+            out["connection"] = public(row)
+        elif real and c.auth == "oauth":
+            try:
+                out["sign_in_url"] = oauth.start(conn, customer_id, app, actor)
+            except oauth.OAuthError as e:
+                out["sign_in_ready"], out["not_live_reason"] = False, str(e)
+        return out
     if c.auth != "none":
         ready, why = oauth.ready(app)
         out["sign_in_ready"] = ready
@@ -192,7 +218,13 @@ def connect(conn: psycopg.Connection, customer_id: Any, app: str, actor: str) ->
 
 
 def start_sign_in(conn: psycopg.Connection, customer_id: Any, app: str, actor: str) -> str:
-    _connector(app)
+    c = _connector(app)
+    if isinstance(c, kit.KitConnector):
+        real, reasons = c.real_ready(conn, customer_id)
+        if not real:
+            raise SetupError(" ".join(reasons), 409)
+        if c.auth != "oauth":
+            raise SetupError(f"{c.label} uses credentials you enter, not a sign-in page.", 409)
     if _row(conn, customer_id, app) is None:
         connect(conn, customer_id, app, actor)
     try:
@@ -235,6 +267,74 @@ def enter_token(conn: psycopg.Connection, customer_id: Any, app: str, token: str
         raise SetupError(str(e), 409) from None
     events.emit(conn, customer_id, "integration.signed_in", {"app": app, "method": "token", "by": actor}, app)
     return public(_row(conn, customer_id, app))
+
+
+def enter_credentials(conn: psycopg.Connection, customer_id: Any, app: str, creds: dict, actor: str) -> dict:
+    """Secure entry of credentials (API key, user name and app password, client
+    id and secret) for apps that use them (ADR 0028). Checked against the
+    app's own fields, stored encrypted after one live check, never shown again."""
+    c = _connector(app)
+    fields = getattr(c, "credentials", ()) or ()
+    if not fields:
+        raise SetupError(f"{c.label} signs in with its own sign-in page, not credentials.")
+    if isinstance(c, kit.KitConnector):
+        real, reasons = c.real_ready(conn, customer_id)
+        if not real:
+            raise SetupError(" ".join(reasons), 409)
+    clean = {}
+    for f in fields:
+        v = str((creds or {}).get(f.name) or "").strip()
+        if not v:
+            raise SetupError(f"{f.label} is required.", 422)
+        if not re.fullmatch(f.pattern, v):
+            raise SetupError(f"That doesn't look like a {c.label} {f.label.lower()}.", 422)
+        clean[f.name] = v
+    unknown = set(creds or {}) - {f.name for f in fields}
+    if unknown:
+        raise SetupError(f"Unknown fields: {', '.join(sorted(unknown))}.", 422)
+    row = _row(conn, customer_id, app, lock=True)
+    if row is None:
+        connect(conn, customer_id, app, actor)
+        row = _row(conn, customer_id, app, lock=True)
+    from . import vault
+
+    try:
+        with conn.transaction():
+            oauth.set_credentials(conn, row, clean)
+            fresh = _row(conn, customer_id, app)
+            check = c.health(conn, fresh)
+            if not check["ok"] and check["cause"] in ("expired_signin", "permission"):
+                raise SetupError(f"{c.label} did not accept those details: {check['detail']}", 422)
+    except vault.VaultError as e:
+        raise SetupError(str(e), 409) from None
+    events.emit(conn, customer_id, "integration.signed_in", {"app": app, "method": "credentials", "by": actor}, app)
+    return public(_row(conn, customer_id, app))
+
+
+def extra_settings(conn: psycopg.Connection, customer_id: Any, app: str) -> set[str]:
+    """Settings an app takes beyond the common ones: its own (tenant, subdomain,
+    server address...) and, for example apps and stand-ins, simulate_failure."""
+    try:
+        c = connectors.get(app)
+    except KeyError:
+        return set()
+    out = {s.name for s in getattr(c, "settings_fields", ()) or ()}
+    row = _row(conn, customer_id, app)
+    if app.startswith("sim_") or (row and row.get("auth_method") == "simulated"):
+        out.add("simulate_failure")
+    return out
+
+
+def check_settings(app: str, settings: dict) -> None:
+    c = _connector(app)
+    mode = settings.get("simulate_failure")
+    if mode not in (None, "", "expired_signin", "permission", "provider", "rate_limit"):
+        raise SetupError("simulate_failure is expired_signin, permission, provider or rate_limit.", 422)
+    if hasattr(c, "check_settings"):
+        try:
+            c.check_settings(settings)
+        except ValueError as e:
+            raise SetupError(str(e), 422) from None
 
 
 def set_allowed(conn: psycopg.Connection, customer_id: Any, app: str, names: list[str], actor: str) -> dict:

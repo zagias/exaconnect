@@ -68,6 +68,7 @@ class GoogleCalendar(Connector):
     label = "Google Calendar"
     description = "Look up free times and book appointments in a Google calendar."
     auth = "oauth"
+    category = "calendar"
     actions = {
         "find_slots": ActionSpec("find_slots", "Find free times", "read", fields=(Field("date", "Date", "date"),)),
         "book": ActionSpec(
