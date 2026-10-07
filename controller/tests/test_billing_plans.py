@@ -197,7 +197,7 @@ def test_lab_seed_holds_both_plans(client, admin_headers):
     cid = lab(client, connect_only=False)["customer_id"]
     r = client.get(f"/api/v1/customers/{cid}/plans", headers=admin_headers).json()
     assert r["products"] == ["connect", "commai"]
-    assert sorted(s["plan"] for s in r["subscriptions"]) == ["Jibsy Standard", "Connect Standard"]
+    assert sorted(s["plan"] for s in r["subscriptions"]) == ["Connect Standard", "Jibsy Standard"]
 
 
 def test_payables_and_margin(client, admin_headers):

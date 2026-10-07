@@ -12,7 +12,7 @@ def test_openapi_document_is_valid_and_covers_commai(client):
     assert r.status_code == 200, r.text
     doc = r.json()
     assert api_docs.check_openapi(doc) == []
-    assert doc["info"]["title"] == "ExaCarib Connect: Jibsy API"
+    assert doc["info"]["title"] == "Jibsy by ExaCarib API"
     paths = doc["paths"]
     assert paths and all(p.startswith("/api/v1/commai") for p in paths)
     for p in (
