@@ -317,3 +317,16 @@ multilingual replies and browser calls; integrations (Google Calendar,
 HubSpot), workflows from plain English, AI onboarding, the platform
 assistant and outcome reports; and voice stages 2 to 4. Paid providers are
 simulated until Dudley chooses them; see docs/commai/README.md.
+
+**Connect integrations** (ADR 0026, 2026-10-07). One event catalogue and one
+publish point feed standards first: CloudEvents webhooks signed per Standard
+Webhooks with REST hooks for Zapier, Make and n8n, Prometheus/OpenMetrics scoped
+to the API key's organisation, OTLP, syslog (RFC 5424 over UDP, TCP and TLS),
+SNMPv2c traps, IPFIX from the agents, read-only RESTCONF over a YANG module,
+TMF621, TMF622, TMF688 and MEF LSO Sonata. Vendor profiles for Slack, Teams,
+PagerDuty, Opsgenie, ServiceNow, Jira Service Management, Datadog, Splunk,
+Elastic/OpenSearch, Sentinel and Grafana Cloud, NetBox sync, and cloud on-ramp
+adapters for AWS Direct Connect, Azure ExpressRoute, Google Partner Interconnect
+and Megaport. Carriers post faults and maintenance on their own links, and a
+maintenance window moves traffic before it starts. Everything is simulated until
+live sending is on and credentials exist; see docs/integrations.md.

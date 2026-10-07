@@ -295,3 +295,14 @@ def test_engine_moves_off_a_link_under_maintenance_and_says_why():
     new, d = decide("voice", evals, ["carrier-a", "carrier-b"], state, Policy(), now)
     assert new.path == "carrier-b" and d.kind == "move"
     assert d.reason == f"Moved voice from Carrier A to Carrier B ahead of {reason}."
+
+
+def test_grafana_dashboard_uses_only_series_connect_exports():
+    import pathlib
+    import re
+
+    root = pathlib.Path(__file__).resolve().parents[2]
+    dash = json.loads((root / "docs/integrations/grafana-dashboard.json").read_text())
+    used = set(re.findall(r"exacarib_[a-z_]+", json.dumps(dash)))
+    exported = set(re.findall(r'"(exacarib_[a-z_]+)"', pathlib.Path(metrics.__file__).read_text()))
+    assert used and used <= exported, used - exported
