@@ -198,7 +198,7 @@ def overlapping(
         """SELECT s.*, p.name AS plan FROM subscriptions s JOIN plans p ON p.id = s.plan_id
            WHERE s.customer_id = %(c)s AND s.starts_on < %(e)s AND (s.ends_on IS NULL OR s.ends_on > %(s)s)
              AND (%(p)s::text IS NULL OR s.product = %(p)s)
-           ORDER BY s.product, s.starts_on""",
+           ORDER BY s.product = 'commai', s.starts_on""",
         {"c": customer_id, "s": start, "e": end, "p": product},
     ).fetchall()
 

@@ -829,7 +829,7 @@ def generate(
                JOIN customers c ON c.id = s.customer_id
                WHERE s.starts_on < %(e)s AND (s.ends_on IS NULL OR s.ends_on > %(s)s)
                  AND (%(p)s::text IS NULL OR s.product = %(p)s)
-               ORDER BY c.name, s.product, s.starts_on""",
+               ORDER BY c.name, s.product = 'commai', s.starts_on""",
             {"s": start, "e": end, "p": product},
         ).fetchall()
     made, skipped = [], []
@@ -938,7 +938,7 @@ def list_invoices(
         HEAD_SQL
         + """ WHERE (%(c)s::uuid IS NULL OR i.customer_id = %(c)s) AND (%(d)s OR i.status <> 'draft')
               AND (%(p)s::date IS NULL OR i.period_start = %(p)s) AND (%(pr)s::text IS NULL OR i.product = %(pr)s)
-              ORDER BY i.period_start DESC, c.name, i.product, i.covered_from, i.created_at DESC""",
+              ORDER BY i.period_start DESC, c.name, i.product = 'commai', i.covered_from, i.created_at DESC""",
         {"c": customer_id, "d": include_drafts, "p": period, "pr": product},
     ).fetchall()
     for r in rows:
