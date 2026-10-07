@@ -9,6 +9,17 @@
  * data-user-token="..." or ExaCaribChat.identify(token). Only then does the
  * widget show the customer's past conversations.
  *
+ * SDK (docs/commai/partners.md, "Website chat SDK"):
+ *   ExaCaribChat.open() / close() / isOpen()
+ *   ExaCaribChat.identify(token)          a signed-in customer (HS256 token from your server)
+ *   ExaCaribChat.on(event, fn) / off(event, fn)
+ *     events: ready, open, close, message (from the team or assistant),
+ *             sent (the visitor's message was accepted), identified, error
+ *   Each event is also dispatched on window as "exacarib-chat:<event>".
+ *   Calls made before the script loads are queued with the snippet:
+ *     window.ExaCaribChat = window.ExaCaribChat || { q: [], on() { this.q.push(["on", ...arguments]); } ... }
+ *   (any method name works: each queued [name, ...args] is replayed in order).
+ *
  * Built from widget/src/widget.ts with portal/node_modules/.bin/tsc -p widget (no
  * dependencies). Do not edit the built file by hand.
  */
@@ -26,7 +37,12 @@ interface WidgetConfig {
   callbacks: boolean;
   attachments: { enabled: boolean; max_bytes: number; types: string[] };
   ask_contact: "before" | "after_first" | "never";
+  /** The business's (or its partner's) white-label brand; null is ExaCarib's own look. */
+  brand?: { product_name: string; colour: string; ink: string; support_email: string; logo_url: string | null } | null;
 }
+
+type ChatEvent = "ready" | "open" | "close" | "message" | "sent" | "identified" | "error";
+type Handler = (detail: unknown) => void;
 
 interface Attachment {
   id: string;
@@ -60,15 +76,43 @@ interface Stored {
 }
 
 interface ExaCaribChatApi {
+  version: string;
   identify(token: string): void;
   open(): void;
   close(): void;
+  isOpen(): boolean;
+  on(event: ChatEvent, fn: Handler): void;
+  off(event: ChatEvent, fn: Handler): void;
   preview(container: HTMLElement, config: Partial<WidgetConfig>): () => void;
 }
 
+interface QueueStub {
+  q?: unknown[][];
+  version?: string;
+}
+
 (function () {
-  const w = window as unknown as Window & { ExaCaribChat?: ExaCaribChatApi; ExaCaribChatSettings?: { key?: string; userToken?: string } };
-  if (w.ExaCaribChat) return; // loaded twice
+  const w = window as unknown as Window & { ExaCaribChat?: ExaCaribChatApi | QueueStub; ExaCaribChatSettings?: { key?: string; userToken?: string } };
+  const stub = w.ExaCaribChat as QueueStub | undefined;
+  if (stub && stub.version) return; // loaded twice
+  const queued: unknown[][] = (stub && Array.isArray(stub.q) && stub.q) || [];
+
+  // ---- events (the SDK) ---------------------------------------------------------------------
+  const handlers: Record<string, Handler[]> = {};
+  function emit(event: ChatEvent, detail: unknown = null) {
+    for (const fn of (handlers[event] || []).slice()) {
+      try {
+        fn(detail);
+      } catch {
+        /* a page's handler must not break the chat */
+      }
+    }
+    try {
+      window.dispatchEvent(new CustomEvent(`exacarib-chat:${event}`, { detail }));
+    } catch {
+      /* very old browsers */
+    }
+  }
 
   const script = document.currentScript as HTMLScriptElement | null;
   const apiOrigin = script && script.src ? new URL(script.src).origin : location.origin;
@@ -236,6 +280,8 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
     private messages: ChatMessage[] = [];
     private view: View = "chat";
     private isOpen = false;
+    private ready = false;
+    private openWhenReady = false;
     private unread = 0;
     private timer: number | undefined;
     private session: Session | null = null;
@@ -318,11 +364,15 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
       this.mount();
       try {
         this.cfg = { ...DEFAULTS, ...(await this.call<WidgetConfig>("GET", "/config", undefined, false)) };
-      } catch {
+      } catch (e) {
         this.host.remove(); // not allowed on this site, or the key is off: stay invisible
+        emit("error", { message: (e as Error).message });
         return;
       }
       this.applyConfig();
+      emit("ready", { online: this.cfg.online, ai: this.cfg.ai });
+      this.ready = true;
+      if (this.openWhenReady) this.open();
       this.heartbeat();
       if (this.stored.conv || this.userToken) {
         this.ensureSession()
@@ -335,6 +385,7 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
       this.cfg = { ...DEFAULTS, ...cfg };
       container.append(this.host);
       this.build(true);
+      this.ready = true;
       this.applyConfig();
       this.messages = [
         { id: "p1", from: "you", body: "Hello, do you open on Saturdays?", attachments: [], status: "", at: "" },
@@ -378,12 +429,16 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
       this.launcher.classList.add(this.cfg.position === "left" ? "left" : "right");
       this.panel.classList.add(this.cfg.position === "left" ? "left" : "right");
       this.panel.setAttribute("aria-label", this.cfg.title);
+      if (this.cfg.brand && /^#[0-9a-f]{6}$/i.test(this.cfg.brand.ink)) this.root.style.setProperty("--ink", this.cfg.brand.ink);
       if (!this.cfg.online && this.cfg.mode !== "ai_first" && !this.stored.conv) this.view = "offline";
       this.render();
     }
 
     open() {
-      if (!this.panel) return;
+      if (!this.panel || !this.ready) {
+        this.openWhenReady = true; // asked before the config arrived
+        return;
+      }
       this.isOpen = true;
       this.unread = 0;
       this.panel.hidden = false;
@@ -393,6 +448,11 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
       this.render();
       if (this.stored.conv) this.ensureSession().then(() => this.poll()).catch(() => undefined);
       setTimeout(() => (this.input || this.panel.querySelector("input"))?.focus(), 30);
+      emit("open");
+    }
+
+    get opened() {
+      return this.isOpen;
     }
 
     close() {
@@ -404,6 +464,7 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
       this.launcher.innerHTML = ICON_CHAT;
       this.launcher.focus();
       this.renderBadge();
+      emit("close");
     }
 
     private renderBadge() {
@@ -426,7 +487,16 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
       else if (this.view === "done") p.append(el("div", { class: "form" }, el("p", { role: "status" }, this.doneText), this.backButton()));
       else if (this.view === "history") p.append(this.historyView());
       else this.renderChat();
-      p.append(el("div", { class: "foot" }, COPY.poweredBy));
+      p.append(this.footer());
+    }
+
+    private footer() {
+      const b = this.cfg.brand;
+      if (!b) return el("div", { class: "foot" }, COPY.poweredBy);
+      const foot = el("div", { class: "foot" });
+      if (b.logo_url) foot.append(el("img", { src: apiOrigin + b.logo_url, alt: "", height: "14", style: "vertical-align: middle; margin-right: 6px; max-width: 80px" }));
+      foot.append(b.product_name);
+      return foot;
     }
 
     private backButton() {
@@ -535,12 +605,14 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
         save(this.storeKey, this.stored);
         Object.assign(m, out.message);
         m.pending = undefined;
+        emit("sent", { conversation_id: out.conversation_id, id: m.id, body: m.body });
         if (first && !this.session?.signed_in && !this.stored.contactGiven && this.cfg.ask_contact === "after_first") this.showContact = true;
         this.render();
         this.poll();
-      } catch {
+      } catch (e) {
         m.pending = "failed";
         this.render();
+        emit("error", { message: (e as Error).message });
       }
     }
 
@@ -583,6 +655,7 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
         const fresh = out.items.filter((m) => !known.has(m.id));
         if (fresh.length) {
           this.messages.push(...fresh);
+          for (const m of fresh) if (m.from !== "you") emit("message", { conversation_id: this.stored.conv, id: m.id, from: m.from, body: m.body, at: m.at });
           const theirs = fresh.filter((m) => m.from !== "you").length;
           if (!this.isOpen) {
             this.unread += theirs;
@@ -710,10 +783,11 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
       this.messages = [];
       this.ensureSession()
         .then(() => {
+          emit("identified", { signed_in: !!this.session?.signed_in });
           this.render();
           this.poll();
         })
-        .catch(() => undefined);
+        .catch((e) => emit("error", { message: (e as Error).message }));
     }
   }
 
@@ -724,7 +798,17 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
   const userToken = (script && script.dataset.userToken) || settings.userToken || "";
   let chat: Chat | null = null;
 
-  w.ExaCaribChat = {
+  const api: ExaCaribChatApi = {
+    version: "1.1",
+    on(event: ChatEvent, fn: Handler) {
+      if (typeof fn === "function") (handlers[event] = handlers[event] || []).push(fn);
+    },
+    off(event: ChatEvent, fn: Handler) {
+      handlers[event] = (handlers[event] || []).filter((h) => h !== fn);
+    },
+    isOpen() {
+      return !!chat && chat.opened;
+    },
     identify(token: string) {
       if (chat) chat.identify(token);
     },
@@ -740,11 +824,19 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
       return () => container.textContent = "";
     },
   };
+  w.ExaCaribChat = api;
 
   if (key) {
     chat = new Chat(key, userToken);
     const go = () => chat && chat.start();
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", go);
     else go();
+  }
+
+  // Replay calls queued before the script loaded, in order.
+  for (const call of queued) {
+    const [name, ...args] = call as [keyof ExaCaribChatApi, ...unknown[]];
+    const fn = api[name];
+    if (typeof fn === "function") (fn as (...a: unknown[]) => void).apply(api, args);
   }
 })();
