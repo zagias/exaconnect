@@ -14,6 +14,8 @@ No endpoint here returns a token or reads private notes.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import os
 import re
@@ -21,15 +23,15 @@ import secrets
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 from ... import audit, db
 from ...api.deps import User, UserDep, require_admin
-from .. import access, events, golive
-from ..channels import countries, messaging, providers, sms_routing, social
+from .. import access, events, golive, inbox
+from ..channels import countries, messaging, providers, sms_routing, social, whatsapp_cloud
 
 router = APIRouter(prefix="/customers/{customer_id}", tags=["commai: channels (global)"])
 public = APIRouter(tags=["commai: channels (global)"])
@@ -662,3 +664,405 @@ def meta_app_hook_verify(request: Request):
 async def telegram_hook(hook_token: str, request: Request):
     """Telegram updates for one bot (X-Telegram-Bot-Api-Secret-Token)."""
     return await _hook(request, hook_token, ("telegram",))
+
+
+# =====================================================================================
+# WhatsApp through Meta's Cloud API, interactive messages and click-to-chat links
+# =====================================================================================
+
+WA_CLOUD_NEEDS = [
+    "ExaCarib's Meta app must be a Meta Tech Provider with WhatsApp permissions approved in app review "
+    "(ExaCarib does this once).",
+    "Your business completes Meta business verification and has a WhatsApp Business Account, or creates one "
+    "during sign-up.",
+    "A number that can receive a verification code by SMS or call and is not in use on the WhatsApp app.",
+    "You connect through Meta's Embedded Signup window; CommAI keeps the business token encrypted and never shows it.",
+    "Templates are submitted to Meta from here; their approval comes back from Meta.",
+]
+
+
+def _wa_cloud(conn, customer_id: str, account_id: str) -> dict:
+    row = conn.execute(
+        "SELECT * FROM channel_accounts WHERE id = %s AND customer_id = %s AND channel = 'whatsapp'"
+        " AND provider = ANY(%s)",
+        (account_id, customer_id, list(whatsapp_cloud.CLOUD)),
+    ).fetchone()
+    if row is None:
+        raise HTTPException(404, "Cloud API account not found.")
+    return row
+
+
+def _wa_out(request: Request, a: dict, secret: bool = False) -> dict:
+    prov = whatsapp_cloud.PROVIDERS[a["provider"]]
+    s = a["settings"] or {}
+    out = {k: a[k] for k in ("id", "channel", "provider", "name", "address", "status", "last_inbound_at",
+                             "last_sent_at", "last_error", "created_at")}  # fmt: skip
+    hook = (
+        f"{_base(request)}/api/v1/commai/channels/meta/webhook"
+        if a["provider"] == "meta-cloud"
+        else f"{_base(request)}/api/v1/commai/channels/whatsapp-cloud/hooks/{a['hook_token']}"
+    )
+    out.update(provider_label=prov.label, simulated=prov.simulated, missing=prov.missing(a), webhook_url=hook,
+               waba_id=s.get("waba_id", ""), phone_number_id=s.get("phone_number_id", ""),
+               verified_name=s.get("verified_name", ""), token_saved=bool(s.get("token_ref")))  # fmt: skip
+    if secret:
+        out["secret"] = a["hook_secret"]
+    return out
+
+
+def _require_wa_cloud(conn, customer_id: str) -> None:
+    try:
+        golive.require(conn, "channel", whatsapp_cloud.KEY, customer_id)
+    except golive.GoLiveError as e:
+        raise HTTPException(409, str(e)) from e
+
+
+@router.get("/whatsapp-cloud")
+def wa_cloud_setup(customer_id: str, request: Request, user: UserDep) -> dict:
+    """Whether the Cloud API is switched on for this business, what it needs, and
+    the public Embedded Signup settings (app id and configuration id, never a secret)."""
+    access.check(user, customer_id, "commai:read")
+    with db.tx() as conn:
+        rows = conn.execute(
+            "SELECT * FROM channel_accounts WHERE customer_id = %s AND channel = 'whatsapp' AND provider = ANY(%s)"
+            " ORDER BY created_at",
+            (customer_id, list(whatsapp_cloud.CLOUD)),
+        ).fetchall()
+        available = golive.enabled(conn, "channel", whatsapp_cloud.KEY, customer_id)
+    missing = whatsapp_cloud.CloudApi.signup_env_missing()
+    return {
+        "available": available,
+        "needs": WA_CLOUD_NEEDS,
+        "embedded_signup": {
+            "ready": not missing,
+            "missing_env": missing,
+            "app_id": os.environ.get("EXA_META_APP_ID", ""),
+            "config_id": os.environ.get("EXA_META_ES_CONFIG_ID", ""),
+        },
+        "accounts": [_wa_out(request, a) for a in rows],
+    }
+
+
+class SignupIn(BaseModel):
+    simulated: bool = True
+    number: str = Field(default="", max_length=30, description="Simulated sign-up only: the number to stand in")
+    code: str = Field(default="", max_length=1000, description="Embedded Signup: the code from FB.login")
+    waba_id: str = Field(default="", pattern=r"^\d{0,25}$")
+    phone_number_id: str = Field(default="", pattern=r"^\d{0,25}$")
+    pin: str = Field(
+        default="", pattern=r"^(\d{6})?$", description="Two-step verification PIN; used once, never stored"
+    )
+    name: str = Field(default="", max_length=80)
+
+
+@router.post("/whatsapp-cloud/signup", status_code=201)
+def wa_cloud_signup(customer_id: str, body: SignupIn, request: Request, user: UserDep) -> dict:
+    """Connect a WhatsApp number through Embedded Signup (real), or the simulated
+    stand-in. Refused until the Cloud API is switched on for this business."""
+    from ..automation import vault
+
+    access.check(user, customer_id, "commai:admin")
+    with db.tx() as conn:
+        _no_internal(conn, user, customer_id)
+        _require_wa_cloud(conn, customer_id)
+    if body.simulated:
+        number = providers.e164(body.number)
+        if len(number) < 8:
+            raise HTTPException(422, "Give the number in international form, like +18685550100.")
+        prov_name = "meta-cloud-simulated"
+        settings = {
+            "waba_id": str(10**14 + secrets.randbelow(10**14)),
+            "phone_number_id": str(10**14 + secrets.randbelow(10**14)),
+        }
+        got: dict = {}
+    else:
+        if not (body.code and body.waba_id and body.phone_number_id):
+            raise HTTPException(422, "Embedded Signup returns a code, a WABA id and a phone number id; send all three.")
+        if not vault.configured():
+            raise HTTPException(409, "Secure storage is not set up: the controller needs EXA_SECRETS_KEY.")
+        try:
+            got = whatsapp_cloud.PROVIDERS["meta-cloud"].signup(body.code, body.waba_id, body.phone_number_id, body.pin)
+        except providers.ProviderError as e:
+            raise HTTPException(502 if "answered" in str(e) or "reached" in str(e) else 409, str(e)) from e
+        number = got["number"]
+        prov_name = "meta-cloud"
+        settings = {
+            "waba_id": body.waba_id,
+            "phone_number_id": body.phone_number_id,
+            "verified_name": got["verified_name"],
+        }
+    with db.tx() as conn:
+        if conn.execute(
+            "SELECT 1 FROM channel_accounts WHERE channel = 'whatsapp' AND address = %s AND customer_id = %s",
+            (number, customer_id),
+        ).fetchone() or (
+            prov_name == "meta-cloud"
+            and conn.execute(
+                "SELECT 1 FROM channel_accounts WHERE provider = 'meta-cloud' AND settings->>'phone_number_id' = %s",
+                (body.phone_number_id,),
+            ).fetchone()
+        ):
+            raise HTTPException(409, "That WhatsApp number is already connected.")
+        row = conn.execute(
+            """INSERT INTO channel_accounts (customer_id, channel, provider, name, address, status, settings,
+                                             hook_token, hook_secret, created_by)
+               VALUES (%s, 'whatsapp', %s, %s, %s, 'live', %s, %s, %s, %s) RETURNING *""",
+            (customer_id, prov_name, body.name, number, Jsonb(settings), messaging.new_hook_token(),
+             "chs_" + secrets.token_urlsafe(24), user.actor),
+        ).fetchone()  # fmt: skip
+        if got.get("token"):
+            row["settings"] = social.save_token(conn, row, got["token"], user.actor)
+        audit.record(conn, user.actor, "commai.whatsapp_cloud.signup", f"whatsapp:{number}", customer_id,
+                     {"provider": prov_name, "waba_id": settings["waba_id"]})  # fmt: skip
+    return _wa_out(request, row, secret=body.simulated)
+
+
+class WaSimIn(BaseModel):
+    from_: str = Field(alias="from", min_length=8, max_length=20)
+    name: str = Field(default="", max_length=120)
+    body: str = Field(default="", max_length=4000)
+    id: str = Field(default="", max_length=120)
+    button: dict | None = Field(default=None, description='Reply to buttons: {"id", "title"}')
+
+
+def _wa_sim_post(conn, a: dict, payload: dict) -> dict:
+    if not whatsapp_cloud.PROVIDERS[a["provider"]].simulated:
+        raise HTTPException(409, "Only simulated accounts take test traffic from here.")
+    raw = json.dumps(payload).encode()
+    req = providers.InboundRequest(
+        url="", headers={"x-hub-signature-256": social.meta_sign(a["hook_secret"], raw)}, body=raw
+    )
+    try:
+        return whatsapp_cloud.handle_webhook(conn, a, req)
+    except social.ChannelOff as e:
+        raise HTTPException(409, str(e)) from e
+
+
+@router.post("/whatsapp-cloud/{account_id}/simulate-inbound")
+def wa_cloud_sim_inbound(customer_id: str, account_id: str, body: WaSimIn, user: UserDep) -> dict:
+    access.check(user, customer_id, "commai:admin")
+    if not body.body and not body.button:
+        raise HTTPException(422, "Give a message or a button reply.")
+    with db.tx() as conn:
+        a = _wa_cloud(conn, customer_id, account_id)
+        payload = whatsapp_cloud.sim_payload(
+            a, body.from_, body.body, body.id or "wamid.IN" + secrets.token_hex(10), body.name, body.button
+        )
+        return _wa_sim_post(conn, a, payload)
+
+
+class WaSimStatus(BaseModel):
+    message_id: str
+    status: Literal["sent", "delivered", "read", "failed"]
+
+
+@router.post("/whatsapp-cloud/{account_id}/simulate-status")
+def wa_cloud_sim_status(customer_id: str, account_id: str, body: WaSimStatus, user: UserDep) -> dict:
+    access.check(user, customer_id, "commai:admin")
+    with db.tx() as conn:
+        a = _wa_cloud(conn, customer_id, account_id)
+        m = conn.execute(
+            """SELECT m.provider_ref, ci.address FROM messages m JOIN conversations c ON c.id = m.conversation_id
+               JOIN contact_identities ci ON ci.id = c.identity_id WHERE m.id = %s AND m.customer_id = %s""",
+            (body.message_id, customer_id),
+        ).fetchone()
+        if m is None or not m["provider_ref"]:
+            raise HTTPException(404, "That message hasn't been sent yet.")
+        return _wa_sim_post(conn, a, whatsapp_cloud.sim_status_payload(a, m["provider_ref"], body.status, m["address"]))
+
+
+class WaSimTemplate(BaseModel):
+    template_id: str
+    event: Literal["APPROVED", "REJECTED", "PAUSED", "DISABLED"]
+    reason: str = Field(default="", max_length=200)
+
+
+@router.post("/whatsapp-cloud/{account_id}/simulate-template-status")
+def wa_cloud_sim_template(customer_id: str, account_id: str, body: WaSimTemplate, user: UserDep) -> dict:
+    access.check(user, customer_id, "commai:admin")
+    with db.tx() as conn:
+        a = _wa_cloud(conn, customer_id, account_id)
+        tpl = conn.execute(
+            "SELECT * FROM whatsapp_templates WHERE id::text = %s AND customer_id = %s", (body.template_id, customer_id)
+        ).fetchone()
+        if tpl is None or not tpl["provider_template_id"]:
+            raise HTTPException(404, "Submit the template first.")
+        return _wa_sim_post(conn, a, whatsapp_cloud.sim_template_payload(a, tpl, body.event, body.reason))
+
+
+@router.post("/whatsapp-cloud/{account_id}/templates/{template_id}/submit")
+def wa_cloud_submit_template(customer_id: str, account_id: str, template_id: str, user: UserDep) -> dict:
+    """Submit one of the business's templates to Meta for review."""
+    access.check(user, customer_id, "commai:admin")
+    with db.tx() as conn:
+        _no_internal(conn, user, customer_id)
+        _require_wa_cloud(conn, customer_id)
+        a = _wa_cloud(conn, customer_id, account_id)
+        tpl = conn.execute(
+            "SELECT * FROM whatsapp_templates WHERE id::text = %s AND customer_id = %s", (template_id, customer_id)
+        ).fetchone()
+        if tpl is None:
+            raise HTTPException(404, "Template not found.")
+        try:
+            row = whatsapp_cloud.submit_template(conn, a, tpl)
+        except providers.ProviderError as e:
+            raise HTTPException(502, str(e)) from e
+        audit.record(conn, user.actor, "commai.whatsapp_cloud.template_submit", f"{tpl['name']}:{tpl['language']}",
+                     customer_id)  # fmt: skip
+    return row
+
+
+@router.post("/whatsapp-cloud/{account_id}/templates/sync")
+def wa_cloud_sync_templates(customer_id: str, account_id: str, user: UserDep) -> dict:
+    """Pull every template's approval status from the WhatsApp Business Account."""
+    access.check(user, customer_id, "commai:admin")
+    with db.tx() as conn:
+        _require_wa_cloud(conn, customer_id)
+        a = _wa_cloud(conn, customer_id, account_id)
+        try:
+            out = whatsapp_cloud.sync_templates(conn, a)
+        except providers.ProviderError as e:
+            raise HTTPException(502, str(e)) from e
+        audit.record(conn, user.actor, "commai.whatsapp_cloud.template_sync", str(a["id"]), customer_id, out)
+    return out
+
+
+class MediaIn(BaseModel):
+    filename: str = Field(min_length=1, max_length=120)
+    content_type: str = Field(pattern=r"^(image/(jpeg|png)|application/pdf|text/plain|audio/(ogg|mpeg|aac)|video/mp4)$")
+    data: str = Field(min_length=4, max_length=7_000_000, description="base64")
+
+
+@router.post("/whatsapp-cloud/{account_id}/media", status_code=201)
+def wa_cloud_upload(customer_id: str, account_id: str, body: MediaIn, user: UserDep) -> dict:
+    """Upload media to Meta for sending (up to 5 MB here)."""
+    access.check(user, customer_id, "commai:write")
+    try:
+        data = base64.b64decode(body.data, validate=True)
+    except (binascii.Error, ValueError) as e:
+        raise HTTPException(422, "The file must be base64.") from e
+    if len(data) > 5_000_000:
+        raise HTTPException(413, "Files up to 5 MB.")
+    with db.tx() as conn:
+        _require_wa_cloud(conn, customer_id)
+        a = _wa_cloud(conn, customer_id, account_id)
+        try:
+            mid = whatsapp_cloud.PROVIDERS[a["provider"]].upload_media(conn, a, data, body.content_type, body.filename)
+        except providers.ProviderError as e:
+            raise HTTPException(502, str(e)) from e
+        audit.record(conn, user.actor, "commai.whatsapp_cloud.media_upload", mid, customer_id, {"size": len(data)})
+    return {"media_id": mid}
+
+
+@router.get("/whatsapp-cloud/{account_id}/media/{media_id}")
+def wa_cloud_download(customer_id: str, account_id: str, media_id: str, user: UserDep) -> Response:
+    """Fetch media a customer sent (its id comes with the inbound message)."""
+    access.check(user, customer_id, "commai:read")
+    if not re.fullmatch(r"[A-Za-z0-9_.:-]{1,120}", media_id):
+        raise HTTPException(422, "Not a media id.")
+    with db.tx() as conn:
+        a = _wa_cloud(conn, customer_id, account_id)
+        try:
+            data, ctype = whatsapp_cloud.PROVIDERS[a["provider"]].download_media(conn, a, media_id)
+        except providers.ProviderError as e:
+            raise HTTPException(404, str(e)) from e
+    return Response(
+        data, media_type=ctype, headers={"Content-Disposition": "attachment", "X-Content-Type-Options": "nosniff"}
+    )
+
+
+class InteractiveIn(BaseModel):
+    body: str = Field(min_length=1, max_length=1024)
+    buttons: list[dict] | None = Field(default=None, max_length=3)
+    list_: dict | None = Field(default=None, alias="list")
+
+
+@router.post("/conversations/{conversation_id}/interactive", status_code=201)
+def send_interactive(customer_id: str, conversation_id: str, body: InteractiveIn, user: UserDep) -> dict:
+    """Reply with WhatsApp reply buttons or a list (inside the 24-hour window)."""
+    access.check(user, customer_id, "commai:write")
+    try:
+        spec = whatsapp_cloud.check_interactive(body.model_dump(by_alias=True))
+    except whatsapp_cloud.InteractiveError as e:
+        raise HTTPException(422, str(e)) from e
+    with db.tx() as conn:
+        access.require_reply_seat(conn, user, customer_id)
+        try:
+            msg = whatsapp_cloud.send_interactive_reply(conn, customer_id, conversation_id, spec, author=user.email,
+                                                        user_id=user.id)  # fmt: skip
+        except inbox.InboxError as e:
+            raise HTTPException(e.code, str(e)) from e
+        audit.record(conn, user.actor, "commai.message.send", str(msg["id"]), customer_id,
+                     {"conversation_id": conversation_id, "interactive": spec["kind"]})  # fmt: skip
+    return msg
+
+
+@router.get("/whatsapp-link")
+def whatsapp_link(customer_id: str, user: UserDep, account_id: str, text: str = "") -> dict:
+    """A click-to-WhatsApp link (wa.me) for one of the business's WhatsApp numbers,
+    with a QR code as SVG for posters, receipts and the website."""
+    access.check(user, customer_id, "commai:read")
+    if len(text) > 500:
+        raise HTTPException(422, "Keep the pre-filled message under 500 characters.")
+    with db.tx() as conn:
+        a = conn.execute(
+            "SELECT address FROM channel_accounts WHERE id::text = %s AND customer_id = %s AND channel = 'whatsapp'",
+            (account_id, customer_id),
+        ).fetchone()
+    if a is None:
+        raise HTTPException(404, "WhatsApp number not found.")
+    url = whatsapp_cloud.click_to_chat(a["address"], text)
+    return {"url": url, "qr_svg": whatsapp_cloud.qr_svg(url)}
+
+
+@public.post("/channels/whatsapp-cloud/hooks/{hook_token}", include_in_schema=False)
+async def wa_cloud_hook(hook_token: str, request: Request):
+    """Cloud API webhooks for one account (X-Hub-Signature-256): messages, statuses, template updates."""
+    raw = await request.body()
+    if len(raw) > 2_000_000:
+        return JSONResponse({"detail": "Too large."}, status_code=413)
+    headers = {k.lower(): v for k, v in request.headers.items()}
+
+    def run():
+        with db.tx() as conn:
+            a = conn.execute(
+                "SELECT * FROM channel_accounts WHERE hook_token = %s AND provider = ANY(%s)",
+                (hook_token, list(whatsapp_cloud.CLOUD)),
+            ).fetchone()
+            if a is None:
+                return None, "missing"
+            try:
+                req = providers.InboundRequest(url="", headers=headers, body=raw)
+                return a, whatsapp_cloud.handle_webhook(conn, a, req)
+            except PermissionError:
+                return a, "rejected"
+            except social.ChannelOff:
+                return a, "off"
+            except (ValueError, KeyError, TypeError) as e:
+                messaging.log_webhook(conn, a, "unreadable", type(e).__name__)
+                return a, "unreadable"
+
+    a, out = await run_in_threadpool(run)
+    if a is None:
+        return JSONResponse({"detail": "Unknown webhook."}, status_code=404)
+    if out in ("rejected", "off"):
+        detail = "Signature did not verify." if out == "rejected" else "This channel is not switched on."
+        return JSONResponse({"detail": detail}, status_code=403)
+    if out == "unreadable":
+        return JSONResponse({"detail": "The webhook body couldn't be read."}, status_code=400)
+    return out
+
+
+@public.get("/channels/whatsapp-cloud/hooks/{hook_token}", include_in_schema=False)
+def wa_cloud_hook_verify(hook_token: str, request: Request):
+    """Meta's hub.challenge handshake for one account."""
+    q = request.query_params
+    with db.tx() as conn:
+        a = conn.execute(
+            "SELECT hook_secret FROM channel_accounts WHERE hook_token = %s AND provider = ANY(%s)",
+            (hook_token, list(whatsapp_cloud.CLOUD)),
+        ).fetchone()
+    tok = q.get("hub.verify_token", "")
+    if a is None or q.get("hub.mode") != "subscribe" or not tok or not secrets.compare_digest(tok, a["hook_secret"]):
+        return PlainTextResponse("Forbidden", status_code=403)
+    return PlainTextResponse(q.get("hub.challenge", "")[:200])

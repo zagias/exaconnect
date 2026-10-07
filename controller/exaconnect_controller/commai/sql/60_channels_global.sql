@@ -88,3 +88,24 @@ CREATE TABLE IF NOT EXISTS sms_sender_registrations (
   updated_at   timestamptz NOT NULL DEFAULT now(),
   UNIQUE (customer_id, sender, country)
 );
+
+-- WhatsApp interactive messages (reply buttons, lists): the structure sent with a message.
+CREATE TABLE IF NOT EXISTS wa_interactive (
+  message_id  uuid PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+  spec        jsonb NOT NULL
+);
+
+-- Meta's side of template review, for the simulated Cloud API provider.
+CREATE TABLE IF NOT EXISTS sim_wa_templates (
+  id               text PRIMARY KEY,
+  account_id       uuid NOT NULL REFERENCES channel_accounts(id) ON DELETE CASCADE,
+  name             text NOT NULL,
+  language         text NOT NULL,
+  category         text NOT NULL,
+  status           text NOT NULL DEFAULT 'PENDING',
+  rejected_reason  text NOT NULL DEFAULT ''
+);
+
+-- A real WhatsApp number (Cloud API phone number id) belongs to one business only.
+CREATE UNIQUE INDEX IF NOT EXISTS channel_accounts_wa_cloud_phone
+  ON channel_accounts ((settings->>'phone_number_id')) WHERE provider = 'meta-cloud';

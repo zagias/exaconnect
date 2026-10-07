@@ -592,12 +592,17 @@ def _watermark(conn: psycopg.Connection, account: dict, w: Watermark) -> int:
 
 def meta_app_webhook(conn: psycopg.Connection, req: InboundRequest) -> dict:
     """Meta's one app-wide webhook: verified with EXA_META_APP_SECRET, then each
-    entry routed to the business that connected that Page or Instagram account."""
+    entry routed to the business that connected that Page, Instagram account or
+    WhatsApp number (Cloud API)."""
     secret = os.environ.get("EXA_META_APP_SECRET", "")
     got = req.headers.get("x-hub-signature-256", "")
     if not secret or not got or not hmac.compare_digest(got, meta_sign(secret, req.body)):
         raise PermissionError("The webhook signature did not verify.")
     data = json.loads(req.body or b"{}")
+    if data.get("object") == "whatsapp_business_account":
+        from . import whatsapp_cloud
+
+        return whatsapp_cloud.app_webhook(conn, data)
     channel = "instagram" if data.get("object") == "instagram" else "messenger"
     out = {"received": 0, "duplicates": 0, "receipts": 0, "opt_changes": 0, "unknown_accounts": 0, "refused": 0}
     by_entry: dict[str, list] = {}

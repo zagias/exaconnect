@@ -284,7 +284,8 @@ def test_failover_on_refusal_never_sends_twice(client, admin_headers):
     assert _msg(m1["id"])["status"] == "sent"
     with db.tx() as conn:
         cost = conn.execute(
-            "SELECT quantity, detail FROM usage_records WHERE customer_id = %s AND meter = 'sms_route_cost' AND ref = %s",
+            "SELECT quantity, detail FROM usage_records WHERE customer_id = %s AND meter = 'sms_route_cost'"
+            " AND ref = %s",
             (b["id"], m1["id"]),
         ).fetchone()
     assert float(cost["quantity"]) == 0.025 and cost["detail"]["carrier"] == "sms-sim-b"

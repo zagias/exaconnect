@@ -8,4 +8,4 @@ audit log and API keys. See docs/adr/0016-commai-foundation.md.
 # diagnostic checks: the AI agents (ADR 0019, registers "ai.respond"), the
 # channels (ADR 0018), voice (ADR 0021) and automation (ADR 0020).
 from . import actions, ai, automation, diagnostics, golive, inbox, jobs, usage, voice, webhooks  # noqa: F401
-from .channels import checks, countries, email, messaging, sms_routing, social, widget  # noqa: F401
+from .channels import checks, countries, email, messaging, sms_routing, social, whatsapp_cloud, widget  # noqa: F401
