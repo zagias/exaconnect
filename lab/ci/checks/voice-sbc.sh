@@ -14,7 +14,7 @@ fi
 for s in kamailio freeswitch; do
   if [[ -n $("${COMPOSE[@]}" ps -q --status running "$s" 2>/dev/null) ]]; then ok "$s running"; else bad "$s not running"; fi
 done
-# shellcheck disable=SC2329  # called through wait_for
+# shellcheck disable=SC2317,SC2329  # called through wait_for
 up() { "${COMPOSE[@]}" exec -T freeswitch fs_cli -x status 2>/dev/null | grep -q '^UP'; }
 if wait_for 120 up; then ok "FreeSWITCH up"; else bad "FreeSWITCH not up"; fi
 profiles=$("${COMPOSE[@]}" exec -T freeswitch fs_cli -x "sofia status" 2>/dev/null | grep -cE '(internal|external)[[:space:]]+profile.*RUNNING')
