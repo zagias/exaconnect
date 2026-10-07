@@ -163,6 +163,15 @@ services:
       - ./freeswitch/dialplan/public/exacarib.xml:/etc/freeswitch/dialplan/public/exacarib.xml:ro
       - ./freeswitch/ivr_menus/exacarib.xml:/etc/freeswitch/ivr_menus/exacarib.xml:ro
       - ./freeswitch/autoload_configs/callcenter.conf.xml:/etc/freeswitch/autoload_configs/callcenter.conf.xml:ro
+      # Hardened stock files: no STUN or SignalWire calls out, event socket on loopback only.
+      - ./freeswitch/vars.xml:/etc/freeswitch/vars.xml:ro
+      - ./freeswitch/autoload_configs/event_socket.conf.xml:/etc/freeswitch/autoload_configs/event_socket.conf.xml:ro
+      - ./freeswitch/autoload_configs/modules.conf.xml:/etc/freeswitch/autoload_configs/modules.conf.xml:ro
+    # Hide the image's demo users (1000-1019 with a shared password).
+    tmpfs:
+      - /etc/freeswitch/directory/default
+    environment:
+      EXA_VOICE_PUBLIC_IP: ${EXA_VOICE_PUBLIC_IP:-}
     depends_on:
       - controller
 
@@ -174,7 +183,8 @@ services:
     profiles: [voice]
     image: ghcr.io/kamailio/kamailio:5.8.4-bookworm
     restart: unless-stopped
-    command: ["kamailio", "-DD", "-E", "-f", "/etc/kamailio/kamailio.cfg"]
+    # The image's entrypoint is a shell line that ignores `command`, so replace it.
+    entrypoint: ["kamailio", "-DD", "-E", "-f", "/etc/kamailio/kamailio.cfg"]
     volumes:
       - ./kamailio/kamailio.cfg:/etc/kamailio/kamailio.cfg:ro
       - ./kamailio/tls.cfg:/etc/kamailio/tls.cfg:ro

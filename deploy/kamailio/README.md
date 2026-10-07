@@ -25,7 +25,21 @@ FreeSWITCH has no public SIP port.
 | `dispatcher.list`, `address.list` | Written by the controller from the carriers to `EXA_KAMAILIO_DIR` (`/data/kamailio` on the shared volume, `/exacarib/kamailio` inside Kamailio) each time `GET /api/v1/commai/voice-admin/kamailio` runs. |
 | `tls/server.crt`, `tls/server.key` | The voice host's certificate, mounted from the host. Never committed. |
 
-Run it with `docker compose --profile voice up -d kamailio`. It is not started by default.
+Start it with `make voice-up` (`deploy/voice/up.sh`). That writes `kamailio-local.cfg` from the
+example if it is missing (advertising `EXA_VOICE_PUBLIC_IP` from `.env`, or 127.0.0.1), makes a
+stand-in certificate in `tls/` until the real one is put there, renders the carrier lists and
+starts Kamailio and FreeSWITCH. No SIP or media port is published, so nothing outside the host can
+reach them. It is not started by the lab runner; it is started by hand once agreed.
+
+`make voice-check` (`deploy/voice/check.sh`, run in CI) parses this config with the pinned image,
+starts Kamailio with empty carrier lists, checks that it answers 403 to a caller that is not on the
+allow-list, and checks that FreeSWITCH starts with ExaCarib's files and both SIP profiles run.
+`lab/ci/checks/voice-sbc.sh` runs the same checks on a host where the SBC is started.
+
+FreeSWITCH runs with three hardened stock files from `deploy/freeswitch/`: `vars.xml` (no STUN
+lookup; the external address is `EXA_VOICE_PUBLIC_IP`, else the container address),
+`event_socket.conf.xml` (loopback only) and `modules.conf.xml` (no `mod_signalwire`). The image's
+demo users 1000 to 1019 are hidden by an empty mount.
 
 ## What Dudley must provide
 
@@ -49,6 +63,5 @@ Run it with `docker compose --profile voice up -d kamailio`. It is not started b
    its written criteria are met (contract, interconnect tested, rates checked,
    emergency calls tested).
 
-Not run here: check it with `kamailio -c -f /etc/kamailio/kamailio.cfg` on the host
-before first use. The image tag is pinned in `deploy/docker-compose.yml`. Check
+The image tag is pinned in `deploy/docker-compose.yml`. Check
 that the tag has an arm64 build.
