@@ -22,7 +22,7 @@ from typing import Any
 import psycopg
 from fastapi import HTTPException, status
 
-from ...api.deps import User
+from ...api.deps import User, can_manage_org
 
 
 def _row(conn: psycopg.Connection, user: User, customer_id: Any) -> dict | None:
@@ -40,6 +40,9 @@ def configured(conn: psycopg.Connection, customer_id: Any) -> bool:
 
 
 def _has_admin_scope(user: User) -> bool:
+    # An organisation's members and viewers never administer voice (ADR 0023).
+    if user.role == "customer" and not can_manage_org(user):
+        return False
     return user.scopes is None or "commai:admin" in user.scopes
 
 

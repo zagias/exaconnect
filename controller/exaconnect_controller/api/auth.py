@@ -14,7 +14,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
 from .. import audit, db
-from ..identity import mfa, oidc, passkeys, sessions, sso, totp
+from ..identity import mfa, oidc, orgs, passkeys, sessions, sso, totp
 from ..security import hash_password, new_token, token_hash, verify_password
 from .deps import API_KEY_PREFIX, UserDep
 
@@ -46,6 +46,22 @@ class UserOut(BaseModel):
     two_step: bool = False
     # None: the full account. A list: what a directory-provisioned account may do.
     scopes: list[str] | None = None
+    # Shared accounts (ADR 0023): customer_id above is the organisation this
+    # session acts for; org_role is your role there; memberships are every
+    # organisation you belong to.
+    org_role: str | None = None
+    organisation: str | None = None
+    memberships: list[MembershipOut] = []
+
+
+class MembershipOut(BaseModel):
+    customer_id: str
+    name: str
+    role: str
+    managed_by: str | None = None
+
+
+UserOut.model_rebuild()
 
 
 class LoginOut(BaseModel):
@@ -91,14 +107,21 @@ def _failed(email: str, ip: str, reason: str, **detail) -> None:
         audit.record(conn, f"user:{email}", "login_failed", email, detail={"ip": ip, "reason": reason, **detail})
 
 
-def _signed_in(request: Request, response: Response, row: dict, via: str, **detail) -> LoginOut:
+def _acting_org(user) -> object:
+    """The organisation a replacement session keeps acting for."""
+    return user.customer_id if user.role == "customer" else None
+
+
+def _signed_in(request: Request, response: Response, row: dict, via: str, org=None, **detail) -> LoginOut:
+    """org: the organisation the new session acts for (an enterprise SSO sign-in
+    acts for the business whose provider vouched); None for the primary one."""
     with db.tx() as conn:
-        token, expires = sessions.start(conn, row["id"], request.app.state.settings.session_hours, via)
+        token, expires = sessions.start(conn, row["id"], request.app.state.settings.session_hours, via, org)
         audit.record(
             conn,
             f"user:{row['email']}",
             "login",
-            customer_id=row["customer_id"],
+            customer_id=org or row["customer_id"],
             detail={"via": via, "ip": _client_ip(request), **detail},
         )
         on = mfa.two_step_on(conn, row)
@@ -173,9 +196,18 @@ def me(user: UserDep) -> UserOut:
     with db.tx() as conn:
         row = conn.execute("SELECT * FROM users WHERE id = %s", (user.id,)).fetchone()
         on = mfa.two_step_on(conn, row)
+        mine = orgs.memberships(conn, user.id) if user.role == "customer" else []
     out = _user_out(row)
     out.two_step = on
     out.scopes = list(user.scopes) if user.scopes is not None else None
+    if user.role == "customer":
+        out.customer_id = str(user.customer_id) if user.customer_id else None
+        out.org_role = user.org_role
+        out.memberships = [
+            MembershipOut(customer_id=str(m["customer_id"]), name=m["name"], role=m["role"], managed_by=m["managed_by"])
+            for m in mine
+        ]
+        out.organisation = next((m.name for m in out.memberships if m.customer_id == out.customer_id), None)
     return out
 
 
@@ -209,7 +241,9 @@ def change_password(body: PasswordIn, user: UserDep, request: Request, response:
         conn.execute("DELETE FROM sessions WHERE user_id = %s AND token_hash <> %s", (user.id, token_hash(token or "")))
         if from_cookie:
             conn.execute("DELETE FROM sessions WHERE token_hash = %s", (token_hash(token or ""),))
-            new, expires = sessions.start(conn, user.id, request.app.state.settings.session_hours, "password")
+            new, expires = sessions.start(
+                conn, user.id, request.app.state.settings.session_hours, "password", _acting_org(user)
+            )
         audit.record(conn, user.actor, "user.change_password", user.email, user.customer_id)
     if from_cookie:
         sessions.set_cookie(response, request, new, expires)
@@ -580,7 +614,8 @@ def oidc_callback(
                     conn_row["customer_id"],
                     {"via": "sso", "connection": str(conn_row["id"])},
                 )
-            elif user["role"] != "customer" or str(user["customer_id"]) != str(conn_row["customer_id"]):
+            elif user["role"] != "customer" or orgs.membership(conn, conn_row["customer_id"], user["id"]) is None:
+                # The business's provider vouches only for its own members (ADR 0023).
                 user, why = None, "sso_other_business"
             else:
                 why = "ok"
@@ -602,7 +637,8 @@ def oidc_callback(
     if user["disabled_at"] is not None:
         return fail("This account has been switched off. Ask your administrator.", "disabled", email)
     response = _back(st["next_path"])
-    _signed_in(request, response, user, "sso" if conn_row else f"oidc:{st['idp']}", idp=st["idp"])
+    org = conn_row["customer_id"] if conn_row else None
+    _signed_in(request, response, user, "sso" if conn_row else f"oidc:{st['idp']}", org, idp=st["idp"])
     return response
 
 
@@ -667,11 +703,21 @@ def create_key(body: KeyIn, user: UserDep) -> dict:
         if active >= MAX_KEYS:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"You have {MAX_KEYS} keys. Revoke one first.")
         row = conn.execute(
-            f"""INSERT INTO api_keys (user_id, name, prefix, token_hash, scopes, expires_at)
+            f"""INSERT INTO api_keys (user_id, name, prefix, token_hash, scopes, expires_at, customer_id)
                 VALUES (%s, %s, %s, %s, %s,
-                        CASE WHEN %s::int IS NULL THEN NULL ELSE now() + make_interval(days => %s) END)
+                        CASE WHEN %s::int IS NULL THEN NULL ELSE now() + make_interval(days => %s) END, %s)
                 RETURNING {KEY_COLUMNS}""",
-            (user.id, body.name.strip(), token[:12], token_hash(token), body.scopes, body.days, body.days),
+            (
+                user.id,
+                body.name.strip(),
+                token[:12],
+                token_hash(token),
+                body.scopes,
+                body.days,
+                body.days,
+                # A customer's key acts in the organisation it is made in, and only there (ADR 0023).
+                user.customer_id if user.role == "customer" else None,
+            ),
         ).fetchone()
         audit.record(
             conn,
