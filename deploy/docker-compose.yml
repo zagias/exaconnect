@@ -38,6 +38,15 @@ services:
       # CommAI voice (ADR 0021): rendered FreeSWITCH config, read by the freeswitch service.
       EXA_FREESWITCH_DIR: /data/freeswitch
       EXA_SIP_PROVIDER: ${EXA_SIP_PROVIDER:-simulated}
+      # Voice stage 5 (ADR 0027): the real provider's API, Kamailio's carrier lists, LiveKit.
+      EXA_SIP_PROVIDER_URL: ${EXA_SIP_PROVIDER_URL:-}
+      EXA_SIP_PROVIDER_KEY: ${EXA_SIP_PROVIDER_KEY:-}
+      EXA_SIP_PROVIDER_ACCOUNT: ${EXA_SIP_PROVIDER_ACCOUNT:-}
+      EXA_KAMAILIO_DIR: /data/kamailio
+      EXA_LIVEKIT_URL: ${EXA_LIVEKIT_URL:-}
+      EXA_LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
+      EXA_LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
+      EXA_LIVEKIT_AGENT_SECRET: ${EXA_LIVEKIT_AGENT_SECRET:-}
       # Sign-in (ADR 0017). Google/Microsoft/enterprise SSO stay off until the gateway is set.
       EXA_COOKIE_SECURE: ${EXA_COOKIE_SECURE:-1}
       EXA_PUBLIC_URL: ${EXA_PUBLIC_URL:-}
@@ -155,6 +164,69 @@ services:
       - ./freeswitch/ivr_menus/exacarib.xml:/etc/freeswitch/ivr_menus/exacarib.xml:ro
       - ./freeswitch/autoload_configs/callcenter.conf.xml:/etc/freeswitch/autoload_configs/callcenter.conf.xml:ro
     depends_on:
+      - controller
+
+  # Voice stage 5 (ADR 0027), profile "voice" only. Kamailio is the edge proxy in
+  # front of FreeSWITCH; its carrier lists are rendered by the controller
+  # (EXA_KAMAILIO_DIR=/data/kamailio on the shared volume). Ports are published
+  # only once a carrier account and a public IP exist: see deploy/kamailio/README.md.
+  kamailio:
+    profiles: [voice]
+    image: ghcr.io/kamailio/kamailio:5.8.4-bookworm
+    restart: unless-stopped
+    command: ["kamailio", "-DD", "-E", "-f", "/etc/kamailio/kamailio.cfg"]
+    volumes:
+      - ./kamailio/kamailio.cfg:/etc/kamailio/kamailio.cfg:ro
+      - ./kamailio/tls.cfg:/etc/kamailio/tls.cfg:ro
+      - ./kamailio/kamailio-local.cfg:/etc/kamailio/kamailio-local.cfg:ro
+      - ./kamailio/tls:/etc/kamailio/tls:ro
+      - controller-data:/exacarib:ro
+    depends_on:
+      - freeswitch
+
+  # LiveKit (self-hosted) for AI on phone calls; see deploy/livekit/README.md.
+  livekit-redis:
+    profiles: [voice]
+    image: redis:7.4-alpine
+    restart: unless-stopped
+
+  livekit:
+    profiles: [voice]
+    image: livekit/livekit-server:v1.8
+    restart: unless-stopped
+    command: ["--config", "/etc/livekit.yaml"]
+    environment:
+      LIVEKIT_KEYS: ${LIVEKIT_KEYS:-}
+    volumes:
+      - ./livekit/livekit.yaml:/etc/livekit.yaml:ro
+    depends_on:
+      - livekit-redis
+
+  livekit-sip:
+    profiles: [voice]
+    image: livekit/sip:v1.0
+    restart: unless-stopped
+    environment:
+      SIP_CONFIG_FILE: /etc/sip.yaml
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
+    volumes:
+      - ./livekit/sip.yaml:/etc/sip.yaml:ro
+    depends_on:
+      - livekit
+
+  livekit-agent:
+    profiles: [voice]
+    build: ./livekit/agent
+    restart: unless-stopped
+    environment:
+      LIVEKIT_URL: ws://livekit:7880
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
+      EXA_CONTROLLER_URL: http://controller:8000
+      EXA_LIVEKIT_AGENT_SECRET: ${EXA_LIVEKIT_AGENT_SECRET:-}
+    depends_on:
+      - livekit
       - controller
 
 networks:

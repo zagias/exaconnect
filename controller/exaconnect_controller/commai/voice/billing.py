@@ -263,12 +263,24 @@ def spend_today(conn, customer_id) -> Decimal:
     return money(row["a"])
 
 
-def authorise(conn: psycopg.Connection, customer_id: Any, to_number: str) -> dict:
-    """May this outbound call go ahead? -> {"allowed", "reason"}. Emergency
-    numbers are never stopped. Unusual patterns raise an alert, not a block."""
+def authorise(
+    conn: psycopg.Connection,
+    customer_id: Any,
+    to_number: str,
+    *,
+    voice_user_id: Any = None,
+    from_number: str | None = None,
+) -> dict:
+    """May this outbound call go ahead? -> {"allowed", "reason", "route"}.
+    Emergency numbers (every island's, ADR 0027) are never stopped. Unusual
+    patterns raise an alert; revenue share fraud rules (fraud.py) can stop a
+    call or suspend international calling. "route" is the carriers to try, in
+    order (None: the single provider)."""
+    from . import carriers, emergency, fraud
+
     d = digits(to_number)
-    if d in EMERGENCY:
-        return {"allowed": True, "reason": "Emergency call."}
+    if d in EMERGENCY or emergency.is_emergency(conn, customer_id, d, voice_user_id):
+        return {"allowed": True, "reason": "Emergency call.", "emergency": True, "route": None}
     lim = fraud_limits(conn, customer_id)
     for p in lim["blocked_prefixes"]:
         if d.startswith(p):
@@ -295,7 +307,13 @@ def authorise(conn: psycopg.Connection, customer_id: Any, to_number: str) -> dic
                 "voice.fraud_alert",
                 {"reason": "unusual_volume", "calls_last_hour": recent + 1, "threshold": lim["calls_per_hour_alert"]},
             )
-    return {"allowed": True, "reason": ""}
+    stop = fraud.check(conn, customer_id, d, voice_user_id=voice_user_id, from_number=from_number)
+    if stop:
+        return {**stop, "route": None}
+    route = carriers.route_keys(conn, customer_id, d)
+    if route == []:
+        return {"allowed": False, "reason": "No carrier can take calls to this destination right now.", "route": []}
+    return {"allowed": True, "reason": "", "route": route}
 
 
 # ---- rating --------------------------------------------------------------------------
@@ -353,10 +371,16 @@ def record_call(conn: psycopg.Connection, customer_id: Any, call: dict) -> dict:
             "SELECT id, site_id, team_id FROM voice_users WHERE id = %s AND customer_id = %s",
             (call["voice_user_id"], customer_id),
         ).fetchone()
+    from . import fraud
+
+    intl = call.get("direction", "outbound") == "outbound" and fraud.is_international(
+        call.get("to_number", ""), fraud.origin(conn, customer_id)["country"]
+    )
     row = conn.execute(
         """INSERT INTO voice_cdrs (customer_id, call_id, direction, from_number, to_number, voice_user_id, site_id,
-             team_id, started_at, ended_at, seconds, ai_seconds, status, block_reason, recording_ref, provider_ref)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+             team_id, started_at, ended_at, seconds, ai_seconds, status, block_reason, recording_ref, provider_ref,
+             international)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
            ON CONFLICT (customer_id, call_id) DO NOTHING RETURNING *""",
         (
             customer_id,
@@ -375,6 +399,7 @@ def record_call(conn: psycopg.Connection, customer_id: Any, call: dict) -> dict:
             call.get("block_reason", ""),
             call.get("recording_ref", ""),
             call.get("provider_ref", ""),
+            intl,
         ),
     ).fetchone()
     if row is None:
@@ -889,7 +914,7 @@ def reconcile(conn, customer_id, period: dt.date) -> dict:
     period = month_start(period)
     end = next_month(period)
     calls = conn.execute(
-        """SELECT d.call_id, d.to_number, d.seconds, d.ended_at,
+        """SELECT d.call_id, d.to_number, d.seconds, d.ended_at, d.carrier, d.carrier_cost,
                   coalesce((SELECT sum(amount) FROM voice_charges c WHERE c.cdr_id = d.id), 0) AS billed,
                   sc.cost, sc.seconds AS supplier_seconds
            FROM voice_cdrs d LEFT JOIN voice_supplier_charges sc ON sc.cdr_id = d.id
@@ -927,7 +952,16 @@ def reconcile(conn, customer_id, period: dt.date) -> dict:
     estimate = Decimal(0)
     prov = providers.get()
     if not prov.live:
-        estimate = sum((q4(Decimal(c["seconds"]) / 60 * prov.supplier_rate(c["to_number"])) for c in calls), Decimal(0))
+        # A call carried by a named carrier is costed from that carrier's rate sheet (ADR 0027).
+        estimate = sum(
+            (
+                money(c["carrier_cost"])
+                if c["carrier_cost"] is not None
+                else q4(Decimal(c["seconds"]) / 60 * prov.supplier_rate(c["to_number"]))
+                for c in calls
+            ),
+            Decimal(0),
+        )
     margin = billed - cost
     return {
         "period": period.isoformat(),

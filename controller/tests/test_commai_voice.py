@@ -483,7 +483,7 @@ def test_freeswitch_render_is_deterministic_and_complete(client, tmp_path):
     assert "[leg_timeout=15]user/201@" in plan and "|[leg_timeout=15]user/202@" in plan  # sequential
     assert 'wday="2" time-of-day="08:00-12:00"' in plan and 'wday="6" time-of-day="08:00-16:00"' in plan
     assert "2026-12-25" in plan
-    assert 'expression="^(112|211|911|990|999)$"' in plan  # emergency first
+    assert 'expression="^(112|211|811|911|990|999)$"' in plan  # with Trinidad's 811 (ADR 0027)  # emergency first
     assert plan.index("emergency") < plan.index("blocked-destinations") < plan.index("user-201")
     assert "1900" in plan  # blocked premium prefixes are refused in the dial plan
     # Ben is on do not disturb: no bridge to his phone, straight to voicemail.

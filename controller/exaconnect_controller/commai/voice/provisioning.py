@@ -27,7 +27,7 @@ from psycopg.types.json import Jsonb
 from ... import audit
 from ...security import token_hash
 from .. import events, jobs
-from . import billing, config
+from . import billing, config, countries, emergency, porting
 from . import provider as providers
 from .common import VoiceError, now
 
@@ -89,7 +89,37 @@ def _check_items(conn, cid, items: dict) -> dict:
         raise VoiceError("Switch-over dates look like 2026-11-30.", 422) from e
     if int(nums.get("new", 0)) < 0 or int(nums.get("new", 0)) > 100:
         raise VoiceError("Order 0 to 100 extra numbers.", 422)
+    _check_countries(conn, cid, items)
     return items
+
+
+def _check_countries(conn, cid, items: dict) -> None:
+    """Real numbers by country (ADR 0027). With a country named, or with the
+    live provider, numbers and ports need their country switched on. Without
+    one, the simulated provider's sandbox numbers are used (stage 3)."""
+    nums = items.get("numbers") or {}
+    country = str(nums.get("country") or "").upper()
+    live = providers.get().live
+    wanted = int(nums.get("new", 0)) + sum(1 for u in items.get("users") or [] if u.get("number"))
+    if wanted and (country or live):
+        if not country:
+            raise VoiceError("Say which country the new numbers are in.", 422)
+        c = countries.require(conn, country, cid)
+        nums["area"] = countries.check_area(c, nums.get("area"))
+        nums["country"] = c.code
+    chosen = nums.get("choose") or []
+    if chosen:
+        if not country:
+            raise VoiceError("Pick numbers from a search by country.", 422)
+        if len(chosen) > wanted:
+            raise VoiceError("More numbers were picked than the order has.", 422)
+        try:
+            nums["choose"] = [config.norm_e164(n) for n in chosen]
+        except config.OpError as e:
+            raise VoiceError(str(e), 422) from e
+    if country or live:
+        for p in nums.get("ported") or []:
+            countries.require(conn, countries.country_of(p.get("e164", "")), cid, "porting")
 
 
 def create(conn: psycopg.Connection, cid: Any, items: dict, actor: str) -> dict:
@@ -312,18 +342,40 @@ def _numbers(conn, o, prov, calls: list) -> dict:
             (_ref(o, "number", "new", j), "ring_group" if main else "none", main["id"] if main else None, None)
         )
     got = []
-    for ref, ttype, tid, site_id in wanted:
+    spec = items.get("numbers") or {}
+    country = spec.get("country") or None
+    if country:  # checked again when it runs: a country can be switched off meanwhile
+        countries.require(conn, country, cid)
+    chosen = list(spec.get("choose") or [])
+    for k, (ref, ttype, tid, site_id) in enumerate(wanted):
         row = conn.execute("SELECT e164 FROM voice_numbers WHERE order_ref = %s", (ref,)).fetchone()
         if row:
             got.append(row["e164"])
             continue
-        n = prov.order_number(conn, cid, f"{cid}:{ref}")  # same key, same number, however often it runs
+        key = f"{cid}:{ref}"  # same key, same number, however often it runs
+        if country:
+            n = prov.order_number(
+                conn, cid, key, spec.get("area") or "", country=country, e164=chosen[k] if k < len(chosen) else None
+            )
+        else:
+            n = prov.order_number(conn, cid, key)
         site = conn.execute("SELECT * FROM voice_sites WHERE id = %s", (site_id,)).fetchone() if site_id else None
         conn.execute(
             """INSERT INTO voice_numbers (customer_id, e164, source, status, target_type, target_id, site_id,
-                 provider, provider_ref, emergency_address, order_ref)
-               VALUES (%s, %s, 'new', 'pending', %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (order_ref) DO NOTHING""",
-            (cid, n["e164"], ttype, tid, site_id, prov.name, n["ref"], Jsonb(config.site_address(site)), ref),
+                 provider, provider_ref, emergency_address, order_ref, country)
+               VALUES (%s, %s, 'new', 'pending', %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (order_ref) DO NOTHING""",
+            (
+                cid,
+                n["e164"],
+                ttype,
+                tid,
+                site_id,
+                prov.name,
+                n["ref"],
+                Jsonb(config.site_address(site)),
+                ref,
+                country or countries.country_of(n["e164"]),
+            ),
         )
         got.append(n["e164"])
     ports = []
@@ -332,29 +384,22 @@ def _numbers(conn, o, prov, calls: list) -> dict:
         if conn.execute("SELECT 1 FROM voice_port_orders WHERE order_ref = %s", (ref,)).fetchone():
             continue
         e164 = config.norm_e164(p["e164"])
-        sub = prov.submit_port(conn, cid, e164, p.get("losing_carrier", ""), f"{cid}:{ref}")
         num = conn.execute(
             """INSERT INTO voice_numbers (customer_id, e164, source, status, target_type, target_id, provider,
-                 order_ref) VALUES (%s, %s, 'ported', 'porting', %s, %s, %s, %s)
+                 order_ref, country) VALUES (%s, %s, 'ported', 'porting', %s, %s, %s, %s, %s)
                ON CONFLICT (order_ref) DO UPDATE SET order_ref = EXCLUDED.order_ref RETURNING id""",
-            (cid, e164, "ring_group" if main else "none", main["id"] if main else None, prov.name, ref + ":number"),
-        ).fetchone()
-        conn.execute(
-            """INSERT INTO voice_port_orders (customer_id, order_id, number_id, e164, losing_carrier, status,
-                 switch_date, provider_ref, order_ref) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-               ON CONFLICT (order_ref) DO NOTHING""",
             (
                 cid,
-                o["id"],
-                num["id"],
                 e164,
-                p.get("losing_carrier", "")[:120],
-                sub["status"],
-                p.get("switch_date") or None,
-                sub["ref"],
-                ref,
+                "ring_group" if main else "none",
+                main["id"] if main else None,
+                prov.name,
+                ref + ":number",
+                countries.country_of(e164),
             ),
-        )
+        ).fetchone()
+        # Its own status timeline, documents and switch-over job (ADR 0027).
+        porting.create_from_order(conn, cid, o["id"], num["id"], e164, p, ref, prov)
         ports.append(e164)
     return {"numbers": got, "ports": ports}
 
@@ -400,6 +445,7 @@ def _confirm(conn, o, prov, calls: list) -> dict:
         calls.append((o["customer_id"], o["id"], n["id"], n["e164"], res["ok"], res["detail"]))
         if res["ok"]:
             conn.execute("UPDATE voice_numbers SET status = 'active' WHERE id = %s AND status = 'pending'", (n["id"],))
+            emergency.activate_outbound(conn, o["customer_id"], n["id"])
         else:
             failed.append(f"{n['e164']}: {res['detail']}")
     if failed:
@@ -516,46 +562,10 @@ def _dead(job: dict, error: str) -> None:
 
 
 def set_port(conn, cid, port_id, status: str, switch_date: str | None, note: str, actor: str) -> dict:
-    """Move a port order on (ExaCarib does this with the provider until its API
-    is live). On completion the number gets a test call; only then does it go
-    live and start billing."""
-    if status not in PORT_STATUSES:
-        raise VoiceError(f"Port status is one of {', '.join(PORT_STATUSES)}.", 422)
-    p = conn.execute(
-        "SELECT * FROM voice_port_orders WHERE id = %s AND customer_id = %s FOR UPDATE", (port_id, cid)
-    ).fetchone()
-    if p is None:
-        raise VoiceError("Port order not found.", 404)
-    if p["status"] in ("completed", "cancelled"):
-        raise VoiceError("This port order is finished.", 409)
-    conn.execute(
-        """UPDATE voice_port_orders SET status = %s, switch_date = coalesce(%s::date, switch_date), note = %s,
-             updated_at = now() WHERE id = %s""",
-        (status, switch_date or None, note[:300], port_id),
-    )
-    if status == "completed":
-        prov = providers.get()
-        res = prov.test_call(conn, p["e164"])
-        conn.execute(
-            "INSERT INTO voice_test_calls (customer_id, order_id, number_id, e164, ok, detail)"
-            " VALUES (%s, %s, %s, %s, %s, %s)",
-            (cid, p["order_id"], p["number_id"], p["e164"], res["ok"], res["detail"]),
-        )
-        if not res["ok"]:
-            raise VoiceError(f"The number ported but the test call failed: {res['detail']}", 502)
-        conn.execute(
-            "UPDATE voice_numbers SET status = 'active', billing_from = coalesce(billing_from, now()) WHERE id = %s",
-            (p["number_id"],),
-        )
-        jobs.enqueue(conn, "voice.render", {"customer_id": str(cid)}, customer_id=cid)
-    elif status in ("rejected", "cancelled"):
-        conn.execute(
-            "UPDATE voice_numbers SET status = 'removed', removed_at = now() WHERE id = %s AND status = 'porting'",
-            (p["number_id"],),
-        )
-    events.emit(conn, cid, "voice.port_updated", {"e164": p["e164"], "status": status}, str(port_id))
-    audit.record(conn, actor, "commai.voice.port", str(port_id), cid, {"status": status})
-    return conn.execute("SELECT * FROM voice_port_orders WHERE id = %s", (port_id,)).fetchone()
+    """ExaCarib moves a port order by hand (see porting.admin_set). On
+    completion the number gets a test call; only then does it go live and
+    start billing."""
+    return porting.admin_set(conn, cid, port_id, status, switch_date, note, actor)
 
 
 def issue_device_link(conn, cid, device_id) -> dict:
