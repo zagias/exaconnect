@@ -48,7 +48,8 @@ class Connector:
     app = ""
     label = ""
     description = ""
-    auth = "none"  # none | oauth | token
+    auth = "none"  # none | oauth | token | credentials
+    category = "other"  # see kit.CATEGORIES
     actions: dict[str, ActionSpec] = {}
 
     def validate(self, action: str, inputs: dict) -> dict:
@@ -100,11 +101,25 @@ def register(c: Connector) -> Connector:
     return c
 
 
+# Connectors made at run time, such as a business's own REST app described by
+# an OpenAPI document (ADR 0028): each resolver takes an app name and returns
+# a Connector or None.
+resolvers: list = []
+
+
 def get(app: str) -> Connector:
     c = _registry.get(app)
     if c is None:
+        for fn in resolvers:
+            c = fn(app)
+            if c is not None:
+                return c
         raise KeyError(app)
     return c
+
+
+def all_connectors() -> list[Connector]:
+    return list(_registry.values())
 
 
 def catalogue() -> list[dict]:

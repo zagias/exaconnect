@@ -149,14 +149,16 @@ def set_integration_settings(customer_id: str, app: str, body: SettingsIn, user:
     """Non-secret settings (calendar id, hours). Example apps also take
     simulate_failure to rehearse a broken integration."""
     access.check(user, customer_id, "commai:admin")
-    allowed = SAFE_SETTINGS | ({"simulate_failure"} if app.startswith("sim_") else set())
-    bad = sorted(set(body.settings) - allowed)
-    if bad:
-        raise HTTPException(422, f"Unknown settings: {', '.join(bad)}.")
     from psycopg.types.json import Jsonb
 
     with db.tx() as conn, _errors():
         _admin(conn, user, customer_id)
+        # The app's own settings and, on a stand-in, simulate_failure (ADR 0028).
+        allowed = SAFE_SETTINGS | integrations.extra_settings(conn, customer_id, app)
+        bad = sorted(set(body.settings) - allowed)
+        if bad:
+            raise HTTPException(422, f"Unknown settings: {', '.join(bad)}.")
+        integrations.check_settings(app, body.settings)
         row = conn.execute(
             """UPDATE integration_connections SET settings = settings || %s, updated_at = now()
                WHERE customer_id = %s AND app = %s RETURNING *""",

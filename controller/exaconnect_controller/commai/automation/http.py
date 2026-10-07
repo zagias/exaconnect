@@ -40,7 +40,9 @@ def _urllib_transport(method: str, url: str, headers: dict, data: bytes | None, 
     try:
         body: Any = json.loads(text) if text else {}
     except ValueError:
-        body = text[:2000]
+        ctype = str({k.lower(): v for k, v in hdrs.items()}.get("content-type", ""))
+        # XML (WebDAV multistatus), iCalendar and vCard documents are kept whole.
+        body = text if any(t in ctype for t in ("xml", "calendar", "vcard")) else text[:2000]
     return Response(status, body, hdrs)
 
 
@@ -60,17 +62,27 @@ def request(
     form: dict | None = None,
     params: dict | None = None,
     headers: dict | None = None,
+    content: bytes | None = None,
+    basic: tuple[str, str] | None = None,
     timeout: float = 20,
 ) -> Response:
+    """`content` sends raw bytes (set Content-Type in `headers`), for XML
+    (CalDAV, CardDAV) and other non-JSON bodies. `basic` is HTTP Basic auth."""
     if params:
         url = f"{url}?{urllib.parse.urlencode(params, doseq=True)}"
     h = {"Accept": "application/json", **(headers or {})}
     data: bytes | None = None
     if token:
         h["Authorization"] = f"Bearer {token}"
+    elif basic:
+        import base64
+
+        h["Authorization"] = "Basic " + base64.b64encode(f"{basic[0]}:{basic[1]}".encode()).decode()
     if json_body is not None:
         h["Content-Type"] = "application/json"
         data = json.dumps(json_body).encode()
+    elif content is not None:
+        data = content
     elif form is not None:
         h["Content-Type"] = "application/x-www-form-urlencoded"
         data = urllib.parse.urlencode(form).encode()
