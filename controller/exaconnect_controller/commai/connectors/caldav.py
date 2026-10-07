@@ -151,7 +151,7 @@ class CalDAV(DavConnector):
                 return {"dry_run": True, "would_send": {"PUT": href, "event": body}}
             existing = self.dav(conn, connection, "GET", href, ok=(200,), allow=(404,))
             if existing.status == 200:
-                return self._booking(uid, start, replayed=True)
+                return self._invite(conn, connection, key, self._booking(uid, start, replayed=True))
             if self.busy(conn, connection, url, start, finish):
                 raise ConnectorError("That time is already booked.", "input")
             r = self.dav(
@@ -166,9 +166,9 @@ class CalDAV(DavConnector):
                 allow=(412,),
             )
             if r.status == 412:  # created by an earlier attempt: never book twice
-                return self._booking(uid, start, replayed=True)
+                return self._invite(conn, connection, key, self._booking(uid, start, replayed=True))
             self.remember(conn, connection, key, "booking", uid)
-            return self._booking(uid, start)
+            return self._invite(conn, connection, key, self._booking(uid, start))
         if action == "cancel":
             bid = str(inputs["booking_id"])
             if not bid.replace("-", "").isalnum():
@@ -189,6 +189,14 @@ class CalDAV(DavConnector):
                 (connection["customer_id"], self.app, uid),
             ).fetchone()
         )
+
+    @staticmethod
+    def _invite(conn, connection: dict, key: str, result: dict) -> dict:
+        """Add the booking's signed .ics invite link (ADR 0028) for confirmations."""
+        from ..standards import ical_feed
+
+        url = ical_feed.invite_url_for_key(conn, connection["customer_id"], key)
+        return {**result, "invite_url": url} if url else result
 
     @staticmethod
     def _booking(uid: str, start: dt.datetime, replayed: bool = False) -> dict:

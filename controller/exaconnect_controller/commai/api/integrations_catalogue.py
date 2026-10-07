@@ -30,7 +30,7 @@ from .. import access
 from ..automation import catalogue, integrations, vault
 from ..channels import mailbox
 from ..connectors import kit, rest_generic
-from ..standards import api_docs, inbound, openapi_import, webhooks_std
+from ..standards import api_docs, exchange, ical_feed, inbound, openapi_import, webhooks_std
 from .common import errors
 
 router = APIRouter(prefix="/customers/{customer_id}", tags=["commai: integrations catalogue"])
@@ -529,3 +529,137 @@ def commai_openapi(request: Request) -> dict:
 def commai_asyncapi(request: Request) -> dict:
     """AsyncAPI 3.0 description of the webhook event stream and inbound webhooks."""
     return api_docs.asyncapi(_base(request))
+
+
+# ==== data exchange: CSV and vCard ======================================================
+
+
+class ImportIn(BaseModel):
+    data: str = Field(min_length=1, max_length=5_000_000, description="The file's text (CSV or vCard)")
+
+
+def _file(text: str, media: str, name: str) -> Response:
+    return Response(
+        content=text.encode(),
+        media_type=media,
+        headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store"},
+    )
+
+
+@router.get("/exports/contacts.csv")
+def export_contacts_csv(customer_id: str, user: UserDep) -> Response:
+    access.check(user, customer_id, "commai:admin")
+    with db.tx() as conn:
+        text = exchange.contacts_csv(conn, customer_id)
+        audit.record(conn, user.actor, "commai.export.contacts", "csv", customer_id)
+    return _file(text, "text/csv; charset=utf-8", "contacts.csv")
+
+
+@router.get("/exports/contacts.vcf")
+def export_contacts_vcf(customer_id: str, user: UserDep) -> Response:
+    access.check(user, customer_id, "commai:admin")
+    with db.tx() as conn:
+        text = exchange.contacts_vcf(conn, customer_id)
+        audit.record(conn, user.actor, "commai.export.contacts", "vcard", customer_id)
+    return _file(text, "text/vcard; charset=utf-8", "contacts.vcf")
+
+
+@router.get("/exports/conversations.csv")
+def export_conversations_csv(customer_id: str, user: UserDep, since: str | None = None) -> Response:
+    access.check(user, customer_id, "commai:admin")
+    with db.tx() as conn, _errors():
+        text = exchange.conversations_csv(conn, customer_id, since)
+        audit.record(conn, user.actor, "commai.export.conversations", "csv", customer_id, {"since": since})
+    return _file(text, "text/csv; charset=utf-8", "conversations.csv")
+
+
+@router.post("/imports/contacts.csv")
+def import_contacts_csv(customer_id: str, body: ImportIn, user: UserDep) -> dict:
+    """Contacts from CSV (name, email, phone, language, external_ref), matched by
+    email then phone: importing the same file twice changes nothing."""
+    access.check(user, customer_id, "commai:admin")
+    with db.tx() as conn, _errors():
+        _admin(conn, user, customer_id)
+        out = exchange.import_contacts_csv(conn, customer_id, body.data, user.actor)
+        audit.record(conn, user.actor, "commai.import.contacts", "csv", customer_id, {"rows": out["rows"]})
+    return out
+
+
+@router.post("/imports/contacts.vcf")
+def import_contacts_vcf(customer_id: str, body: ImportIn, user: UserDep) -> dict:
+    access.check(user, customer_id, "commai:admin")
+    with db.tx() as conn, _errors():
+        _admin(conn, user, customer_id)
+        out = exchange.import_contacts_vcf(conn, customer_id, body.data, user.actor)
+        audit.record(conn, user.actor, "commai.import.contacts", "vcard", customer_id, {"rows": out["rows"]})
+    return out
+
+
+@router.get("/imports")
+def list_imports(customer_id: str, user: UserDep) -> list[dict]:
+    access.check(user, customer_id, "commai:admin")
+    with db.tx() as conn:
+        return conn.execute(
+            "SELECT * FROM commai_data_imports WHERE customer_id = %s ORDER BY created_at DESC LIMIT 50",
+            (customer_id,),
+        ).fetchall()
+
+
+# ==== the iCalendar feed of bookings, and invites =======================================
+
+
+@router.get("/ical-feed")
+def get_ical_feed(customer_id: str, user: UserDep) -> dict:
+    access.check(user, customer_id, "commai:admin")
+    with db.tx() as conn:
+        row = ical_feed.get(conn, customer_id)
+    return {"published": ical_feed.published(row), "since": row["created_at"] if ical_feed.published(row) else None}
+
+
+@router.post("/ical-feed")
+def publish_ical_feed(customer_id: str, request: Request, user: UserDep) -> dict:
+    """A secret calendar address for the business's bookings, shown once. Making a
+    new one stops the old address working."""
+    access.check(user, customer_id, "commai:admin")
+    with db.tx() as conn:
+        _admin(conn, user, customer_id)
+        token = ical_feed.publish(conn, customer_id, user.actor)
+        audit.record(conn, user.actor, "commai.ical_feed.publish", "bookings", customer_id)
+    url = f"{_base(request)}/api/v1/commai/ical/{token}.ics"
+    return {"url": url, "webcal": "webcal://" + url.split("://", 1)[1]}
+
+
+@router.delete("/ical-feed", status_code=204)
+def unpublish_ical_feed(customer_id: str, user: UserDep) -> None:
+    access.check(user, customer_id, "commai:admin")
+    with db.tx() as conn:
+        _admin(conn, user, customer_id)
+        ical_feed.unpublish(conn, customer_id)
+        audit.record(conn, user.actor, "commai.ical_feed.unpublish", "bookings", customer_id)
+
+
+_ICS = {"Cache-Control": "private, max-age=300"}
+
+
+@public.get("/ical/{token}.ics", tags=["commai: calendar"])
+def bookings_feed(token: str) -> Response:
+    """A business's bookings as iCalendar (subscribe from any calendar app)."""
+    with db.tx() as conn:
+        text = ical_feed.feed(conn, token)
+    if text is None:
+        raise HTTPException(404, "No such calendar.")
+    return Response(content=text.encode(), media_type="text/calendar; charset=utf-8", headers=_ICS)
+
+
+@public.get("/ical/invites/{run_id}.ics", tags=["commai: calendar"])
+def booking_invite(run_id: str, sig: str = "") -> Response:
+    """One booking as an .ics invite (or cancellation), from a signed link."""
+    with db.tx() as conn:
+        text = ical_feed.invite(conn, run_id, sig)
+    if text is None:
+        raise HTTPException(404, "No such invite.")
+    return Response(
+        content=text.encode(),
+        media_type="text/calendar; charset=utf-8; method=" + ("CANCEL" if "METHOD:CANCEL" in text else "REQUEST"),
+        headers={**_ICS, "Content-Disposition": 'attachment; filename="invite.ics"'},
+    )
