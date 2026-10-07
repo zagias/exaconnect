@@ -1,0 +1,95 @@
+module exacarib-connect {
+  yang-version 1.1;
+  namespace "urn:exacarib:yang:exacarib-connect";
+  prefix exc;
+
+  import ietf-yang-types { prefix yang; }
+  import ietf-inet-types { prefix inet; }
+
+  organization "ExaCarib";
+  contact "https://www.exacarib.com";
+  description
+    "Read-only operational view of ExaCarib Connect: an organisation's
+     sites, their carrier links and paths with live health, and where each
+     application class runs against its SLA. Served over RESTCONF
+     (RFC 8040) at /api/v1/restconf/data/exacarib-connect:connect.";
+
+  revision 2026-10-07 {
+    description "Initial revision (ADR 0026).";
+  }
+
+  typedef underlay-type {
+    type enumeration {
+      enum fibre;
+      enum broadband;
+      enum lte;
+      enum leo;
+      enum geo;
+    }
+  }
+
+  typedef path-name {
+    type string { length "1..16"; }
+    description "carrier-a, carrier-b or sat.";
+  }
+
+  grouping sla-limits {
+    leaf max-latency-ms { type decimal64 { fraction-digits 2; } units "milliseconds"; }
+    leaf max-jitter-ms { type decimal64 { fraction-digits 2; } units "milliseconds"; }
+    leaf max-loss-percent { type decimal64 { fraction-digits 3; } units "percent"; }
+    leaf allow-satellite { type boolean; }
+  }
+
+  container connect {
+    config false;
+    description "Everything the requester's organisation may see.";
+
+    list site {
+      key "name";
+      leaf name { type string; }
+      leaf id { type yang:uuid; }
+      leaf organisation { type string; }
+      leaf kind { type enumeration { enum site; enum pop; } }
+      leaf location { type string; }
+      leaf storm-mode { type boolean; }
+      leaf-list lan-prefix { type inet:ip-prefix; }
+
+      container node {
+        leaf name { type string; }
+        leaf online { type boolean; }
+        leaf last-seen { type yang:date-and-time; }
+        leaf applied-version { type uint64; }
+        leaf config-ok { type boolean; }
+      }
+
+      list link {
+        key "path";
+        leaf path { type path-name; }
+        leaf id { type yang:uuid; }
+        leaf carrier { type string; }
+        leaf underlay-type { type underlay-type; }
+        leaf commit-mbps { type decimal64 { fraction-digits 3; } units "Mbit/s"; }
+        container state {
+          leaf bfd { type enumeration { enum up; enum down; enum unknown; } }
+          leaf latency-ms { type decimal64 { fraction-digits 2; } units "milliseconds"; }
+          leaf jitter-ms { type decimal64 { fraction-digits 2; } units "milliseconds"; }
+          leaf loss-percent { type decimal64 { fraction-digits 3; } units "percent"; }
+          leaf under-maintenance { type boolean; }
+        }
+      }
+
+      list class {
+        key "name";
+        leaf name { type string; }
+        leaf current-path { type path-name; }
+        leaf since { type yang:date-and-time; }
+        leaf sla-score {
+          type decimal64 { fraction-digits 3; range "0..1"; }
+          description "1 comfortable, 0 breaching, on the current path.";
+        }
+        container sla { uses sla-limits; }
+        leaf last-reason { type string; }
+      }
+    }
+  }
+}

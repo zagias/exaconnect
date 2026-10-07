@@ -227,6 +227,7 @@ def all_providers() -> list[Provider]:
 
 
 def _load() -> None:
+    from .. import netbox  # noqa: F401
     from . import alerting, chat, itsm, monitoring, otlp, snmp, syslog, webhook  # noqa: F401
 
 
