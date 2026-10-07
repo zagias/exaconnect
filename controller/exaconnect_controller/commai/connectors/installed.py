@@ -5,5 +5,7 @@ capability). Add one line here for each new connector file; the catalogue,
 the portal's Integrations catalogue page and the docs read from the registry.
 """
 
-# ruff: noqa: F401
+# ruff: noqa: F401, I001
 from . import google_calendar, hubspot, simulated  # phase 2
+from . import caldav, carddav  # standards (ADR 0028)
+from . import salesforce  # CRM (ADR 0028)
