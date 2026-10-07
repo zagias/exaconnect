@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from ... import audit, db
 from ...api.deps import UserDep, current_user
-from .. import access, attachments, inbox
+from .. import access, attachments, inbox, presence
 from .common import errors, page, page_after
 
 router = APIRouter(prefix="/customers/{customer_id}", tags=["commai: inbox"])
@@ -764,7 +764,9 @@ async def live_updates(websocket: WebSocket, customer_id: str) -> None:
                 ).fetchone()
             after = row["s"]
             await websocket.send_json({"type": "ready", "seq": after})
+        seen = dt.datetime.now(dt.UTC)
         while True:
+            seen = await _send_presence(websocket, customer_id, seen)
             rows = await asyncio.to_thread(_events_after, customer_id, after)
             for r in rows:
                 after = r["seq"]
@@ -780,6 +782,20 @@ async def live_updates(websocket: WebSocket, customer_id: str) -> None:
             await asyncio.sleep(1)
     except WebSocketDisconnect:
         return
+
+
+async def _send_presence(websocket: WebSocket, customer_id: str, since: dt.datetime) -> dt.datetime:
+    """Typing and viewing changes (ADR 0032): {"type": "presence", "data": {...}}, never a webhook event."""
+    rows = await asyncio.to_thread(_presence_after, customer_id, since)
+    for r in rows:
+        since = max(since, r["seen_at"])
+        await websocket.send_json({"type": "presence", "data": json.loads(json.dumps(r, default=str))})
+    return since
+
+
+def _presence_after(customer_id: str, since: dt.datetime) -> list[dict]:
+    with db.tx() as conn:
+        return presence.changes(conn, customer_id, since)
 
 
 def _ws_user(websocket: WebSocket, auth: str | None):

@@ -36,7 +36,7 @@ from starlette.concurrency import run_in_threadpool
 
 from ... import audit, db
 from ...api.deps import UserDep
-from .. import access, diagnostics, events, inbox
+from .. import access, diagnostics, events, inbox, visitor_calls
 from ..channels import email as email_ch
 from ..channels import messaging, providers, widget
 from .common import errors
@@ -874,6 +874,7 @@ def widget_config(public_key: str, request: Request):
                 "types": sorted(widget.FILE_TYPES),
             },
             "ask_contact": ws["ask_contact"],
+            "ai_calls": visitor_calls.enabled(c.conn, c.key),
         }
 
     return _widget_call(request, public_key, run, need_session=False)

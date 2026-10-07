@@ -4,14 +4,17 @@ the website visitor's AI browser call."""
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
 from ... import audit, db
 from ...api.deps import UserDep
-from .. import access, attachments, channels, events, history, inbox, inbox_jobs, ratelimit
+from .. import access, attachments, channels, events, history, inbox, inbox_jobs, presence, ratelimit, visitor_calls
+from ..channels import widget
+from . import channels as ch_api
 from .common import errors, page_after
 
 router = APIRouter(prefix="/customers/{customer_id}", tags=["commai: inbox"])
@@ -318,3 +321,136 @@ def provider_media(hook_token: str, file_id: str, exp: int, sig: str) -> Respons
             "Cache-Control": "private, max-age=300",
         },
     )
+
+
+# ---- typing and presence --------------------------------------------------------------------
+
+
+class TypingIn(BaseModel):
+    typing: bool = True
+
+
+@router.post("/conversations/{conversation_id}/typing")
+def staff_typing(customer_id: str, conversation_id: str, body: TypingIn, user: UserDep) -> dict:
+    """Say you are typing (send every few seconds while you type; it lapses on
+    its own) or stopped. Also marks you as viewing. Not audited: nothing changes."""
+    access.check(user, customer_id, "commai:read")
+    with db.tx() as conn, errors():
+        inbox.get(conn, customer_id, conversation_id)
+        presence.touch(conn, customer_id, conversation_id, "user", str(user.id), name=user.email, typing=body.typing)
+        return presence.state(conn, customer_id, conversation_id)
+
+
+@router.get("/conversations/{conversation_id}/presence")
+def get_presence(customer_id: str, conversation_id: str, user: UserDep) -> dict:
+    """Who is typing or viewing now, and whether the AI is preparing a reply."""
+    access.check(user, customer_id, "commai:read")
+    with db.tx() as conn, errors():
+        inbox.get(conn, customer_id, conversation_id)
+        return presence.state(conn, customer_id, conversation_id)
+
+
+# ---- website visitors: typing and AI calls ----------------------------------------------------
+
+
+class VisitorTypingIn(BaseModel):
+    conversation_id: str
+    typing: bool = True
+
+
+def _team_typing(c, conversation_id: str) -> dict:
+    conv = widget.own_conversation(c.conn, c.key, c.address, conversation_id)
+    return {"team_typing": presence.team_typing(c.conn, c.key["customer_id"], conv["id"])}
+
+
+@public.post("/widget/{public_key}/typing")
+async def widget_typing(public_key: str, request: Request):
+    """The visitor is typing (or stopped). Answers whether the team is typing."""
+    raw = await ch_api._json(request)
+
+    def run(c) -> dict:
+        body = ch_api._body(VisitorTypingIn, raw)
+        conv = widget.own_conversation(c.conn, c.key, c.address, body.conversation_id)
+        presence.touch(
+            c.conn,
+            c.key["customer_id"],
+            conv["id"],
+            "contact",
+            c.address,
+            name=c.session.get("n", ""),
+            typing=body.typing,
+        )
+        return _team_typing(c, body.conversation_id)
+
+    return await run_in_threadpool(ch_api._widget_call, request, public_key, run)
+
+
+@public.get("/widget/{public_key}/typing")
+def widget_team_typing(public_key: str, request: Request, conversation_id: str):
+    """Whether someone on the team (or the AI) is writing a reply to the visitor."""
+    return ch_api._widget_call(request, public_key, lambda c: _team_typing(c, conversation_id))
+
+
+class VisitorTurnIn(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+
+
+@public.post("/widget/{public_key}/calls")
+async def widget_start_call(public_key: str, request: Request):
+    """Start a call with the AI agent from the website. Speech is recognised and
+    spoken in the visitor's browser; this carries text only."""
+
+    def run(c) -> dict:
+        return visitor_calls.start(c.conn, c.key, c.address, c.session.get("n", ""))
+
+    return await run_in_threadpool(ch_api._widget_call, request, public_key, run, status_code=201)
+
+
+@public.post("/widget/{public_key}/calls/{conversation_id}/turns")
+async def widget_call_turn(public_key: str, conversation_id: str, request: Request):
+    """What the visitor said; answers what the AI says back."""
+    from ..ai import agent, voice
+
+    raw = await ch_api._json(request)
+    state: dict = {}
+
+    def store(c) -> dict:
+        body = ch_api._body(VisitorTurnIn, raw)
+        call = visitor_calls.own_call(c.conn, c.key, c.address, conversation_id)
+        visitor_calls.turn_allowed(c.conn, c.key, call)
+        state["msg"] = voice.caller_turn(c.conn, c.key["customer_id"], conversation_id, body.text)
+        state["customer_id"] = c.key["customer_id"]
+        return {}
+
+    first = await run_in_threadpool(ch_api._widget_call, request, public_key, store)
+    if first.status_code != 200:
+        return first
+
+    def answer(c) -> dict:
+        # The reply in its own transaction, after the visitor's words are stored.
+        agent.respond(c.conn, state["customer_id"], conversation_id, state["msg"]["id"])
+        return {}
+
+    await run_in_threadpool(ch_api._widget_call, request, public_key, answer)
+
+    def read(c) -> dict:
+        replies = voice.replies_after(c.conn, state["customer_id"], conversation_id, state["msg"])
+        conv = inbox.get(c.conn, state["customer_id"], conversation_id)
+        return {
+            "reply": " ".join(r["body"] for r in replies),
+            "handed_over": conv["handler"] != "ai",
+        }
+
+    return await run_in_threadpool(ch_api._widget_call, request, public_key, read)
+
+
+@public.post("/widget/{public_key}/calls/{conversation_id}/end")
+async def widget_end_call(public_key: str, conversation_id: str, request: Request):
+    from ..ai import voice
+
+    def run(c) -> dict:
+        visitor_calls.own_call(c.conn, c.key, c.address, conversation_id)
+        call = voice.end_call(c.conn, c.key["customer_id"], conversation_id, f"visitor:{c.address}")
+        return {"ended": True, "turns": call["turns"]}
+
+    return await run_in_threadpool(ch_api._widget_call, request, public_key, run)
