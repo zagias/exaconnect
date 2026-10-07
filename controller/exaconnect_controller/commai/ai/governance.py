@@ -228,7 +228,7 @@ def sync_model(conn: psycopg.Connection, env_model: str) -> str:
         waiting = conn.execute(
             """SELECT 1 FROM ai_candidates WHERE customer_id IS NULL AND kind = 'model' AND change->>'model' = %s
                AND status IN ('testing', 'passed', 'failed', 'promoted')
-               AND created_at > (SELECT promoted_at FROM ai_live_model WHERE id = 1)""",
+               AND created_at >= (SELECT promoted_at FROM ai_live_model WHERE id = 1)""",
             (env_model,),
         ).fetchone()
         if not waiting:
