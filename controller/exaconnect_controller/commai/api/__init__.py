@@ -16,10 +16,11 @@ from . import (  # noqa: E402
     ai,
     automation,
     channels,
+    inbox_extras,
     voice,
 )
 
-for _m in (channels, ai, automation, voice):
+for _m in (channels, ai, automation, voice, inbox_extras):
     router.include_router(_m.router)
     if hasattr(_m, "public"):
         router.include_router(_m.public)

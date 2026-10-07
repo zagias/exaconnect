@@ -386,6 +386,7 @@ class FieldsIn(BaseModel):
     priority: Literal["low", "normal", "high", "urgent"] | None = None
     tags: list[str] | None = Field(default=None, max_length=20)
     subject: str | None = Field(default=None, max_length=200)
+    intent: str | None = Field(default=None, max_length=60, description="What the contact wants, for routing")
 
 
 @router.patch("/conversations/{conversation_id}")
@@ -400,6 +401,7 @@ def update_conversation(customer_id: str, conversation_id: str, body: FieldsIn, 
             priority=body.priority,
             tags=body.tags,
             subject=body.subject,
+            intent=body.intent,
         )
         audit.record(
             conn,
@@ -577,6 +579,7 @@ class RuleIn(BaseModel):
     team_id: str | None = None
     queue: str = Field(default="", max_length=60)
     priority: Literal["low", "normal", "high", "urgent"] | None = None
+    skills: list[str] = Field(default_factory=list, max_length=20, description="Skills the person picked must have")
     enabled: bool = True
 
 
@@ -612,8 +615,9 @@ def create_rule(customer_id: str, body: RuleIn, user: UserDep) -> dict:
         ):
             raise HTTPException(404, "Team not found.")
         row = conn.execute(
-            """INSERT INTO commai_routing_rules (customer_id, position, name, match, team_id, queue, priority, enabled)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING *""",
+            """INSERT INTO commai_routing_rules (customer_id, position, name, match, team_id, queue, priority, enabled,
+                                                skills)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING *""",
             (
                 customer_id,
                 body.position,
@@ -623,6 +627,7 @@ def create_rule(customer_id: str, body: RuleIn, user: UserDep) -> dict:
                 body.queue,
                 body.priority,
                 body.enabled,
+                sorted({k.strip()[:40] for k in body.skills if k.strip()}),
             ),
         ).fetchone()
         audit.record(conn, user.actor, "commai.routing_rule.create", body.name, customer_id)

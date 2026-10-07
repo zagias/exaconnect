@@ -338,6 +338,8 @@ def _run(conn: psycopg.Connection, customer_id: Any, conv: dict, message_id: Any
         # Written only now: holding the conversation row during the model call
         # would block a person taking over.
         conn.execute("UPDATE conversations SET language = %s WHERE id = %s", (detected, conv["id"]))
+    if out.intent and out.intent[:60] != (conv.get("intent") or ""):
+        conn.execute("UPDATE conversations SET intent = %s WHERE id = %s", (out.intent[:60], conv["id"]))
     msg = inbox.send(
         conn,
         customer_id,
