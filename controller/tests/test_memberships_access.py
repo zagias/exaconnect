@@ -525,3 +525,99 @@ def test_scim_cannot_take_over_a_member_of_another_organisation(client, world):
     sh = _scim_token(client, a, world["h_a"])
     r = client.post(f"{SCIM}/Users", json={"schemas": [USER], "userName": "shared@b.example"}, headers=sh)
     assert r.status_code == 409
+
+
+def test_invite_into_a_single_sign_on_domain(client, world):
+    """A business that requires single sign-on for its domain: an invited
+    newcomer there can't set a password; they sign in through SSO first."""
+    a = world["a"]
+    with db.tx() as conn:
+        c = conn.execute(
+            """INSERT INTO sso_connections (customer_id, alias, protocol, display_name, status, require_sso)
+               VALUES (%s, 'a-idp', 'oidc', 'Org A sign-in', 'enabled', true) RETURNING id""",
+            (a,),
+        ).fetchone()["id"]
+        conn.execute(
+            "INSERT INTO sso_domains (connection_id, customer_id, domain, status) VALUES (%s, %s, 'sso-a.example', 'approved')",
+            (c, a),
+        )
+    r = client.post(f"{API}/orgs/{a}/invites", json={"email": "new@sso-a.example"}, headers=world["h_a"])
+    tok = r.json()["token"]
+    client.cookies.clear()
+    shown = client.get(f"{API}/invites/{tok}").json()
+    assert shown["sso_required"] is True and shown["has_account"] is False
+    r = client.post(f"{API}/invites/{tok}/accept", json={"password": NEW_PASSWORD})
+    assert r.status_code == 403 and "single sign-on" in r.json()["detail"]
+    with db.tx() as conn:
+        assert conn.execute("SELECT 1 FROM users WHERE email = 'new@sso-a.example'").fetchone() is None
+        # The invitation wasn't used up by the refusal.
+        assert (
+            conn.execute("SELECT accepted_at FROM org_invites WHERE email = 'new@sso-a.example'").fetchone()[
+                "accepted_at"
+            ]
+            is None
+        )
+
+
+def test_invitation_notice_goes_to_the_simulated_outbox_without_the_link(client, world):
+    r = client.post(f"{API}/orgs/{world['a']}/invites", json={"email": "n@a.example"}, headers=world["h_a"])
+    inv = r.json()
+    assert inv["emailed"] is False and inv["email_sender"] == "simulated"
+    with db.tx() as conn:
+        rows = conn.execute(
+            "SELECT to_address, body, headers FROM sim_channel_outbox WHERE customer_id = %s", (world["a"],)
+        ).fetchall()
+    assert len(rows) == 1 and rows[0]["to_address"] == "n@a.example"
+    assert inv["token"] not in rows[0]["body"] and inv["token"] not in str(rows[0]["headers"])
+    assert "Org A" in rows[0]["body"]
+
+
+def test_migration_turns_legacy_accounts_into_memberships(client, world):
+    """Accounts from before memberships: hand-made people become admins with the
+    earliest the owner, directory people follow their scopes, keys keep their
+    organisation, and running it again changes nothing."""
+    from importlib import resources
+
+    sql = resources.files("exaconnect_controller").joinpath("commai", "sql", "15_memberships.sql").read_text()
+    a = world["a"]
+    with db.tx() as conn:
+        legacy = []
+        for email, prov, scopes in (
+            ("first@legacy.example", None, None),
+            ("second@legacy.example", None, None),
+            ("dir@legacy.example", "scim", ["commai:read"]),
+        ):
+            legacy.append(
+                conn.execute(
+                    """INSERT INTO users (email, password_hash, role, customer_id, provisioned_by, access_scopes)
+                       VALUES (%s, '!', 'customer', %s, %s, %s) RETURNING id""",
+                    (email, a, prov, scopes),
+                ).fetchone()["id"]
+            )
+        conn.execute(
+            "INSERT INTO api_keys (user_id, name, prefix, token_hash) VALUES (%s, 'old', 'exa_old', 'h-old')",
+            (legacy[0],),
+        )
+        # Wipe the organisation's memberships, as if they predate the table.
+        conn.execute("DELETE FROM org_memberships WHERE customer_id = %s", (a,))
+        conn.execute("UPDATE api_keys SET customer_id = NULL")
+        conn.execute(sql)
+        first = {
+            r["email"]: (r["role"], r["managed_by"])
+            for r in conn.execute(
+                """SELECT u.email, m.role, m.managed_by FROM org_memberships m JOIN users u ON u.id = m.user_id
+                   WHERE m.customer_id = %s""",
+                (a,),
+            ).fetchall()
+        }
+        conn.execute(sql)
+        again = conn.execute("SELECT count(*) AS n FROM org_memberships WHERE customer_id = %s", (a,)).fetchone()["n"]
+        key_org = conn.execute("SELECT customer_id FROM api_keys WHERE name = 'old'").fetchone()["customer_id"]
+    assert first == {
+        "owner@a.example": ("owner", None),  # made first
+        "first@legacy.example": ("admin", None),
+        "second@legacy.example": ("admin", None),
+        "dir@legacy.example": ("member", "scim"),
+    }
+    assert again == 4
+    assert str(key_org) == a
