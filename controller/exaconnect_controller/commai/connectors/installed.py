@@ -9,3 +9,6 @@ the portal's Integrations catalogue page and the docs read from the registry.
 from . import google_calendar, hubspot, simulated  # phase 2
 from . import caldav, carddav  # standards (ADR 0028)
 from . import salesforce  # CRM (ADR 0028)
+from . import dynamics365, pipedrive, zoho_crm  # CRM (ADR 0028)
+from . import gmail, microsoft365  # email and Outlook calendar (ADR 0028)
+from . import calendly  # scheduling (ADR 0028)
