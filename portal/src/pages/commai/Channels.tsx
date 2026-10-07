@@ -3,8 +3,10 @@ import { Link, NavLink, Navigate, Route, Routes } from "react-router-dom";
 import { api, useApi, type Loaded } from "../../api";
 import { ErrorNote, ExampleTag } from "../../components";
 import { Card, PageHead, Tabs, useAction } from "../../ui";
+import { SocialChannel, WhatsAppExtras } from "./ChannelsGlobal";
 import { useCommaiBase, when } from "./lib";
 import "./channels.css";
+import { EmailLimits } from "./ChannelExtras";
 
 /* Shapes from controller/exaconnect_controller/commai/api/channels.py (ADR 0018). */
 
@@ -17,6 +19,7 @@ interface WidgetSettings {
   hours: Partial<Record<Day, [string, string] | null>>;
   callbacks: boolean;
   attachments: boolean;
+  ai_calls?: boolean;
   ask_contact: "before" | "after_first" | "never";
 }
 
@@ -125,7 +128,7 @@ export default function Channels() {
   if (!base) return <p className="muted">Choose a business first.</p>;
   return (
     <>
-      <PageHead eyebrow="CommAI" title="Channels">
+      <PageHead title="Channels">
         Where your customers reach you. Every channel lands in the same inbox.
       </PageHead>
       <Tabs label="Channels">
@@ -133,6 +136,9 @@ export default function Channels() {
         <NavLink to="/commai/channels/whatsapp">WhatsApp</NavLink>
         <NavLink to="/commai/channels/sms">SMS</NavLink>
         <NavLink to="/commai/channels/email">Email</NavLink>
+        <NavLink to="/commai/channels/messenger">Messenger</NavLink>
+        <NavLink to="/commai/channels/instagram">Instagram</NavLink>
+        <NavLink to="/commai/channels/telegram">Telegram</NavLink>
       </Tabs>
       <Routes>
         <Route index element={<Navigate to="web" replace />} />
@@ -140,6 +146,9 @@ export default function Channels() {
         <Route path="whatsapp" element={<WhatsApp base={base} />} />
         <Route path="sms" element={<Sms base={base} />} />
         <Route path="email" element={<Email base={base} />} />
+        <Route path="messenger" element={<SocialChannel key="messenger" base={base} channel="messenger" />} />
+        <Route path="instagram" element={<SocialChannel key="instagram" base={base} channel="instagram" />} />
+        <Route path="telegram" element={<SocialChannel key="telegram" base={base} channel="telegram" />} />
       </Routes>
     </>
   );
@@ -564,6 +573,9 @@ function Appearance({ base, k, reload }: { base: string; k: WidgetKey; reload: (
         <label className="check">
           <input type="checkbox" checked={s.attachments} onChange={(e) => set("attachments", e.target.checked)} /> Visitors can attach images, PDFs and text files (up to 2 MB)
         </label>
+        <label className="check">
+          <input type="checkbox" checked={!!s.ai_calls} onChange={(e) => set("ai_calls", e.target.checked)} /> Visitors can talk to the AI assistant (needs the AI agent on)
+        </label>
         <div className="actions wide">
           <button className="button" disabled={save.busy}>
             Save
@@ -894,6 +906,7 @@ function WhatsApp({ base }: { base: string }) {
       </Card>
       <Accounts base={base} channel="whatsapp" title="Numbers" placeholder="+1 868 555 0100" />
       <Templates base={base} tpls={tpls} />
+      <WhatsAppExtras base={base} />
       <Outbox base={base} channel="whatsapp" />
       <Diagnostics base={base} area="whatsapp" />
     </>
@@ -1082,7 +1095,7 @@ function Email({ base }: { base: string }) {
  "message_id": "<...>", "in_reply_to": "<...>", "references": "<...> <...>"}`}</code>
         </pre>
       </Card>
-      <Accounts base={base} channel="email" title="Addresses" placeholder="help@example.com" />
+      <Accounts base={base} channel="email" title="Addresses" placeholder="help@example.com" extra={(a, reload) => <EmailLimits base={base} a={a} reload={reload} />} />
       <Outbox base={base} channel="email" />
       <Diagnostics base={base} area="email" />
     </>

@@ -93,6 +93,12 @@ rollback: ## Go back to the previous release (or TO=<commit>) without rebuilding
 releases: ## List the releases kept on this server
 	deploy/release/release.sh list
 
+voice-up: ## Start the voice SBC (Kamailio, FreeSWITCH) next to the controller; publishes no SIP ports
+	deploy/voice/up.sh
+
+voice-check: ## Check the SBC configuration with the real images (used by CI)
+	deploy/voice/check.sh
+
 controller-down: ## Stop controller, proxy and database (data is kept)
 	docker compose -f deploy/docker-compose.yml --env-file .env down
 

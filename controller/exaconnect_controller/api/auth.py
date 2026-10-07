@@ -14,6 +14,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
 from .. import audit, db
+from ..commai.enterprise import security as enterprise_security
 from ..identity import mfa, oidc, orgs, passkeys, sessions, sso, totp
 from ..security import hash_password, new_token, token_hash, verify_password
 from .deps import API_KEY_PREFIX, UserDep, products_of
@@ -44,6 +45,8 @@ class UserOut(BaseModel):
     customer_id: str | None = None
     name: str = ""
     two_step: bool = False
+    # The organisation requires two-step sign-in and this account has not set it up (ADR 0030).
+    two_step_required: bool = False
     # None: the full account. A list: what a directory-provisioned account may do.
     scopes: list[str] | None = None
     # Shared accounts (ADR 0023): customer_id above is the organisation this
@@ -120,8 +123,18 @@ def _acting_org(user) -> object:
 def _signed_in(request: Request, response: Response, row: dict, via: str, org=None, **detail) -> LoginOut:
     """org: the organisation the new session acts for (an enterprise SSO sign-in
     acts for the business whose provider vouched); None for the primary one."""
+    # That business's security settings (ADR 0030): allowed addresses, session lifetime, two-step.
+    policy = enterprise_security.signin_policy(
+        {**row, "customer_id": org or row["customer_id"]}, _client_ip(request), via
+    )
+    if policy["refuse"]:
+        _failed(row["email"], _client_ip(request), policy["reason"])
+        raise HTTPException(status.HTTP_403_FORBIDDEN, policy["refuse"])
+    hours = request.app.state.settings.session_hours
+    if policy["session_hours"]:
+        hours = min(hours, policy["session_hours"])
     with db.tx() as conn:
-        token, expires = sessions.start(conn, row["id"], request.app.state.settings.session_hours, via, org)
+        token, expires = sessions.start(conn, row["id"], hours, via, org)
         audit.record(
             conn,
             f"user:{row['email']}",
@@ -133,6 +146,7 @@ def _signed_in(request: Request, response: Response, row: dict, via: str, org=No
     sessions.set_cookie(response, request, token, expires)
     out = _user_out(row)
     out.two_step = on
+    out.two_step_required = policy["enrol"]
     return LoginOut(token=token, expires_at=expires, user=out)
 
 
@@ -197,13 +211,27 @@ def login_mfa(body: MfaLoginIn, request: Request, response: Response) -> LoginOu
 
 
 @router.get("/me")
-def me(user: UserDep) -> UserOut:
+def me(user: UserDep, request: Request) -> UserOut:
     with db.tx() as conn:
         row = conn.execute("SELECT * FROM users WHERE id = %s", (user.id,)).fetchone()
         on = mfa.two_step_on(conn, row)
         mine = orgs.memberships(conn, user.id) if user.role == "customer" else []
+        session_via = None
+        if user.via != "key":
+            token, _ = sessions.request_token(request)
+            srow = conn.execute("SELECT via FROM sessions WHERE token_hash = %s", (token_hash(token or ""),)).fetchone()
+            session_via = srow["via"] if srow else None
+        required = (
+            user.via != "key"
+            and row["role"] == "customer"
+            and bool(user.customer_id)
+            and enterprise_security.needs_two_step(
+                conn, enterprise_security.get(conn, user.customer_id), row, session_via
+            )
+        )
     out = _user_out(row)
     out.two_step = on
+    out.two_step_required = required
     out.scopes = list(user.scopes) if user.scopes is not None else None
     if user.role == "customer":
         out.customer_id = str(user.customer_id) if user.customer_id else None
@@ -227,10 +255,18 @@ def me(user: UserDep) -> UserOut:
 def logout(user: UserDep, request: Request, response: Response) -> None:
     token, _ = sessions.request_token(request)
     with db.tx() as conn:
+        # Sign-out also reaches the gateway and the company's provider (ADR 0030).
+        provider_logout = (
+            enterprise_security.logout_url(conn, request.app.state.settings, token_hash(token)) if token else None
+        )
         if token:
             conn.execute("DELETE FROM sessions WHERE token_hash = %s", (token_hash(token),))
-        audit.record(conn, user.actor, "logout", customer_id=user.customer_id)
+        audit.record(
+            conn, user.actor, "logout", customer_id=user.customer_id, detail={"provider_logout": bool(provider_logout)}
+        )
     sessions.clear_cookie(response, request)
+    if provider_logout:
+        response.headers["X-Exa-Logout-Url"] = provider_logout
 
 
 class PasswordIn(BaseModel):
@@ -648,9 +684,14 @@ def oidc_callback(
         return fail(messages[why], why, email)
     if user["disabled_at"] is not None:
         return fail("This account has been switched off. Ask your administrator.", "disabled", email)
-    response = _back(st["next_path"])
+    via = "sso" if conn_row else f"oidc:{st['idp']}"
     org = conn_row["customer_id"] if conn_row else None
-    _signed_in(request, response, user, "sso" if conn_row else f"oidc:{st['idp']}", org, idp=st["idp"])
+    policy = enterprise_security.signin_policy({**user, "customer_id": org or user["customer_id"]}, ip, via)
+    if policy["refuse"]:
+        return fail(policy["refuse"], policy["reason"], email)
+    response = _back(st["next_path"])
+    out = _signed_in(request, response, user, via, org, idp=st["idp"])
+    enterprise_security.remember_id_token(token_hash(out.token), tokens["id_token"])
     return response
 
 

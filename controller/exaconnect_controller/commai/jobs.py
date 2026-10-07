@@ -85,7 +85,7 @@ def _backoff(attempts: int) -> float:
 
 def claim(limit: int = 20, kinds: list[str] | None = None) -> list[dict]:
     with db.tx() as conn:
-        return conn.execute(
+        rows = conn.execute(
             f"""UPDATE jobs SET status = 'running', attempts = attempts + 1,
                        locked_until = now() + interval '{LEASE_S} seconds'
                 WHERE id IN (
@@ -97,6 +97,9 @@ def claim(limit: int = 20, kinds: list[str] | None = None) -> list[dict]:
                 RETURNING *""",
             {"limit": limit, "kinds": kinds},
         ).fetchall()
+    # UPDATE ... RETURNING does not keep the subquery's order: sort again so two
+    # replies in one conversation go out in the order they were written.
+    return sorted(rows, key=lambda r: (r["run_after"], r["id"]))
 
 
 def _finish(job_id: int, ok: bool, error: str = "", delay_s: float | None = None, dead: bool = False) -> None:

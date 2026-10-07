@@ -13,6 +13,12 @@ controller and portal (ADR 0016).
 | AI runtime, knowledge, copilot, memory, browser calls | `commai/ai/` | 0019 | ai.md |
 | Integrations, workflows, onboarding, assistant, reports | `commai/automation/`, `commai/connectors/` | 0020 | automation.md |
 | Voice phone system, provisioning, billing | `commai/voice/`, `deploy/freeswitch/` | 0021 | voice.md |
+| Partners, white-label, regions, OAuth, sandboxes, API policy, chat SDK | `commai/partners.py`, `branding.py`, `regions.py`, `oauth.py`, `sandbox.py`, `apipolicy.py` | 0025 | partners.md, api-policy.md |
+| Organisations, calendars, roles, security settings, data governance, abuse protection | `commai/enterprise/` | 0024 | enterprise.md |
+| Messenger, Instagram, Telegram, WhatsApp Cloud API, countries, SMS carriers | `commai/channels/` | 0023 | channels-global.md |
+| Languages, AI quality, attachments, governance, staff chat, surveys | `commai/i18n/`, `commai/ai/`, `commai/team.py`, `commai/csat.py` | 0026 | quality.md |
+| Inbox routing, targets, presence, attachments, contact history, API errors, rate limits | `commai/inbox_jobs.py`, `commai/presence.py`, `commai/attachments.py`, `commai/ratelimit.py` | 0032 | inbox-extras.md |
+| Integration catalogue: CRM, email and calendar apps; CalDAV, CardDAV, IMAP/SMTP, CloudEvents, OpenAPI import, CSV | `commai/connectors/`, `commai/standards/`, `commai/channels/mailbox.py` | 0028 | integrations.md |
 
 API: `/api/v1/commai/customers/{customer_id}/...` (OpenAPI at
 `/api/v1/docs`), SCIM at `/api/v1/scim/v2`. Python SDK:

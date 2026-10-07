@@ -112,3 +112,12 @@ jobs:
           deploy/agent/*.sh deploy/release/*.sh
       - name: topology parses
         run: python3 -c "import yaml,sys; t=yaml.safe_load(open('lab/exaconnect.clab.yml')); print(len(t['topology']['nodes']), 'nodes')"
+
+  voice-sbc:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: shellcheck -x deploy/voice/*.sh lab/ci/checks/voice-sbc.sh
+      - name: Kamailio and FreeSWITCH start with this config
+        run: make voice-check

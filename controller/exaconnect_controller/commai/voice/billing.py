@@ -263,20 +263,33 @@ def spend_today(conn, customer_id) -> Decimal:
     return money(row["a"])
 
 
-def authorise(conn: psycopg.Connection, customer_id: Any, to_number: str) -> dict:
-    """May this outbound call go ahead? -> {"allowed", "reason"}. Emergency
-    numbers are never stopped. Unusual patterns raise an alert, not a block."""
+def authorise(
+    conn: psycopg.Connection,
+    customer_id: Any,
+    to_number: str,
+    *,
+    voice_user_id: Any = None,
+    from_number: str | None = None,
+) -> dict:
+    """May this outbound call go ahead? -> {"allowed", "reason", "route"}, and
+    "code" when refused (see refused()).
+    Emergency numbers (every island's, ADR 0033) are never stopped. Unusual
+    patterns raise an alert; revenue share fraud rules (fraud.py) can stop a
+    call or suspend international calling. "route" is the carriers to try, in
+    order (None: the single provider)."""
+    from . import carriers, emergency, fraud
+
     d = digits(to_number)
-    if d in EMERGENCY:
-        return {"allowed": True, "reason": "Emergency call."}
+    if d in EMERGENCY or emergency.is_emergency(conn, customer_id, d, voice_user_id):
+        return {"allowed": True, "reason": "Emergency call.", "emergency": True, "route": None}
     lim = fraud_limits(conn, customer_id)
     for p in lim["blocked_prefixes"]:
         if d.startswith(p):
-            return {"allowed": False, "reason": f"Calls to numbers starting {p} are blocked (premium or high-risk)."}
+            return refused("blocked_prefix", f"Calls to numbers starting {p} are blocked (premium or high-risk).")
     if not lim["international"] and not d.startswith("1"):
-        return {"allowed": False, "reason": "International calls are switched off for your company."}
+        return refused("international_off", "International calls are switched off for your company.")
     if lim["daily_cap"] is not None and spend_today(conn, customer_id) >= money(lim["daily_cap"]):
-        return {"allowed": False, "reason": f"Today's call spend has reached the daily cap of {lim['daily_cap']}."}
+        return refused("daily_cap", f"Today's call spend has reached the daily cap of {lim['daily_cap']}.")
     recent = conn.execute(
         """SELECT count(*) AS n FROM voice_cdrs WHERE customer_id = %s AND direction = 'outbound'
            AND started_at > now() - interval '1 hour'""",
@@ -295,7 +308,18 @@ def authorise(conn: psycopg.Connection, customer_id: Any, to_number: str) -> dic
                 "voice.fraud_alert",
                 {"reason": "unusual_volume", "calls_last_hour": recent + 1, "threshold": lim["calls_per_hour_alert"]},
             )
-    return {"allowed": True, "reason": ""}
+    stop = fraud.check(conn, customer_id, d, voice_user_id=voice_user_id, from_number=from_number)
+    if stop:
+        return {**stop, "route": None}
+    route = carriers.route_keys(conn, customer_id, d)
+    if route == []:
+        return {**refused("no_carrier", "No carrier can take calls to this destination right now."), "route": []}
+    return {"allowed": True, "reason": "", "route": route}
+
+
+def refused(code: str, reason: str) -> dict:
+    """A refused call: "code" is the short name the PBX gets (voice/pbx.py)."""
+    return {"allowed": False, "code": code, "reason": reason}
 
 
 # ---- rating --------------------------------------------------------------------------
@@ -353,10 +377,16 @@ def record_call(conn: psycopg.Connection, customer_id: Any, call: dict) -> dict:
             "SELECT id, site_id, team_id FROM voice_users WHERE id = %s AND customer_id = %s",
             (call["voice_user_id"], customer_id),
         ).fetchone()
+    from . import fraud
+
+    intl = call.get("direction", "outbound") == "outbound" and fraud.is_international(
+        call.get("to_number", ""), fraud.origin(conn, customer_id)["country"]
+    )
     row = conn.execute(
         """INSERT INTO voice_cdrs (customer_id, call_id, direction, from_number, to_number, voice_user_id, site_id,
-             team_id, started_at, ended_at, seconds, ai_seconds, status, block_reason, recording_ref, provider_ref)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+             team_id, started_at, ended_at, seconds, ai_seconds, status, block_reason, recording_ref, provider_ref,
+             international)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
            ON CONFLICT (customer_id, call_id) DO NOTHING RETURNING *""",
         (
             customer_id,
@@ -375,6 +405,7 @@ def record_call(conn: psycopg.Connection, customer_id: Any, call: dict) -> dict:
             call.get("block_reason", ""),
             call.get("recording_ref", ""),
             call.get("provider_ref", ""),
+            intl,
         ),
     ).fetchone()
     if row is None:
@@ -594,7 +625,8 @@ def draft_invoice(conn, customer_id, period: dt.date, actor: str) -> dict:
     conn.execute(
         """INSERT INTO voice_invoice_lines (invoice_id, customer_id, charge_id, description, quantity, amount)
            SELECT %s, customer_id, id, description, quantity, amount FROM voice_charges
-           WHERE customer_id = %s AND invoice_id IS NULL AND at >= %s AND at < %s ORDER BY at, ref""",
+           WHERE customer_id = %s AND invoice_id IS NULL AND bill_id IS NULL AND at >= %s AND at < %s
+           ORDER BY at, ref""",
         (inv["id"], customer_id, period, end),
     )
     total = conn.execute(
@@ -639,7 +671,7 @@ def issue_invoice(conn, customer_id, invoice_id, actor: str) -> dict:
         raise VoiceError("This invoice is already issued. Corrections go on a credit note.", 409)
     taken = conn.execute(
         """SELECT 1 FROM voice_invoice_lines l JOIN voice_charges c ON c.id = l.charge_id
-           WHERE l.invoice_id = %s AND c.invoice_id IS NOT NULL LIMIT 1""",
+           WHERE l.invoice_id = %s AND (c.invoice_id IS NOT NULL OR c.bill_id IS NOT NULL) LIMIT 1""",
         (invoice_id,),
     ).fetchone()
     if taken:
@@ -889,7 +921,7 @@ def reconcile(conn, customer_id, period: dt.date) -> dict:
     period = month_start(period)
     end = next_month(period)
     calls = conn.execute(
-        """SELECT d.call_id, d.to_number, d.seconds, d.ended_at,
+        """SELECT d.call_id, d.to_number, d.seconds, d.ended_at, d.carrier, d.carrier_cost,
                   coalesce((SELECT sum(amount) FROM voice_charges c WHERE c.cdr_id = d.id), 0) AS billed,
                   sc.cost, sc.seconds AS supplier_seconds
            FROM voice_cdrs d LEFT JOIN voice_supplier_charges sc ON sc.cdr_id = d.id
@@ -927,7 +959,16 @@ def reconcile(conn, customer_id, period: dt.date) -> dict:
     estimate = Decimal(0)
     prov = providers.get()
     if not prov.live:
-        estimate = sum((q4(Decimal(c["seconds"]) / 60 * prov.supplier_rate(c["to_number"])) for c in calls), Decimal(0))
+        # A call carried by a named carrier is costed from that carrier's rate sheet (ADR 0033).
+        estimate = sum(
+            (
+                money(c["carrier_cost"])
+                if c["carrier_cost"] is not None
+                else q4(Decimal(c["seconds"]) / 60 * prov.supplier_rate(c["to_number"]))
+                for c in calls
+            ),
+            Decimal(0),
+        )
     margin = billed - cost
     return {
         "period": period.isoformat(),

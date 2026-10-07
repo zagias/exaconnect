@@ -71,10 +71,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.settings = settings
-    from .commai.idempotency import Idempotency, RateLimit
+    from . import errors
+    from .commai.idempotency import Idempotency
+    from .commai.ratelimit import RateLimit
 
     app.add_middleware(Idempotency)
     app.add_middleware(RateLimit)
+    errors.install(app)  # one error shape and X-Request-ID (ADR 0038); outermost middleware
     app.state.ca = pki.load_or_create(settings.data_dir, settings.tls_names())
 
     @app.get("/healthz", tags=["ops"])

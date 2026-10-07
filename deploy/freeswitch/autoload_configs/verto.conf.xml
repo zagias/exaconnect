@@ -1,0 +1,57 @@
+<!--
+  CommAI browser phone (ADR 0039): FreeSWITCH Verto over secure WebSocket.
+
+  Staff sign in from the portal's dialer with their own extension
+  (extension@business-domain) and its SIP password, fetched from
+  GET /api/v1/commai/customers/{id}/voice/webphone. Users come from the
+  rendered directory (one domain per business), so a person can only sign in
+  as their own extension and only reaches their own business's dialplan
+  (user_context in the directory).
+
+  Not live: switch it on by
+    1. mounting this file in the freeswitch service, next to the other
+       exacarib files (deploy/docker-compose.yml, voice profile):
+         - ./freeswitch/autoload_configs/verto.conf.xml:/etc/freeswitch/autoload_configs/verto.conf.xml:ro
+       and loading mod_verto (modules.conf.xml: <load module="mod_verto"/>);
+    2. putting a TLS certificate for the public name at
+       /etc/freeswitch/tls/wss.pem (certificate, then key) - never in the repo;
+    3. publishing port 8082 behind the proxy and setting EXA_VERTO_URL to
+       wss://<public name>:8082 for the controller.
+  Calls outside the business also need the SIP provider (not live yet).
+  To check on the lab first: mod_verto signs users in against the
+  directory's a1-hash.
+-->
+<configuration name="verto.conf" description="ExaCarib Connect browser phone">
+  <settings>
+    <param name="debug" value="0"/>
+  </settings>
+  <profiles>
+    <profile name="exacarib-wss">
+      <!-- Secure WebSocket only: no plain ws:// listener. -->
+      <param name="secure-bind-local" value="0.0.0.0:8082"/>
+      <param name="secure-combined" value="/etc/freeswitch/tls/wss.pem"/>
+      <param name="secure-chain" value="/etc/freeswitch/tls/wss.pem"/>
+      <param name="userauth" value="true"/>
+      <!-- Every sign-in is checked against the directory; no guest calls. -->
+      <param name="blind-reg" value="false"/>
+      <param name="mcast-ip" value="224.1.1.1"/>
+      <param name="mcast-port" value="1337"/>
+      <param name="rtp-ip" value="$${local_ip_v4}"/>
+      <param name="ext-rtp-ip" value="$${external_rtp_ip}"/>
+      <param name="local-network" value="localnet.auto"/>
+      <param name="outbound-codec-string" value="opus,pcmu,pcma"/>
+      <param name="inbound-codec-string" value="opus,pcmu,pcma"/>
+      <param name="apply-candidate-acl" value="localnet.auto"/>
+      <param name="apply-candidate-acl" value="wan_v4.auto"/>
+      <param name="apply-candidate-acl" value="rfc1918.auto"/>
+      <param name="apply-candidate-acl" value="any_v4.auto"/>
+      <param name="timer-name" value="soft"/>
+      <!-- A signed-in user's calls use their own business's context (user_context in the
+           directory). This fallback context does not exist, so a call without one goes nowhere. -->
+      <param name="context" value="exacarib-verto"/>
+      <param name="dialplan" value="XML"/>
+      <param name="force-register-domain" value=""/>
+      <param name="enable-text" value="false"/>
+    </profile>
+  </profiles>
+</configuration>

@@ -1,8 +1,8 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Link, Route, Routes, useLocation, useParams } from "react-router-dom";
+import { Link, NavLink, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { api, useApi } from "../../api";
 import { ErrorNote } from "../../components";
-import { Card, PageHead, useAction } from "../../ui";
+import { Card, EmptyState, PageHead, Tabs, useAction } from "../../ui";
 import { useCommaiBase, when } from "./lib";
 import "./automation.css";
 
@@ -101,6 +101,18 @@ const LEVEL: Record<Health["level"], [string, string]> = {
   broken: ["bad", "Broken"],
 };
 
+/** The two halves of Apps: the apps you connect, and the full catalogue with the developer options. */
+export function AppsTabs() {
+  return (
+    <Tabs label="Apps sections">
+      <NavLink to="/commai/integrations" end>
+        Your apps
+      </NavLink>
+      <NavLink to="/commai/catalogue">App catalogue</NavLink>
+    </Tabs>
+  );
+}
+
 export default function Integrations() {
   return (
     <Routes>
@@ -115,12 +127,18 @@ function Catalogue() {
   const { data, error } = useApi<App[]>(base && `${base}/integrations`, 30_000);
   return (
     <>
-      <PageHead eyebrow="CommAI" title="Integrations">
+      <PageHead title="Apps">
         Connect the systems your team already uses. Each app lists exactly what CommAI may do in it, and nothing runs
         until you test it and switch it on.
       </PageHead>
+      <AppsTabs />
       {!base && <p className="muted">Choose an organisation first.</p>}
       <ErrorNote error={error} />
+      {data && data.length === 0 && (
+        <EmptyState title="No apps to connect yet" action={<Link className="button" to="/commai/catalogue">See the app catalogue</Link>}>
+          Apps your business can connect appear here once ExaCarib makes them available.
+        </EmptyState>
+      )}
       <div className="auto-grid">
         {(data ?? []).map((a) => (
           <section key={a.app} className="card auto-app" aria-labelledby={`app-${a.app}`}>
@@ -181,11 +199,11 @@ function Setup() {
 
   return (
     <>
-      <PageHead eyebrow="Integrations" title={info.label}>
+      <PageHead eyebrow="Apps" title={info.label}>
         {info.description}
       </PageHead>
       <p className="small">
-        <Link to="..">All integrations</Link>
+        <Link to="..">All your apps</Link>
       </p>
       {signin === "ok" && <div className="auto-banner ok">Signed in to {info.label}. Choose what CommAI may do next.</div>}
       {signin === "failed" && <div className="auto-banner bad">Sign-in did not finish: {params.get("reason")}</div>}

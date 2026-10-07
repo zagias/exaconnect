@@ -63,11 +63,27 @@ def _message(status: int, body: Any) -> str:
     return f"HubSpot answered {status}" + (f": {msg}" if msg else ".")
 
 
+def _signed_urls(query: dict) -> list[str]:
+    """HubSpot signs the address it called: our public address when one is set
+    (behind a proxy the request URL we see differs), else the request URL."""
+    import os
+    import urllib.parse
+
+    seen = str(query.get("__url__", ""))
+    out = [seen] if seen else []
+    public = os.environ.get("EXA_PUBLIC_URL", "").rstrip("/")
+    if seen and public:
+        parts = urllib.parse.urlsplit(seen)
+        out.insert(0, public + parts.path + (f"?{parts.query}" if parts.query else ""))
+    return out
+
+
 class HubSpot(Connector):
     app = "hubspot"
     label = "HubSpot"
     description = "Find and create contacts, leads, deals and tickets in HubSpot CRM."
     auth = "oauth"  # or a private-app token
+    category = "crm"
     actions = {
         "find_contact": ActionSpec(
             "find_contact", "Look up a contact", "read", fields=(Field("email", "Email", "email"),)
@@ -100,11 +116,25 @@ class HubSpot(Connector):
             "create",
             fields=(Field("subject", "Subject"), Field("description", "Description", "text", False)),
         ),
+        # ADR 0034: updates, and webhooks (v3 signatures).
+        "update_contact": ActionSpec(
+            "update_contact",
+            "Update a contact",
+            "update",
+            fields=(
+                Field("contact_id", "Contact"),
+                Field("phone", "Phone", "phone", False),
+                Field("notes", "Notes", "text", False),
+            ),
+        ),
     }
+    webhooks = "HubSpot app webhooks (contact, deal and ticket changes), checked by X-HubSpot-Signature-v3."
+    needs_from_exacarib = "A HubSpot public app (OAuth), or a private-app token per business."
     mapping_targets = {
         "contact": ["firstname", "lastname", "email", "phone", "company", "message", "lifecyclestage"],
         "deal": ["dealname", "amount", "description", "closedate", "pipeline", "dealstage"],
         "ticket": ["subject", "content", "hs_ticket_priority", "hs_pipeline", "hs_pipeline_stage"],
+        "company": ["name", "domain", "phone", "industry", "city", "country", "numberofemployees"],
     }
 
     def _call(self, conn, connection: dict, method: str, path: str, **kw):
@@ -206,7 +236,51 @@ class HubSpot(Connector):
             obj = hit or self._create(conn, connection, kind, props)
             self._remember(conn, connection, key, obj_name, str(obj["id"]))
             return {f"{obj_name}_id": str(obj["id"]), "existing": bool(hit)}
+        if action == "update_contact":
+            cid = str(inputs["contact_id"])
+            if not cid.isdigit():
+                raise ConnectorError("That is not a HubSpot contact id.", "input")
+            props = self._props(connection, "contact", {k: inputs.get(k) for k in ("phone", "notes")})
+            if self._dry(connection):
+                return {"dry_run": True, "would_send": {"PATCH": f"contacts/{cid}", "properties": props}}
+            r = self._call(
+                conn, connection, "PATCH", f"/crm/v3/objects/contacts/{cid}", json_body={"properties": props}
+            )
+            if r.status != 200:
+                raise ConnectorError(_message(r.status, r.body), _cause(r.status, r.body))
+            return {"contact_id": cid, "updated": True}
         raise ConnectorError(f"Unknown action {action}.", "input")
+
+    # ---- webhooks (ADR 0034) ------------------------------------------------------------
+
+    def verify_webhook(self, conn, connection: dict, hook: dict, headers: dict, body: bytes, query: dict) -> bool:
+        """X-HubSpot-Signature-v3: base64 HMAC-SHA256, keyed with the app's client
+        secret, of method + full URL + body + timestamp (ms); five minutes at most."""
+        import os
+
+        from .kit import fresh, header, hmac_b64, same
+
+        secret = os.environ.get("EXA_HUBSPOT_CLIENT_SECRET", "")
+        ts = header(headers, "X-HubSpot-Request-Timestamp")
+        if not secret or not ts.isdigit() or not fresh(int(ts) // 1000, 300):
+            return False
+        got = header(headers, "X-HubSpot-Signature-v3")
+        return any(
+            same(hmac_b64(secret, f"POST{url}".encode() + body + ts.encode()), got) for url in _signed_urls(query)
+        )
+
+    def webhook_events(self, body: bytes, headers: dict) -> list[dict]:
+        import json
+
+        return [
+            {
+                "type": f"hubspot.{e.get('subscriptionType', 'object.change')}",
+                "id": str(e.get("eventId")),
+                "data": {"object_id": e.get("objectId"), "property": e.get("propertyName"), "at": e.get("occurredAt")},
+            }
+            for e in json.loads(body)
+            if isinstance(e, dict)
+        ]
 
     def health(self, conn, connection: dict) -> dict:
         try:

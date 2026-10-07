@@ -98,6 +98,9 @@ DEFAULT_PROFILE: dict = {
     "enabled": True,
     "name": "Assistant",
     "tone": "friendly, plain and brief",
+    # Extra guidance from the business, added to the prompt. Changing it (or the
+    # tone) creates a candidate that must pass the evaluation suite (ADR 0032).
+    "instructions": "",
     "greeting": "",
     "business_language": "en",
     "languages": ["en", "es", "fr", "pt", "nl", "ht", "pap"],
@@ -136,7 +139,9 @@ after the business system reports success.
 - Reply in the customer's language ("customer_language"). When it differs from the business language, also give \
 the same reply in the business language in "answer_original".
 - Escalate when the customer asks for a person, is upset, or anything sensitive comes up.
-- Keep replies under 80 words. Plain British English when replying in English."""
+- Keep replies under 80 words. Plain British English when replying in English.""" + (
+            f"\n- The business's own instructions: {prof['instructions']}" if prof.get("instructions") else ""
+        )
     if role == "copilot":
         return f"""You are the copilot helping staff at {business} handle a conversation. You never send anything: \
 a person reviews and sends. Ground every draft in the approved knowledge given and cite chunk ids in "sources". \
@@ -217,7 +222,12 @@ def get_model() -> Model:
         return _override
     s = get_settings()
     if s.llm_api_key:
-        return OpenAICompatibleModel(api_key=s.llm_api_key, base_url=s.llm_base_url, model=s.llm_model)
+        # The live model, not necessarily EXA_LLM_MODEL: a new model goes live
+        # only after it passes the evaluation suite (ADR 0032).
+        from . import governance
+
+        model = governance.live_model(s.llm_model)
+        return OpenAICompatibleModel(api_key=s.llm_api_key, base_url=s.llm_base_url, model=model)
     return SimulatedModel()
 
 

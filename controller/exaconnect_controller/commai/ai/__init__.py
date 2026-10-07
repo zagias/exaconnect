@@ -11,6 +11,21 @@
 - voice.py      browser calls with the AI agent (voice stage 1)
 """
 
-from . import agent, copilot, knowledge, language, memory, model, runtime, voice  # noqa: F401
+from . import (  # noqa: F401  # noqa: F401
+    agent,
+    attachments,
+    copilot,
+    followups,
+    gaps,
+    governance,
+    judging,
+    knowledge,
+    language,
+    memory,
+    model,
+    quality,
+    runtime,
+    voice,
+)
 from .model import Model, ModelError, ModelInput, ModelOutput, OpenAICompatibleModel, SimulatedModel  # noqa: F401
 from .runtime import ROLES, UsageLimit, get_model, set_model  # noqa: F401

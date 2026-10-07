@@ -3,11 +3,13 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, useApi } from "../../api";
 import { useAuth } from "../../auth";
 import { ErrorNote } from "../../components";
-import { useAction } from "../../ui";
+import { EmptyState, useAction } from "../../ui";
 import CopilotPanel from "./CopilotPanel";
+import { AttachmentReadings, NoteFiles, SavedViews, uploadNoteFiles, type Filters } from "./InboxExtras";
 import { CHANNEL_LABEL, STATE_LABEL, useCommaiBase, when, type Page } from "./lib";
+import { useT } from "./i18n";
 import { useLive } from "./live";
-import type { Conversation, ConversationDetail, Member, Note, Team } from "./types";
+import type { Attachment, Conversation, ConversationDetail, Member, Note, Team, Typing } from "./types";
 import "./inbox.css";
 
 const VIEWS: { id: string; label: string }[] = [
@@ -26,19 +28,34 @@ export default function Inbox() {
   const base = useCommaiBase();
   const { id } = useParams();
   const navigate = useNavigate();
+  const { t } = useT();
   const [view, setView] = useState("open");
   const [q, setQ] = useState("");
   const [query, setQuery] = useState("");
-  const params = new URLSearchParams({ view, limit: "100" });
+  const [extra, setExtra] = useState<Filters>({});
+  const params = new URLSearchParams({ ...extra, view, limit: "100" });
   if (query) params.set("q", query);
   const list = useApi<Page<Conversation>>(base ? `${base}/conversations?${params}` : null, 15_000);
   const [tick, setTick] = useState(0);
+  const [typing, setTyping] = useState<Record<string, Typing[]>>({});
 
   const reloadList = list.reload;
   useLive(
     base,
     useCallback(
-      (type: string) => {
+      (type: string, data: Record<string, unknown>) => {
+        if (type === "presence") {
+          // Who is typing where. Entries lapse on their own after a few seconds.
+          const conv = String(data.conversation_id ?? "");
+          const name = String(data.name ?? "");
+          const until = data.typing && data.typing_until ? Date.parse(String(data.typing_until)) : 0;
+          setTyping((all) => {
+            const rest = (all[conv] ?? []).filter((t) => t.name !== name || t.who_kind !== data.who_kind);
+            const next = until > Date.now() ? [...rest, { name, who_kind: data.who_kind as Typing["who_kind"], until }] : rest;
+            return { ...all, [conv]: next };
+          });
+          return;
+        }
         if (type.startsWith("conversation.") || type.startsWith("message.") || type === "note.created") {
           reloadList();
           setTick((t) => t + 1);
@@ -55,7 +72,7 @@ export default function Inbox() {
     <div className={`inbox ${id ? "has-open" : ""}`}>
       <section className="inbox-list card" aria-labelledby="inbox-title">
         <div className="inbox-list-head">
-          <h1 id="inbox-title">Inbox</h1>
+          <h1 id="inbox-title">{t("inbox.title")}</h1>
           <form
             role="search"
             onSubmit={(e) => {
@@ -71,16 +88,38 @@ export default function Inbox() {
           <div className="segmented inbox-views" role="group" aria-label="Show">
             {VIEWS.map((v) => (
               <button key={v.id} type="button" aria-pressed={view === v.id} onClick={() => setView(v.id)}>
-                {v.label}
+                {t(`inbox.view.${v.id}`)}
               </button>
             ))}
           </div>
+          <SavedViews
+            base={base}
+            current={{ ...extra, view, ...(query ? { q: query } : {}) }}
+            onApply={(f) => {
+              const { view: v, q: fq, ...rest } = f;
+              setView(v || "all");
+              setQ(fq ?? "");
+              setQuery(fq ?? "");
+              setExtra(rest);
+            }}
+          />
+          {Object.keys(extra).length > 0 && (
+            <button className="button secondary small" type="button" onClick={() => setExtra({})}>
+              {t("inbox.clearFilters", { filters: Object.entries(extra).map(([k, v]) => `${k}: ${v}`).join(", ") })}
+            </button>
+          )}
         </div>
         <ErrorNote error={list.error} />
         {list.data && items.length === 0 && (
-          <div className="empty">
-            <p>Nothing here. New chats, WhatsApp messages and emails arrive in this list.</p>
-          </div>
+          query || Object.keys(extra).length > 0 ? (
+            <EmptyState title="No conversations match">Try another search, or clear the filters.</EmptyState>
+          ) : view !== "open" && view !== "all" ? (
+            <EmptyState title="Nothing in this view">Conversations that fit it appear here. Choose All to see every conversation.</EmptyState>
+          ) : (
+            <EmptyState title="No conversations yet" action={<Link className="button small" to="/commai/channels">Set up a channel</Link>}>
+              Website chats, WhatsApp messages and emails arrive in this list.
+            </EmptyState>
+          )
         )}
         <ul className="inbox-items">
           {items.map((c) => (
@@ -104,7 +143,7 @@ export default function Inbox() {
         </ul>
       </section>
       {id ? (
-        <ConversationPane key={id} base={base} id={id} tick={tick} onChanged={reloadList} onClose={() => navigate("/commai")} />
+        <ConversationPane key={id} base={base} id={id} tick={tick} typing={typing[id] ?? []} onChanged={reloadList} onClose={() => navigate("/commai")} />
       ) : (
         <section className="inbox-empty card">
           <p className="muted">Choose a conversation to read and reply.</p>
@@ -118,12 +157,14 @@ function ConversationPane({
   base,
   id,
   tick,
+  typing,
   onChanged,
   onClose,
 }: {
   base: string;
   id: string;
   tick: number;
+  typing: Typing[];
   onChanged: () => void;
   onClose: () => void;
 }) {
@@ -155,6 +196,26 @@ function ConversationPane({
       await api(`${base}/conversations/${id}${path}`, { method: "POST", body: body ? JSON.stringify(body) : undefined });
       refresh();
     });
+
+  // Screen readers hear new customer messages as they arrive (a polite live region).
+  const [announce, setAnnounce] = useState("");
+  const seen = useRef<number | null>(null);
+  useEffect(() => {
+    const msgs = conv.data?.messages;
+    if (!msgs) return;
+    if (seen.current !== null && msgs.length > seen.current) {
+      const last = msgs[msgs.length - 1];
+      if (last.direction === "in") setAnnounce(`New message from ${conv.data?.contact_name || "the customer"}: ${last.body.slice(0, 140)}`);
+    }
+    seen.current = msgs.length;
+  }, [conv.data]);
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!typing.length) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [typing]);
+  const typingNames = typing.filter((t) => t.until > now && t.name !== user?.email).map((t) => t.name);
 
   const timeline = useMemo(() => {
     const m = (conv.data?.messages ?? []).map((x) => ({ kind: "message" as const, at: x.created_at, m: x }));
@@ -205,6 +266,18 @@ function ConversationPane({
                   {t.m.direction === "out" && <span className={`msg-status ${t.m.status}`}> · {statusLabel(t.m.status)}</span>}
                 </div>
                 <div className="bubble-body">{t.m.template ? `Template: ${t.m.template}` : t.m.body}</div>
+                {(t.m.attachments ?? []).length > 0 && (
+                  <ul className="bubble-files small" aria-label="Attached files">
+                    {(t.m.attachments ?? []).map((a) => (
+                      <li key={a.id}>
+                        <a href={`/api/v1${base}/files/${a.id}`} target="_blank" rel="noopener noreferrer">
+                          {a.name}
+                        </a>{" "}
+                        <span className="muted">({sizeLabel(a.size)})</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 {t.m.original_body && t.m.original_body !== t.m.body && (
                   <div className="bubble-original small">
                     Original{t.m.original_language ? ` (${t.m.original_language})` : ""}: {t.m.original_body}
@@ -219,10 +292,17 @@ function ConversationPane({
                   <span className="muted"> · {when(t.n.created_at)}</span>
                 </div>
                 <div className="bubble-body">{t.n.body}</div>
+                <NoteFiles base={base} files={t.n.attachments} />
               </li>
             ),
           )}
         </ol>
+        <p className="typing small muted" role="status" aria-live="polite">
+          {typingNames.length ? `${typingNames.join(" and ")} ${typingNames.length > 1 ? "are" : "is"} typing…` : ""}
+        </p>
+        <div className="sr-only" role="status" aria-live="polite">
+          {announce}
+        </div>
 
         <Composer
           key={id}
@@ -239,10 +319,15 @@ function ConversationPane({
 
       <aside className="inbox-side card" aria-label="Conversation details">
         <Details c={c} teams={teams.data ?? []} members={members.data ?? []} base={base} internal={internal} onChanged={refresh} />
+        <AttachmentReadings base={base} conversationId={c.id} />
         <CopilotPanel base={base} conversationId={c.id} onDraft={(text) => setDraft({ text, n: Date.now() })} />
       </aside>
     </>
   );
+}
+
+function sizeLabel(n: number): string {
+  return n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`;
 }
 
 function authorLabel(kind: string, author: string): string {
@@ -329,8 +414,34 @@ function Composer({
   const [mode, setMode] = useState<"reply" | "note">(internal ? "note" : "reply");
   const [text, setText] = useState("");
   const [template, setTemplate] = useState("");
+  const [files, setFiles] = useState<Attachment[]>([]);
+  const [noteFiles, setNoteFiles] = useState<File[]>([]);
+  const { t } = useT();
   const send = useAction();
+  const upload = useAction();
   const key = useRef(crypto.randomUUID());
+  const lastPing = useRef(0);
+  // Tell the customer (and colleagues) a reply is being written; it lapses on its own.
+  const ping = (typing: boolean) => {
+    const now = Date.now();
+    if (typing && now - lastPing.current < 3000) return;
+    lastPing.current = typing ? now : 0;
+    api(`${base}/conversations/${id}/typing`, { method: "POST", body: JSON.stringify({ typing }) }).catch(() => undefined);
+  };
+  const addFile = (f: File) =>
+    upload.run(async () => {
+      const data = await new Promise<string>((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(String(r.result).split(",", 2)[1] ?? "");
+        r.onerror = () => reject(r.error);
+        r.readAsDataURL(f);
+      });
+      const a = await api<{ id: string; name: string; type: string; size: number }>(`${base}/conversations/${id}/files`, {
+        method: "POST",
+        body: JSON.stringify({ name: f.name.slice(0, 120), type: f.type, data }),
+      });
+      setFiles((all) => [...all, a]);
+    });
   // A draft from the copilot lands in the box; a person still presses Send.
   useEffect(() => {
     if (draft && !internal) {
@@ -342,16 +453,21 @@ function Composer({
   const submit = (e: FormEvent, takeOver = false) => {
     e.preventDefault();
     const body = text.trim();
-    if (!body && !template) return;
+    const attachments = mode === "reply" ? files.map((f) => f.id) : [];
+    if (!body && !template && !attachments.length) return;
     send.run(async () => {
       if (mode === "note") {
-        await api(`${base}/conversations/${id}/notes`, { method: "POST", body: JSON.stringify({ body }) });
+        const n = await api<{ id: string }>(`${base}/conversations/${id}/notes`, { method: "POST", body: JSON.stringify({ body }) });
+        if (noteFiles.length) await uploadNoteFiles(base, n.id, noteFiles);
+        setNoteFiles([]);
       } else {
         await api(`${base}/conversations/${id}/messages`, {
           method: "POST",
           headers: { "Idempotency-Key": key.current },
-          body: JSON.stringify({ body, template, take_over: takeOver }),
+          body: JSON.stringify({ body, template, take_over: takeOver, attachments }),
         });
+        ping(false);
+        setFiles([]);
       }
       key.current = crypto.randomUUID();
       setText("");
@@ -381,12 +497,26 @@ function Composer({
         id="composer-text"
         rows={3}
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => {
+          setText(e.target.value);
+          if (mode === "reply") ping(e.target.value.trim() !== "");
+        }}
         placeholder={mode === "note" ? "Only your team sees this. Use @name to mention someone." : "Write a reply"}
         onKeyDown={(e) => {
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit(e as unknown as FormEvent, handledByOther);
         }}
       />
+      {mode === "note" && (
+        <label className="small note-attach">
+          {t("inbox.attachToNote")}
+          <input
+            type="file"
+            multiple
+            accept=".txt,.csv,.pdf,image/png,image/jpeg,image/gif,image/webp"
+            onChange={(e) => setNoteFiles(Array.from(e.target.files ?? []).slice(0, 5))}
+          />
+        </label>
+      )}
       {mode === "reply" && (
         <details className="small">
           <summary>Send an approved template instead</summary>
@@ -396,6 +526,38 @@ function Composer({
           </label>
           <p className="muted">WhatsApp only allows approved templates once 24 hours have passed since the customer last wrote.</p>
         </details>
+      )}
+      {mode === "reply" && (
+        <div className="composer-files">
+          <label className="button secondary small file-pick">
+            Attach a file
+            <input
+              type="file"
+              className="sr-only"
+              accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain"
+              disabled={upload.busy}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                e.target.value = "";
+                if (f) addFile(f);
+              }}
+            />
+          </label>
+          {upload.busy && <span className="muted small">Uploading…</span>}
+          {files.length > 0 && (
+            <ul className="file-chips" aria-label="Files to send">
+              {files.map((f) => (
+                <li key={f.id} className="tag">
+                  {f.name}{" "}
+                  <button type="button" className="linklike" aria-label={`Remove ${f.name}`} onClick={() => setFiles(files.filter((x) => x.id !== f.id))}>
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <ErrorNote error={upload.error} />
+        </div>
       )}
       <div className="actions">
         <button className="button" disabled={send.busy} onClick={(e) => submit(e, handledByOther)}>
@@ -505,6 +667,18 @@ function Details({
         </label>
       </form>
       <dl className="small facts">
+        {c.intent && (
+          <>
+            <dt>Intent</dt>
+            <dd>{c.intent}</dd>
+          </>
+        )}
+        {c.language && (
+          <>
+            <dt>Language</dt>
+            <dd>{c.language}</dd>
+          </>
+        )}
         <dt>First reply due</dt>
         <dd>
           {c.first_reply_at ? "Replied" : c.first_reply_due ? new Date(c.first_reply_due).toLocaleString("en-GB") : "–"}

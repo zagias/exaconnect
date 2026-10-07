@@ -11,6 +11,9 @@ dependencies = [
   "psycopg-pool>=3.2",
   "cryptography>=43",
   "webauthn>=2.0",  # passkeys (ADR 0017)
+  "segno>=1.6",  # click-to-WhatsApp QR codes (ADR 0029)
+  "ldap3>=2.9",  # directory sync over LDAPS (ADR 0036)
+  "python-multipart>=0.0.9",  # file uploads (port documents, attachments, logos)
 ]
 
 [project.optional-dependencies]
@@ -24,7 +27,7 @@ build-backend = "setuptools.build_meta"
 include = ["exaconnect_controller*"]
 
 [tool.setuptools.package-data]
-exaconnect_controller = ["schema.sql", "commai/sql/*.sql", "commai/static/*", "ai/fixtures/*.json", "ai/fixtures/*.xml",
+exaconnect_controller = ["schema.sql", "commai/sql/*.sql", "commai/static/*", "commai/i18n/*.json", "ai/fixtures/*.json", "ai/fixtures/*.xml",
                          "integrations/*.sql", "integrations/yang/*.yang", "integrations/static/*"]
 
 [tool.ruff]

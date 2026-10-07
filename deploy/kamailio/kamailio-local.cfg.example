@@ -1,0 +1,10 @@
+# Copy to kamailio-local.cfg on the voice host (git-ignored) and set the addresses.
+# No secrets here: carrier credentials, if a carrier uses digest auth, go in
+# FreeSWITCH's gateway (EXA_SIP_USERNAME / EXA_SIP_PASSWORD), not in Kamailio.
+
+# The public address carriers send to (Dudley provides it with the voice host).
+#!substdef "!PUBLIC_IP!203.0.113.10!g"
+# FreeSWITCH on the compose network (its external SIP profile).
+#!substdef "!PBX_ADDR!freeswitch:5080!g"
+# New calls a minute from one address before Kamailio answers 503.
+#!substdef "!MAX_INVITES_PER_MIN!120!g"

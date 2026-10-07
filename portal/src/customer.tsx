@@ -28,20 +28,28 @@ export function CustomerProvider({ children }: { children: ReactNode }) {
   const [id, setId] = useState<string | null>(readKey());
   const [tick, setTick] = useState(0);
   const reload = useCallback(() => setTick((t) => t + 1), []);
+  const { user } = useAuth();
+  const own = user?.customer_id ?? null;
 
   useEffect(() => {
     let cancelled = false;
     const load = () =>
       api<CustomerSettings[]>("/customers/mine")
         .then((c) => !cancelled && setCustomers(c))
-        .catch(() => {});
+        .catch(() => {
+          // An account limited to CommAI (a partner acting for a business, a
+          // directory-provisioned person) can't read Connect's customer list:
+          // it still acts for its own business.
+          if (!cancelled && own)
+            setCustomers([{ id: own, name: "", shadow_mode: false, storm_mode: false, storm_since: null, storm_by: null, storm_allow_bulk_sat: false, auto_prioritise: false, sites: [] }]);
+        });
     load();
     const t = setInterval(load, 10_000);
     return () => {
       cancelled = true;
       clearInterval(t);
     };
-  }, [tick]);
+  }, [tick, own]);
 
   const select = (next: string) => {
     setId(next);

@@ -41,6 +41,16 @@ def register(*types: str) -> None:
     TYPES.update(types)
 
 
+# In-process listeners run inside emit, in the same transaction as the change.
+# Keep them small (an insert, a queued job): a failing listener fails the change.
+_listeners: dict[str, list] = {}
+
+
+def listen(type_: str, fn) -> None:
+    """Call fn(conn, customer_id, type, data, event_id) whenever this event is recorded."""
+    _listeners.setdefault(type_, []).append(fn)
+
+
 def emit(conn: psycopg.Connection, customer_id: Any, type_: str, data: dict | None = None, subject: str = "") -> str:
     """Record an event and queue its webhook fan-out. Returns the event id."""
     row = conn.execute(
@@ -48,6 +58,8 @@ def emit(conn: psycopg.Connection, customer_id: Any, type_: str, data: dict | No
         (customer_id, type_, str(subject or ""), Jsonb(data or {})),
     ).fetchone()
     event_id = str(row["id"])
+    for fn in _listeners.get(type_, ()):
+        fn(conn, customer_id, type_, data or {}, event_id)
     has_hooks = conn.execute(
         "SELECT 1 FROM webhook_endpoints WHERE customer_id = %s AND active LIMIT 1", (customer_id,)
     ).fetchone()

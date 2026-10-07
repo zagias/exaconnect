@@ -9,6 +9,17 @@
  * data-user-token="..." or ExaCaribChat.identify(token). Only then does the
  * widget show the customer's past conversations.
  *
+ * SDK (docs/commai/partners.md, "Website chat SDK"):
+ *   ExaCaribChat.open() / close() / isOpen()
+ *   ExaCaribChat.identify(token)          a signed-in customer (HS256 token from your server)
+ *   ExaCaribChat.on(event, fn) / off(event, fn)
+ *     events: ready, open, close, message (from the team or assistant),
+ *             sent (the visitor's message was accepted), identified, error
+ *   Each event is also dispatched on window as "exacarib-chat:<event>".
+ *   Calls made before the script loads are queued with the snippet:
+ *     window.ExaCaribChat = window.ExaCaribChat || { q: [], on() { this.q.push(["on", ...arguments]); } ... }
+ *   (any method name works: each queued [name, ...args] is replayed in order).
+ *
  * Built from widget/src/widget.ts with portal/node_modules/.bin/tsc -p widget (no
  * dependencies). Do not edit the built file by hand.
  */
@@ -26,7 +37,26 @@ interface WidgetConfig {
   callbacks: boolean;
   attachments: { enabled: boolean; max_bytes: number; types: string[] };
   ask_contact: "before" | "after_first" | "never";
+  /** The business's (or its partner's) white-label brand; null is ExaCarib's own look. */
+  brand?: { product_name: string; colour: string; ink: string; support_email: string; logo_url: string | null } | null;
+  /** Visitors can talk to the AI assistant from the widget (ADR 0038). */
+  ai_calls?: boolean;
 }
+
+/** The browser's speech recogniser, where there is one (Chrome, Edge, Safari). */
+interface Recogniser {
+  lang: string;
+  interimResults: boolean;
+  continuous: boolean;
+  onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
+  onend: (() => void) | null;
+  onerror: (() => void) | null;
+  start(): void;
+  stop(): void;
+}
+
+type ChatEvent = "ready" | "open" | "close" | "message" | "sent" | "identified" | "error";
+type Handler = (detail: unknown) => void;
 
 interface Attachment {
   id: string;
@@ -60,15 +90,43 @@ interface Stored {
 }
 
 interface ExaCaribChatApi {
+  version: string;
   identify(token: string): void;
   open(): void;
   close(): void;
+  isOpen(): boolean;
+  on(event: ChatEvent, fn: Handler): void;
+  off(event: ChatEvent, fn: Handler): void;
   preview(container: HTMLElement, config: Partial<WidgetConfig>): () => void;
 }
 
+interface QueueStub {
+  q?: unknown[][];
+  version?: string;
+}
+
 (function () {
-  const w = window as unknown as Window & { ExaCaribChat?: ExaCaribChatApi; ExaCaribChatSettings?: { key?: string; userToken?: string } };
-  if (w.ExaCaribChat) return; // loaded twice
+  const w = window as unknown as Window & { ExaCaribChat?: ExaCaribChatApi | QueueStub; ExaCaribChatSettings?: { key?: string; userToken?: string } };
+  const stub = w.ExaCaribChat as QueueStub | undefined;
+  if (stub && stub.version) return; // loaded twice
+  const queued: unknown[][] = (stub && Array.isArray(stub.q) && stub.q) || [];
+
+  // ---- events (the SDK) ---------------------------------------------------------------------
+  const handlers: Record<string, Handler[]> = {};
+  function emit(event: ChatEvent, detail: unknown = null) {
+    for (const fn of (handlers[event] || []).slice()) {
+      try {
+        fn(detail);
+      } catch {
+        /* a page's handler must not break the chat */
+      }
+    }
+    try {
+      window.dispatchEvent(new CustomEvent(`exacarib-chat:${event}`, { detail }));
+    } catch {
+      /* very old browsers */
+    }
+  }
 
   const script = document.currentScript as HTMLScriptElement | null;
   const apiOrigin = script && script.src ? new URL(script.src).origin : location.origin;
@@ -104,7 +162,19 @@ interface ExaCaribChatApi {
     assistant: "Assistant",
     poweredBy: "ExaCarib CommAI",
     tooBig: "That file is too large.",
-    wrongType: "You can send images, PDFs and plain text.",
+    wrongType: "You can send images, PDFs, plain text and voice notes.",
+    teamTyping: "Our team is writing a reply…",
+    talk: "Talk to our assistant",
+    callTitle: "Talking to our assistant",
+    callNote: "Speak after the tone, or type below. Our assistant can pass you to our team.",
+    callStarting: "Connecting…",
+    callListen: "Speak",
+    callListening: "Listening… select to stop",
+    callType: "Or type what you want to say",
+    callSay: "Say",
+    callEnd: "End call",
+    callEnded: "Call ended. You can carry on in the chat.",
+    callHanded: "Our team will take it from here. We'll be in touch.",
   };
 
   const ICON_CHAT =
@@ -169,6 +239,11 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
 .foot { text-align: center; font-size: 11px; color: var(--muted); padding: 4px 0 8px; background: #fff; }
 .link { background: none; border: 0; color: var(--exa); cursor: pointer; font: inherit; font-size: 13px; padding: 0; text-decoration: underline; }
 .conv { text-align: left; }
+.typing { margin: 0; padding: 0 14px; min-height: 0; font-size: 12px; color: var(--muted); background: var(--page); }
+.typing:not(:empty) { padding: 2px 14px 6px; }
+.log.call { flex: 0 1 auto; min-height: 160px; border: 1px solid var(--line); border-radius: 8px; }
+.msg.note { color: var(--muted); }
+.row input { border: 1px solid var(--line); border-radius: 5px; padding: 8px 10px; font: inherit; color: var(--ink); min-width: 0; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 `;
 
@@ -218,9 +293,10 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
     callbacks: true,
     attachments: { enabled: true, max_bytes: 2 * 1024 * 1024, types: ["application/pdf", "image/gif", "image/jpeg", "image/png", "image/webp", "text/plain"] },
     ask_contact: "after_first",
+    ai_calls: false,
   };
 
-  type View = "chat" | "offline" | "callback" | "done" | "history";
+  type View = "chat" | "offline" | "callback" | "done" | "history" | "call";
 
   class Chat {
     private base: string;
@@ -236,6 +312,8 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
     private messages: ChatMessage[] = [];
     private view: View = "chat";
     private isOpen = false;
+    private ready = false;
+    private openWhenReady = false;
     private unread = 0;
     private timer: number | undefined;
     private session: Session | null = null;
@@ -243,8 +321,13 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
     private conversations: { id: string; state: string; created_at: string }[] = [];
     private doneText = "";
     private showContact = false;
+    private typingNote: HTMLParagraphElement | null = null;
+    private lastTypingPing = 0;
+    private callId: string | null = null;
+    private callLog: HTMLDivElement | null = null;
+    private recogniser: Recogniser | null = null;
 
-    constructor(key: string, private userToken: string, private previewMode = false) {
+    constructor(private key: string, private userToken: string, private previewMode = false) {
       this.base = `${apiOrigin}/api/v1/commai/widget/${encodeURIComponent(key)}`;
       this.storeKey = `exacarib-chat:${key}`;
       this.stored = previewMode ? {} : load(this.storeKey);
@@ -312,17 +395,41 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
       return this.sessionReady;
     }
 
+    // ---- language (ADR 0032) ----------------------------------------------------------------
+
+    /** The widget's words in the visitor's language, when the business has it switched on. */
+    private async loadWords() {
+      const wanted = (script && script.dataset.lang) || (navigator.languages || [navigator.language]).join(",");
+      if (!wanted || /^en(-|,|$)/i.test(wanted)) return;
+      try {
+        const url = `${apiOrigin}/api/v1/commai/i18n/widget/${encodeURIComponent(this.key)}?lang=${encodeURIComponent(wanted)}`;
+        const r = await fetch(url, { mode: "cors", credentials: "omit" });
+        if (!r.ok) return;
+        const out = (await r.json()) as { locale: string; strings: Partial<typeof COPY> };
+        Object.assign(COPY, out.strings);
+        this.host.setAttribute("lang", out.locale);
+        if (this.launcher) this.launcher.setAttribute("aria-label", COPY.open);
+      } catch {
+        /* English stays */
+      }
+    }
+
     // ---- start ----------------------------------------------------------------------------
 
     async start() {
       this.mount();
       try {
         this.cfg = { ...DEFAULTS, ...(await this.call<WidgetConfig>("GET", "/config", undefined, false)) };
-      } catch {
+      } catch (e) {
         this.host.remove(); // not allowed on this site, or the key is off: stay invisible
+        emit("error", { message: (e as Error).message });
         return;
       }
+      await this.loadWords();
       this.applyConfig();
+      emit("ready", { online: this.cfg.online, ai: this.cfg.ai });
+      this.ready = true;
+      if (this.openWhenReady) this.open();
       this.heartbeat();
       if (this.stored.conv || this.userToken) {
         this.ensureSession()
@@ -335,6 +442,7 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
       this.cfg = { ...DEFAULTS, ...cfg };
       container.append(this.host);
       this.build(true);
+      this.ready = true;
       this.applyConfig();
       this.messages = [
         { id: "p1", from: "you", body: "Hello, do you open on Saturdays?", attachments: [], status: "", at: "" },
@@ -378,12 +486,16 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
       this.launcher.classList.add(this.cfg.position === "left" ? "left" : "right");
       this.panel.classList.add(this.cfg.position === "left" ? "left" : "right");
       this.panel.setAttribute("aria-label", this.cfg.title);
+      if (this.cfg.brand && /^#[0-9a-f]{6}$/i.test(this.cfg.brand.ink)) this.root.style.setProperty("--ink", this.cfg.brand.ink);
       if (!this.cfg.online && this.cfg.mode !== "ai_first" && !this.stored.conv) this.view = "offline";
       this.render();
     }
 
     open() {
-      if (!this.panel) return;
+      if (!this.panel || !this.ready) {
+        this.openWhenReady = true; // asked before the config arrived
+        return;
+      }
       this.isOpen = true;
       this.unread = 0;
       this.panel.hidden = false;
@@ -393,6 +505,11 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
       this.render();
       if (this.stored.conv) this.ensureSession().then(() => this.poll()).catch(() => undefined);
       setTimeout(() => (this.input || this.panel.querySelector("input"))?.focus(), 30);
+      emit("open");
+    }
+
+    get opened() {
+      return this.isOpen;
     }
 
     close() {
@@ -404,6 +521,7 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
       this.launcher.innerHTML = ICON_CHAT;
       this.launcher.focus();
       this.renderBadge();
+      emit("close");
     }
 
     private renderBadge() {
@@ -425,8 +543,18 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
       else if (this.view === "callback") p.append(this.callbackForm());
       else if (this.view === "done") p.append(el("div", { class: "form" }, el("p", { role: "status" }, this.doneText), this.backButton()));
       else if (this.view === "history") p.append(this.historyView());
+      else if (this.view === "call") p.append(this.callView());
       else this.renderChat();
-      p.append(el("div", { class: "foot" }, COPY.poweredBy));
+      p.append(this.footer());
+    }
+
+    private footer() {
+      const b = this.cfg.brand;
+      if (!b) return el("div", { class: "foot" }, COPY.poweredBy);
+      const foot = el("div", { class: "foot" });
+      if (b.logo_url) foot.append(el("img", { src: apiOrigin + b.logo_url, alt: "", height: "14", style: "vertical-align: middle; margin-right: 6px; max-width: 80px" }));
+      foot.append(b.product_name);
+      return foot;
     }
 
     private backButton() {
@@ -446,9 +574,13 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
       if (this.showContact) this.log.append(this.contactCard());
       const links = el("div", { class: "row" });
       if (this.cfg.callbacks) links.append(this.linkTo(COPY.callback, "callback"));
+      if (this.cfg.ai_calls && !this.previewMode) links.append(this.linkTo(COPY.talk, "call"));
       if (this.conversations.length > 1) links.append(this.linkTo(COPY.history, "history"));
       if (links.childNodes.length) this.log.append(links);
       this.panel.append(this.log);
+      // "Our team is writing a reply…", announced politely (ADR 0038).
+      this.typingNote = el("p", { class: "typing", role: "status", "aria-live": "polite" });
+      this.panel.append(this.typingNote);
 
       const form = el("form", { class: "compose" });
       this.input = el("textarea", { rows: "1", "aria-label": COPY.placeholder, placeholder: COPY.placeholder, maxlength: "4000" });
@@ -458,11 +590,13 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
           form.requestSubmit();
         }
       });
+      this.input.addEventListener("input", () => this.typing(this.input.value.trim() !== ""));
       form.addEventListener("submit", (e) => {
         e.preventDefault();
         const text = this.input.value.trim();
         if (!text) return;
         this.input.value = "";
+        this.typing(false);
         this.send(text, []);
       });
       if (this.cfg.attachments.enabled) {
@@ -535,12 +669,14 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
         save(this.storeKey, this.stored);
         Object.assign(m, out.message);
         m.pending = undefined;
+        emit("sent", { conversation_id: out.conversation_id, id: m.id, body: m.body });
         if (first && !this.session?.signed_in && !this.stored.contactGiven && this.cfg.ask_contact === "after_first") this.showContact = true;
         this.render();
         this.poll();
-      } catch {
+      } catch (e) {
         m.pending = "failed";
         this.render();
+        emit("error", { message: (e as Error).message });
       }
     }
 
@@ -562,6 +698,144 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
       }
     }
 
+    /** Tell the team the visitor is typing (at most every 3 seconds; it lapses on its own). */
+    private typing(on: boolean) {
+      if (!this.stored.conv || !this.session || this.previewMode) return;
+      const now = Date.now();
+      if (on && now - this.lastTypingPing < 3000) return;
+      this.lastTypingPing = on ? now : 0;
+      this.call<{ team_typing: boolean }>("POST", "/typing", { conversation_id: this.stored.conv, typing: on })
+        .then((out) => this.showTeamTyping(out.team_typing))
+        .catch(() => undefined);
+    }
+
+    private showTeamTyping(on: boolean) {
+      if (this.typingNote) this.typingNote.textContent = on ? COPY.teamTyping : "";
+    }
+
+    // ---- a call with the AI assistant (speech in the browser, text to us) ----------------------
+
+    private callView() {
+      const box = el("div", { class: "form" });
+      box.append(el("h3", {}, COPY.callTitle), el("p", { class: "note" }, COPY.callNote));
+      this.callLog = el("div", { class: "log call", role: "log", "aria-live": "polite", "aria-label": COPY.callTitle });
+      box.append(this.callLog);
+      const W = window as unknown as { SpeechRecognition?: new () => Recogniser; webkitSpeechRecognition?: new () => Recogniser };
+      const Rec = W.SpeechRecognition || W.webkitSpeechRecognition;
+      const row = el("div", { class: "row" });
+      if (Rec) {
+        const mic = el("button", { class: "btn", type: "button", "aria-pressed": "false" }, COPY.callListen);
+        mic.addEventListener("click", () => {
+          if (this.recogniser) {
+            this.recogniser.stop();
+            return;
+          }
+          const r = new Rec();
+          r.lang = document.documentElement.lang || navigator.language || "en";
+          r.interimResults = false;
+          r.continuous = false;
+          r.onresult = (e) => {
+            const said = Array.from(e.results).map((x) => x[0].transcript).join(" ").trim();
+            if (said) this.callSay(said);
+          };
+          r.onend = r.onerror = () => {
+            this.recogniser = null;
+            mic.textContent = COPY.callListen;
+            mic.setAttribute("aria-pressed", "false");
+          };
+          this.recogniser = r;
+          mic.textContent = COPY.callListening;
+          mic.setAttribute("aria-pressed", "true");
+          r.start();
+        });
+        row.append(mic);
+      }
+      const end = el("button", { class: "btn secondary", type: "button" }, COPY.callEnd);
+      end.addEventListener("click", () => this.endCall(COPY.callEnded));
+      row.append(end);
+      box.append(row);
+      const form = el("form", { class: "row" });
+      const input = el("input", { type: "text", "aria-label": COPY.callType, placeholder: COPY.callType, maxlength: "2000", style: "flex: 1" });
+      form.append(input, el("button", { class: "btn secondary", type: "submit" }, COPY.callSay));
+      form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const text = input.value.trim();
+        input.value = "";
+        if (text) this.callSay(text);
+      });
+      box.append(form);
+      if (!this.callId) this.startCall();
+      return box;
+    }
+
+    private callLine(who: string, text: string, cls = "them") {
+      if (!this.callLog) return;
+      this.callLog.append(el("div", { class: `msg ${cls}` }, el("span", { class: "who" }, who), text));
+      this.callLog.scrollTop = this.callLog.scrollHeight;
+    }
+
+    private speak(text: string) {
+      try {
+        if (!("speechSynthesis" in window) || !text) return;
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = document.documentElement.lang || navigator.language || "en";
+        window.speechSynthesis.speak(u);
+      } catch {
+        /* the words are on screen anyway */
+      }
+    }
+
+    private async startCall() {
+      this.callLine(COPY.assistant, COPY.callStarting, "them note");
+      try {
+        await this.ensureSession();
+        const out = await this.call<{ conversation_id: string; greeting: string }>("POST", "/calls", {});
+        this.callId = out.conversation_id;
+        this.callLog?.lastElementChild?.remove();
+        this.callLine(COPY.assistant, out.greeting);
+        this.speak(out.greeting);
+      } catch (e) {
+        this.callId = null;
+        this.flashIn(this.callLog, (e as Error).message);
+      }
+    }
+
+    private async callSay(text: string) {
+      if (!this.callId) return;
+      this.callLine(COPY.you, text, "you");
+      try {
+        const out = await this.call<{ reply: string; handed_over: boolean }>("POST", `/calls/${encodeURIComponent(this.callId)}/turns`, { text });
+        if (out.reply) {
+          this.callLine(COPY.assistant, out.reply);
+          this.speak(out.reply);
+        }
+        if (out.handed_over) await this.endCall(COPY.callHanded);
+      } catch (e) {
+        this.flashIn(this.callLog, (e as Error).message);
+      }
+    }
+
+    private async endCall(text: string) {
+      const id = this.callId;
+      this.callId = null;
+      if (this.recogniser) this.recogniser.stop();
+      try {
+        if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+      } catch {
+        /* nothing to stop */
+      }
+      if (id) await this.call("POST", `/calls/${encodeURIComponent(id)}/end`, {}).catch(() => undefined);
+      this.doneText = text;
+      this.view = "done";
+      this.render();
+    }
+
+    private flashIn(box: HTMLElement | null, text: string) {
+      if (!box) return;
+      box.append(el("p", { class: "err", role: "alert" }, text));
+      box.scrollTop = box.scrollHeight;
+    }
+
     private flash(text: string) {
       if (!this.log) return;
       const p = el("p", { class: "err", role: "alert" }, text);
@@ -579,10 +853,16 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
         const last = [...this.messages].reverse().find((m) => !m.pending && m.at);
         const q = `?conversation_id=${encodeURIComponent(this.stored.conv)}${last ? `&after=${encodeURIComponent(last.at)}` : ""}`;
         const out = await this.call<{ items: ChatMessage[] }>("GET", `/messages${q}`);
+        if (this.isOpen && this.view === "chat") {
+          this.call<{ team_typing: boolean }>("GET", `/typing?conversation_id=${encodeURIComponent(this.stored.conv)}`)
+            .then((t) => this.showTeamTyping(t.team_typing))
+            .catch(() => undefined);
+        }
         const known = new Set(this.messages.map((m) => m.id));
         const fresh = out.items.filter((m) => !known.has(m.id));
         if (fresh.length) {
           this.messages.push(...fresh);
+          for (const m of fresh) if (m.from !== "you") emit("message", { conversation_id: this.stored.conv, id: m.id, from: m.from, body: m.body, at: m.at });
           const theirs = fresh.filter((m) => m.from !== "you").length;
           if (!this.isOpen) {
             this.unread += theirs;
@@ -710,10 +990,11 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
       this.messages = [];
       this.ensureSession()
         .then(() => {
+          emit("identified", { signed_in: !!this.session?.signed_in });
           this.render();
           this.poll();
         })
-        .catch(() => undefined);
+        .catch((e) => emit("error", { message: (e as Error).message }));
     }
   }
 
@@ -724,7 +1005,17 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
   const userToken = (script && script.dataset.userToken) || settings.userToken || "";
   let chat: Chat | null = null;
 
-  w.ExaCaribChat = {
+  const api: ExaCaribChatApi = {
+    version: "1.1",
+    on(event: ChatEvent, fn: Handler) {
+      if (typeof fn === "function") (handlers[event] = handlers[event] || []).push(fn);
+    },
+    off(event: ChatEvent, fn: Handler) {
+      handlers[event] = (handlers[event] || []).filter((h) => h !== fn);
+    },
+    isOpen() {
+      return !!chat && chat.opened;
+    },
     identify(token: string) {
       if (chat) chat.identify(token);
     },
@@ -740,11 +1031,19 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
       return () => container.textContent = "";
     },
   };
+  w.ExaCaribChat = api;
 
   if (key) {
     chat = new Chat(key, userToken);
     const go = () => chat && chat.start();
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", go);
     else go();
+  }
+
+  // Replay calls queued before the script loaded, in order.
+  for (const call of queued) {
+    const [name, ...args] = call as [keyof ExaCaribChatApi, ...unknown[]];
+    const fn = api[name];
+    if (typeof fn === "function") (fn as (...a: unknown[]) => void).apply(api, args);
   }
 })();

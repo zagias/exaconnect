@@ -12,7 +12,8 @@ import sys
 from playwright.sync_api import sync_playwright
 
 HOST = os.environ["E2E_HOST"]
-BASE = f"https://{HOST}"
+# E2E_BASE overrides the address for a local run over plain HTTP.
+BASE = os.environ.get("E2E_BASE", f"https://{HOST}")
 SCREENS = [
     ("/", "Overview"),
     ("/sites", "Sites"),
@@ -43,18 +44,65 @@ SCREENS = [
     ("/admin/protection", "Admin: protection"),
     ("/admin/releases", "Admin: releases"),
     ("/admin/audit", "Admin: audit"),
+    # CommAI, in menu order (portal/src/nav.tsx), with every tab.
     ("/commai", "CommAI: inbox"),
     ("/commai/contacts", "CommAI: contacts"),
-    ("/commai/channels", "CommAI: channels"),
-    ("/commai/ai", "CommAI: AI agents"),
+    ("/commai/voice", "CommAI: phone, people and numbers"),
+    ("/commai/voice/routing", "CommAI: phone, call routing"),
+    ("/commai/voice/changes", "CommAI: phone, scheduled, history and bulk"),
+    ("/commai/voice/access", "CommAI: phone, access"),
+    ("/commai/voice/orders", "CommAI: phone, orders"),
+    ("/commai/voice/numbers", "CommAI: phone, numbers"),
+    ("/commai/voice/ports", "CommAI: phone, ports"),
+    ("/commai/voice/emergency", "CommAI: phone, emergency"),
+    ("/commai/voice/fraud", "CommAI: phone, fraud"),
+    ("/commai/voice/billing", "CommAI: phone, billing"),
+    ("/commai/voice/me", "CommAI: phone, my phone"),
+    ("/commai/voice/carriers", "CommAI: phone, carriers"),
+    ("/commai/voice/phone", "CommAI: phone, browser phone"),
+    ("/commai/team", "CommAI: team"),
+    ("/commai/ai", "CommAI: AI agents, profile and mode"),
+    ("/commai/ai/tools", "CommAI: AI agents, tools"),
+    ("/commai/ai/knowledge", "CommAI: AI agents, knowledge"),
+    ("/commai/ai/gaps", "CommAI: AI agents, knowledge gaps"),
+    ("/commai/ai/call", "CommAI: AI agents, browser call"),
     ("/commai/workflows", "CommAI: workflows"),
-    ("/commai/integrations", "CommAI: integrations"),
-    ("/commai/voice", "CommAI: voice"),
-    ("/commai/reports", "CommAI: reports"),
+    ("/commai/approvals", "CommAI: approvals"),
+    ("/commai/integrations", "CommAI: apps, your apps"),
+    ("/commai/catalogue", "CommAI: apps, catalogue"),
     ("/commai/assistant", "CommAI: assistant"),
-    ("/commai/setup", "CommAI: set up"),
-    ("/commai/settings", "CommAI: settings"),
-    ("/commai/settings/sign-in", "CommAI: sign-in settings"),
+    ("/commai/reports", "CommAI: reports"),
+    ("/commai/quality", "CommAI: quality, review"),
+    ("/commai/quality/flags", "CommAI: quality, flags"),
+    ("/commai/quality/gaps", "CommAI: quality, knowledge gaps"),
+    ("/commai/quality/follow-ups", "CommAI: quality, follow-ups"),
+    ("/commai/quality/satisfaction", "CommAI: quality, satisfaction"),
+    ("/commai/bill", "CommAI: usage and bill"),
+    ("/commai/setup", "CommAI: getting started"),
+    ("/commai/channels/web", "CommAI: channels, website chat"),
+    ("/commai/channels/whatsapp", "CommAI: channels, WhatsApp"),
+    ("/commai/channels/sms", "CommAI: channels, SMS"),
+    ("/commai/channels/email", "CommAI: channels, email"),
+    ("/commai/channels/messenger", "CommAI: channels, Messenger"),
+    ("/commai/channels/instagram", "CommAI: channels, Instagram"),
+    ("/commai/channels/telegram", "CommAI: channels, Telegram"),
+    ("/commai/countries", "CommAI: countries"),
+    ("/commai/languages", "CommAI: languages"),
+    ("/commai/governance", "CommAI: AI governance"),
+    ("/commai/settings", "CommAI: settings, service"),
+    ("/commai/settings/teams", "CommAI: settings, teams and people"),
+    ("/commai/settings/routing", "CommAI: settings, routing"),
+    ("/commai/settings/developers", "CommAI: settings, webhooks and keys"),
+    ("/commai/settings/sign-in", "CommAI: settings, sign-in"),
+    ("/commai/settings/organisation", "CommAI: settings, organisation"),
+    ("/commai/settings/roles", "CommAI: settings, roles"),
+    ("/commai/settings/security", "CommAI: settings, security"),
+    ("/commai/settings/data", "CommAI: settings, data"),
+    ("/commai/settings/help-centre", "CommAI: settings, help centre"),
+    ("/commai/partner", "CommAI: partners"),
+    ("/commai/me", "CommAI: my settings"),
+    ("/commai/golive", "CommAI: go-live"),
+    ("/commai/support", "CommAI: support queue"),
 ]
 failed = 0
 
@@ -136,11 +184,38 @@ def main() -> int:
                 problems.append("blank")
             problems += [f"alert: {a[:120]}" for a in alerts]
             problems += [f"API {a}" for a in api_fail]
-            problems += [f"console: {e}" for e in errors if "favicon" not in e]
+            # A 404 is how some screens learn "not set up for you yet" (no phone
+            # extension, say); the page says so in words. 5xx are caught above.
+            problems += [f"console: {e}" for e in errors if "favicon" not in e and "404 (Not Found)" not in e]
             if problems:
                 bad(f"{name} ({path}): " + "; ".join(problems[:4]))
             else:
                 ok(f"{name} renders without errors")
+
+        # Jump to: Ctrl+K opens the search, a tab name finds it, Enter goes there,
+        # "/" opens it again and Escape closes it.
+        page.goto(BASE + "/commai", wait_until="networkidle")
+        page.keyboard.press("Control+k")
+        dialog = page.get_by_role("dialog", name="Jump to a screen")
+        try:
+            dialog.wait_for(timeout=3000)
+            page.keyboard.type("numbers")
+            page.keyboard.press("Enter")
+            page.wait_for_url(re.compile(r"/commai/voice/numbers$"), timeout=5000)
+            ok("jump to (Ctrl+K) finds Phone > Numbers and opens it")
+        except Exception:
+            bad(f"jump to (Ctrl+K) did not open Phone > Numbers (at {page.url.split(HOST)[-1]})")
+        page.locator("main").click(position={"x": 5, "y": 5})
+        page.keyboard.press("/")
+        if dialog.count() and dialog.is_visible():
+            page.keyboard.press("Escape")
+            page.wait_for_timeout(300)
+            if dialog.count():
+                bad("jump to did not close on Escape")
+            else:
+                ok('jump to opens with "/" and closes with Escape')
+        else:
+            bad('jump to did not open with "/"')
 
         # The example alerts show and clear from the Insights screen.
         page.goto(BASE + "/insights", wait_until="networkidle")

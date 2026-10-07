@@ -153,12 +153,14 @@ def _greeting(conn, customer_id: Any, prof: dict) -> str:
     )
 
 
-def start_call(conn: psycopg.Connection, customer_id: Any, *, caller: str = "", started_by: str = "") -> dict:
+def start_call(
+    conn: psycopg.Connection, customer_id: Any, *, caller: str = "", started_by: str = "", contact_id: Any = None
+) -> dict:
     """Open a browser call: a conversation on channel 'voice', handled by the
     AI when the AI agent is switched on, with a spoken greeting."""
     prof = runtime.profile(conn, customer_id)
     identity = inbox.find_or_create_identity(
-        conn, customer_id, "voice", f"browser:{uuid.uuid4()}", name=caller.strip()[:100]
+        conn, customer_id, "voice", f"browser:{uuid.uuid4()}", name=caller.strip()[:100], contact_id=contact_id
     )
     conv = inbox.open_conversation(
         conn,

@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field
 from ... import audit, db
 from ...api.deps import UserDep
 from .. import access
-from ..voice import billing, bulk, config, freeswitch, perms, provisioning, selfservice
+from ..voice import billing, bulk, carriers, config, freeswitch, perms, provisioning, selfservice
 from ..voice import provider as providers
 from ..voice.common import VoiceError, month_start, now, policy, set_policy
 from .common import errors
@@ -90,7 +90,7 @@ def overview(customer_id: str, user: UserDep) -> dict:
         ).fetchall()
         out["numbers"] = conn.execute(
             """SELECT n.id, n.e164, n.source, n.status, n.target_type, n.target_id, n.site_id, s.name AS site,
-                      n.emergency_address, n.billing_from
+                      n.emergency_address, n.billing_from, n.country, n.outbound_enabled, n.outbound_reason
                FROM voice_numbers n LEFT JOIN voice_sites s ON s.id = n.site_id
                WHERE n.customer_id = %s AND n.status <> 'removed' ORDER BY n.e164""",
             (customer_id,),
@@ -642,6 +642,8 @@ def pbx_config(customer_id: str, user: UserDep) -> dict:
 
 class AuthoriseIn(BaseModel):
     to: str = Field(max_length=40)
+    from_number: str | None = Field(default=None, max_length=40)
+    voice_user_id: str | None = None
 
 
 @router.post("/voice/calls/authorise")
@@ -650,7 +652,9 @@ def authorise_call(customer_id: str, body: AuthoriseIn, user: UserDep) -> dict:
     access.check(user, customer_id, "commai:admin")
     with db.tx() as conn:
         _admin(conn, user, customer_id)
-        return billing.authorise(conn, customer_id, body.to)
+        return billing.authorise(
+            conn, customer_id, body.to, voice_user_id=body.voice_user_id, from_number=body.from_number
+        )
 
 
 class CallIn(BaseModel):
@@ -684,6 +688,7 @@ def post_call(customer_id: str, body: CallIn, user: UserDep) -> dict:
 
 class SimCallIn(BaseModel):
     extension: str = Field(max_length=6)
+    from_number: str | None = Field(default=None, max_length=40)
     to: str = Field(max_length=40)
     seconds: int = Field(ge=1, le=14400)
     ai_seconds: int = Field(default=0, ge=0, le=14400)
@@ -703,10 +708,17 @@ def simulate_call(customer_id: str, body: SimCallIn, user: UserDep) -> dict:
         if vu is None:
             raise HTTPException(422, f"There is no extension {body.extension}.")
         to = config.norm_e164(body.to) if len(re.sub(r"\D", "", body.to)) > 4 else body.to
-        verdict = billing.authorise(conn, customer_id, to)
+        verdict = billing.authorise(conn, customer_id, to, voice_user_id=vu["id"], from_number=body.from_number)
+        call_id = f"sim-{uuid.uuid4().hex[:16]}"
+        routed = None
+        if verdict["allowed"] and verdict.get("route"):
+            # Several carriers (ADR 0033): try each in order until one takes the call.
+            routed = carriers.connect(conn, customer_id, call_id, to, verdict["route"])
+            if not routed["ok"]:
+                verdict = {**verdict, "allowed": False, "reason": routed["reason"]}
         end = now()
         call = {
-            "call_id": f"sim-{uuid.uuid4().hex[:16]}",
+            "call_id": call_id,
             "direction": "outbound",
             "from_number": body.extension,
             "to_number": to,
@@ -719,10 +731,23 @@ def simulate_call(customer_id: str, body: SimCallIn, user: UserDep) -> dict:
             "block_reason": verdict["reason"],
         }
         call["provider_ref"] = call["call_id"]
+        if routed is not None and not routed["ok"]:
+            call["status"] = "failed"
         cdr = billing.record_call(conn, customer_id, call)
+        if routed and routed["ok"]:
+            carriers.attach(conn, cdr, routed["carrier"])
+            cdr = {**cdr, "carrier": routed["carrier"]}
         audit.record(conn, user.actor, "commai.voice.simulated_call", cdr["call_id"], customer_id)
         charges = conn.execute("SELECT * FROM voice_charges WHERE cdr_id = %s ORDER BY kind", (cdr["id"],)).fetchall()
-    return clean({**cdr, "allowed": verdict["allowed"], "reason": verdict["reason"], "charges": charges})
+    return clean(
+        {
+            **cdr,
+            "allowed": verdict["allowed"],
+            "reason": verdict["reason"],
+            "charges": charges,
+            "route": [{"carrier": a["carrier"], "ok": a["ok"]} for a in (routed or {}).get("attempts", [])],
+        }
+    )
 
 
 @router.get("/voice/calls")

@@ -25,3 +25,7 @@
   .ch-dl { grid-template-columns: 1fr; }
   .ch-dl dd { margin-bottom: 4px; }
 }
+
+/* Phase 3 (ADR 0029): click-to-WhatsApp link and QR code. */
+.ch-link { display: grid; gap: 8px; justify-items: start; margin-top: 12px; }
+.ch-qr { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 8px; max-width: 100%; height: auto; }

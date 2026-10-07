@@ -15,6 +15,7 @@ export interface Conversation {
   handler_user_id: string | null;
   handler_email: string | null;
   language: string;
+  intent?: string;
   tags: string[];
   contact_id: string | null;
   contact_name: string | null;
@@ -45,6 +46,21 @@ export interface Message {
   status: string;
   error: string;
   created_at: string;
+  attachments?: Attachment[];
+}
+
+export interface Attachment {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+}
+
+/** Someone typing in a conversation, from the inbox live feed (ADR 0038). */
+export interface Typing {
+  name: string;
+  who_kind: "user" | "contact";
+  until: number;
 }
 
 export interface Note {
@@ -52,6 +68,7 @@ export interface Note {
   author: string;
   body: string;
   mentions: string[];
+  attachments?: { id: string; name: string; type: string; size: number }[];
   created_at: string;
 }
 

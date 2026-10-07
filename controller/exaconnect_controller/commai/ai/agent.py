@@ -26,7 +26,7 @@ import psycopg
 from psycopg.types.json import Jsonb
 
 from .. import actions, events, inbox, jobs
-from . import knowledge, language, memory, runtime
+from . import attachments, knowledge, language, memory, runtime
 from .model import EMAIL, NAME, PHONE, ModelError, ModelOutput, parse_when
 
 log = logging.getLogger("exaconnect.commai.ai.agent")
@@ -62,9 +62,16 @@ def _who(m: dict) -> str:
 
 
 def history(conn: psycopg.Connection, customer_id: Any, conversation_id: Any, limit: int) -> list[dict]:
-    """Customer-facing messages only (inbox.messages never reads notes)."""
+    """Customer-facing messages only (inbox.messages never reads notes). A voice
+    note's transcript counts as the customer's words (ADR 0032)."""
     msgs = inbox.messages(conn, customer_id, conversation_id)[-limit:]
-    return [{"from": _who(m), "text": m["body"], "at": m["created_at"].isoformat()} for m in msgs if m["body"]]
+    spoken = attachments.transcripts(conn, customer_id, msgs)
+    out = []
+    for m in msgs:
+        text = " ".join(x for x in (m["body"], spoken.get(str(m["id"]), "")) if x).strip()
+        if text:
+            out.append({"from": _who(m), "text": text, "at": m["created_at"].isoformat()})
+    return out
 
 
 def build_context(
@@ -212,14 +219,20 @@ def _run(conn: psycopg.Connection, customer_id: Any, conv: dict, message_id: Any
     # would block a person taking over.
     run_id = None
     last_msg = conn.execute(
-        """SELECT body FROM messages WHERE conversation_id = %s AND direction = 'in'
+        """SELECT id, body, attachments FROM messages WHERE conversation_id = %s AND direction = 'in'
            ORDER BY created_at DESC LIMIT 1""",
         (conv["id"],),
     ).fetchone()
     last_text = last_msg["body"] if last_msg else ""
+    # Attachments and voice notes (ADR 0032): a voice note's words are the
+    # customer's words; other files go to the model as data.
+    files = attachments.for_message(conn, customer_id, last_msg) if last_msg else {"files": [], "unreadable": []}
+    if files.get("transcript"):
+        last_text = f"{last_text} {files['transcript']}".strip()
     business_lang = prof["business_language"]
     detected = language.detect(last_text, default=conv["language"] or business_lang)
     ctx = build_context(conn, customer_id, conv, prof, last_text, detected)
+    ctx["attachments"] = files["files"]
     esc = prof["escalation"]
 
     def escalate(reason: str, *, out: ModelOutput | None = None, tried: list[str] | None = None, gap: str = ""):
@@ -239,6 +252,9 @@ def _run(conn: psycopg.Connection, customer_id: Any, conv: dict, message_id: Any
 
     if not prof.get("enabled", True):
         return escalate("The AI agent is switched off for this business.")
+    if not last_text.strip() and not files["files"]:
+        why = "; ".join(files["unreadable"]) or "the message has nothing the AI can read"
+        return escalate(f"The AI could not read what the customer sent: {why}.")
     low = last_text.lower()
     hit = next((k for k in esc.get("keywords") or [] if k and re.search(rf"\b{re.escape(k.lower())}\b", low)), None)
     if hit:
@@ -338,6 +354,8 @@ def _run(conn: psycopg.Connection, customer_id: Any, conv: dict, message_id: Any
         # Written only now: holding the conversation row during the model call
         # would block a person taking over.
         conn.execute("UPDATE conversations SET language = %s WHERE id = %s", (detected, conv["id"]))
+    if out.intent and out.intent[:60] != (conv.get("intent") or ""):
+        conn.execute("UPDATE conversations SET intent = %s WHERE id = %s", (out.intent[:60], conv["id"]))
     msg = inbox.send(
         conn,
         customer_id,

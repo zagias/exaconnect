@@ -7,22 +7,17 @@ repeat with a different body is refused (422) and a repeat that arrives
 while the first is still running gets 409. The caller is identified by a
 hash of its credentials, so two callers never share a key.
 
-Rate limit: a simple per-caller budget (EXA_API_RATE_PER_MIN, default 600
-requests a minute) answered with 429 and Retry-After. It is per process; a
-shared limiter comes with more than one API process.
+Rate limits live in commai/ratelimit.py (shared through Postgres, ADR 0038).
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
-import os
-import time
-from collections import defaultdict, deque
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from .. import db
+from .. import db, errors
 
 WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 MAX_STORED = 1_000_000
@@ -48,8 +43,10 @@ def principal(scope: Scope) -> str:
     return hashlib.sha256(auth.encode()).hexdigest() if auth else ""
 
 
-async def _send_json(send: Send, status: int, detail: str, extra: list[tuple[bytes, bytes]] | None = None) -> None:
-    body = json.dumps({"detail": detail}).encode()
+async def _send_json(
+    send: Send, status: int, detail: str, extra: list[tuple[bytes, bytes]] | None = None, scope: Scope | None = None
+) -> None:
+    body = json.dumps(errors.body(status, detail, scope)).encode()
     await send(
         {
             "type": "http.response.start",
@@ -59,35 +56,6 @@ async def _send_json(send: Send, status: int, detail: str, extra: list[tuple[byt
         }
     )
     await send({"type": "http.response.body", "body": body})
-
-
-class RateLimit:
-    def __init__(self, app: ASGIApp, per_minute: int | None = None):
-        self.app = app
-        self.per_minute = per_minute or int(os.environ.get("EXA_API_RATE_PER_MIN", "600"))
-        self.hits: dict[str, deque] = defaultdict(deque)
-
-    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http" or not scope["path"].startswith("/api/v1/"):
-            return await self.app(scope, receive, send)
-        who = principal(scope) or (scope.get("client") or ("anon",))[0]
-        now = time.monotonic()
-        q = self.hits[who]
-        while q and q[0] < now - 60:
-            q.popleft()
-        if len(q) >= self.per_minute:
-            retry = max(1, int(60 - (now - q[0])))
-            return await _send_json(
-                send,
-                429,
-                "Too many requests. Slow down and try again shortly.",
-                [(b"retry-after", str(retry).encode())],
-            )
-        q.append(now)
-        if len(self.hits) > 50_000:  # forget idle callers
-            for k in [k for k, v in self.hits.items() if not v or v[-1] < now - 60]:
-                del self.hits[k]
-        return await self.app(scope, receive, send)
 
 
 class Idempotency:
@@ -106,7 +74,7 @@ class Idempotency:
         if not key:
             return await self.app(scope, receive, send)
         if len(key) > 200:
-            return await _send_json(send, 400, "Idempotency-Key must be at most 200 characters.")
+            return await _send_json(send, 400, "Idempotency-Key must be at most 200 characters.", scope=scope)
         who = principal(scope)
         if not who:
             return await self.app(scope, receive, send)  # unauthenticated: the endpoint answers 401
@@ -137,9 +105,13 @@ class Idempotency:
                 ).fetchone()
         if existing is not None:
             if existing["body_hash"] != body_hash:
-                return await _send_json(send, 422, "This Idempotency-Key was already used for a different request.")
+                return await _send_json(
+                    send, 422, "This Idempotency-Key was already used for a different request.", scope=scope
+                )
             if existing["status_code"] is None:
-                return await _send_json(send, 409, "A request with this Idempotency-Key is still being processed.")
+                return await _send_json(
+                    send, 409, "A request with this Idempotency-Key is still being processed.", scope=scope
+                )
             stored = bytes(existing["response"] or b"")
             await send(
                 {

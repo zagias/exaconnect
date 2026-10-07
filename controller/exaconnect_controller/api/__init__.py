@@ -11,6 +11,7 @@ from . import (
     billing,
     circuits,
     deps,
+    directory,
     internet,
     inventory_admin,
     metering,
@@ -62,6 +63,7 @@ router.include_router(security.router, dependencies=_connect)
 router.include_router(sso.router)
 router.include_router(orgs.router)
 router.include_router(scim.router)
+router.include_router(directory.router)
 
 from ..commai.api import router as commai_router  # noqa: E402
 

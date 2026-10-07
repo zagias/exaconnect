@@ -134,23 +134,19 @@ def _fanout(conn: psycopg.Connection, job: dict) -> None:
 @jobs.handler("webhook.deliver")
 def _deliver(conn: psycopg.Connection, job: dict) -> None:
     d = conn.execute(
-        """SELECT d.*, e.url, e.secret, e.active FROM webhook_deliveries d
+        """SELECT d.*, e.url, e.secret, e.active, e.format, e.standard_headers FROM webhook_deliveries d
            JOIN webhook_endpoints e ON e.id = d.endpoint_id WHERE d.id = %s FOR UPDATE OF d""",
         (job["payload"]["delivery_id"],),
     ).fetchone()
     if d is None or d["status"] == "delivered" or not d["active"]:
         return
     event = conn.execute("SELECT * FROM commai_events WHERE id = %s", (d["event_id"],)).fetchone()
-    body = payload(event)
+    from .standards import webhooks_std
+
     ts = int(time.time())
-    headers = {
-        "Content-Type": "application/json",
-        "User-Agent": "ExaCarib-Webhooks/1",
-        "X-ExaCarib-Event-Id": str(event["id"]),
-        "X-ExaCarib-Event-Type": event["type"],
-        "X-ExaCarib-Timestamp": str(ts),
-        "X-ExaCarib-Signature": sign(d["secret"], ts, body),
-    }
+    # ADR 0034: the endpoint's format (ExaCarib v1 or CloudEvents) and, when
+    # asked, Standard Webhooks headers. The v1 signature is always there.
+    body, headers = webhooks_std.render(d, event, payload(event), ts)
     try:
         code = sender(d["url"], body, headers)
         error = "" if 200 <= code < 300 else f"answered {code}"

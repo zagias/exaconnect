@@ -9,7 +9,7 @@ import "./automation.css";
 
 interface Draft {
   id: string;
-  kind: "profile" | "team" | "knowledge" | "routing" | "workflow";
+  kind: "profile" | "team" | "knowledge" | "routing" | "workflow" | "channel";
   title: string;
   content: Record<string, unknown>;
   source: string;
@@ -27,7 +27,18 @@ const KIND_LABEL: Record<Draft["kind"], string> = {
   knowledge: "Knowledge",
   routing: "Routing rules",
   workflow: "Starter workflows",
+  channel: "Channel set-up",
 };
+const DAY_LABEL: [string, string][] = [
+  ["mon", "Monday"],
+  ["tue", "Tuesday"],
+  ["wed", "Wednesday"],
+  ["thu", "Thursday"],
+  ["fri", "Friday"],
+  ["sat", "Saturday"],
+  ["sun", "Sunday"],
+];
+type Hours = Record<string, [string, string] | null>;
 const TYPES = ["Appointments (clinic, salon)", "Online shop", "Professional services", "Property", "Hospitality", "Other"];
 const CHANNELS: [string, string][] = [
   ["web", "Website chat"],
@@ -41,17 +52,24 @@ export default function Onboarding() {
   const base = useCommaiBase();
   const batch = useApi<Batch>(base && `${base}/onboarding`, 0);
   const [dropped, setDropped] = useState<string[]>([]);
+  const [note, setNote] = useState<string | null>(null);
   if (!base) return <p className="muted">Choose an organisation first.</p>;
   return (
     <>
-      <PageHead eyebrow="CommAI" title="Set up">
+      <PageHead title="Getting started">
         Tell CommAI about your business. It drafts a profile, teams, knowledge, routing and starter workflows; you review and approve each one before
         anything goes live.
       </PageHead>
-      <SetupForm base={base} onDone={(d) => {
+      <SetupForm base={base} onDone={(d, n) => {
         setDropped(d);
+        setNote(n);
         batch.reload();
       }} />
+      {note && (
+        <p className="auto-banner" role="status">
+          {note}
+        </p>
+      )}
       {dropped.length > 0 && (
         <div className="auto-banner bad" role="status">
           <strong>Left out of the drafts:</strong> these lines in your website text read like instructions to an AI, so CommAI ignored them.
@@ -68,7 +86,17 @@ export default function Onboarding() {
   );
 }
 
-function SetupForm({ base, onDone }: { base: string; onDone: (dropped: string[]) => void }) {
+function SetupForm({ base, onDone }: { base: string; onDone: (dropped: string[], note: string | null) => void }) {
+  const [perDay, setPerDay] = useState(false);
+  const [hours, setHours] = useState<Hours>({
+    mon: ["08:00", "17:00"],
+    tue: ["08:00", "17:00"],
+    wed: ["08:00", "17:00"],
+    thu: ["08:00", "17:00"],
+    fri: ["08:00", "17:00"],
+    sat: null,
+    sun: null,
+  });
   const [f, setF] = useState({ business_name: "", business_type: "", hours: "", locations: "", teams: "", website_text: "", website_url: "" });
   const [channels, setChannels] = useState<string[]>(["web"]);
   const act = useAction();
@@ -76,16 +104,21 @@ function SetupForm({ base, onDone }: { base: string; onDone: (dropped: string[])
   const submit = (e: FormEvent) => {
     e.preventDefault();
     act.run(async () => {
-      const out = await api<{ dropped_lines: string[] }>(`${base}/onboarding`, {
+      const out = await api<{ dropped_lines: string[]; fetched: { url: string } | null; hours_need_a_person: boolean }>(`${base}/onboarding`, {
         method: "POST",
         body: JSON.stringify({
           ...f,
+          ...(perDay ? { opening_hours: hours, hours: "" } : {}),
           locations: f.locations.split("\n").map((x) => x.trim()).filter(Boolean),
           teams: f.teams.split(",").map((x) => x.trim()).filter(Boolean),
           channels,
         }),
       });
-      onDone(out.dropped_lines);
+      const notes = [
+        out.fetched ? `Read your website at ${out.fetched.url}.` : "",
+        out.hours_need_a_person ? "CommAI couldn't read your opening hours into days. Tick “Set hours day by day” above and draft again." : "",
+      ].filter(Boolean);
+      onDone(out.dropped_lines, notes.join(" ") || null);
     });
   };
   return (
@@ -104,10 +137,47 @@ function SetupForm({ base, onDone }: { base: string; onDone: (dropped: string[])
             ))}
           </select>
         </label>
-        <label>
-          Opening hours
-          <input value={f.hours} onChange={(e) => set("hours", e.target.value)} placeholder="Mon–Fri 8:00–17:00" maxLength={500} />
+        {!perDay && (
+          <label>
+            Opening hours
+            <input value={f.hours} onChange={(e) => set("hours", e.target.value)} placeholder="Mon–Fri 8am–5pm, Sat 9–1, Sun closed" maxLength={500} aria-describedby="hours-hint" />
+            <span id="hours-hint" className="small muted">
+              CommAI reads this into days; check it on the profile draft.
+            </span>
+          </label>
+        )}
+        <label className="check">
+          <input type="checkbox" checked={perDay} onChange={(e) => setPerDay(e.target.checked)} /> Set hours day by day
         </label>
+        {perDay && (
+          <fieldset className="wide">
+            <legend>Opening hours</legend>
+            {DAY_LABEL.map(([d, l]) => {
+              const span = hours[d];
+              return (
+                <div key={d} className="auto-row" role="group" aria-label={l}>
+                  <span style={{ minWidth: 96 }}>{l}</span>
+                  <label className="check">
+                    <input type="checkbox" checked={!span} onChange={(e) => setHours((h) => ({ ...h, [d]: e.target.checked ? null : ["09:00", "17:00"] }))} /> Closed
+                  </label>
+                  {span && (
+                    <>
+                      <label className="small">
+                        <span className="sr-only">{l} opens</span>
+                        <input type="time" value={span[0]} onChange={(e) => setHours((h) => ({ ...h, [d]: [e.target.value, span[1]] }))} />
+                      </label>
+                      <span aria-hidden="true">to</span>
+                      <label className="small">
+                        <span className="sr-only">{l} closes</span>
+                        <input type="time" value={span[1]} onChange={(e) => setHours((h) => ({ ...h, [d]: [span[0], e.target.value] }))} />
+                      </label>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </fieldset>
+        )}
         <label>
           Teams (comma separated)
           <input value={f.teams} onChange={(e) => set("teams", e.target.value)} placeholder="Sales, Support" />
@@ -130,11 +200,14 @@ function SetupForm({ base, onDone }: { base: string; onDone: (dropped: string[])
           ))}
         </fieldset>
         <label className="wide">
-          Website address (for reference)
-          <input value={f.website_url} onChange={(e) => set("website_url", e.target.value)} placeholder="https://" maxLength={300} />
+          Website address
+          <input type="url" value={f.website_url} onChange={(e) => set("website_url", e.target.value)} placeholder="https://" maxLength={300} aria-describedby="site-hint" />
+          <span id="site-hint" className="small muted">
+            Leave the text below empty and CommAI reads this page itself (public websites only).
+          </span>
         </label>
         <label className="wide">
-          Website text (paste it here)
+          Website text (or paste it here)
           <textarea className="auto-text" style={{ minHeight: 180 }} value={f.website_text} onChange={(e) => set("website_text", e.target.value)} maxLength={60000} />
         </label>
         <p className="small muted wide" style={{ margin: 0 }}>
@@ -216,6 +289,11 @@ function Drafts({ base, drafts, reload }: { base: string; drafts: Draft[]; reloa
                       </div>
                     )}
                     {d.kind === "workflow" && d.status === "approved" && <span className="small muted">Added to Workflows as a draft to publish.</span>}
+                    {d.kind === "channel" && d.status === "approved" && (
+                      <span className="small muted">
+                        {d.content.channel === "web" ? "Website chat key created: see Channels." : "Set-up steps saved: finish them on Channels."}
+                      </span>
+                    )}
                   </section>
                 );
               })}
@@ -232,8 +310,17 @@ function summary(d: Draft): string {
   if (d.kind === "routing") return `Messages mentioning ${(c.keywords as string[]).join(", ")} go to ${c.team}.`;
   if (d.kind === "team") return `A team called ${c.name}.`;
   if (d.kind === "workflow") return String(c.description ?? c.name ?? "");
+  if (d.kind === "channel") return ((c.steps as string[]) ?? []).map((x, i) => `${i + 1}. ${x}`).join("\n");
   if (d.kind === "profile")
-    return [c.summary, c.hours && `Hours: ${c.hours}`, (c.locations as string[])?.length ? `Locations: ${(c.locations as string[]).join("; ")}` : ""]
+    return [
+      c.summary,
+      c.opening_hours
+        ? `Hours: ${DAY_LABEL.map(([k, l]) => {
+            const v = (c.opening_hours as Hours)[k];
+            return `${l.slice(0, 3)} ${v ? `${v[0]}–${v[1]}` : "closed"}`;
+          }).join(", ")}`
+        : c.hours && `Hours: ${c.hours}`,
+      (c.locations as string[])?.length ? `Locations: ${(c.locations as string[]).join("; ")}` : ""]
       .filter(Boolean)
       .join("\n");
   return String(c.body ?? "");

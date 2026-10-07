@@ -43,6 +43,19 @@ services:
       # CommAI voice (ADR 0021): rendered FreeSWITCH config, read by the freeswitch service.
       EXA_FREESWITCH_DIR: /data/freeswitch
       EXA_SIP_PROVIDER: ${EXA_SIP_PROVIDER:-simulated}
+      # Voice stage 5 (ADR 0033): the real provider's API, Kamailio's carrier lists, LiveKit.
+      EXA_SIP_PROVIDER_URL: ${EXA_SIP_PROVIDER_URL:-}
+      EXA_SIP_PROVIDER_KEY: ${EXA_SIP_PROVIDER_KEY:-}
+      EXA_SIP_PROVIDER_ACCOUNT: ${EXA_SIP_PROVIDER_ACCOUNT:-}
+      EXA_KAMAILIO_DIR: /data/kamailio
+      # FreeSWITCH's address range in Kamailio's allow-list (group 2); written by make voice-up.
+      EXA_KAMAILIO_PBX_NETS: ${EXA_KAMAILIO_PBX_NETS:-}
+      # FreeSWITCH signs its check before each outside call with this (voice/pbx.py).
+      EXA_PBX_SECRET: ${EXA_PBX_SECRET:-}
+      EXA_LIVEKIT_URL: ${EXA_LIVEKIT_URL:-}
+      EXA_LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
+      EXA_LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
+      EXA_LIVEKIT_AGENT_SECRET: ${EXA_LIVEKIT_AGENT_SECRET:-}
       # Sign-in (ADR 0017). Google/Microsoft/enterprise SSO stay off until the gateway is set.
       EXA_COOKIE_SECURE: ${EXA_COOKIE_SECURE:-1}
       EXA_PUBLIC_URL: ${EXA_PUBLIC_URL:-}
@@ -178,7 +191,88 @@ services:
       - ./freeswitch/dialplan/public/exacarib.xml:/etc/freeswitch/dialplan/public/exacarib.xml:ro
       - ./freeswitch/ivr_menus/exacarib.xml:/etc/freeswitch/ivr_menus/exacarib.xml:ro
       - ./freeswitch/autoload_configs/callcenter.conf.xml:/etc/freeswitch/autoload_configs/callcenter.conf.xml:ro
+      # Hardened stock files: no STUN or SignalWire calls out, event socket on loopback only.
+      - ./freeswitch/vars.xml:/etc/freeswitch/vars.xml:ro
+      - ./freeswitch/autoload_configs/event_socket.conf.xml:/etc/freeswitch/autoload_configs/event_socket.conf.xml:ro
+      - ./freeswitch/autoload_configs/modules.conf.xml:/etc/freeswitch/autoload_configs/modules.conf.xml:ro
+      # The outside-call gateway, installed by make voice-up for EXA_VOICE_EDGE (provider or kamailio).
+      - ./freeswitch/sip_profiles/external:/etc/freeswitch/sip_profiles/external:ro
+    # Hide the image's demo users (1000-1019 with a shared password).
+    tmpfs:
+      - /etc/freeswitch/directory/default
+    environment:
+      EXA_VOICE_PUBLIC_IP: ${EXA_VOICE_PUBLIC_IP:-}
+      # The dial plan asks the controller before each outside call; no secret means every one is refused.
+      EXA_PBX_SECRET: ${EXA_PBX_SECRET:-}
+      # Only for EXA_VOICE_EDGE=provider (exacarib_sip.xml.example).
+      EXA_SIP_USERNAME: ${EXA_SIP_USERNAME:-}
+      EXA_SIP_PASSWORD: ${EXA_SIP_PASSWORD:-}
+      EXA_SIP_REALM: ${EXA_SIP_REALM:-}
     depends_on:
+      - controller
+
+  # Voice stage 5 (ADR 0033), profile "voice" only. Kamailio is the edge proxy in
+  # front of FreeSWITCH; its carrier lists are rendered by the controller
+  # (EXA_KAMAILIO_DIR=/data/kamailio on the shared volume). Ports are published
+  # only once a carrier account and a public IP exist: see deploy/kamailio/README.md.
+  kamailio:
+    profiles: [voice]
+    image: ghcr.io/kamailio/kamailio:5.8.4-bookworm
+    restart: unless-stopped
+    # The image's entrypoint is a shell line that ignores `command`, so replace it.
+    entrypoint: ["kamailio", "-DD", "-E", "-f", "/etc/kamailio/kamailio.cfg"]
+    volumes:
+      - ./kamailio/kamailio.cfg:/etc/kamailio/kamailio.cfg:ro
+      - ./kamailio/tls.cfg:/etc/kamailio/tls.cfg:ro
+      - ./kamailio/kamailio-local.cfg:/etc/kamailio/kamailio-local.cfg:ro
+      - ./kamailio/tls:/etc/kamailio/tls:ro
+      - controller-data:/exacarib:ro
+    depends_on:
+      - freeswitch
+
+  # LiveKit (self-hosted) for AI on phone calls; see deploy/livekit/README.md.
+  livekit-redis:
+    profiles: [voice]
+    image: redis:7.4-alpine
+    restart: unless-stopped
+
+  livekit:
+    profiles: [voice]
+    image: livekit/livekit-server:v1.8
+    restart: unless-stopped
+    command: ["--config", "/etc/livekit.yaml"]
+    environment:
+      LIVEKIT_KEYS: ${LIVEKIT_KEYS:-}
+    volumes:
+      - ./livekit/livekit.yaml:/etc/livekit.yaml:ro
+    depends_on:
+      - livekit-redis
+
+  livekit-sip:
+    profiles: [voice]
+    image: livekit/sip:v1.0
+    restart: unless-stopped
+    environment:
+      SIP_CONFIG_FILE: /etc/sip.yaml
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
+    volumes:
+      - ./livekit/sip.yaml:/etc/sip.yaml:ro
+    depends_on:
+      - livekit
+
+  livekit-agent:
+    profiles: [voice]
+    build: ./livekit/agent
+    restart: unless-stopped
+    environment:
+      LIVEKIT_URL: ws://livekit:7880
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
+      EXA_CONTROLLER_URL: http://controller:8000
+      EXA_LIVEKIT_AGENT_SECRET: ${EXA_LIVEKIT_AGENT_SECRET:-}
+    depends_on:
+      - livekit
       - controller
 
 networks:

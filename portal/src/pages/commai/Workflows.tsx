@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, Route, Routes, useNavigate, useParams } from "react-router-dom";
 import { api, useApi } from "../../api";
 import { ErrorNote } from "../../components";
-import { Card, PageHead, useAction } from "../../ui";
+import { Card, EmptyState, PageHead, useAction } from "../../ui";
 import { useCommaiBase, when } from "./lib";
 import "./automation.css";
 
@@ -10,11 +10,14 @@ import "./automation.css";
 
 type Cond = { field: string; op: string; value: unknown };
 type Step = { id?: string; type: string; [k: string]: unknown };
+type Schedule = { every_minutes?: number; at?: string; days?: string[] };
 interface Definition {
   name: string;
   description?: string;
-  trigger: { event: string; conditions: Cond[] };
+  /** No type: an event starts it. "schedule": a time. "manual": a person or the API (ADR 0039). */
+  trigger: { type?: "schedule" | "manual"; event: string; conditions: Cond[]; schedule?: Schedule };
   steps: Step[];
+  notify_on_failure?: string[];
 }
 interface Draft {
   definition: Definition;
@@ -46,6 +49,7 @@ interface Detail extends Summary {
   problems: string[];
   warnings: string[];
   tools_needed: string[];
+  schedule?: { next_at: string; last_at: string | null } | null;
 }
 interface Pack {
   id: string;
@@ -110,6 +114,15 @@ const EVENTS = [
   "contact.created",
 ];
 const OPS = ["contains", "eq", "ne", "not_contains", "in", "exists", "gt", "lt"];
+const DAYS: [string, string][] = [
+  ["mon", "Mon"],
+  ["tue", "Tue"],
+  ["wed", "Wed"],
+  ["thu", "Thu"],
+  ["fri", "Fri"],
+  ["sat", "Sat"],
+  ["sun", "Sun"],
+];
 const EXAMPLE =
   "When a new customer asks for a quote, collect their requirements, create a lead, assign it to Sales and remind the owner if nobody responds";
 
@@ -133,7 +146,7 @@ function List() {
   if (!base) return <p className="muted">Choose an organisation first.</p>;
   return (
     <>
-      <PageHead eyebrow="CommAI" title="Workflows">
+      <PageHead title="Workflows">
         Describe what should happen in plain English. CommAI turns it into steps you can edit, test and switch on.
       </PageHead>
       <Card title="Describe a workflow">
@@ -194,7 +207,7 @@ function List() {
 
       <Card title="Your workflows">
         <ErrorNote error={list.error} />
-        {list.data && list.data.length === 0 && <div className="empty">No workflows yet. Describe one above or start from a pack below.</div>}
+        {list.data && list.data.length === 0 && <EmptyState title="No workflows yet">Describe one above in plain English, or start from a starter pack below.</EmptyState>}
         {list.data && list.data.length > 0 && (
           <div className="table-wrap">
             <table className="paths dt stack">
@@ -349,25 +362,62 @@ function Editor() {
             <input value={def.name} onChange={(e) => setDef({ ...def, name: e.target.value })} maxLength={120} />
           </label>
           <label>
-            Starts when
-            <select value={def.trigger.event} onChange={(e) => setDef({ ...def, trigger: { ...def.trigger, event: e.target.value } })}>
-              {[...new Set([def.trigger.event, ...EVENTS])].map((ev) => (
-                <option key={ev}>{ev}</option>
-              ))}
+            Starts
+            <select
+              value={def.trigger.type ?? "event"}
+              onChange={(e) => {
+                const t = e.target.value;
+                if (t === "event") setDef({ ...def, trigger: { event: EVENTS[0], conditions: def.trigger.conditions } });
+                else
+                  setDef({
+                    ...def,
+                    trigger: { type: t as "schedule" | "manual", event: "", conditions: [], schedule: t === "schedule" ? { every_minutes: 60 } : undefined },
+                  });
+              }}
+            >
+              <option value="event">When something happens</option>
+              <option value="schedule">On a schedule</option>
+              <option value="manual">When someone runs it</option>
             </select>
           </label>
-          <div className="wide">
-            <Conditions conds={def.trigger.conditions} onChange={(c) => setDef({ ...def, trigger: { ...def.trigger, conditions: c } })} />
-          </div>
+          {!def.trigger.type && (
+            <>
+              <label>
+                What happens
+                <select value={def.trigger.event} onChange={(e) => setDef({ ...def, trigger: { ...def.trigger, event: e.target.value } })}>
+                  {[...new Set([def.trigger.event, ...EVENTS])].map((ev) => (
+                    <option key={ev}>{ev}</option>
+                  ))}
+                </select>
+              </label>
+              <div className="wide">
+                <Conditions conds={def.trigger.conditions} onChange={(c) => setDef({ ...def, trigger: { ...def.trigger, conditions: c } })} />
+              </div>
+            </>
+          )}
+          {def.trigger.type === "schedule" && (
+            <ScheduleFields value={def.trigger.schedule ?? {}} onChange={(sc) => setDef({ ...def, trigger: { ...def.trigger, schedule: sc } })} />
+          )}
+          {def.trigger.type === "manual" && <p className="small muted wide">People start it with Run now below, or a system starts it through the API.</p>}
         </div>
+        {w.schedule?.next_at && (
+          <p className="small" role="status">
+            Next run {new Date(w.schedule.next_at).toLocaleString("en-GB")}
+            {w.schedule.last_at ? ` · last ran ${when(w.schedule.last_at)}` : ""} (business time zone)
+          </p>
+        )}
       </Card>
+      {w.status === "live" && def.trigger.type === "manual" && <RunNow base={base} id={id} done={wf.reload} />}
 
       <Card title="Steps">
-        <ol className="auto-steps">
+        <ol className="auto-steps" aria-label="Steps">
           {def.steps.map((s, i) => (
             <li key={i} className="auto-step">
               <div className="auto-step-head">
-                <strong>{STEP_TYPES.find((t) => t[0] === s.type)?.[1] ?? s.type}</strong>
+                <h3 className="small" style={{ margin: 0 }}>
+                  {i + 1}. {STEP_TYPES.find((t) => t[0] === s.type)?.[1] ?? s.type}
+                  {s.id ? <span className="muted"> ({String(s.id)})</span> : null}
+                </h3>
                 <div className="auto-row">
                   <button className="button small secondary" disabled={i === 0} onClick={() => move(i, -1)} aria-label={`Move step ${i + 1} up`}>
                     Up
@@ -390,6 +440,7 @@ function Editor() {
                 </div>
               </div>
               <StepFields step={s} apps={apps.data ?? []} onChange={(x) => setStep(i, x)} />
+              <FailureFields index={i} step={s} later={def.steps.slice(i + 1)} onChange={(x) => setStep(i, x)} />
             </li>
           ))}
         </ol>
@@ -432,8 +483,32 @@ function Editor() {
         </div>
       </Card>
 
+      <Card title="If a run fails">
+        <div className="auto-fields">
+          <label className="wide">
+            Tell these people (emails of people in this business, separated by commas)
+            <input
+              value={(def.notify_on_failure ?? []).join(", ")}
+              onChange={(e) =>
+                setDef({
+                  ...def,
+                  notify_on_failure: e.target.value
+                    .split(",")
+                    .map((x) => x.trim())
+                    .filter(Boolean),
+                })
+              }
+              placeholder="manager@example.com"
+              type="text"
+              inputMode="email"
+            />
+          </label>
+        </div>
+        <p className="small muted">They get a mention on the conversation and the failure event goes to your webhooks. To handle a failure, give a step an id and choose it under “If it fails” on an earlier step.</p>
+      </Card>
+
       <Card title="Preview">
-        <ul className="auto-preview">
+        <ul className="auto-preview" aria-live="polite">
           {preview.map((l) => (
             <li key={l}>{l}</li>
           ))}
@@ -469,6 +544,120 @@ function Editor() {
         </ul>
       </Card>
     </>
+  );
+}
+
+function ScheduleFields({ value, onChange }: { value: Schedule; onChange: (s: Schedule) => void }) {
+  const kind = value.at ? "at" : "every";
+  return (
+    <>
+      <label>
+        How often
+        <select value={kind} onChange={(e) => onChange(e.target.value === "at" ? { at: "09:00", days: ["mon", "tue", "wed", "thu", "fri"] } : { every_minutes: 60 })}>
+          <option value="every">Every few minutes or hours</option>
+          <option value="at">At a time on chosen days</option>
+        </select>
+      </label>
+      {kind === "every" ? (
+        <label>
+          Every (minutes, at least 5)
+          <input type="number" min={5} step={5} value={value.every_minutes ?? 60} onChange={(e) => onChange({ every_minutes: Number(e.target.value) })} />
+        </label>
+      ) : (
+        <>
+          <label>
+            At
+            <input type="time" value={value.at ?? "09:00"} onChange={(e) => onChange({ ...value, at: e.target.value })} />
+          </label>
+          <fieldset className="wide">
+            <legend>On</legend>
+            <div className="auto-row">
+              {DAYS.map(([d, l]) => (
+                <label key={d} className="check">
+                  <input
+                    type="checkbox"
+                    checked={(value.days ?? []).includes(d)}
+                    onChange={(e) =>
+                      onChange({ ...value, days: e.target.checked ? [...(value.days ?? []), d] : (value.days ?? []).filter((x) => x !== d) })
+                    }
+                  />{" "}
+                  {l}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        </>
+      )}
+    </>
+  );
+}
+
+function FailureFields({ index, step, later, onChange }: { index: number; step: Step; later: Step[]; onChange: (s: Step) => void }) {
+  const targets = later.filter((s) => s.id);
+  const dflt = step.type === "action" ? "stop" : "continue";
+  return (
+    <details className="small" style={{ marginTop: 8 }}>
+      <summary>If this step fails{step.only_on_failure ? " (runs only after a failure)" : ""}</summary>
+      <div className="auto-fields" style={{ marginTop: 8 }}>
+        <label>
+          Step id (for jumps)
+          <input value={String(step.id ?? "")} onChange={(e) => onChange({ ...step, id: e.target.value.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 40) || undefined })} placeholder={`step${index + 1}`} />
+        </label>
+        <label>
+          If it fails
+          <select value={String(step.on_failure ?? dflt)} onChange={(e) => onChange({ ...step, on_failure: e.target.value })}>
+            <option value="stop">Stop the workflow</option>
+            <option value="continue">Carry on</option>
+            {targets.map((t) => (
+              <option key={String(t.id)} value={String(t.id)}>
+                Go to {String(t.id)}
+              </option>
+            ))}
+          </select>
+        </label>
+        {index > 0 && (
+          <label className="check">
+            <span>
+              <input type="checkbox" checked={!!step.only_on_failure} onChange={(e) => onChange({ ...step, only_on_failure: e.target.checked || undefined })} /> Only run this step after a failure
+            </span>
+          </label>
+        )}
+      </div>
+    </details>
+  );
+}
+
+function RunNow({ base, id, done }: { base: string; id: string; done: () => void }) {
+  const [conv, setConv] = useState("");
+  const [msg, setMsg] = useState<string | null>(null);
+  const act = useAction();
+  const run = () =>
+    act.run(async () => {
+      await api(`${base}/workflows/${id}/trigger`, {
+        method: "POST",
+        body: JSON.stringify(conv.trim() ? { conversation_id: conv.trim() } : {}),
+      });
+      setMsg("Started. It shows in the run log below.");
+      done();
+    });
+  return (
+    <Card title="Run now">
+      <div className="auto-row">
+        <label className="small">
+          Conversation id (optional){" "}
+          <input value={conv} onChange={(e) => setConv(e.target.value)} maxLength={40} />
+        </label>
+        <button className="button" disabled={act.busy} onClick={run}>
+          Run now
+        </button>
+      </div>
+      {msg && (
+        <p className="small" role="status">
+          {msg}
+        </p>
+      )}
+      <ErrorNote error={act.error} />
+    </Card>
   );
 }
 
@@ -562,13 +751,6 @@ function StepFields({ step, apps, onChange }: { step: Step; apps: AppInfo[]; onC
                 {a.label}
               </option>
             ))}
-          </select>
-        </label>
-        <label>
-          If it fails
-          <select value={String(step.on_failure ?? "stop")} onChange={(e) => set("on_failure", e.target.value)}>
-            <option value="stop">Stop the workflow</option>
-            <option value="continue">Carry on</option>
           </select>
         </label>
         {(spec?.fields ?? []).map((f) => (
@@ -714,10 +896,11 @@ function Runs({ base, id }: { base: string; id: string }) {
   return (
     <Card title="Run log">
       <ErrorNote error={runs.error || act.error} />
-      {runs.data && runs.data.length === 0 && <div className="empty">No runs yet.</div>}
+      {runs.data && runs.data.length === 0 && <EmptyState title="No runs yet">Each time this workflow runs, its steps and results appear here.</EmptyState>}
       {runs.data && runs.data.length > 0 && (
         <div className="table-wrap">
           <table className="paths dt stack">
+            <caption className="sr-only">Runs of this workflow, newest first</caption>
             <thead>
               <tr>
                 <th scope="col">Started</th>
@@ -730,7 +913,12 @@ function Runs({ base, id }: { base: string; id: string }) {
               {runs.data.map((r) => (
                 <tr key={r.id}>
                   <td>
-                    <button className="button small secondary" onClick={() => setOpen(open === r.id ? null : r.id)} aria-expanded={open === r.id}>
+                    <button
+                      className="button small secondary"
+                      onClick={() => setOpen(open === r.id ? null : r.id)}
+                      aria-expanded={open === r.id}
+                      aria-label={`Steps of the run started ${when(r.started_at)}`}
+                    >
                       {when(r.started_at)}
                     </button>
                     {r.test && <span className="tag">Test</span>}

@@ -4,6 +4,7 @@ import { ErrorNote } from "../../../components";
 import { Card, RowActions, useAction } from "../../../ui";
 import { when } from "../lib";
 import { ChangeBox, DiffList, PriceLines } from "./ChangeBox";
+import { QrCode } from "./QrCode";
 import type { ChangeResult, Op, PriceImpact, Version, VoiceOverview } from "./types";
 
 type Propose = (ops: Op[], title: string) => void;
@@ -83,6 +84,7 @@ function Saved({ out, onClose }: { out: ChangeResult & { change?: { run_at: stri
               <li key={i}>
                 {l.setup_url ? "Desk phone provisioning URL" : "Softphone sign-in link (the QR code text)"}:{" "}
                 <code className="voice-secret">{String(l.setup_url ?? l.join_link)}</code>
+                {!l.setup_url && <QrCode text={String(l.join_link)} />}
               </li>
             ))}
           </ul>
@@ -506,6 +508,7 @@ function Devices({ base, v, propose }: { base: string; v: VoiceOverview; propose
           <button className="button secondary small" onClick={() => setLink(null)}>
             Hide
           </button>
+          {link.kind !== "desk" && <QrCode text={link.url} />}
         </p>
       )}
       <div className="table-wrap">
@@ -621,6 +624,15 @@ function Members({ v, value, onChange }: { v: VoiceOverview; value: string[]; on
   );
 }
 
+/** Plain words for how a group or queue offers a call; the stored value keeps the phone system's name. */
+const OFFER_WORD: Record<string, string> = {
+  simultaneous: "All at once",
+  sequential: "One after another",
+  "longest-idle-agent": "Whoever has waited longest",
+  "ring-all": "Everyone at once",
+  "round-robin": "Take turns",
+};
+
 function GroupCard({ kind, v, propose }: { kind: "ring_group" | "queue"; v: VoiceOverview; propose: Propose }) {
   const rows = kind === "ring_group" ? v.ring_groups ?? [] : v.queues ?? [];
   const label = kind === "ring_group" ? "Ring groups" : "Queues";
@@ -661,7 +673,7 @@ function GroupCard({ kind, v, propose }: { kind: "ring_group" | "queue"; v: Voic
               <tr key={g.id}>
                 <td className="mono">{g.extension}</td>
                 <td data-label="Name">{g.name}</td>
-                <td data-label="How">{g.strategy}</td>
+                <td data-label="How">{OFFER_WORD[g.strategy] ?? g.strategy}</td>
                 <td data-label="Members" className="mono cell-wrap">
                   {names(g.members) || "—"}
                 </td>
@@ -691,7 +703,7 @@ function GroupCard({ kind, v, propose }: { kind: "ring_group" | "queue"; v: Voic
           <select value={f.strategy} onChange={(e) => setF({ ...f, strategy: e.target.value })}>
             {(kind === "ring_group" ? ["simultaneous", "sequential"] : ["longest-idle-agent", "ring-all", "round-robin"]).map((s) => (
               <option key={s} value={s}>
-                {s}
+                {OFFER_WORD[s] ?? s}
               </option>
             ))}
           </select>

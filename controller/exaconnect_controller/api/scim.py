@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse, Response
 
 from .. import audit, db
 from ..identity import scim
+from ..identity.directory import quirks
 from ..identity.scim import ScimError
 from ..security import token_hash
 
@@ -70,7 +71,7 @@ _FILTER = re.compile(r'^\s*([A-Za-z.]+)\s+eq\s+"((?:[^"\\]|\\.)*)"\s*$')
 def _filter(expr: str | None, allowed: dict[str, str]) -> tuple[str, Any] | None:
     if not expr:
         return None
-    m = _FILTER.match(expr)
+    m = _FILTER.match(quirks.normalise_filter(expr) or "")
     if not m or m.group(1) not in allowed:
         raise ScimError(400, 'Only filters like userName eq "name" are supported.', "invalidFilter")
     return allowed[m.group(1)], m.group(2).replace('\\"', '"')
@@ -90,7 +91,7 @@ def _ops(body: dict) -> list[dict]:
     ops = body.get("Operations")
     if not isinstance(ops, list) or not ops:
         raise ScimError(400, "Operations is required.", "invalidSyntax")
-    return ops
+    return quirks.normalise_ops(ops)  # provider quirks (ADR 0036)
 
 
 def _audit(conn, tok: dict, action: str, target: str, detail: dict | None = None) -> None:

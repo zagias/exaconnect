@@ -1,4 +1,5 @@
-import { useState, type FormEvent } from "react";
+import { useId, useMemo, useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { api, useApi } from "../../api";
 import { ErrorNote } from "../../components";
 import { Card, PageHead, useAction } from "../../ui";
@@ -62,11 +63,20 @@ function dur(s: number | null): string {
   return `${(s / 3600).toFixed(1)} h`;
 }
 
+/** A figure with where it comes from: shown on hover and focus, and read out by screen readers. */
 function Stat({ label, figure, source }: { label: string; figure: string | number; source?: string }) {
+  const id = useId();
   return (
-    <div className="auto-stat" title={source}>
-      <div className="label">{label}</div>
+    <div className="auto-stat" title={source} tabIndex={source ? 0 : undefined} aria-describedby={source ? id : undefined} role="group" aria-label={label}>
+      <div className="label" aria-hidden="true">
+        {label}
+      </div>
       <div className="figure">{figure}</div>
+      {source && (
+        <div id={id} className="sr-only">
+          Counted from: {source}
+        </div>
+      )}
     </div>
   );
 }
@@ -74,14 +84,16 @@ function Stat({ label, figure, source }: { label: string; figure: string | numbe
 export default function Reports() {
   const base = useCommaiBase();
   const [days, setDays] = useState(30);
-  const from = new Date(Date.now() - days * 86400_000).toISOString();
+  // Fixed when the period is chosen: a time taken on every render changes the
+  // address on every render, and the page then fetches without end.
+  const from = useMemo(() => new Date(Date.now() - days * 86400_000).toISOString(), [days]);
   const q = `?from=${encodeURIComponent(from)}`;
   const out = useApi<Outcomes>(base && `${base}/reports/outcomes${q}`, 60_000);
   const use = useApi<Usage>(base && `${base}/reports/usage${q}`, 60_000);
   const limits = useApi<Limit[]>(base && `${base}/usage-limits`, 60_000);
   const head = (
-    <PageHead eyebrow="CommAI" title="Reports">
-      Every figure is counted from recorded events, never estimated. Hover a figure to see where it comes from.
+    <PageHead title="Reports">
+      Every figure is counted from recorded events, never estimated. Hover over or tab to a figure to see where it comes from.
     </PageHead>
   );
   if (!base)
@@ -97,14 +109,18 @@ export default function Reports() {
       {head}
       <div className="segmented" role="group" aria-label="Period" style={{ marginBottom: 16 }}>
         {PERIODS.map(([l, d]) => (
-          <button key={d} aria-pressed={days === d} onClick={() => setDays(d)}>
+          <button key={d} type="button" aria-pressed={days === d} onClick={() => setDays(d)}>
             {l}
           </button>
         ))}
       </div>
+      <p className="sr-only" role="status" aria-live="polite">
+        {o ? `Showing the ${PERIODS.find((x) => x[1] === days)?.[0].toLowerCase()}` : "Loading"}
+      </p>
       <ErrorNote error={out.error} />
       {o && (
         <>
+          <h2 className="sr-only">Outcomes</h2>
           <div className="auto-stats">
             <Stat label="Conversations" figure={o.conversations.value ?? 0} source={o.conversations.source} />
             <Stat label="First reply (median)" figure={dur(o.first_response.median_s)} source={o.first_response.source} />
@@ -133,6 +149,7 @@ export default function Reports() {
             <Card title="Integration failures">
               <div className="table-wrap">
                 <table className="paths dt stack">
+                  <caption className="sr-only">Integration failures by app and cause</caption>
                   <thead>
                     <tr>
                       <th scope="col">App</th>
@@ -143,7 +160,7 @@ export default function Reports() {
                   <tbody>
                     {o.integration_failures.by_app.map((f) => (
                       <tr key={`${f.app}-${f.cause}`}>
-                        <td>{f.app}</td>
+                        <th scope="row">{f.app}</th>
                         <td data-label="Cause">{f.cause.replace("_", " ") || "unknown"}</td>
                         <td data-label="Failures" className="mono">
                           {f.n}
@@ -165,7 +182,7 @@ export default function Reports() {
 
 function UsageCard({ usage, error }: { usage: Usage | null; error: string | null }) {
   return (
-    <Card title="Usage and cost" note={<span className="tag">Example prices</span>}>
+    <Card title="Usage and cost" note={<span className="tag">Example data: example prices</span>}>
       <ErrorNote error={error} />
       {usage && (
         <>
@@ -176,6 +193,7 @@ function UsageCard({ usage, error }: { usage: Usage | null; error: string | null
           {usage.meters.length > 0 && (
             <div className="table-wrap">
               <table className="paths dt stack">
+                <caption className="sr-only">Usage by meter with example costs</caption>
                 <thead>
                   <tr>
                     <th scope="col">Meter</th>
@@ -187,7 +205,9 @@ function UsageCard({ usage, error }: { usage: Usage | null; error: string | null
                 <tbody>
                   {usage.meters.map((m) => (
                     <tr key={m.meter}>
-                      <td className="mono">{m.meter}</td>
+                      <th scope="row" className="mono">
+                        {m.meter}
+                      </th>
                       <td data-label="Quantity" className="mono">
                         {m.quantity}
                       </td>
@@ -215,7 +235,8 @@ function UsageCard({ usage, error }: { usage: Usage | null; error: string | null
             </p>
           )}
           <p className="small">
-            Example total: <span className="mono">{usage.example_total.toFixed(2)}</span>
+            Example total: <span className="mono">{usage.example_total.toFixed(2)}</span>. The bill itself, priced on your rate card, is on{" "}
+            <Link to="/commai/bill">Usage and bill</Link>.
           </p>
         </>
       )}
@@ -240,11 +261,15 @@ function Limits({ base, limits, reload }: { base: string; limits: Limit[]; reloa
   };
   const word = { ok: ["ok", "Within budget"], alert: ["warn", "Alert level passed"], stopped: ["bad", "Stopped: hard limit reached"] } as const;
   return (
-    <Card title="Budgets and hard limits">
-      <p className="muted small">An alert warns you. A hard limit stops that kind of work until the month ends or you raise it.</p>
+    <Card title="Quantity limits">
+      <p className="muted small">
+        Limits on counts (replies, messages, minutes). An alert warns you. A hard limit stops that kind of work until the month ends or you raise it. Money budgets per channel and
+        workflow are on <Link to="/commai/bill">Usage and bill</Link>.
+      </p>
       {limits.length > 0 && (
         <div className="table-wrap">
           <table className="paths dt stack">
+            <caption className="sr-only">Quantity limits this month</caption>
             <thead>
               <tr>
                 <th scope="col">Meter</th>
@@ -257,7 +282,9 @@ function Limits({ base, limits, reload }: { base: string; limits: Limit[]; reloa
             <tbody>
               {limits.map((l) => (
                 <tr key={l.meter}>
-                  <td className="mono">{l.meter}</td>
+                  <th scope="row" className="mono">
+                    {l.meter}
+                  </th>
                   <td data-label="Used" className="mono">
                     {l.used_this_month}
                   </td>
@@ -276,7 +303,7 @@ function Limits({ base, limits, reload }: { base: string; limits: Limit[]; reloa
           </table>
         </div>
       )}
-      <form className="form" onSubmit={submit} style={{ marginTop: 12 }}>
+      <form className="form" onSubmit={submit} style={{ marginTop: 12 }} aria-label="Set a quantity limit">
         <label>
           Meter
           <input value={meter} onChange={(e) => setMeter(e.target.value)} list="meters" required maxLength={60} />
@@ -290,11 +317,11 @@ function Limits({ base, limits, reload }: { base: string; limits: Limit[]; reloa
         </label>
         <label>
           Alert at
-          <input type="number" min={0} value={alert} onChange={(e) => setAlert(e.target.value)} />
+          <input type="number" min={0} inputMode="decimal" value={alert} onChange={(e) => setAlert(e.target.value)} />
         </label>
         <label>
           Hard limit
-          <input type="number" min={0} value={hard} onChange={(e) => setHard(e.target.value)} />
+          <input type="number" min={0} inputMode="decimal" value={hard} onChange={(e) => setHard(e.target.value)} />
         </label>
         <div className="actions">
           <button className="button" disabled={act.busy}>

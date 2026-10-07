@@ -14,7 +14,12 @@ import { useCustomer } from "../customer";
 import { PageHead, RowActions, useAction, type RowAction } from "../ui";
 import "./identity.css";
 
-const ROLE_LABEL: Record<OrgRole, string> = { owner: "Owner", admin: "Admin", member: "Member", viewer: "Viewer" };
+const ROLE_LABEL: Record<OrgRole, string> = {
+  owner: "Owner",
+  admin: "Admin",
+  member: "Member",
+  viewer: "Viewer",
+};
 const ROLE_HELP: Record<OrgRole, string> = {
   owner: "Everything an admin can do, and hands ownership on.",
   admin: "Manages people and settings.",
@@ -24,7 +29,11 @@ const ROLE_HELP: Record<OrgRole, string> = {
 const INVITE_ROLES: OrgRole[] = ["member", "viewer", "admin"];
 
 function day(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  return new Date(iso).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 /** Account > People: who is in this organisation, their roles, and invitations (ADR 0023). */
@@ -32,10 +41,17 @@ export default function People() {
   const { user } = useAuth();
   const { current } = useCustomer();
   // ExaCarib admins manage the organisation picked in the header.
-  const cid = (user?.role === "admin" ? current?.id : user?.customer_id) ?? null;
-  const members = useApi<OrgMembers>(cid ? `/orgs/${cid}/members` : null, 30_000);
+  const cid =
+    (user?.role === "admin" ? current?.id : user?.customer_id) ?? null;
+  const members = useApi<OrgMembers>(
+    cid ? `/orgs/${cid}/members` : null,
+    30_000,
+  );
   const manage = members.data?.can_manage ?? false;
-  const invites = useApi<OrgInvite[]>(cid && manage ? `/orgs/${cid}/invites` : null, 30_000);
+  const invites = useApi<OrgInvite[]>(
+    cid && manage ? `/orgs/${cid}/invites` : null,
+    30_000,
+  );
   const act = useAction();
 
   if (!cid)
@@ -43,7 +59,9 @@ export default function People() {
       <>
         <PageHead eyebrow="Account" title="People" />
         <div className="empty">
-          <p>You are not a member of an organisation. Ask an owner to invite you.</p>
+          <p>
+            You are not a member of an organisation. Ask an owner to invite you.
+          </p>
         </div>
       </>
     );
@@ -58,12 +76,20 @@ export default function People() {
 
   const setRole = (m: OrgMember, role: OrgRole) =>
     act.run(async () => {
-      await api(`/orgs/${cid}/members/${m.user_id}`, { method: "PATCH", body: JSON.stringify({ role }) });
+      await api(`/orgs/${cid}/members/${m.user_id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ role }),
+      });
       reloadAll();
     });
 
   const remove = (m: OrgMember) => {
-    if (!window.confirm(`Remove ${m.email} from ${members.data?.organisation.name}? Their API keys made here stop working.`)) return;
+    if (
+      !window.confirm(
+        `Remove ${m.email} from ${members.data?.organisation.name}? Their API keys made here stop working.`,
+      )
+    )
+      return;
     act.run(async () => {
       await api(`/orgs/${cid}/members/${m.user_id}`, { method: "DELETE" });
       reloadAll();
@@ -71,15 +97,24 @@ export default function People() {
   };
 
   const transfer = (m: OrgMember) => {
-    if (!window.confirm(`Make ${m.email} the owner? You become an admin.`)) return;
+    if (!window.confirm(`Make ${m.email} the owner? You become an admin.`))
+      return;
     act.run(async () => {
-      await api(`/orgs/${cid}/transfer-ownership`, { method: "POST", body: JSON.stringify({ user_id: m.user_id }) });
+      await api(`/orgs/${cid}/transfer-ownership`, {
+        method: "POST",
+        body: JSON.stringify({ user_id: m.user_id }),
+      });
       window.location.reload();
     });
   };
 
   const leave = () => {
-    if (!window.confirm(`Leave ${members.data?.organisation.name}? You lose access to it straight away.`)) return;
+    if (
+      !window.confirm(
+        `Leave ${members.data?.organisation.name}? You lose access to it straight away.`,
+      )
+    )
+      return;
     act.run(async () => {
       await api(`/orgs/${cid}/leave`, { method: "POST" });
       window.location.assign("/");
@@ -89,13 +124,32 @@ export default function People() {
   const actionsFor = (m: OrgMember): RowAction[] => {
     if (!manage || m.managed_by) return [];
     const items: RowAction[] = [];
-    const roles: OrgRole[] = owner ? ["owner", "admin", "member", "viewer"] : ["admin", "member", "viewer"];
+    const roles: OrgRole[] = owner
+      ? ["owner", "admin", "member", "viewer"]
+      : ["admin", "member", "viewer"];
     if (m.role === "owner" && !owner) return [];
     for (const r of roles)
-      if (r !== m.role && r !== "owner") items.push({ label: `Make ${ROLE_LABEL[r].toLowerCase()}`, onSelect: () => setRole(m, r) });
-    if (owner && m.role !== "owner" && !m.you) items.push({ label: "Hand ownership to them", onSelect: () => transfer(m) });
-    if (owner && m.role !== "owner") items.push({ label: "Make owner too", onSelect: () => setRole(m, "owner") });
-    if (!m.you) items.push({ label: "Remove from organisation", danger: true, onSelect: () => remove(m) });
+      if (r !== m.role && r !== "owner")
+        items.push({
+          label: `Make ${ROLE_LABEL[r].toLowerCase()}`,
+          onSelect: () => setRole(m, r),
+        });
+    if (owner && m.role !== "owner" && !m.you)
+      items.push({
+        label: "Hand ownership to them",
+        onSelect: () => transfer(m),
+      });
+    if (owner && m.role !== "owner")
+      items.push({
+        label: "Make owner too",
+        onSelect: () => setRole(m, "owner"),
+      });
+    if (!m.you)
+      items.push({
+        label: "Remove from organisation",
+        danger: true,
+        onSelect: () => remove(m),
+      });
     return items;
   };
 
@@ -104,13 +158,22 @@ export default function People() {
   return (
     <>
       <PageHead eyebrow="Account" title="People">
-        Everyone in {members.data?.organisation.name ?? "your organisation"}, their roles and pending invitations.
+        Everyone in {members.data?.organisation.name ?? "your organisation"},
+        their roles and pending invitations.
       </PageHead>
 
-      <section className="card" style={{ maxWidth: 960 }} aria-labelledby="people-title">
+      <section
+        className="card"
+        style={{ maxWidth: 960 }}
+        aria-labelledby="people-title"
+      >
         <div className="card-head">
           <h2 id="people-title">Members</h2>
-          {yourRole && <span className="muted small">Your role: {ROLE_LABEL[yourRole]}</span>}
+          {yourRole && (
+            <span className="muted small">
+              Your role: {ROLE_LABEL[yourRole]}
+            </span>
+          )}
         </div>
         <ErrorNote error={members.error} />
         {people.length > 0 && (
@@ -135,17 +198,31 @@ export default function People() {
                         <strong>{m.name || m.email}</strong>
                         {m.you && <span className="muted small"> (you)</span>}
                         {m.name && <span className="sub">{m.email}</span>}
-                        {m.disabled && <span className="sub">Switched off</span>}
+                        {m.disabled && (
+                          <span className="sub">Switched off</span>
+                        )}
                       </td>
                       <td data-label="Role">
                         {ROLE_LABEL[m.role]}
-                        {m.managed_by && <span className="sub">Managed by your directory ({m.managed_by.toUpperCase()})</span>}
+                        {m.managed_by && (
+                          <span className="sub">
+                            {["sandbox", "partner"].includes(m.managed_by)
+                              ? `Managed by ExaCarib (${m.managed_by})`
+                              : `Managed by your directory (${m.managed_by.toUpperCase()})`}
+                          </span>
+                        )}
                       </td>
                       <td data-label="Joined" className="mono">
                         {day(m.created_at)}
                       </td>
                       <td className="actions">
-                        {items.length > 0 && <RowActions label={m.email} disabled={act.busy} items={items} />}
+                        {items.length > 0 && (
+                          <RowActions
+                            label={m.email}
+                            disabled={act.busy}
+                            items={items}
+                          />
+                        )}
                       </td>
                     </tr>
                   );
@@ -155,7 +232,10 @@ export default function People() {
           </div>
         )}
         <ErrorNote error={act.error} />
-        <ul className="muted small" style={{ margin: "12px 0 0", paddingLeft: 18 }}>
+        <ul
+          className="muted small"
+          style={{ margin: "12px 0 0", paddingLeft: 18 }}
+        >
           {(Object.keys(ROLE_HELP) as OrgRole[]).map((r) => (
             <li key={r}>
               <strong>{ROLE_LABEL[r]}</strong>: {ROLE_HELP[r]}
@@ -164,14 +244,26 @@ export default function People() {
         </ul>
         {user?.role === "customer" && (
           <div className="actions" style={{ marginTop: 16 }}>
-            <button type="button" className="button secondary" onClick={leave} disabled={act.busy}>
+            <button
+              type="button"
+              className="button secondary"
+              onClick={leave}
+              disabled={act.busy}
+            >
               Leave this organisation
             </button>
           </div>
         )}
       </section>
 
-      {manage && <Invitations cid={cid} invites={invites.data ?? []} error={invites.error} reload={reloadAll} />}
+      {manage && (
+        <Invitations
+          cid={cid}
+          invites={invites.data ?? []}
+          error={invites.error}
+          reload={reloadAll}
+        />
+      )}
     </>
   );
 }
@@ -207,23 +299,34 @@ function Invitations({
   };
 
   const onRevoke = (i: OrgInvite) => {
-    if (!window.confirm(`Cancel the invitation for ${i.email}? Its link stops working.`)) return;
+    if (
+      !window.confirm(
+        `Cancel the invitation for ${i.email}? Its link stops working.`,
+      )
+    )
+      return;
     revoke.run(async () => {
       await api(`/orgs/${cid}/invites/${i.id}`, { method: "DELETE" });
       reload();
     });
   };
 
-  const link = created ? new URL(created.path, window.location.origin).toString() : "";
+  const link = created
+    ? new URL(created.path, window.location.origin).toString()
+    : "";
 
   return (
-    <section className="card" style={{ maxWidth: 960, marginTop: 24 }} aria-labelledby="invites-title">
+    <section
+      className="card"
+      style={{ maxWidth: 960, marginTop: 24 }}
+      aria-labelledby="invites-title"
+    >
       <div className="card-head">
         <h2 id="invites-title">Invitations</h2>
       </div>
       <p className="muted small" style={{ marginTop: 0 }}>
-        We don't send invitation emails yet. You get a link to pass on yourself; it is shown once, works once and expires
-        in 7 days.
+        We don't send invitation emails yet. You get a link to pass on yourself;
+        it is shown once, works once and expires in 7 days.
       </p>
       <ErrorNote error={error} />
       {invites.length > 0 && (
@@ -247,7 +350,9 @@ function Invitations({
                     <strong>{i.email}</strong>
                   </td>
                   <td data-label="Role">{ROLE_LABEL[i.role]}</td>
-                  <td data-label="Invited by">{i.invited_by.replace(/^user:/, "")}</td>
+                  <td data-label="Invited by">
+                    {i.invited_by.replace(/^user:/, "")}
+                  </td>
                   <td data-label="Expires" className="mono">
                     {i.expired ? "Expired" : day(i.expires_at)}
                   </td>
@@ -255,7 +360,13 @@ function Invitations({
                     <RowActions
                       label={`invitation for ${i.email}`}
                       disabled={revoke.busy}
-                      items={[{ label: "Cancel invitation", danger: true, onSelect: () => onRevoke(i) }]}
+                      items={[
+                        {
+                          label: "Cancel invitation",
+                          danger: true,
+                          onSelect: () => onRevoke(i),
+                        },
+                      ]}
                     />
                   </td>
                 </tr>
@@ -270,11 +381,20 @@ function Invitations({
       <form className="form" onSubmit={submit}>
         <label>
           Email
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} maxLength={255} required />
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            maxLength={255}
+            required
+          />
         </label>
         <label>
           Role
-          <select value={role} onChange={(e) => setRole(e.target.value as OrgRole)}>
+          <select
+            value={role}
+            onChange={(e) => setRole(e.target.value as OrgRole)}
+          >
             {INVITE_ROLES.map((r) => (
               <option key={r} value={r}>
                 {ROLE_LABEL[r]}: {ROLE_HELP[r]}
@@ -292,7 +412,8 @@ function Invitations({
       {created && (
         <div className="secret" role="region" aria-label="Invitation link">
           <p className="callout" style={{ margin: 0 }}>
-            <strong>Copy this link for {created.email} now.</strong> It is not shown again.
+            <strong>Copy this link for {created.email} now.</strong> It is not
+            shown again.
           </p>
           <p>
             <code className="small" style={{ wordBreak: "break-all" }}>
@@ -300,10 +421,18 @@ function Invitations({
             </code>
           </p>
           <div className="secret-actions">
-            <button type="button" className="button secondary" onClick={() => navigator.clipboard?.writeText(link)}>
+            <button
+              type="button"
+              className="button secondary"
+              onClick={() => navigator.clipboard?.writeText(link)}
+            >
               Copy
             </button>
-            <button type="button" className="button" onClick={() => setCreated(null)}>
+            <button
+              type="button"
+              className="button"
+              onClick={() => setCreated(null)}
+            >
               Done
             </button>
           </div>

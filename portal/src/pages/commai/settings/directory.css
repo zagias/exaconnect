@@ -1,0 +1,35 @@
+/* Settings > Sign-in > Connect your directory (ADR 0036). */
+.dir-picker { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); margin: 12px 0; }
+.dir-tile {
+  display: grid; gap: 4px; align-content: start; text-align: left; padding: 12px 14px; min-height: 44px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 8px; color: var(--ink); cursor: pointer;
+  font: inherit;
+}
+.dir-tile:hover { border-color: var(--blue); }
+.dir-tile:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.dir-tile.active { border-color: var(--blue); background: var(--blue-tint); }
+.dir-name { font-weight: 650; letter-spacing: -0.01em; font-size: 16px; }
+.dir-summary { color: var(--ink-muted); font-size: 13px; line-height: 1.35; }
+.dir-note { color: var(--ink-muted); font-size: 12px; }
+.dir-setup { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 12px; }
+.dir-setup h3 { margin: 0 0 4px; font-size: 18px; }
+.dir-setup h4 { margin: 20px 0 8px; font-size: 15px; }
+.dir-values { display: grid; gap: 8px; margin: 0; }
+.dir-values > div { display: grid; grid-template-columns: minmax(140px, 220px) 1fr; gap: 8px; align-items: start; }
+.dir-values dt { font-weight: 600; font-size: 14px; }
+.dir-values dd { margin: 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-width: 0; }
+.dir-values code { overflow-wrap: anywhere; }
+.dir-copy { padding: 2px 10px; min-height: 32px; }
+.dir-steps { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.dir-steps li { overflow-wrap: anywhere; }
+.dir-results { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 4px; font-size: 14px; }
+.dir-results .on strong { color: var(--success); }
+.dir-results .wait strong { color: var(--warning); }
+.dir-results .bad strong { color: var(--danger); }
+.dir-presets { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 6px; }
+.dir-presets label { display: inline-flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.dir-facts { margin: 12px 0; }
+.dir-facts table { margin: 8px 0; }
+@media (max-width: 600px) {
+  .dir-values > div { grid-template-columns: 1fr; }
+}

@@ -37,7 +37,11 @@ describe("components", () => {
     expect(screen.getByText("Example data")).toBeTruthy();
   });
   it("page heads show no example tag without an example organisation", () => {
-    render(<PageHead eyebrow="Admin" title="Administration" />);
+    render(
+      <MemoryRouter>
+        <PageHead eyebrow="Admin" title="Administration" />
+      </MemoryRouter>,
+    );
     expect(screen.getByRole("heading", { name: "Administration" })).toBeTruthy();
     expect(screen.queryByText("Example data")).toBeNull();
   });

@@ -45,7 +45,9 @@ TOPICS = {
     "sms": ("sms", "text message"),
     "email": ("email", "e-mail"),
     "website_chat": ("website", "widget", "web chat", "chat"),
-    "voice": ("call", "phone", "voice"),
+    "voice": ("call", "phone", "voice", "pbx", "porting", "port my", "number transfer", "extension"),
+    "ai_agents": ("ai agent", "the ai", "bot", "escalat", "hand over", "handed over", "knowledge"),
+    "signin": ("sign in", "sign-in", "signin", "log in", "login", "sso", "single sign", "scim", "locked out"),
     "integration": ("integration", "google", "calendar", "hubspot", "crm", "booking", "connector"),
     "webhooks": ("webhook",),
     "jobs": ("stuck", "queue", "job", "not sending", "stopped"),
@@ -578,3 +580,8 @@ def open_case(
     ).fetchone()
     events.emit(conn, customer_id, "support_case.opened", {"case": ref, "by": actor}, str(row["id"]))
     return row
+
+
+# Voice, AI agent and sign-in checks register themselves (ADR 0039).
+from .. import assistant_checks as _assistant_checks  # noqa: E402, F401
+from ..voice import checks as _voice_checks  # noqa: E402, F401

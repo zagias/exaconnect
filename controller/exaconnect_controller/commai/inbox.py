@@ -20,6 +20,7 @@ import psycopg
 from psycopg.types.json import Jsonb
 
 from . import channels, events, jobs
+from .enterprise import calendar, protect
 
 STATES = ("open", "awaiting_customer", "awaiting_internal", "snoozed", "resolved", "reopened")
 PRIORITIES = ("low", "normal", "high", "urgent")
@@ -48,6 +49,13 @@ class NotHandler(InboxError):
 def settings(conn: psycopg.Connection, customer_id: Any) -> dict:
     conn.execute("INSERT INTO commai_settings (customer_id) VALUES (%s) ON CONFLICT DO NOTHING", (customer_id,))
     return conn.execute("SELECT * FROM commai_settings WHERE customer_id = %s", (customer_id,)).fetchone()
+
+
+def _extras():
+    """Service-target and snooze jobs (commai/inbox_jobs.py), imported late."""
+    from . import inbox_jobs
+
+    return inbox_jobs
 
 
 def ai_available() -> bool:
@@ -124,23 +132,23 @@ def get(conn: psycopg.Connection, customer_id: Any, conversation_id: Any, *, loc
     return row
 
 
-def _due(conn, customer_id: Any, priority: str) -> tuple[dt.datetime, dt.datetime]:
+def _due(conn, customer_id: Any, priority: str, team_id: Any = None) -> tuple[dt.datetime, dt.datetime]:
     s = settings(conn, customer_id)
     now = dt.datetime.now(dt.UTC)
     first = dt.timedelta(minutes=float(s["first_reply_minutes"].get(priority, 60)))
     resolve = dt.timedelta(hours=float(s["resolve_hours"].get(priority, 24)))
-    return now + first, now + resolve
+    # Targets count business time only: they pause outside opening hours (ADR 0030).
+    return calendar.due(conn, customer_id, team_id, now, first, resolve)
 
 
-def route(conn: psycopg.Connection, conv: dict, text: str) -> dict:
-    """Apply the business's routing rules, then pick the available team member
-    with the fewest open conversations. Returns the updated conversation."""
+def matching_rule(conn: psycopg.Connection, conv: dict, text: str) -> dict | None:
+    """The first enabled routing rule this conversation matches, or None.
+    Rules match on channel, language, intent and keywords."""
     rules = conn.execute(
         "SELECT * FROM commai_routing_rules WHERE customer_id = %s AND enabled ORDER BY position, created_at",
         (conv["customer_id"],),
     ).fetchall()
     low = text.lower()
-    team_id, queue, priority, rule_name = conv["team_id"], conv["queue"], conv["priority"], ""
     for r in rules:
         m = r["match"] or {}
         if m.get("channel") and m["channel"] != conv["channel"]:
@@ -152,32 +160,71 @@ def route(conn: psycopg.Connection, conv: dict, text: str) -> dict:
         kws = [k.lower() for k in m.get("keywords") or [] if k]
         if kws and not any(k in low for k in kws):
             continue
+        return r
+    return None
+
+
+def _pick_member(conn, customer_id: Any, team_id: Any, language: str, skills: list[str]) -> Any:
+    """The available agent with the fewest open conversations who speaks the
+    conversation's language and has every required skill. Within the team when
+    there is one; across the business when only skills are required."""
+    if not team_id and not skills:
+        return None
+    pick = conn.execute(
+        """SELECT m.user_id FROM commai_members m
+           WHERE m.customer_id = %(c)s AND m.available AND m.seat = 'agent'
+             AND (%(t)s::uuid IS NULL OR EXISTS (SELECT 1 FROM commai_team_members tm
+                                                 WHERE tm.team_id = %(t)s::uuid AND tm.user_id = m.user_id))
+             AND (%(lang)s = '' OR %(lang)s = ANY(m.languages))
+             AND m.skills @> %(skills)s::text[]
+           ORDER BY (SELECT count(*) FROM conversations c WHERE c.assignee_id = m.user_id
+                     AND c.state NOT IN ('resolved', 'snoozed')), m.user_id
+           LIMIT 1""",
+        {"c": customer_id, "t": team_id, "lang": language or "", "skills": list(skills)},
+    ).fetchone()
+    return pick["user_id"] if pick else None
+
+
+def route(conn: psycopg.Connection, conv: dict, text: str) -> dict:
+    """Apply the business's routing rules (channel, language, intent, keywords),
+    then pick the available team member with the fewest open conversations who
+    speaks the language and has the skills the rule requires. A rule that
+    requires skills but names no team picks the team offering those skills.
+    Returns the updated conversation."""
+    team_id, queue, priority, rule_name = conv["team_id"], conv["queue"], conv["priority"], ""
+    skills = list(conv.get("required_skills") or [])
+    r = matching_rule(conn, conv, text)
+    if r is not None:
         team_id = r["team_id"] or team_id
         queue = r["queue"] or queue
         priority = r["priority"] or priority
         rule_name = r["name"]
-        break
+        skills = sorted(set(skills) | set(r.get("skills") or []))
+        if skills and not r["team_id"]:
+            team = conn.execute(
+                """SELECT id FROM commai_teams WHERE customer_id = %s AND skills @> %s::text[]
+                   ORDER BY cardinality(skills), name LIMIT 1""",
+                (conv["customer_id"], skills),
+            ).fetchone()
+            team_id = team["id"] if team else team_id
     assignee = None
-    if team_id:
-        pick = conn.execute(
-            """SELECT tm.user_id FROM commai_team_members tm
-               JOIN commai_members m ON m.user_id = tm.user_id AND m.customer_id = %(c)s
-               WHERE tm.team_id = %(t)s AND m.available AND m.seat = 'agent'
-                 AND (%(lang)s = '' OR %(lang)s = ANY(m.languages))
-               ORDER BY (SELECT count(*) FROM conversations c WHERE c.assignee_id = tm.user_id
-                         AND c.state NOT IN ('resolved', 'snoozed')), tm.user_id
-               LIMIT 1""",
-            {"c": conv["customer_id"], "t": team_id, "lang": conv["language"] or ""},
-        ).fetchone()
-        assignee = pick["user_id"] if pick else None
-    first_due, resolve_due = _due(conn, conv["customer_id"], priority)
+    # Outside the team's opening hours: the after-hours team, or wait for opening (ADR 0030).
+    hours = calendar.after_hours(conn, conv["customer_id"], team_id)
+    if hours["reason"]:
+        team_id = hours["team_id"]
+        rule_name = f"{rule_name}; {hours['reason']}" if rule_name else hours["reason"]
+    if hours["open"]:
+        assignee = _pick_member(conn, conv["customer_id"], team_id, conv["language"] or "", skills)
+    first_due, resolve_due = _due(conn, conv["customer_id"], priority, team_id)
     updated = conn.execute(
         """UPDATE conversations SET team_id = %s, queue = %s, priority = %s, assignee_id = %s,
+                  required_skills = %s,
                   first_reply_due = COALESCE(first_reply_due, %s), resolve_due = COALESCE(resolve_due, %s),
                   updated_at = now()
            WHERE id = %s RETURNING *""",
-        (team_id, queue, priority, assignee, first_due, resolve_due, conv["id"]),
+        (team_id, queue, priority, assignee, skills, first_due, resolve_due, conv["id"]),
     ).fetchone()
+    _extras().schedule_targets(conn, updated)
     if team_id != conv["team_id"] or assignee != conv["assignee_id"]:
         _log(
             conn,
@@ -256,6 +303,10 @@ def receive(
             conv = get(conn, customer_id, dup["conversation_id"])
             return {"conversation": conv, "message": dup, "duplicate": True}
     identity = find_or_create_identity(conn, customer_id, channel, address, name=name, verified=verified)
+    if not language:
+        # Detected on every inbound message, before routing, so a human-first
+        # conversation routes by language too. '' when unsure.
+        language = _extras().detect_language(f"{subject} {body}")
     conv = None
     if conversation_id:
         conv = get(conn, customer_id, conversation_id, lock=True)
@@ -298,9 +349,10 @@ def receive(
         (customer_id, conv["id"], str(identity["contact_id"]), body, Jsonb(attachments or []), external_id),
     ).fetchone()
     conv = conn.execute(
-        "UPDATE conversations SET last_inbound_at = now(), last_message_at = now(), updated_at = now()"
+        "UPDATE conversations SET last_inbound_at = now(), last_message_at = now(), updated_at = now(),"
+        " language = CASE WHEN language = '' THEN %s ELSE language END"
         " WHERE id = %s RETURNING *",
-        (conv["id"],),
+        (language, conv["id"]),
     ).fetchone()
     if created:
         conv = route(conn, conv, f"{subject} {body}")
@@ -382,15 +434,30 @@ def hand_over(
     conv = set_handler(conn, conv, "none", None, actor, f"handed over: {reason}")
     if conv["state"] not in ("open", "reopened"):
         conv = set_state(conn, customer_id, conv["id"], "open", actor=actor, reason="handed over")
+    intent = str((packet or {}).get("intent") or "").strip()[:60]
+    intent_changed = bool(intent) and intent != (conv.get("intent") or "")
+    if intent_changed:
+        _log(conn, conv, actor, "intent", conv.get("intent") or "", intent, "AI judged the intent")
+        conv = conn.execute(
+            "UPDATE conversations SET intent = %s WHERE id = %s RETURNING *", (intent, conv["id"])
+        ).fetchone()
+    text = " ".join(
+        m["body"]
+        for m in conn.execute(
+            "SELECT body FROM messages WHERE conversation_id = %s AND direction = 'in' ORDER BY created_at LIMIT 5",
+            (conv["id"],),
+        ).fetchall()
+    )
     if conv["assignee_id"] is None:
-        text = " ".join(
-            m["body"]
-            for m in conn.execute(
-                "SELECT body FROM messages WHERE conversation_id = %s AND direction = 'in' ORDER BY created_at LIMIT 5",
-                (conv["id"],),
-            ).fetchall()
-        )
         conv = route(conn, conv, text)
+    elif intent_changed:
+        # Re-route on handover when an intent rule sends this kind of request elsewhere.
+        rule = matching_rule(conn, conv, text)
+        if rule and (rule["match"] or {}).get("intent") and rule["team_id"] and rule["team_id"] != conv["team_id"]:
+            conv = conn.execute(
+                "UPDATE conversations SET assignee_id = NULL WHERE id = %s RETURNING *", (conv["id"],)
+            ).fetchone()
+            conv = route(conn, conv, text)
     events.emit(
         conn,
         customer_id,
@@ -461,18 +528,14 @@ def assign(
 
 
 def route_within_team(conn, conv: dict) -> dict:
-    pick = conn.execute(
-        """SELECT tm.user_id FROM commai_team_members tm
-           JOIN commai_members m ON m.user_id = tm.user_id AND m.customer_id = %s
-           WHERE tm.team_id = %s AND m.available AND m.seat = 'agent'
-           ORDER BY (SELECT count(*) FROM conversations c WHERE c.assignee_id = tm.user_id
-                     AND c.state NOT IN ('resolved', 'snoozed')), tm.user_id LIMIT 1""",
-        (conv["customer_id"], conv["team_id"]),
-    ).fetchone()
+    skills = list(conv.get("required_skills") or [])
+    # Someone who speaks the language first; anyone in the team with the skills otherwise.
+    pick = _pick_member(conn, conv["customer_id"], conv["team_id"], conv["language"] or "", skills)
+    pick = pick or _pick_member(conn, conv["customer_id"], conv["team_id"], "", skills)
     if not pick:
         return conv
     return conn.execute(
-        "UPDATE conversations SET assignee_id = %s WHERE id = %s RETURNING *", (pick["user_id"], conv["id"])
+        "UPDATE conversations SET assignee_id = %s WHERE id = %s RETURNING *", (pick, conv["id"])
     ).fetchone()
 
 
@@ -512,6 +575,8 @@ def set_state(
         {"conversation_id": str(conv["id"]), "from": conv["state"], "to": state, "by": actor},
         conv["id"],
     )
+    if state == "snoozed":
+        _extras().schedule_wake(conn, updated)
     return updated
 
 
@@ -525,26 +590,33 @@ def set_fields(
     tags: list[str] | None = None,
     subject: str | None = None,
     language: str | None = None,
+    intent: str | None = None,
 ) -> dict:
     conv = get(conn, customer_id, conversation_id, lock=True)
     if priority is not None and priority not in PRIORITIES:
         raise InboxError(f"Unknown priority {priority}.")
     updated = conn.execute(
         """UPDATE conversations SET priority = COALESCE(%s, priority), tags = COALESCE(%s, tags),
-                  subject = COALESCE(%s, subject), language = COALESCE(%s, language), updated_at = now()
+                  subject = COALESCE(%s, subject), language = COALESCE(%s, language),
+                  intent = COALESCE(%s, intent), updated_at = now()
            WHERE id = %s RETURNING *""",
         (
             priority,
             [t.strip()[:40] for t in tags if t.strip()] if tags is not None else None,
             subject,
             language,
+            intent.strip()[:60] if intent is not None else None,
             conv["id"],
         ),
     ).fetchone()
     if priority is not None and priority != conv["priority"]:
         _log(conn, conv, actor, "priority", conv["priority"], priority)
-    if tags is not None and sorted(tags) != sorted(conv["tags"]):
+        _extras().priority_changed(conn, conv, updated, actor)
+    if tags is not None and sorted(updated["tags"]) != sorted(conv["tags"]):
         _log(conn, conv, actor, "tags", ",".join(conv["tags"]), ",".join(updated["tags"]))
+        _extras().tags_changed(conn, conv, updated, actor)
+    if intent is not None and updated["intent"] != (conv.get("intent") or ""):
+        _log(conn, conv, actor, "intent", conv.get("intent") or "", updated["intent"])
     return updated
 
 
@@ -629,8 +701,10 @@ def send(
     - The AI may only reply while it is the handler.
     """
     body = (body or "").strip()
-    if not body and not template:
+    if not body and not template and not attachments:
         raise InboxError("Write a reply first.")
+    if template and attachments:
+        raise InboxError("Templates go without files. Send the file in a reply after the customer writes.")
     conv = get(conn, customer_id, conversation_id, lock=True)
     if author_kind == "ai":
         if conv["handler"] != "ai":
@@ -646,6 +720,10 @@ def send(
     ch = channels.get(conv["channel"])
     try:
         ch.check_send(conn, conv, body, template)
+        protect.check_send(conn, conv)  # hard monthly limits stop sending (ADR 0030)
+        from . import usage  # the channel's limit and money budgets (ADR 0039)
+
+        usage.check_send(conn, conv)
     except channels.SendBlocked as e:
         # Its own transaction: the refusal rolls the caller's work back, but the
         # block must stay on record for reports and the platform assistant.
@@ -753,6 +831,7 @@ def _send_job(conn: psycopg.Connection, job: dict):
     conv = conn.execute("SELECT * FROM conversations WHERE id = %s", (msg["conversation_id"],)).fetchone()
     ch = channels.get(conv["channel"])
     try:
+        protect.check_send(conn, conv)
         out = ch.deliver(conn, conv, msg)
     except channels.SendBlocked as e:
         conn.execute("UPDATE messages SET status = 'blocked', error = %s WHERE id = %s", (str(e), msg["id"]))

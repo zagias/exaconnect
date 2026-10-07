@@ -1,5 +1,8 @@
 # CommAI voice: operator note
 
+Stage 5 (numbers by country, porting, emergency addresses per island, carriers,
+fraud protection, Kamailio and LiveKit) is in `voice-global.md` and ADR 0033.
+
 See ADR 0021 for the decisions. Code: `controller/exaconnect_controller/commai/voice/`,
 API `commai/api/voice.py`, tables `commai/sql/50_voice.sql`, portal
 `portal/src/pages/commai/Voice.tsx` and `voice/`.

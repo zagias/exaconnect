@@ -444,3 +444,38 @@ def propose(conn, cid, user_id, text: str, parsed: dict) -> dict:
         ),
     ).fetchone()
     return row
+
+
+QUESTION = re.compile(r"(?i)^\s*(why|how|what|when|where|who|which|is|are|does|did|has|have)\b|\?\s*$")
+
+
+def looks_like_change(text: str) -> bool:
+    """A request ("forward my calls to my mobile") rather than a question ("why do my calls go to voicemail?")."""
+    return bool((text or "").strip()) and not QUESTION.search(text)
+
+
+def propose_text(conn: psycopg.Connection, cid: Any, user: Any, text: str) -> dict:
+    """The same proposal "say what you want" makes (ADR 0039): the platform
+    assistant uses it so a voice change typed there gets the same exact
+    change, price impact and confirm step. Nothing changes until the same
+    person confirms it at /voice/say/{id}/confirm.
+    -> {"understood": False, "message"} or {"understood": True, "id", "summary", "scope", "change", ...}"""
+    from . import config, perms
+
+    try:
+        me = mine(conn, cid, user.id)
+    except VoiceError:
+        me = None
+    is_admin = perms.is_voice_admin(conn, user, cid)
+    parsed = parse(conn, cid, text, me, is_admin)
+    if not parsed["understood"]:
+        return {"understood": False, "message": parsed["message"]}
+    out: dict = {"understood": True, "summary": parsed["summary"], "scope": parsed["scope"]}
+    if parsed["scope"] == "admin":
+        dry = config.apply(conn, cid, parsed["ops"], actor=user.actor, dry_run=True)
+        if dry["errors"]:
+            return {"understood": False, "message": dry["errors"][0]["error"]}
+        out["price_impact"] = dry["price_impact"]
+    prop = propose(conn, cid, user.id, text, parsed)
+    out.update({"id": str(prop["id"]), "change": prop["ops"], "expires_at": prop["expires_at"]})
+    return out

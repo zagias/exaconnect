@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 from ... import audit, db
 from ...api.deps import UserDep
 from .. import access, inbox
-from ..ai import agent, copilot, knowledge, memory, runtime, voice
+from ..ai import agent, copilot, governance, knowledge, memory, runtime, voice
 from ..ai.model import ModelError
 from .common import errors
 
@@ -59,6 +59,7 @@ class ProfileIn(BaseModel):
     enabled: bool | None = None
     name: str | None = Field(default=None, min_length=1, max_length=60)
     tone: str | None = Field(default=None, max_length=200)
+    instructions: str | None = Field(default=None, max_length=2000)
     greeting: str | None = Field(default=None, max_length=500)
     business_language: str | None = Field(default=None, min_length=2, max_length=5)
     languages: list[str] | None = Field(default=None, max_length=20)
@@ -85,6 +86,22 @@ def put_profile(customer_id: str, body: ProfileIn, user: UserDep) -> dict:
         fields["languages"] = sorted({x.strip().lower()[:5] for x in fields["languages"] if x.strip()})
     with db.tx() as conn:
         _admin(conn, user, customer_id)
+        # Tone and instructions go live only after the evaluation suite passes (ADR 0032).
+        fields, later = governance.split_profile_change(conn, customer_id, fields)
+        candidate = None
+        if later:
+            before = runtime.profile(conn, customer_id)
+            candidate = governance.create_candidate(
+                conn, customer_id, "instructions", later, {k: before.get(k) for k in later}, user.actor
+            )
+            audit.record(
+                conn,
+                user.actor,
+                "commai.ai.candidate.create",
+                str(candidate["id"]),
+                customer_id,
+                {"fields": sorted(later)},
+            )
         current = (inbox.settings(conn, customer_id)["config"] or {}).get("ai") or {}
         new = {**current, **fields}
         conn.execute(
@@ -93,7 +110,9 @@ def put_profile(customer_id: str, body: ProfileIn, user: UserDep) -> dict:
             (Jsonb(new), customer_id),
         )
         audit.record(conn, user.actor, "commai.ai.profile.update", "", customer_id, {"fields": sorted(fields)})
-        return runtime.profile(conn, customer_id)
+        out = runtime.profile(conn, customer_id)
+        out["candidate"] = candidate
+        return out
 
 
 # ---- role tools -------------------------------------------------------------------------

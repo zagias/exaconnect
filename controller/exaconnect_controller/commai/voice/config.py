@@ -54,7 +54,7 @@ from psycopg.types.json import Jsonb
 from ... import audit
 from ...security import token_hash
 from .. import events, jobs
-from . import billing
+from . import billing, countries, emergency
 from . import provider as providers
 from .common import VoiceError, digits
 
@@ -94,10 +94,11 @@ def norm_mac(mac: str) -> str:
 
 def norm_e164(number: str) -> str:
     d = digits(number)
-    if len(d) == 7:  # a local Trinidad number
-        d = "1868" + d
-    if len(d) == 10:
-        d = "1" + d
+    if not str(number).strip().startswith("+"):  # "+" means it already has its country code
+        if len(d) == 7:  # a local Trinidad number
+            d = "1868" + d
+        if len(d) == 10:
+            d = "1" + d
     if not 8 <= len(d) <= 15:
         raise OpError(f"{number} is not a phone number in international format.")
     return "+" + d
@@ -212,7 +213,7 @@ def _check_ext(conn, cid, ext: str, exclude: Any = None) -> str:
     ext = str(ext or "").strip()
     if not re.fullmatch(r"\d{2,6}", ext):
         raise OpError("An extension is 2 to 6 digits.")
-    if ext in billing.EMERGENCY or ext.startswith("9"):
+    if ext in billing.EMERGENCY or ext.startswith("9") or ext in emergency.business_numbers(conn, cid):
         raise OpError("Extensions can't start with 9 or be an emergency number.")
     ex = str(exclude) if exclude else ""
     for table, cond in (
@@ -297,6 +298,7 @@ class _Run:
                 VALUES (%s, %s, {", ".join(["%s"] * len(SITE_FIELDS))}) RETURNING id""",
             (self.cid, name[:120], *[vals[k] for k in SITE_FIELDS]),
         ).fetchone()
+        self.after.append(("validate_site", str(row["id"])))  # checked with the provider (ADR 0033)
         return {"site_id": str(row["id"])}
 
     def update_site(self, op):
@@ -313,6 +315,8 @@ class _Run:
         site = self.conn.execute(
             f"UPDATE voice_sites SET {sets} WHERE id = %s RETURNING *", (*vals.values(), site["id"])
         ).fetchone()
+        if address_changed:
+            self.after.append(("validate_site", str(site["id"])))
         if address_changed or "name" in vals:
             addr = Jsonb(site_address(site))
             self.conn.execute(
@@ -413,8 +417,9 @@ class _Run:
                     {"voice_user_id": str(vu["id"]), "site": moved_site["name"], "numbers": out["numbers_updated"]},
                 )
             )
-            for n in nums:
-                self.after.append(("emergency", n["e164"], site_address(moved_site)))
+            # The new site's address is checked if it hasn't been, and outbound
+            # calling follows the island's rules (ADR 0033).
+            self.after.append(("moved", str(vu["id"]), str(moved_site["id"])))
         return out
 
     def remove_user(self, op):
@@ -446,16 +451,43 @@ class _Run:
         if site is None and target_type == "user":
             vu = self.conn.execute("SELECT site_id FROM voice_users WHERE id = %s", (target_id,)).fetchone()
             site = _site(self.conn, self.cid, str(vu["site_id"]), required=False) if vu["site_id"] else None
+        country = str(op.get("country") or "").upper()
+        if country or providers.get().live:
+            # Real numbers by country need that country switched on (ADR 0033).
+            try:
+                c = countries.require(self.conn, country, self.cid)
+                area = countries.check_area(c, op.get("area"))
+            except VoiceError as e:
+                raise OpError(str(e)) from e
+        else:
+            area = op.get("area", "868")
         idx = len(self.results)
         placeholder = f"pending:{self.version}:{idx}"
         row = self.conn.execute(
             """INSERT INTO voice_numbers (customer_id, e164, source, status, target_type, target_id, site_id,
-                 emergency_address) VALUES (%s, %s, 'new', 'pending', %s, %s, %s, %s) RETURNING id""",
-            (self.cid, placeholder, target_type, target_id, site["id"] if site else None, Jsonb(site_address(site))),
+                 emergency_address, country) VALUES (%s, %s, 'new', 'pending', %s, %s, %s, %s, %s) RETURNING id""",
+            (
+                self.cid,
+                placeholder,
+                target_type,
+                target_id,
+                site["id"] if site else None,
+                Jsonb(site_address(site)),
+                country or "TT",
+            ),
         ).fetchone()
         self.counts["numbers"] += 1
         self.counts["new_numbers"] += 1
-        self.after.append(("order_number", str(row["id"]), f"{self.cid}:v{self.version}:n{idx}", op.get("area", "868")))
+        self.after.append(
+            (
+                "order_number",
+                str(row["id"]),
+                f"{self.cid}:v{self.version}:n{idx}",
+                area,
+                country or None,
+                op.get("e164"),
+            )
+        )
         return {"number_id": str(row["id"]), "e164": "+1 868 555 01xx (given when saved)" if self.dry_run else None}
 
     def remove_number(self, op):
@@ -477,6 +509,7 @@ class _Run:
         self.conn.execute(
             "UPDATE voice_numbers SET target_type = %s, target_id = %s WHERE id = %s", (kind, target_id, num["id"])
         )
+        self.after.append(("refresh_number", str(num["id"])))
         return {"number_id": str(num["id"])}
 
     # devices
@@ -901,8 +934,12 @@ def _after_checks(conn, cid, run: _Run) -> None:
     prov = providers.get()
     for item in run.after:
         if item[0] == "order_number":
-            _, number_id, key, area = item
-            got = prov.order_number(conn, cid, key, area)
+            _, number_id, key, area, country, chosen = item
+            got = (
+                prov.order_number(conn, cid, key, area, country=country, e164=chosen)
+                if country
+                else prov.order_number(conn, cid, key, area)
+            )
             check = prov.test_call(conn, got["e164"])
             conn.execute(
                 "INSERT INTO voice_test_calls (customer_id, number_id, e164, ok, detail) VALUES (%s, %s, %s, %s, %s)",
@@ -916,6 +953,7 @@ def _after_checks(conn, cid, run: _Run) -> None:
                 (got["e164"], prov.name, got["ref"], number_id),
             )
             billing.one_time_charge(conn, cid, f"new_number:{number_id}", "new_number", f"New number {got['e164']}")
+            emergency.activate_outbound(conn, cid, number_id)
             for r in run.results:
                 if r.get("number_id") == number_id:
                     r["e164"] = got["e164"]
@@ -924,12 +962,13 @@ def _after_checks(conn, cid, run: _Run) -> None:
                 prov.release_number(conn, item[1])
             except providers.ProviderError:
                 pass  # released on our side; the provider is told again at reconciliation
-        elif item[0] == "emergency":
-            status = prov.register_emergency_address(conn, item[1], item[2])
-            conn.execute(
-                "UPDATE voice_sites SET emergency_status = %s WHERE id = %s AND emergency_status <> 'registered'",
-                (status, item[2]["site_id"]),
-            )
+        elif item[0] == "validate_site":
+            emergency.submit_site(conn, cid, item[1])
+        elif item[0] == "moved":
+            site = conn.execute("SELECT * FROM voice_sites WHERE id = %s", (item[2],)).fetchone()
+            emergency.after_move(conn, cid, item[1], site)
+        elif item[0] == "refresh_number":
+            emergency.refresh_numbers(conn, cid, number_id=item[1])
         elif item[0] == "device_fee":
             _, device_id, kind, vu = item
             billing.one_time_charge(

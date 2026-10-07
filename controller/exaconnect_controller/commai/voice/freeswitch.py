@@ -18,10 +18,13 @@ prefix):
   queues.xml, agents.xml, tiers.xml   mod_callcenter fragments
 
 deploy/freeswitch/ includes these from /exacarib/freeswitch/*/. Not live:
-there is no SIP provider account yet, so the provider gateway
-("exacarib_sip") has no credentials and outside calls go nowhere. Calls
-between extensions, menus and queues work without it. The AI agent is a
-transfer with a fallback, so basic calling never depends on the AI services.
+there is no SIP provider account yet, so the gateway ("exacarib_sip": the
+provider, or Kamailio with EXA_VOICE_EDGE=kamailio) has nowhere to send
+outside calls. Calls between extensions, menus and queues work without it.
+Every outside call except an emergency call is authorised by the controller
+first (voice/pbx.py) and refused when the controller can't be reached. The AI
+agent is a transfer with a fallback, so basic calling never depends on the AI
+services.
 """
 
 from __future__ import annotations
@@ -37,6 +40,7 @@ import psycopg
 from psycopg.types.json import Jsonb
 
 from .. import jobs
+from . import emergency, pbx
 from .billing import EMERGENCY, fraud_limits
 from .common import domain as tenant_domain
 from .common import now
@@ -102,7 +106,17 @@ def gather(conn: psycopg.Connection, cid: Any) -> dict:
                       fallback FROM voice_ai_rules WHERE customer_id = %s AND enabled ORDER BY name"""
         ),
         "blocked_prefixes": sorted(fraud_limits(conn, cid)["blocked_prefixes"]),
+        "emergency_numbers": sorted(emergency.business_numbers(conn, cid)),  # each island's (ADR 0033)
+        # The controller check before outside calls (voice/pbx.py) and, for
+        # emergency calls, which never wait for it, every carrier switched on.
+        "controller_url": controller_url(),
+        "emergency_sets": pbx.emergency_sets(conn, cid),
     }
+
+
+def controller_url() -> str:
+    """Where FreeSWITCH reaches the controller: EXA_PBX_CONTROLLER_URL, else the compose service."""
+    return (os.environ.get("EXA_PBX_CONTROLLER_URL") or "http://controller:8000").rstrip("/")
 
 
 def _ext_of(data: dict, kind: str, target_id: str | None) -> str | None:
@@ -230,14 +244,19 @@ def _dialplan(data: dict) -> str:
     users = {u["id"]: u for u in data["users"]}
     out = ["<include>", f"  <context name={a(ctx)}>"]
 
-    # Emergency numbers first, never blocked. Island-specific routing and the
-    # caller's address go to the provider in phase 3.
-    em = "|".join(sorted(EMERGENCY))
+    # Emergency numbers first, never blocked and never waiting for the
+    # controller: with carriers on, Kamailio gets every one of them to try.
+    em = "|".join(sorted(EMERGENCY | set(data.get("emergency_numbers") or ())))
     out += [
         '    <extension name="emergency">',
         f'      <condition field="destination_number" expression={a("^(" + em + ")$")}>',
         '        <action application="set" data="exa_emergency=true"/>',
         '        <action application="set" data="effective_caller_id_number=${exa_emergency_callback}"/>',
+    ]
+    if data.get("emergency_sets"):
+        sets = ",".join(str(n) for n in data["emergency_sets"])
+        out.append(f'        <action application="set" data={a("sip_h_X-Exa-Route=" + sets)}/>')
+    out += [
         f'        <action application="bridge" data={a("sofia/gateway/" + GATEWAY + "/$1")}/>',
         "      </condition>",
         "    </extension>",
@@ -299,7 +318,11 @@ def _dialplan(data: dict) -> str:
         if u["dnd"]:
             pass  # do not disturb: straight to voicemail
         elif fwd and fwd.startswith("+"):
-            out.append(f'        <action application="bridge" data={a("sofia/gateway/" + GATEWAY + "/" + fwd)}/>')
+            # Back through this context, so the forwarded call is checked like any outside call.
+            out += [
+                f'        <action application="export" data={a("nolocal:exa_forwarded_by=" + ext)}/>',
+                f'        <action application="bridge" data={a("loopback/" + fwd + "/" + ctx)}/>',
+            ]
         elif fwd:
             out.append(f'        <action application="bridge" data={a(_dial(fwd, dom))}/>')
         else:
@@ -393,19 +416,94 @@ def _dialplan(data: dict) -> str:
             "    </extension>",
         ]
 
-    # Outside calls through the SIP provider (not live until it is configured).
-    out += [
-        '    <extension name="outbound">',
-        '      <condition field="destination_number" expression="^\\+?(\\d{7,15})$">',
-        '        <action application="set" data="exa_outbound=true"/>',
-        f'        <action application="bridge" data={a("sofia/gateway/" + GATEWAY + "/+$1")}/>',
-        "      </condition>",
-        "    </extension>",
-        "  </context>",
-        "</include>",
-        "",
-    ]
+    out += _outbound(data)
+    out += ["  </context>", "</include>", ""]
     return "\n".join(out)
+
+
+OUTSIDE = "^\\+?(\\d{7,15})$"
+
+
+def _outbound(data: dict) -> list[str]:
+    """Outside calls: ask the controller first (voice/pbx.py), then bridge.
+
+    The check runs inline while the dial plan is hunted, so the extensions after
+    it can match on its answer: "NO <code>" is refused, anything that is not
+    "OK" (the controller is down or refused the digest) fails closed, and "OK
+    <set ids> <caller id>" sets X-Exa-Route for Kamailio and the caller id.
+    The PBX's secret never appears here: ${exa_pbx_secret} is FreeSWITCH's own
+    global variable, from EXA_PBX_SECRET in its environment (vars.xml)."""
+    t = data["tenant"]
+    fields = f"{t}:${{user_name}}:${{exa_forwarded_by}}:$1:${{uuid}}"
+    digest = f"${{md5(${{exa_pbx_secret}}:{fields}:${{exa_pbx_secret}})}}"
+    url = (
+        f"{data['controller_url']}/api/v1/commai/internal/voice/authorise"
+        f"?tenant={t}&ext=${{user_name}}&fwd=${{exa_forwarded_by}}&to=$1&call=${{uuid}}"
+    )
+    ask = f"exa_auth=${{curl({url} connect-timeout 2 timeout 4 append_headers {pbx.HEADER}:{digest} get)}}"
+
+    def ext(name: str, auth_expr: str | None, actions: list[str], cont: bool = False) -> list[str]:
+        lines = [f"    <extension name={a(name)}{' continue=' + a('true') if cont else ''}>"]
+        if auth_expr is None:
+            lines.append(f'      <condition field="destination_number" expression={a(OUTSIDE)}>')
+        else:
+            lines += [
+                f'      <condition field="destination_number" expression={a(OUTSIDE)}/>',
+                f'      <condition field="${{exa_auth}}" expression={a(auth_expr)}>',
+            ]
+        return lines + [f"        {x}" for x in actions] + ["      </condition>", "    </extension>"]
+
+    refuse = '<action application="playback" data="ivr/ivr-call_cannot_be_completed_as_dialed.wav"/>'
+    return [
+        "    <!-- Outside calls: the controller authorises each one (voice/pbx.py). -->",
+        *ext(
+            "outbound-authorise",
+            None,
+            [
+                '<action application="set" data="exa_outbound=true" inline="true"/>',
+                '<action application="set" data="exa_dest=$1" inline="true"/>',
+                f'<action application="set" data={a(ask)} inline="true"/>',
+            ],
+            cont=True,
+        ),
+        *ext(
+            "outbound-refused",
+            "^NO (\\S+)",
+            [
+                '<action application="log" data="NOTICE outside call refused by the controller: $1"/>',
+                '<action application="set" data="exa_refused=$1"/>',
+                refuse,
+                '<action application="hangup" data="CALL_REJECTED"/>',
+            ],
+        ),
+        *ext(
+            "outbound-unavailable",
+            "^(?!OK )",
+            [
+                '<action application="log" data="WARNING outside call refused: no answer from the controller"/>',
+                '<action application="set" data="exa_refused=controller_unreachable"/>',
+                refuse,
+                '<action application="hangup" data="SERVICE_UNAVAILABLE"/>',
+            ],
+        ),
+        *ext(
+            "outbound-route",
+            "^OK (\\d+(,\\d+)*) ",
+            ['<action application="set" data="sip_h_X-Exa-Route=$1"/>'],
+            cont=True,
+        ),
+        *ext(
+            "outbound-caller-id",
+            "^OK \\S+ (\\+\\d{7,15})$",
+            ['<action application="set" data="effective_caller_id_number=$1"/>'],
+            cont=True,
+        ),
+        *ext(
+            "outbound",
+            "^OK ",
+            [f'<action application="bridge" data={a("sofia/gateway/" + GATEWAY + "/+${exa_dest}")}/>'],
+        ),
+    ]
 
 
 def _public(data: dict) -> str:

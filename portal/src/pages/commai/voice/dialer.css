@@ -1,0 +1,6 @@
+/* Browser phone (ADR 0039). Brand tokens come from brand.css. */
+.voice-dialer { display: grid; gap: 12px; max-width: 360px; }
+.voice-dialer input { font: 600 18px/24px var(--font-mono); padding: 6px 8px; border: 1.5px solid var(--line); border-radius: 5px; min-width: 0; flex: 1; }
+.voice-keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.voice-keypad .button { font: 600 18px/24px var(--font-mono); min-height: 44px; }
+.button.listening { border-color: var(--blue); box-shadow: 0 0 0 2px var(--blue-tint); }

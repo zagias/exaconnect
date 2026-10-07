@@ -14,12 +14,17 @@ if TYPE_CHECKING:
 
 
 class ExaConnectError(Exception):
-    """The API refused a request. `detail` is its plain-English reason."""
+    """The API refused a request. `detail` is its plain-English reason, `code`
+    a stable word to branch on ("not_found", "rate_limited"...), `request_id`
+    the id to quote to support, and `retry_after` the seconds to wait after a 429."""
 
-    def __init__(self, status: int, detail: str):
+    def __init__(self, status: int, detail: str, code: str = "", request_id: str = "", retry_after: int | None = None):
         super().__init__(f"{status}: {detail}")
         self.status = status
         self.detail = detail
+        self.code = code
+        self.request_id = request_id
+        self.retry_after = retry_after
 
 
 def _clean(d: dict[str, Any]) -> dict[str, Any]:
@@ -99,13 +104,22 @@ class ExaConnect:
         params = {k: v for k, v in (params or {}).items() if v is not None}
         r = self._http.request(method, API + path, json=json, params=params, headers=headers)
         if r.status_code >= 400:
+            body: dict = {}
             try:
-                detail = r.json().get("detail", r.text)
-            except ValueError:
+                body = r.json()
+                detail = body.get("detail", r.text)
+            except (ValueError, AttributeError):
                 detail = r.text
             if isinstance(detail, list):  # a validation error: the first problem
                 detail = "; ".join(f"{'.'.join(str(x) for x in e.get('loc', [])[1:])}: {e.get('msg')}" for e in detail)
-            raise ExaConnectError(r.status_code, str(detail))
+            retry = r.headers.get("retry-after", "")
+            raise ExaConnectError(
+                r.status_code,
+                str(detail),
+                code=str(body.get("code", "")) if isinstance(body, dict) else "",
+                request_id=r.headers.get("x-request-id", ""),
+                retry_after=int(retry) if retry.isdigit() else None,
+            )
         if r.status_code == 204 or not r.content:
             return None
         if r.headers.get("content-type", "").startswith("application/json"):

@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import hmac
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Annotated, Any
 
 from fastapi import Depends, Header, HTTPException, Request, status
@@ -36,6 +36,13 @@ class User:
     # The plans that organisation holds ('connect', 'commai'); None for ExaCarib
     # admins and carrier accounts, who are not limited by plan.
     products: tuple[str, ...] | None = None
+    # Roles (ADR 0030): None means the person has no roles and keeps their
+    # account's rights; otherwise the business-wide permissions, plus
+    # permissions held for single teams only.
+    permissions: frozenset[str] | None = None
+    team_permissions: dict = field(default_factory=dict)
+    path: str = ""
+    query_team: str | None = None
 
     @property
     def actor(self) -> str:
@@ -92,8 +99,10 @@ def current_user(request: Request, authorization: Annotated[str | None, Header()
                      WHERE token_hash = %(h)s AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > now())
                        AND (last_used_at IS NULL OR last_used_at < now() - interval '1 minute')
                      RETURNING user_id)
-                   SELECT u.*, (SELECT scopes FROM api_keys WHERE token_hash = %(h)s) AS key_scopes,
-                          (SELECT customer_id FROM api_keys WHERE token_hash = %(h)s) AS acting_org FROM users u
+                   SELECT u.*, kk.scopes AS key_scopes, kk.id AS key_id, kk.locked_until AS key_locked_until,
+                          kk.customer_id AS acting_org
+                   FROM users u,
+                        (SELECT scopes, id, locked_until, customer_id FROM api_keys WHERE token_hash = %(h)s) kk
                    WHERE u.id = (SELECT user_id FROM k UNION ALL
                                  SELECT user_id FROM api_keys WHERE token_hash = %(h)s AND revoked_at IS NULL
                                    AND (expires_at IS NULL OR expires_at > now()) LIMIT 1)
@@ -104,7 +113,8 @@ def current_user(request: Request, authorization: Annotated[str | None, Header()
             row = None
         if row is None:
             row = conn.execute(
-                "SELECT u.*, s.customer_id AS acting_org FROM sessions s JOIN users u ON u.id = s.user_id"
+                "SELECT u.*, s.customer_id AS acting_org, s.via AS session_via, s.created_at AS session_created_at,"
+                " s.token_hash AS session_hash FROM sessions s JOIN users u ON u.id = s.user_id"
                 " WHERE s.token_hash = %s AND s.expires_at > now() AND u.disabled_at IS NULL",
                 (token_hash(token),),
             ).fetchone()
@@ -135,6 +145,10 @@ def current_user(request: Request, authorization: Annotated[str | None, Header()
     # Viewers are read-only everywhere, enforced here once for every write.
     if user.org_role == "viewer" and method not in SAFE_METHODS and not _always_allowed(path):
         raise HTTPException(status.HTTP_403_FORBIDDEN, VIEWER_ONLY)
+    # Business security settings and roles (ADR 0030), for the organisation acted for.
+    from ..commai.enterprise import security as enterprise_security
+
+    enterprise_security.guard(request, user, row)
     if user.scopes is not None and "connect" not in user.scopes:
         # A key limited to CommAI scopes never reaches the network API. A
         # limited account (directory-provisioned) may still manage its own sign-in.
