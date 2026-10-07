@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link, Route, Routes, useParams } from "react-router-dom";
 import { api, useApi } from "../../api";
 import { ErrorNote } from "../../components";
-import { Card, PageHead, useAction } from "../../ui";
+import { Card, EmptyState, PageHead, useAction } from "../../ui";
 import { CHANNEL_LABEL, STATE_LABEL, useCommaiBase, when, type Page } from "./lib";
 import type { Contact } from "./types";
 
@@ -49,7 +49,7 @@ function ContactList() {
   const items = [...(list.data?.items ?? []), ...extra.flatMap((x) => x.items)];
   return (
     <>
-      <PageHead eyebrow="CommAI" title="Contacts">
+      <PageHead title="Contacts">
         Everyone who has written to the business, on any channel.
       </PageHead>
       <Card title="Contacts">
@@ -68,9 +68,9 @@ function ContactList() {
         </form>
         <ErrorNote error={list.error} />
         {list.data && items.length === 0 && (
-          <div className="empty">
-            <p>No contacts yet. They appear when someone writes in, or add one below.</p>
-          </div>
+          <EmptyState title={query ? "No contacts match" : "No contacts yet"}>
+            {query ? "Try another name, email or phone number." : "Contacts appear when someone writes in. You can also add one below."}
+          </EmptyState>
         )}
         {items.length > 0 && (
           <div className="table-wrap">

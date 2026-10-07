@@ -56,7 +56,7 @@ export default function Onboarding() {
   if (!base) return <p className="muted">Choose an organisation first.</p>;
   return (
     <>
-      <PageHead eyebrow="CommAI" title="Set up">
+      <PageHead title="Getting started">
         Tell CommAI about your business. It drafts a profile, teams, knowledge, routing and starter workflows; you review and approve each one before
         anything goes live.
       </PageHead>

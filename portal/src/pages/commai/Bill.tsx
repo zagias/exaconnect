@@ -98,7 +98,7 @@ export default function Bill() {
   const u = usage.data;
   return (
     <>
-      <PageHead eyebrow="CommAI" title="Usage and bill">
+      <PageHead title="Usage and bill">
         Messaging, AI, workflows and voice on one bill, priced on versioned rate cards. Budgets warn you, and a hard limit stops the work it covers.
       </PageHead>
       <Card

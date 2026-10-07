@@ -13,7 +13,7 @@ export default function AiAgents() {
   if (!base) return null;
   return (
     <>
-      <PageHead eyebrow="CommAI" title="AI agents">
+      <PageHead title="AI agents">
         How the AI answers your customers, what it may do, and what it knows.
       </PageHead>
       <Tabs label="AI agent sections">
@@ -334,7 +334,7 @@ function Tools({ base }: { base: string }) {
     <>
       <p className="muted ai-intro">
         Each AI role may use only the tools ticked here. Anything else is refused by the action service, whatever the AI
-        asks for. A tool also has to be switched on in <Link to="/commai/integrations">Integrations</Link>. Sensitive
+        asks for. A tool also has to be switched on in <Link to="/commai/integrations">Apps</Link>. Sensitive
         actions always wait for a person to approve.
       </p>
       {data.roles.map((r) => (
@@ -398,7 +398,7 @@ function RoleTools({
                   {t.sensitive && <span className="tag">Needs approval</span>}
                   {has(t) && (
                     <span className={`pill small ${role.usable.includes(t.tool) ? "ok" : "off"}`}>
-                      {role.usable.includes(t.tool) ? "Usable now" : "Not switched on in Integrations"}
+                      {role.usable.includes(t.tool) ? "Usable now" : "Not switched on in Apps"}
                     </span>
                   )}
                 </span>

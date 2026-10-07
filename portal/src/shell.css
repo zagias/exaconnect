@@ -232,3 +232,43 @@
   :root:not([data-theme="light"]) .shell-avatar { background: var(--blue); color: var(--navy-deep); }
 }
 :root[data-theme="dark"] .shell-avatar { background: var(--blue); color: var(--navy-deep); }
+
+/* ---- Product headings, collapsible groups and the jump-to button (CommAI UX pass) ---- */
+.shell-section {
+  margin: 22px 12px 0; padding-top: 14px; border-top: 1px solid var(--shell-side-line);
+  font: 650 13px/18px var(--font-head); letter-spacing: 0.02em; color: #fff;
+}
+.shell-group-toggle {
+  display: flex; align-items: center; justify-content: space-between; width: 100%;
+  background: none; border: none; cursor: pointer; text-align: left; border-radius: var(--radius-sm);
+  padding-top: 4px; padding-bottom: 4px; margin-bottom: 2px;
+}
+.shell-group-toggle:hover { color: #fff; }
+.shell-group-toggle .shell-icon { width: 14px; height: 14px; transition: transform 120ms ease-out; }
+.shell-group-toggle[aria-expanded="false"] .shell-icon { transform: rotate(-90deg); }
+.shell-group[data-collapsed] ul { display: none; }
+.shell .page:focus { outline: none; }
+
+.shell-jump-button {
+  display: inline-flex; align-items: center; gap: 8px; min-width: 0;
+  padding: 5px 8px 5px 10px; border: 1px solid var(--line); border-radius: 5px;
+  background: var(--card); color: var(--ink-muted); font: 500 14px/20px var(--font-body); cursor: pointer;
+}
+.shell-jump-button:hover { border-color: var(--ink-muted); color: var(--ink); }
+.shell-jump-button .shell-icon { flex: none; }
+@media (max-width: 1279px) { .shell-jump-text { display: none; } }
+
+@media (min-width: 641px) and (max-width: 1023px) {
+  /* The rail has no room for words: the heading becomes a rule and every group stays open. */
+  .shell-section { margin: 12px 4px 0; padding-top: 8px; font-size: 0; line-height: 0; }
+  .shell-group[data-collapsed] ul { display: grid; }
+  .shell-group-toggle { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .shell-jump-kbd { display: none; }
+}
+@media (max-width: 640px) {
+  .shell .shell-top .shell-jump-button {
+    background: transparent; border-color: transparent; color: var(--on-navy); padding: 8px;
+  }
+  .shell-jump-kbd { display: none; }
+  .shell-jump-button .shell-icon { width: 22px; height: 22px; }
+}

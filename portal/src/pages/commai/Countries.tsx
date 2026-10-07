@@ -1,4 +1,5 @@
 import { Fragment, useState } from "react";
+import { Link } from "react-router-dom";
 import { api, useApi } from "../../api";
 import { useAuth } from "../../auth";
 import { ErrorNote } from "../../components";
@@ -97,7 +98,7 @@ export default function Countries() {
   const groups = ["Caribbean", "Atlantic", "Reference"];
   return (
     <>
-      <PageHead eyebrow="CommAI" title="Countries">
+      <PageHead title="Countries">
         What CommAI can do in each country. A country is switched on only after its written checks pass.
       </PageHead>
       <p className="callout small">
@@ -107,7 +108,7 @@ export default function Countries() {
       <ErrorNote error={list.error} />
       {admin && (
         <p className="muted small">
-          ExaCarib admins switch countries on, and record each check, in the go-live registry (<span className="mono">/api/v1/commai/golive?kind=country</span>).
+          ExaCarib admins switch countries on, and record each check, on the <Link to="/commai/golive">Go-live</Link> screen.
         </p>
       )}
       {groups.map((g) => {

@@ -57,7 +57,7 @@ export default function GoLive() {
   if (user?.role !== "admin") return <p className="muted">ExaCarib admins only.</p>;
   return (
     <>
-      <PageHead eyebrow="Admin" title="Go-live">
+      <PageHead title="Go-live">
         Each capability starts off. Record every criterion as met, with evidence, before switching it to a pilot or on.
       </PageHead>
       <div className="segmented" role="group" aria-label="Kind" style={{ marginBottom: 16, flexWrap: "wrap" }}>

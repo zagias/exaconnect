@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useLocation } from "react-router-dom";
 import { Eyebrow } from "./components";
+import { groupOf } from "./nav";
 import "./tables.css";
 
 export { RowActions, type RowAction } from "./menu";
@@ -35,11 +36,16 @@ export function Card({ title, children, note }: { title: string; children: React
   );
 }
 
-/** Eyebrow, title and one short muted line. */
-export function PageHead({ eyebrow, title, children }: { eyebrow: string; title: string; children?: ReactNode }) {
+/**
+ * Eyebrow, title and one short muted line. Without an eyebrow, the screen's
+ * menu group is used ("Conversations", "Set up"...), so headers match the menu.
+ */
+export function PageHead({ eyebrow, title, children }: { eyebrow?: string; title: string; children?: ReactNode }) {
+  const { pathname } = useLocation();
+  const label = eyebrow ?? groupOf(pathname);
   return (
     <div className="page-head">
-      <Eyebrow>{eyebrow}</Eyebrow>
+      {label && <Eyebrow>{label}</Eyebrow>}
       <h1>{title}</h1>
       {children && <p className="muted">{children}</p>}
     </div>
@@ -86,6 +92,22 @@ export function Tabs({ label, children }: { label: string; children: ReactNode }
       <nav ref={nav} className="tabs" aria-label={label} onScroll={measure}>
         {children}
       </nav>
+    </div>
+  );
+}
+
+/**
+ * What to show instead of an empty list: what belongs here, in a sentence,
+ * and the one thing to do next (a button or link), if there is one.
+ */
+export function EmptyState({ title, children, action }: { title: string; children?: ReactNode; action?: ReactNode }) {
+  return (
+    <div className="empty empty-state">
+      <div className="empty-text">
+        <strong>{title}</strong>
+        {children && <p>{children}</p>}
+      </div>
+      {action}
     </div>
   );
 }

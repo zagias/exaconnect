@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, Route, Routes, useNavigate, useParams } from "react-router-dom";
 import { api, useApi } from "../../api";
 import { ErrorNote } from "../../components";
-import { Card, PageHead, useAction } from "../../ui";
+import { Card, EmptyState, PageHead, useAction } from "../../ui";
 import { useCommaiBase, when } from "./lib";
 import "./automation.css";
 
@@ -146,7 +146,7 @@ function List() {
   if (!base) return <p className="muted">Choose an organisation first.</p>;
   return (
     <>
-      <PageHead eyebrow="CommAI" title="Workflows">
+      <PageHead title="Workflows">
         Describe what should happen in plain English. CommAI turns it into steps you can edit, test and switch on.
       </PageHead>
       <Card title="Describe a workflow">
@@ -207,7 +207,7 @@ function List() {
 
       <Card title="Your workflows">
         <ErrorNote error={list.error} />
-        {list.data && list.data.length === 0 && <div className="empty">No workflows yet. Describe one above or start from a pack below.</div>}
+        {list.data && list.data.length === 0 && <EmptyState title="No workflows yet">Describe one above in plain English, or start from a starter pack below.</EmptyState>}
         {list.data && list.data.length > 0 && (
           <div className="table-wrap">
             <table className="paths dt stack">
@@ -896,7 +896,7 @@ function Runs({ base, id }: { base: string; id: string }) {
   return (
     <Card title="Run log">
       <ErrorNote error={runs.error || act.error} />
-      {runs.data && runs.data.length === 0 && <div className="empty">No runs yet.</div>}
+      {runs.data && runs.data.length === 0 && <EmptyState title="No runs yet">Each time this workflow runs, its steps and results appear here.</EmptyState>}
       {runs.data && runs.data.length > 0 && (
         <div className="table-wrap">
           <table className="paths dt stack">

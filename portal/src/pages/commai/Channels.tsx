@@ -128,7 +128,7 @@ export default function Channels() {
   if (!base) return <p className="muted">Choose a business first.</p>;
   return (
     <>
-      <PageHead eyebrow="CommAI" title="Channels">
+      <PageHead title="Channels">
         Where your customers reach you. Every channel lands in the same inbox.
       </PageHead>
       <Tabs label="Channels">

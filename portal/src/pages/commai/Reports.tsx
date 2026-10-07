@@ -1,4 +1,4 @@
-import { useId, useState, type FormEvent } from "react";
+import { useId, useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { api, useApi } from "../../api";
 import { ErrorNote } from "../../components";
@@ -84,7 +84,9 @@ function Stat({ label, figure, source }: { label: string; figure: string | numbe
 export default function Reports() {
   const base = useCommaiBase();
   const [days, setDays] = useState(30);
-  const from = new Date(Date.now() - days * 86400_000).toISOString();
+  // Fixed when the period is chosen: a time taken on every render changes the
+  // address on every render, and the page then fetches without end.
+  const from = useMemo(() => new Date(Date.now() - days * 86400_000).toISOString(), [days]);
   const q = `?from=${encodeURIComponent(from)}`;
   const out = useApi<Outcomes>(base && `${base}/reports/outcomes${q}`, 60_000);
   const use = useApi<Usage>(base && `${base}/reports/usage${q}`, 60_000);
@@ -93,7 +95,7 @@ export default function Reports() {
   const o = out.data;
   return (
     <>
-      <PageHead eyebrow="CommAI" title="Reports">
+      <PageHead title="Reports">
         Every figure is counted from recorded events, never estimated. Hover over or tab to a figure to see where it comes from.
       </PageHead>
       <div className="segmented" role="group" aria-label="Period" style={{ marginBottom: 16 }}>

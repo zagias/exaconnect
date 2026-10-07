@@ -44,7 +44,7 @@ export default function Team() {
   if (!base) return <p className="muted">{t("common.chooseBusiness")}</p>;
   return (
     <>
-      <PageHead eyebrow={t("common.eyebrow")} title={t("team.title")}>
+      <PageHead title={t("team.title")}>
         {t("team.intro")}
       </PageHead>
       <DraftLabel />

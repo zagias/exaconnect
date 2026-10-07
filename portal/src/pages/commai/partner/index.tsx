@@ -108,7 +108,7 @@ export default function Partner() {
   if (m.acting_for)
     return (
       <>
-        <PageHead eyebrow="CommAI" title={`Acting for ${m.acting_for.customer_name}`}>
+        <PageHead title={`Acting for ${m.acting_for.customer_name}`}>
           You are working in this business for {m.acting_for.partner_name}, with only what it granted.
         </PageHead>
         <Card title="What you can do here">
@@ -578,7 +578,7 @@ function BusinessSide() {
   const base = `/commai/customers/${current.id}`;
   return (
     <>
-      <PageHead eyebrow="CommAI" title="Partners and apps">
+      <PageHead title="Partners and apps">
         Who may manage {current.name || "this business"}, which apps can reach it, and its sandbox for developers.
       </PageHead>
       <Card title="Your business id">
