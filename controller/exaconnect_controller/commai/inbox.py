@@ -644,6 +644,9 @@ def send(
     ch = channels.get(conv["channel"])
     try:
         ch.check_send(conn, conv, body, template)
+        from . import usage  # the channel's limit and money budgets (ADR 0033)
+
+        usage.check_send(conn, conv)
     except channels.SendBlocked as e:
         # Its own transaction: the refusal rolls the caller's work back, but the
         # block must stay on record for reports and the platform assistant.

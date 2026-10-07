@@ -594,7 +594,8 @@ def draft_invoice(conn, customer_id, period: dt.date, actor: str) -> dict:
     conn.execute(
         """INSERT INTO voice_invoice_lines (invoice_id, customer_id, charge_id, description, quantity, amount)
            SELECT %s, customer_id, id, description, quantity, amount FROM voice_charges
-           WHERE customer_id = %s AND invoice_id IS NULL AND at >= %s AND at < %s ORDER BY at, ref""",
+           WHERE customer_id = %s AND invoice_id IS NULL AND bill_id IS NULL AND at >= %s AND at < %s
+           ORDER BY at, ref""",
         (inv["id"], customer_id, period, end),
     )
     total = conn.execute(
@@ -639,7 +640,7 @@ def issue_invoice(conn, customer_id, invoice_id, actor: str) -> dict:
         raise VoiceError("This invoice is already issued. Corrections go on a credit note.", 409)
     taken = conn.execute(
         """SELECT 1 FROM voice_invoice_lines l JOIN voice_charges c ON c.id = l.charge_id
-           WHERE l.invoice_id = %s AND c.invoice_id IS NOT NULL LIMIT 1""",
+           WHERE l.invoice_id = %s AND (c.invoice_id IS NOT NULL OR c.bill_id IS NOT NULL) LIMIT 1""",
         (invoice_id,),
     ).fetchone()
     if taken:

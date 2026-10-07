@@ -17,12 +17,13 @@ from . import (  # noqa: E402
     ai,
     approvals,
     automation,
+    bill,
     channels,
     entitlements,
     voice,
 )
 
-for _m in (channels, ai, automation, voice, entitlements, approvals):
+for _m in (channels, ai, automation, voice, entitlements, approvals, bill):
     # Module routes check the business has that module (ADR 0033).
     router.include_router(_m.router, dependencies=dependencies_for(_m.__name__))
     if hasattr(_m, "public"):

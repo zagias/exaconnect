@@ -24,6 +24,17 @@ Steps:
 Triggers are dispatched by one job ("workflow.dispatch") that reads
 commai_events after a stored cursor and re-enqueues itself, so events.emit
 needs no changes. A live run happens once per (workflow version, event).
+
+A trigger can also be a schedule ({"type": "schedule", "schedule":
+{"every_minutes": 60}} or {"at": "09:00", "days": ["mon", ...]} in the
+business's time zone) or manual ({"type": "manual"}: started by a person or
+through POST /workflows/{id}/trigger). Each start is recorded as an event
+(workflow.scheduled, workflow.triggered) so a run still happens once per event.
+
+Exceptions (ADR 0033): a step's on_failure is "stop", "continue" or the id
+of a later step to jump to; steps marked only_on_failure run only after such
+a jump, with {{failure.step}} and {{failure.error}} filled in. A workflow's
+notify_on_failure lists people told when a run fails.
 """
 
 from __future__ import annotations
@@ -52,6 +63,9 @@ events.register(
     "workflow.approval_requested",
     "workflow.reminder",
     "workflow.escalated",
+    "workflow.scheduled",
+    "workflow.triggered",
+    "workflow.exception",
 )
 
 STEP_TYPES = (
@@ -88,6 +102,10 @@ FORBIDDEN_KEYS = {
     "sensitive",
 }
 TRIGGER_BLOCKLIST_PREFIXES = ("workflow.", "webhook.")
+TRIGGER_TYPES = ("event", "schedule", "manual")
+DAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+MIN_EVERY_MINUTES = 5
+FAILURE_STEPS = ("action", "send_message", "assign", "collect")
 
 
 class WorkflowError(Exception):
@@ -180,14 +198,25 @@ def validate(conn: psycopg.Connection | None, customer_id: Any, definition: Any,
     if not name:
         problems.append("Give the workflow a name.")
     trig = d.get("trigger") or {}
+    kind = str(trig.get("type") or ("schedule" if trig.get("schedule") else "event"))
     ev = str(trig.get("event") or "")
-    if not ev:
-        problems.append("Choose the event that starts the workflow.")
-    elif ev not in events.TYPES:
-        problems.append(f"There is no event called {ev}.")
-    elif ev.startswith(TRIGGER_BLOCKLIST_PREFIXES):
-        problems.append(f"A workflow can't start from {ev} (it could start itself in a loop).")
-    clean_trigger = {"event": ev, "conditions": _conditions(trig.get("conditions"), "Trigger", problems)}
+    if kind not in TRIGGER_TYPES:
+        problems.append(f"Unknown trigger type {kind}.")
+        kind = "event"
+    if kind == "event":
+        if not ev:
+            problems.append("Choose the event that starts the workflow.")
+        elif ev not in events.TYPES:
+            problems.append(f"There is no event called {ev}.")
+        elif ev.startswith(TRIGGER_BLOCKLIST_PREFIXES):
+            problems.append(f"A workflow can't start from {ev} (it could start itself in a loop).")
+        clean_trigger = {"event": ev, "conditions": _conditions(trig.get("conditions"), "Trigger", problems)}
+    elif kind == "schedule":
+        ev = ""
+        clean_trigger = {"type": "schedule", "event": "", "conditions": [], "schedule": _schedule(trig, problems)}
+    else:
+        ev = ""
+        clean_trigger = {"type": "manual", "event": "", "conditions": []}
     raw_steps = d.get("steps") or []
     if not isinstance(raw_steps, list) or not raw_steps:
         problems.append("Add at least one step.")
@@ -213,6 +242,10 @@ def validate(conn: psycopg.Connection | None, customer_id: Any, definition: Any,
         st: dict = {"id": sid, "type": t}
         if s.get("label"):
             st["label"] = str(s["label"])[:120]
+        if s.get("only_on_failure"):
+            st["only_on_failure"] = True
+        if t in FAILURE_STEPS and t != "action" and s.get("on_failure") not in (None, ""):
+            st["on_failure"] = re.sub(r"[^a-z0-9_]", "", str(s["on_failure"]).lower())[:30] or "continue"
         if t == "condition":
             st["if"] = _conditions(s.get("if"), where, problems)
             if not st["if"]:
@@ -224,7 +257,7 @@ def validate(conn: psycopg.Connection | None, customer_id: Any, definition: Any,
                 app=app,
                 action=action,
                 inputs={k: str(v)[:2000] for k, v in (s.get("inputs") or {}).items()},
-                on_failure="continue" if s.get("on_failure") == "continue" else "stop",
+                on_failure=re.sub(r"[^a-z0-9_]", "", str(s.get("on_failure") or "stop").lower())[:30] or "stop",
             )
             try:
                 c = connectors.get(app)
@@ -305,25 +338,109 @@ def validate(conn: psycopg.Connection | None, customer_id: Any, definition: Any,
         steps.append(st)
     # Jumps go forward only, so a workflow can never loop.
     for i, st in enumerate(steps):
+        later = [x["id"] for x in steps[i + 1 :]]
         if st["type"] == "condition" and st["else"] not in ("end", "continue"):
-            later = [x["id"] for x in steps[i + 1 :]]
             if st["else"] not in later:
                 problems.append(f"Step {i + 1}: 'else' must name a later step, 'continue' or 'end'.")
-    if any(s["type"] in ("send_message", "collect", "assign", "add_note", "remind", "escalate") for s in steps) and (
-        ev and not _has_conversation(ev)
-    ):
+        of = st.get("on_failure")
+        if of and of not in ("stop", "continue") and of not in later:
+            problems.append(f"Step {i + 1}: 'on failure' must be stop, continue or a later step.")
+    if steps and steps[0].get("only_on_failure"):
+        problems.append("The first step can't be one that runs only after a failure.")
+    conv_types = ("send_message", "collect", "assign", "add_note", "remind", "escalate")
+    conv_steps = any(x["type"] in conv_types for x in steps)
+    if conv_steps and clean_trigger.get("type") in ("schedule", "manual"):
+        warnings.append(
+            "Some steps work on a conversation. A scheduled run has none, and a manual run has one only when it is "
+            "started for a conversation; otherwise they are skipped."
+        )
+    elif conv_steps and ev and not _has_conversation(ev):
         warnings.append("Some steps work on a conversation, but this trigger may not have one; they will be skipped.")
+    notify = []
+    for who in (d.get("notify_on_failure") or [])[:10]:
+        w = str(who).strip().lower()[:200]
+        if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", w):
+            problems.append(f"{who} is not an email address to notify.")
+        elif (
+            conn is not None
+            and not conn.execute(
+                "SELECT 1 FROM users WHERE lower(email) = %s AND (customer_id = %s OR role = 'admin')", (w, customer_id)
+            ).fetchone()
+        ):
+            (problems if strict else warnings).append(f"There is nobody called {w} to notify.")
+        else:
+            notify.append(w)
     clean = {
         "name": name,
         "description": str(d.get("description") or "")[:500],
         "trigger": clean_trigger,
         "steps": steps,
     }
+    if notify:
+        clean["notify_on_failure"] = notify
     return {"definition": clean, "problems": problems, "warnings": warnings}
 
 
 def _has_conversation(ev: str) -> bool:
     return ev.startswith(("conversation.", "message.", "note.", "booking.", "action.", "ai."))
+
+
+def trigger_type(definition: dict) -> str:
+    return (definition.get("trigger") or {}).get("type") or "event"
+
+
+def start_event_type(definition: dict) -> str:
+    """The event a run of this workflow starts from."""
+    t = trigger_type(definition)
+    if t == "schedule":
+        return "workflow.scheduled"
+    if t == "manual":
+        return "workflow.triggered"
+    return definition["trigger"]["event"]
+
+
+def _schedule(trig: dict, problems: list[str]) -> dict:
+    sc = trig.get("schedule") or {}
+    if not isinstance(sc, dict):
+        problems.append("The schedule must say how often the workflow runs.")
+        return {}
+    if sc.get("every_minutes") not in (None, ""):
+        try:
+            n = int(sc["every_minutes"])
+        except (TypeError, ValueError):
+            problems.append("Run every: a number of minutes.")
+            return {}
+        if not MIN_EVERY_MINUTES <= n <= 30 * 1440:
+            problems.append(f"Run every {MIN_EVERY_MINUTES} minutes to 30 days.")
+        return {"every_minutes": n}
+    at = str(sc.get("at") or "")
+    m = re.fullmatch(r"([01]?\d|2[0-3]):([0-5]\d)", at)
+    if not m:
+        problems.append("Say when the workflow runs: every so many minutes, or at a time like 09:00.")
+        return {}
+    days = [str(x).lower()[:3] for x in (sc.get("days") or DAYS)]
+    bad = [x for x in days if x not in DAYS]
+    if bad or not days:
+        problems.append("Days must be mon, tue, wed, thu, fri, sat or sun.")
+        days = [x for x in days if x in DAYS] or list(DAYS)
+    return {"at": f"{int(m.group(1)):02d}:{m.group(2)}", "days": [x for x in DAYS if x in days]}
+
+
+def next_fire(schedule: dict, tz: str, after: dt.datetime) -> dt.datetime:
+    """The next time a schedule fires, strictly after `after` (UTC)."""
+    from zoneinfo import ZoneInfo
+
+    if schedule.get("every_minutes"):
+        return after + dt.timedelta(minutes=int(schedule["every_minutes"]))
+    zone = ZoneInfo(tz or "UTC")
+    hh, mm = (int(x) for x in schedule["at"].split(":"))
+    local = after.astimezone(zone)
+    for add in range(0, 8):
+        day = local.date() + dt.timedelta(days=add)
+        cand = dt.datetime.combine(day, dt.time(hh, mm), tzinfo=zone)
+        if cand > local and DAYS[day.weekday()] in schedule["days"]:
+            return cand.astimezone(dt.UTC)
+    raise WorkflowError("The schedule never fires.", 422)
 
 
 def _setup_checks(conn, customer_id, app, action, c, spec, where, sink: list[str]) -> None:
@@ -373,10 +490,29 @@ def _fmt_cond(c: dict) -> str:
 def preview(definition: dict) -> list[str]:
     """The workflow in plain words, one line per step."""
     t = definition.get("trigger") or {}
-    lines = [
-        f"When {t.get('event', '?')}"
-        + (" and " + " and ".join(_fmt_cond(c) for c in t.get("conditions") or []) if t.get("conditions") else "")
-    ]
+    kind = t.get("type") or "event"
+    if kind == "schedule":
+        sc = t.get("schedule") or {}
+        if sc.get("every_minutes"):
+            first = f"Every {_fmt_s(int(sc['every_minutes']) * 60)}"
+        else:
+            days = sc.get("days") or list(DAYS)
+            which = (
+                "every day"
+                if len(days) == 7
+                else "every weekday"
+                if days == list(DAYS[:5])
+                else "on " + ", ".join(d.capitalize() for d in days)
+            )
+            first = f"At {sc.get('at', '?')} {which} (business time zone)"
+        lines = [first]
+    elif kind == "manual":
+        lines = ["When started by a person or through the API"]
+    else:
+        lines = [
+            f"When {t.get('event', '?')}"
+            + (" and " + " and ".join(_fmt_cond(c) for c in t.get("conditions") or []) if t.get("conditions") else "")
+        ]
     for i, s in enumerate(definition.get("steps") or [], 1):
         k = s["type"]
         if k == "condition":
@@ -420,7 +556,16 @@ def preview(definition: dict) -> list[str]:
             line = f'Ask "{s["question"][:80]}" and wait up to {_fmt_s(s["timeout_s"])} for the answer'
         else:
             line = k
+        if s.get("only_on_failure"):
+            line = "Only after a failure: " + line
+        of = s.get("on_failure")
+        if of and of not in ("stop", "continue"):
+            line += f"; if it fails, go to {of}"
+        elif of == "continue" and k == "action":
+            line += "; if it fails, carry on"
         lines.append(f"{i}. {line}")
+    if definition.get("notify_on_failure"):
+        lines.append("If a run fails, tell " + ", ".join(definition["notify_on_failure"]))
     return lines
 
 
@@ -524,6 +669,7 @@ def publish(
         wf["id"],
     )
     ensure_dispatcher(conn)
+    arm_schedule(conn, wf, ver["definition"])
     return {"workflow": wf, "version": ver, "warnings": v["warnings"]}
 
 
@@ -535,6 +681,7 @@ def pause(conn, customer_id: Any, workflow_id: Any, *, actor: str) -> dict:
         "UPDATE commai_workflows SET status = 'paused', updated_at = now() WHERE id = %s RETURNING *", (wf["id"],)
     ).fetchone()
     events.emit(conn, customer_id, "workflow.paused", {"workflow_id": str(wf["id"]), "by": actor}, wf["id"])
+    conn.execute("DELETE FROM commai_workflow_schedules WHERE workflow_id = %s", (wf["id"],))
     return wf
 
 
@@ -562,6 +709,7 @@ def resume(conn, customer_id: Any, workflow_id: Any, *, actor: str) -> dict:
         )
     events.emit(conn, customer_id, "workflow.resumed", {"workflow_id": str(wf["id"]), "by": actor}, wf["id"])
     ensure_dispatcher(conn)
+    arm_schedule(conn, wf, version(conn, wf, wf["live_version"])["definition"])
     return wf
 
 
@@ -698,7 +846,11 @@ def start_run(conn, wf: dict, ver: dict, event: dict) -> dict | None:
         if recent >= MAX_RUNS_PER_CONVERSATION_HOUR:
             log.warning("workflow %s: run limit reached for conversation %s", wf["id"], conv_id)
             return None
-    if not usage.allowed(conn, wf["customer_id"], "workflow_run"):
+    from .. import entitlements
+
+    if not entitlements.enabled(conn, wf["customer_id"], "automation"):
+        return None
+    if not usage.allowed(conn, wf["customer_id"], "workflow_run", workflow_id=wf["id"]):
         return None
     run = conn.execute(
         """INSERT INTO commai_workflow_runs (customer_id, workflow_id, version_id, version, event_id, conversation_id,
@@ -770,15 +922,34 @@ def _finish(conn, run: dict, status: str, error: str = "") -> None:
         },
         run["id"],
     )
-    if status == "failed" and run["conversation_id"]:
-        name = conn.execute("SELECT name FROM commai_workflows WHERE id = %s", (run["workflow_id"],)).fetchone()
+    if status != "failed":
+        return
+    name = conn.execute("SELECT name FROM commai_workflows WHERE id = %s", (run["workflow_id"],)).fetchone()
+    ver = conn.execute("SELECT definition FROM commai_workflow_versions WHERE id = %s", (run["version_id"],)).fetchone()
+    notify = list((ver["definition"] if ver else {}).get("notify_on_failure") or [])
+    if notify:
+        events.emit(
+            conn,
+            run["customer_id"],
+            "workflow.exception",
+            {
+                "workflow_id": str(run["workflow_id"]),
+                "run_id": str(run["id"]),
+                "error": error[:500],
+                "notify": notify,
+                "conversation_id": str(run["conversation_id"] or ""),
+            },
+            run["id"],
+        )
+    if run["conversation_id"]:
         try:
             inbox.add_note(
                 conn,
                 run["customer_id"],
                 run["conversation_id"],
                 author="CommAI workflows",
-                body=f'Workflow "{name["name"] if name else ""}" stopped: {error}',
+                body="".join(f"@{w} " for w in notify) + f'Workflow "{name["name"] if name else ""}" stopped: {error}',
+                mentions=notify,
             )
         except inbox.InboxError:
             pass
@@ -827,6 +998,23 @@ class _Stop(Exception):
         self.status = status
 
 
+class _Jump(Exception):
+    def __init__(self, target: str):
+        super().__init__(target)
+        self.target = target
+
+
+def _on_fail(step: dict, ctx: dict, reason: str, default: str = "stop") -> str:
+    """A step failed: carry on, stop the run, or take the exception path."""
+    how = step.get("on_failure") or default
+    if how == "continue":
+        return "next"
+    ctx["failure"] = {"step": step["id"], "error": reason[:500]}
+    if how == "stop":
+        raise _Stop("failed", reason)
+    return f"goto:{how}"
+
+
 def _resume(conn, run: dict, wf: dict, step: dict, i: int, ctx: dict, resume: dict) -> bool:
     """Handle a signal for the waiting step. True to move on to the next step."""
     kind = resume.get("kind")
@@ -859,9 +1047,10 @@ def _resume(conn, run: dict, wf: dict, step: dict, i: int, ctx: dict, resume: di
                 f"{step['app']}.{step['action']}: {why}",
                 {"action_run_id": wait.get("action_run_id")},
             )
-            if step.get("on_failure") == "continue":
-                return True
-            raise _Stop("failed", f"{step['app']}.{step['action']} {ar['status'] if ar else 'failed'}: {why}")
+            out = _on_fail(step, ctx, f"{step['app']}.{step['action']} {ar['status'] if ar else 'failed'}: {why}")
+            if out.startswith("goto:"):
+                raise _Jump(out[5:])
+            return True
         return False  # not finished yet: keep waiting
     if t == "wait":
         if kind == "event":
@@ -1012,14 +1201,10 @@ def _execute(conn, run: dict, wf: dict, step: dict, i: int, ctx: dict) -> str:
                 )
         except actions.ActionRefused as e:
             _log_step(conn, run, i, step, "failed", f"Refused: {e}", {"inputs": inputs})
-            if step.get("on_failure") == "continue":
-                return "next"
-            raise _Stop("failed", f"{step['app']}.{step['action']} refused: {e}") from None
+            return _on_fail(step, ctx, f"{step['app']}.{step['action']} refused: {e}")
         if ar["status"] == "rejected":
             _log_step(conn, run, i, step, "failed", f"Refused: {ar['error']}")
-            if step.get("on_failure") == "continue":
-                return "next"
-            raise _Stop("failed", f"{step['app']}.{step['action']} refused: {ar['error']}")
+            return _on_fail(step, ctx, f"{step['app']}.{step['action']} refused: {ar['error']}")
         if ar["status"] == "succeeded":
             ctx["steps"][step["id"]] = {"result": ar["result"]}
             _log_step(conn, run, i, step, "done", f"{step['app']}.{step['action']} succeeded")
@@ -1070,14 +1255,7 @@ def _execute(conn, run: dict, wf: dict, step: dict, i: int, ctx: dict) -> str:
             for r in rows:
                 try:
                     with conn.transaction():
-                        inbox.send(
-                            conn,
-                            run["customer_id"],
-                            r["id"],
-                            body,
-                            author_kind="workflow",
-                            author=f"Workflow: {wf['name']}",
-                        )
+                        msg = _send(conn, run, wf, r["id"], body)
                     sent += 1
                 except inbox.InboxError:
                     blocked += 1
@@ -1085,12 +1263,10 @@ def _execute(conn, run: dict, wf: dict, step: dict, i: int, ctx: dict) -> str:
             return "next"
         try:
             with conn.transaction():
-                msg = inbox.send(
-                    conn, run["customer_id"], conv_id, body, author_kind="workflow", author=f"Workflow: {wf['name']}"
-                )
+                msg = _send(conn, run, wf, conv_id, body)
         except inbox.InboxError as e:
             _log_step(conn, run, i, step, "failed", f"Not sent: {e}")
-            return "next"
+            return _on_fail(step, ctx, f"Message not sent: {e}", "continue")
         _log_step(conn, run, i, step, "done", "Message sent", {"message_id": str(msg["id"])})
         return "next"
     if t == "assign":
@@ -1126,7 +1302,7 @@ def _execute(conn, run: dict, wf: dict, step: dict, i: int, ctx: dict) -> str:
                     )
         except inbox.InboxError as e:
             _log_step(conn, run, i, step, "failed", f"Not assigned: {e}")
-            return "next"
+            return _on_fail(step, ctx, f"Not assigned: {e}", "continue")
         cur = conn.execute(
             "SELECT t.name AS team, u.email AS assignee FROM conversations c"
             " LEFT JOIN commai_teams t ON t.id = c.team_id"
@@ -1187,12 +1363,10 @@ def _execute(conn, run: dict, wf: dict, step: dict, i: int, ctx: dict) -> str:
         q = render(step["question"], ctx)
         try:
             with conn.transaction():
-                inbox.send(
-                    conn, run["customer_id"], conv_id, q, author_kind="workflow", author=f"Workflow: {wf['name']}"
-                )
+                _send(conn, run, wf, conv_id, q)
         except inbox.InboxError as e:
             _log_step(conn, run, i, step, "failed", f"Question not sent: {e}")
-            return "next"
+            return _on_fail(step, ctx, f"Question not sent: {e}", "continue")
         _log_step(conn, run, i, step, "waiting", "Asked; waiting for the answer")
         _wait(
             conn,
@@ -1204,6 +1378,24 @@ def _execute(conn, run: dict, wf: dict, step: dict, i: int, ctx: dict) -> str:
         )
         return "wait"
     raise _Stop("failed", f"Unknown step type {t}.")
+
+
+def _send(conn, run: dict, wf: dict, conv_id: Any, body: str) -> dict:
+    """A workflow's message, within the workflow's own budget (ADR 0033)."""
+    ch = conn.execute("SELECT channel FROM conversations WHERE id = %s", (conv_id,)).fetchone()
+    if ch and not usage.allowed(conn, run["customer_id"], f"message_out:{ch['channel']}", workflow_id=wf["id"]):
+        raise inbox.InboxError("This workflow has reached its monthly budget.", 422)
+    msg = inbox.send(conn, run["customer_id"], conv_id, body, author_kind="workflow", author=f"Workflow: {wf['name']}")
+    conn.execute(
+        "INSERT INTO commai_message_sources (message_id, customer_id, workflow_id, run_id) VALUES (%s, %s, %s, %s)"
+        " ON CONFLICT DO NOTHING",
+        (msg["id"], run["customer_id"], wf["id"], run["id"]),
+    )
+    return msg
+
+
+def _index(steps: list[dict], target: str) -> int:
+    return next(k for k, s in enumerate(steps) if s["id"] == target)
 
 
 def advance(conn, run_id: Any, resume: dict | None = None) -> None:
@@ -1226,9 +1418,12 @@ def advance(conn, run_id: Any, resume: dict | None = None) -> None:
     i = run["step_index"]
     try:
         if resume:
-            if not _resume(conn, run, wf, steps[i], i, ctx, resume):
-                return
-            i += 1
+            try:
+                if not _resume(conn, run, wf, steps[i], i, ctx, resume):
+                    return
+                i += 1
+            except _Jump as j:
+                i = _index(steps, j.target)
             conn.execute(
                 "UPDATE commai_workflow_runs SET status = 'running', wait = '{}', step_index = %s,"
                 " context = %s WHERE id = %s",
@@ -1242,12 +1437,15 @@ def advance(conn, run_id: Any, resume: dict | None = None) -> None:
                 conn.execute("UPDATE commai_workflow_runs SET context = %s WHERE id = %s", (Jsonb(ctx), run["id"]))
                 _finish(conn, run, "done")
                 return
-            out = _execute(conn, run, wf, steps[i], i, ctx)
+            if steps[i].get("only_on_failure") and not ctx.get("failure"):
+                _log_step(conn, run, i, steps[i], "skipped", "Runs only after a failure")
+                out = "next"
+            else:
+                out = _execute(conn, run, wf, steps[i], i, ctx)
             if out == "wait":
                 return
             if out.startswith("goto:"):
-                target = out[5:]
-                i = next(k for k, s in enumerate(steps) if s["id"] == target)
+                i = _index(steps, out[5:])
             else:
                 i += 1
             conn.execute(
@@ -1332,12 +1530,12 @@ def dry_run(
         if ev is None:
             raise WorkflowError("Event not found.", 404)
     elif sample:
-        ev = {"id": None, "type": d["trigger"]["event"], "data": {}}
+        ev = {"id": None, "type": start_event_type(d), "data": {}}
     else:
         ev = conn.execute(
             "SELECT * FROM commai_events WHERE customer_id = %s AND type = %s ORDER BY seq DESC LIMIT 1",
-            (customer_id, d["trigger"]["event"]),
-        ).fetchone() or {"id": None, "type": d["trigger"]["event"], "data": {}}
+            (customer_id, start_event_type(d)),
+        ).fetchone() or {"id": None, "type": start_event_type(d), "data": {}}
     ctx = build_context(conn, customer_id, ev)
     for k, v in (sample or {}).items():  # a sample fills or overrides what the event lacks
         if isinstance(v, dict):
@@ -1435,6 +1633,8 @@ def dry_run(
             and not (t == "send_message" and s.get("audience") == "matching")
         ):
             status, summary = "skipped", "Skipped: this event has no conversation"
+        if s.get("only_on_failure"):
+            status, summary = "skipped", "Runs only after a failure: " + summary
         lines.append({"step": s["id"], "type": t, "status": status, "summary": summary, **detail})
         i += 1
     for n, line in enumerate(lines):
@@ -1579,6 +1779,135 @@ def _dispatch_dead(job: dict, error: str) -> None:
     with db.tx() as conn:
         conn.execute("DELETE FROM jobs WHERE id = %s", (job["id"],))
         ensure_dispatcher(conn)
+
+
+# ---- schedules and manual starts (ADR 0033) ------------------------------------------
+
+
+def _tz(conn, customer_id: Any) -> str:
+    row = conn.execute("SELECT timezone FROM commai_settings WHERE customer_id = %s", (customer_id,)).fetchone()
+    return (row["timezone"] if row else "") or "UTC"
+
+
+def arm_schedule(conn, wf: dict, definition: dict) -> None:
+    """(Re)start the timer for a live scheduled workflow; remove it otherwise.
+    A new token makes any timer queued for the old schedule do nothing."""
+    if trigger_type(definition) != "schedule" or wf["status"] != "live":
+        conn.execute("DELETE FROM commai_workflow_schedules WHERE workflow_id = %s", (wf["id"],))
+        return
+    at = next_fire(definition["trigger"]["schedule"], _tz(conn, wf["customer_id"]), dt.datetime.now(dt.UTC))
+    token = secrets.token_hex(8)
+    conn.execute(
+        """INSERT INTO commai_workflow_schedules (workflow_id, customer_id, token, next_at) VALUES (%s, %s, %s, %s)
+           ON CONFLICT (workflow_id) DO UPDATE SET token = EXCLUDED.token, next_at = EXCLUDED.next_at,
+             updated_at = now()""",
+        (wf["id"], wf["customer_id"], token, at),
+    )
+    _queue_tick(conn, wf, token, at)
+
+
+def _queue_tick(conn, wf: dict, token: str, at: dt.datetime) -> None:
+    jobs.enqueue(
+        conn,
+        "workflow.schedule",
+        {"workflow_id": str(wf["id"]), "token": token, "at": at.isoformat()},
+        customer_id=wf["customer_id"],
+        dedupe_key=f"wf.sched:{wf['id']}:{token}:{at.isoformat()}",
+        delay_s=max(0.0, (at - dt.datetime.now(dt.UTC)).total_seconds()),
+    )
+
+
+def _live(conn, customer_id: Any, workflow_id: Any) -> tuple[dict, dict]:
+    wf = get(conn, customer_id, workflow_id, lock=True)
+    if wf["status"] != "live":
+        raise WorkflowError("Only a live workflow can be started.", 409)
+    v = version(conn, wf, wf["live_version"])
+    return wf, {"id": v["id"], "version": v["version"], "definition": v["definition"]}
+
+
+@jobs.handler("workflow.schedule")
+def _schedule_job(conn: psycopg.Connection, job: dict):
+    p = job["payload"]
+    row = conn.execute(
+        "SELECT * FROM commai_workflow_schedules WHERE workflow_id = %s FOR UPDATE", (p["workflow_id"],)
+    ).fetchone()
+    if row is None or row["token"] != p["token"] or row["next_at"].isoformat() != p["at"]:
+        return None  # paused, republished or already fired
+    wf = conn.execute("SELECT * FROM commai_workflows WHERE id = %s", (p["workflow_id"],)).fetchone()
+    if wf is None or wf["status"] != "live":
+        return None
+    v = version(conn, wf, wf["live_version"])
+    if trigger_type(v["definition"]) != "schedule":
+        conn.execute("DELETE FROM commai_workflow_schedules WHERE workflow_id = %s", (wf["id"],))
+        return None
+    ev_id = events.emit(
+        conn,
+        wf["customer_id"],
+        "workflow.scheduled",
+        {"workflow_id": str(wf["id"]), "scheduled_for": p["at"]},
+        wf["id"],
+    )
+    ev = conn.execute("SELECT * FROM commai_events WHERE id = %s", (ev_id,)).fetchone()
+    engine.start(conn, wf, {"id": v["id"], "version": v["version"], "definition": v["definition"]}, ev)
+    nxt = next_fire(v["definition"]["trigger"]["schedule"], _tz(conn, wf["customer_id"]), row["next_at"])
+    now = dt.datetime.now(dt.UTC)
+    while nxt <= now:  # the controller was down: fire once now, not once per missed slot
+        nxt = next_fire(v["definition"]["trigger"]["schedule"], _tz(conn, wf["customer_id"]), nxt)
+    conn.execute(
+        "UPDATE commai_workflow_schedules SET last_at = %s, next_at = %s, updated_at = now() WHERE workflow_id = %s",
+        (row["next_at"], nxt, wf["id"]),
+    )
+    _queue_tick(conn, wf, row["token"], nxt)
+    return None
+
+
+def trigger(
+    conn,
+    customer_id: Any,
+    workflow_id: Any,
+    *,
+    actor: str,
+    conversation_id: Any = None,
+    data: dict | None = None,
+) -> dict:
+    """Start a live workflow now, by a person or through the API. The start is
+    recorded as a workflow.triggered event; trigger conditions (which describe
+    events) are not checked, the steps' own conditions are."""
+    wf, ver = _live(conn, customer_id, workflow_id)
+    if conversation_id:
+        ok = conn.execute(
+            "SELECT 1 FROM conversations WHERE id::text = %s AND customer_id = %s", (str(conversation_id), customer_id)
+        ).fetchone()
+        if not ok:
+            raise WorkflowError("Conversation not found.", 404)
+    clean = {str(k)[:40]: (v if isinstance(v, int | float | bool) else str(v)[:500]) for k, v in (data or {}).items()}
+    if len(clean) > 20:
+        raise WorkflowError("Pass up to 20 values.", 422)
+    ev_id = events.emit(
+        conn,
+        customer_id,
+        "workflow.triggered",
+        {
+            "workflow_id": str(wf["id"]),
+            "by": actor,
+            "conversation_id": str(conversation_id or ""),
+            "input": clean,
+        },
+        wf["id"],
+    )
+    ev = conn.execute("SELECT * FROM commai_events WHERE id = %s", (ev_id,)).fetchone()
+    run = engine.start(conn, wf, ver, ev)
+    if run is None:
+        raise WorkflowError(
+            "The workflow did not start: a usage limit, its budget or the per-conversation run limit stopped it.", 409
+        )
+    return run
+
+
+def schedule_of(conn, workflow_id: Any) -> dict | None:
+    return conn.execute(
+        "SELECT next_at, last_at FROM commai_workflow_schedules WHERE workflow_id = %s", (workflow_id,)
+    ).fetchone()
 
 
 # ---- reading for the API -----------------------------------------------------------

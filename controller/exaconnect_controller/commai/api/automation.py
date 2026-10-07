@@ -387,6 +387,7 @@ def get_workflow(customer_id: str, workflow_id: str, user: UserDep) -> dict:
             "problems": v["problems"],
             "warnings": v["warnings"],
             "tools_needed": workflows.tools_needed(latest["definition"]),
+            "schedule": workflows.schedule_of(conn, wf["id"]),
         }
 
 
@@ -495,13 +496,32 @@ def test_workflow(customer_id: str, workflow_id: str, body: TestIn, user: UserDe
     return out
 
 
+class TriggerIn(BaseModel):
+    conversation_id: str | None = None
+    data: dict[str, Any] = Field(default_factory=dict)
+
+
+@router.post("/workflows/{workflow_id}/trigger", status_code=201)
+def trigger_workflow(customer_id: str, workflow_id: str, body: TriggerIn, user: UserDep) -> dict:
+    """Start a live workflow now (ADR 0033), optionally for one conversation.
+    `data` is available to its steps as {{event.data.input.<name>}}."""
+    access.check(user, customer_id, "commai:write")
+    with db.tx() as conn, _errors():
+        access.require_reply_seat(conn, user, customer_id)
+        run = workflows.trigger(
+            conn, customer_id, workflow_id, actor=user.actor, conversation_id=body.conversation_id, data=body.data
+        )
+        audit.record(conn, user.actor, "commai.workflow.trigger", workflow_id, customer_id, {"run": str(run["id"])})
+    return {"run_id": str(run["id"]), "status": run["status"], "workflow_id": workflow_id}
+
+
 @router.get("/workflows/{workflow_id}/sample-events")
 def sample_events(customer_id: str, workflow_id: str, user: UserDep) -> list[dict]:
     """Recent events that could start this workflow, to test against."""
     access.check(user, customer_id, "commai:read")
     with db.tx() as conn, _errors():
         wf = workflows.get(conn, customer_id, workflow_id)
-        ev = workflows.version(conn, wf)["definition"]["trigger"]["event"]
+        ev = workflows.start_event_type(workflows.version(conn, wf)["definition"])
         return conn.execute(
             "SELECT id, type, subject, at FROM commai_events WHERE customer_id = %s AND type = %s"
             " ORDER BY seq DESC LIMIT 10",
