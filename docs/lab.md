@@ -101,7 +101,8 @@ carrier (both sites).
 | `lab/faults/cut.sh <link>` | 100 % loss both ways; interfaces stay up |
 | `lab/faults/restore.sh [link]` | Back to profile (all links without an argument) |
 | `lab/faults/storm.sh [gap-s]` | Cut carrier A, then carrier B after `gap-s` (default 30) |
-| `SAT_PROFILE=geo lab/netem/apply-profiles.sh` | Satellite as GEO (600 ms) instead of LEO |
+| `SAT_PROFILE=geo lab/netem/apply-profiles.sh` | Satellite as GEO (600 ms) instead of LEO; saved for later scripts and `make demo-seed` |
+| `LOSS_BOTH_WAYS=1 lab/netem/apply-profiles.sh` | Split each link's loss across both directions (off by default) |
 
 Profiles are in `lab/netem/profiles.env` and are round-trip figures; see
 [ADR 0002](adr/0002-netem-profile-semantics.md).
