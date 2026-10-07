@@ -28,6 +28,8 @@ def _errors(e: golive.GoLiveError) -> HTTPException:
 
 @router.get("")
 def list_capabilities(user: UserDep, kind: str | None = None) -> list[dict]:
+    if user.role == "carrier":  # carrier accounts never reach CommAI (access.py)
+        raise HTTPException(403, "Not available for this account.")
     with db.tx() as conn:
         rows = conn.execute(
             """SELECT c.kind, c.key, c.name, c.status, c.details, c.updated_by, c.updated_at,
