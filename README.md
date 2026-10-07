@@ -1,6 +1,8 @@
 # ExaConnect
 
-ExaCarib's connectivity platform: a Go edge agent (WireGuard + FRR), a FastAPI
+The code behind ExaCarib Connect, ExaCarib's connectivity platform, and
+CommAI, its customer communications app ([docs/commai](docs/commai/README.md)).
+Connect is a Go edge agent (WireGuard + FRR), a FastAPI
 controller, AI SLA routing, customer traffic rules with priority queues and
 application detection, virtual circuits to clouds and between sites
 (ExaConnect Fabric, with a cloud router, elastic bandwidth and resilient
@@ -9,7 +11,8 @@ an encryption report, a partner directory with plain-English ordering, API
 keys with a Python SDK and a Terraform provider, per-site Storm Mode, carrier
 metering and settlement, AI insights (hurricane and disaster watch, bill
 forecast, carrier anomalies, "Ask your network") and an ExaCarib-branded
-portal for customers, carriers and admins.
+portal for customers, carriers and admins. Organisations hold Connect, CommAI
+or both as separate plans, with shared people, sign-in and billing.
 The build brief is [CLAUDE.md](CLAUDE.md); progress per milestone is in
 [docs/progress.md](docs/progress.md).
 
@@ -21,13 +24,13 @@ The build brief is [CLAUDE.md](CLAUDE.md); progress per milestone is in
 | `lab/` | containerlab topology, netem profiles, fault scripts, lab host setup |
 | `sdk/python/` | Python SDK (`exaconnect` package) for the REST API |
 | `terraform/` | Terraform provider for circuits, firewall rules, port forwards, internet breakout and traffic rules |
-| `deploy/` | Docker Compose for the controller, database and agent TLS proxy; `deploy/public` for the HTTPS portal |
+| `deploy/` | Docker Compose for the controller, database and agent gateway; `deploy/public` for the HTTPS portal; `deploy/agent` and `deploy/systemd` to install the agent at a site; `deploy/release` for releases with rollback |
 | `docs/` | Lab runbook, ADRs, progress notes |
 
 ## Develop (any OS)
 
 ```bash
-make test                               # Go tests, controller tests, portal type check
+make test                               # Go tests, controller tests, portal type check and unit tests
 make build                              # agent for linux/arm64 + amd64, portal bundle
 pip install -e 'controller[dev]'        # once, for the controller tests
 export EXA_TEST_DATABASE_URL=postgresql://user:pass@127.0.0.1/exatest   # optional: DB tests (the DB is wiped)
@@ -42,11 +45,12 @@ the host:
 
 ```bash
 sudo lab/host/setup-ubuntu.sh           # once: Docker, containerlab, kernel modules
-make lab-up                             # build node image, deploy, apply profiles, smoke test
+make lab-up                             # build node image, deploy, apply profiles, smoke test (SAT_PROFILE=geo for GEO)
 make controller-up                      # controller on 127.0.0.1:8000 (SSH tunnel); generates .env secrets
 make demo-seed                          # seed sites, enrol and start the agents
 make lab-routing                        # tunnels, BGP, BFD, site-to-site ping via the PoP
 lab/faults/brownout.sh carrier-a 3 180  # faults: brownout, latency-creep, cut, restore, storm
+make traffic                            # voice, business and bulk traffic between the sites (make traffic-stop)
 make demo                               # the acceptance demo, all seven steps (DEMO_PAUSE=1 to step through)
 make lab-down
 ```
@@ -78,9 +82,39 @@ network" answers a question from the decision log when an AI key is set.
 
 `make public-up` serves the portal at `EXA_PUBLIC_HOST` (connect.exacarib.com,
 in `deploy/public/site.env`) over HTTPS with a Let's Encrypt certificate.
-Only ports 80 and 443 are opened; the cloud firewall must allow them too.
-The controller API and database stay private, and agent endpoints are not
-served publicly.
+Ports 80 and 443 serve the portal; port 8443 is the agent gateway, mutual TLS
+only, so sites can reach the controller (ADR 0024). The controller API and
+database stay private. The OpenAPI schema is at `/api/v1/openapi.json` and the
+API reference at `/api/v1/docs`.
+
+## Real sites
+
+Admin, Enrolment tokens shows a one-line install command for a site's Linux
+box; `deploy/agent/install.sh` installs the agent with a systemd unit and it
+enrols through the gateway. Agents renew their certificates on their own;
+Admin, Agents can revoke one. Step by step: [docs/real-site.md](docs/real-site.md).
+
+## Releases
+
+`make release` deploys the current commit: it tags the running images, backs
+up the database when `/etc/exaconnect/backup.env` is set, then checks the
+controller, sign-in, the portal, the gateway and that agents report again,
+and rolls back on its own if anything fails (ADR 0025). `make rollback
+TO=<commit>` goes back by hand; `make releases` and Admin, Releases list
+them. The lab runner deploys this way on every new commit
+([docs/lab-runner.md](docs/lab-runner.md)).
+
+## Accounts, plans and billing
+
+People belong to one or more organisations as owner, admin, member or viewer
+(read only); they are invited from Account, People and switch organisation
+from the header (ADR 0023). Sign-in supports passwords with reset links,
+two-step codes, passkeys, Google and Microsoft, and company single sign-on
+with SCIM. Connect and CommAI are separate plans: an organisation sees an app
+only while it holds that plan. Billing works out monthly charges per plan,
+draft and issued invoices, SLA credits and partner margin (ADR 0022); online
+payment and accounting exports stay off or simulated until ExaCarib adds those
+accounts. API keys can be limited, for example to read-only Connect access.
 
 ## Configuration
 
@@ -90,4 +124,6 @@ secret and admin password. Optional: `EXA_LLM_API_KEY` turns on "Ask your
 network" (DeepInfra by default, model `deepseek-ai/DeepSeek-V4-Flash`), and
 `EXA_NHC_URL` points the hurricane watch elsewhere or, set empty, turns it off;
 `EXA_USGS_URL`, `EXA_GDACS_URL` and `EXA_TSUNAMI_URLS` do the same for the
-disaster watch (ADR 0008).
+disaster watch (ADR 0008). `EXA_SMTP_HOST` and its login turn on outgoing
+email (password resets, CommAI email); without it, nothing is sent. Payment
+and accounting settings are listed, off, in `.env.example`.
