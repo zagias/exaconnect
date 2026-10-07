@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 from ... import audit, db
 from ...api.deps import UserDep, current_user
 from .. import access, inbox
-from .common import errors, page
+from .common import errors, page, page_after
 
 router = APIRouter(prefix="/customers/{customer_id}", tags=["commai: inbox"])
 
@@ -241,11 +241,35 @@ def get_conversation(customer_id: str, conversation_id: str, user: UserDep) -> d
 
 
 @router.get("/conversations/{conversation_id}/messages")
-def list_messages(customer_id: str, conversation_id: str, user: UserDep, after: str | None = None) -> list[dict]:
+def list_messages(
+    customer_id: str,
+    conversation_id: str,
+    user: UserDep,
+    after: str | None = None,
+    cursor: str | None = Query(None, description="Page through: '' for the first page, then `next`"),
+    limit: int = Query(100, ge=1, le=500),
+) -> list[dict] | dict:
+    """Oldest first. Without `cursor`, every message (after `after`); with it, {"items", "next"}."""
     access.check(user, customer_id, "commai:read")
     with db.tx() as conn, errors():
         inbox.get(conn, customer_id, conversation_id)
-        return inbox.messages(conn, customer_id, conversation_id, after)
+        if cursor is None:
+            return inbox.messages(conn, customer_id, conversation_id, after)
+        at, _, mid = cursor.partition("|")
+        try:
+            at_ts = dt.datetime.fromisoformat(at) if cursor else None
+        except ValueError as e:
+            raise HTTPException(400, "That cursor is not valid.") from e
+        rows = conn.execute(
+            """SELECT * FROM messages WHERE customer_id = %(c)s AND conversation_id = %(v)s
+               AND (%(after)s::timestamptz IS NULL OR created_at > %(after)s::timestamptz)
+               AND (%(at)s::timestamptz IS NULL OR (created_at, id) > (%(at)s::timestamptz, %(id)s::uuid))
+               ORDER BY created_at, id LIMIT %(n)s""",
+            {"c": customer_id, "v": conversation_id, "after": after, "at": at_ts, "id": mid or None, "n": limit + 1},
+        ).fetchall()
+    for r in rows:
+        r["cursor"] = f"{r['created_at'].isoformat()}|{r['id']}"
+    return page(rows, limit, "cursor")
 
 
 @router.get("/conversations/{conversation_id}/export")
@@ -303,15 +327,22 @@ class NoteIn(BaseModel):
 
 
 @router.get("/conversations/{conversation_id}/notes")
-def list_notes(customer_id: str, conversation_id: str, user: UserDep) -> list[dict]:
+def list_notes(
+    customer_id: str,
+    conversation_id: str,
+    user: UserDep,
+    cursor: str | None = Query(None, description="'' for the first page, then `next`"),
+    limit: int = Query(100, ge=1, le=500),
+) -> list[dict] | dict:
     """Private notes. Never reachable with a customer-facing API key."""
     access.check(user, customer_id, "commai:notes")
     with db.tx() as conn, errors():
         inbox.get(conn, customer_id, conversation_id)
-        return conn.execute(
-            "SELECT * FROM commai_notes WHERE conversation_id = %s AND customer_id = %s ORDER BY created_at",
+        rows = conn.execute(
+            "SELECT * FROM commai_notes WHERE conversation_id = %s AND customer_id = %s ORDER BY created_at, id",
             (conversation_id, customer_id),
         ).fetchall()
+    return rows if cursor is None else page_after(rows, cursor, limit)
 
 
 @router.post("/conversations/{conversation_id}/notes", status_code=201)
@@ -446,15 +477,19 @@ class TeamIn(BaseModel):
 
 
 @router.get("/teams")
-def list_teams(customer_id: str, user: UserDep) -> list[dict]:
+def list_teams(
+    customer_id: str, user: UserDep, cursor: str | None = None, limit: int = Query(100, ge=1, le=500)
+) -> list[dict] | dict:
+    """Without `cursor`, every team; with it ('' for the first page), {"items", "next"}."""
     access.check(user, customer_id, "commai:read")
     with db.tx() as conn:
-        return conn.execute(
+        rows = conn.execute(
             """SELECT t.*, COALESCE(array_agg(tm.user_id) FILTER (WHERE tm.user_id IS NOT NULL), '{}') AS members
                FROM commai_teams t LEFT JOIN commai_team_members tm ON tm.team_id = t.id
                WHERE t.customer_id = %s GROUP BY t.id ORDER BY t.name""",
             (customer_id,),
         ).fetchall()
+    return rows if cursor is None else page_after(rows, cursor, limit)
 
 
 def _set_members(conn, customer_id: str, team_id: Any, members: list[str]) -> None:
@@ -520,11 +555,13 @@ def delete_team(customer_id: str, team_id: str, user: UserDep) -> None:
 
 
 @router.get("/members")
-def list_members(customer_id: str, user: UserDep) -> list[dict]:
-    """Everyone in the business, with their seat and availability."""
+def list_members(
+    customer_id: str, user: UserDep, cursor: str | None = None, limit: int = Query(100, ge=1, le=500)
+) -> list[dict] | dict:
+    """Everyone in the business, with their seat and availability. Page with `cursor` ('' first)."""
     access.check(user, customer_id, "commai:read")
     with db.tx() as conn:
-        return conn.execute(
+        rows = conn.execute(
             """SELECT u.id, u.email, COALESCE(m.seat, 'agent') AS seat, COALESCE(m.skills, '{}') AS skills,
                       COALESCE(m.languages, '{en}') AS languages, COALESCE(m.available, true) AS available,
                       (SELECT count(*) FROM conversations c WHERE c.assignee_id = u.id
@@ -533,6 +570,7 @@ def list_members(customer_id: str, user: UserDep) -> list[dict]:
                WHERE u.customer_id = %(c)s ORDER BY u.email""",
             {"c": customer_id},
         ).fetchall()
+    return rows if cursor is None else page_after(rows, cursor, limit)
 
 
 class MemberIn(BaseModel):
@@ -594,12 +632,15 @@ def _check_match(m: dict) -> dict:
 
 
 @router.get("/routing-rules")
-def list_rules(customer_id: str, user: UserDep) -> list[dict]:
+def list_rules(
+    customer_id: str, user: UserDep, cursor: str | None = None, limit: int = Query(100, ge=1, le=500)
+) -> list[dict] | dict:
     access.check(user, customer_id, "commai:read")
     with db.tx() as conn:
-        return conn.execute(
+        rows = conn.execute(
             "SELECT * FROM commai_routing_rules WHERE customer_id = %s ORDER BY position, created_at", (customer_id,)
         ).fetchall()
+    return rows if cursor is None else page_after(rows, cursor, limit)
 
 
 @router.post("/routing-rules", status_code=201)
