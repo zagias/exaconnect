@@ -26,6 +26,9 @@ export const CHANNEL_LABEL: Record<string, string> = {
   whatsapp: "WhatsApp",
   sms: "SMS",
   email: "Email",
+  messenger: "Messenger",
+  instagram: "Instagram",
+  telegram: "Telegram",
   voice: "Call",
   api: "API",
 };
