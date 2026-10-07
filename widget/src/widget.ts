@@ -26,6 +26,20 @@ interface WidgetConfig {
   callbacks: boolean;
   attachments: { enabled: boolean; max_bytes: number; types: string[] };
   ask_contact: "before" | "after_first" | "never";
+  /** Visitors can talk to the AI assistant from the widget (ADR 0032). */
+  ai_calls?: boolean;
+}
+
+/** The browser's speech recogniser, where there is one (Chrome, Edge, Safari). */
+interface Recogniser {
+  lang: string;
+  interimResults: boolean;
+  continuous: boolean;
+  onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
+  onend: (() => void) | null;
+  onerror: (() => void) | null;
+  start(): void;
+  stop(): void;
 }
 
 interface Attachment {
@@ -105,6 +119,18 @@ interface ExaCaribChatApi {
     poweredBy: "ExaCarib CommAI",
     tooBig: "That file is too large.",
     wrongType: "You can send images, PDFs and plain text.",
+    teamTyping: "Our team is writing a reply…",
+    talk: "Talk to our assistant",
+    callTitle: "Talking to our assistant",
+    callNote: "Speak after the tone, or type below. Our assistant can pass you to our team.",
+    callStarting: "Connecting…",
+    callListen: "Speak",
+    callListening: "Listening… select to stop",
+    callType: "Or type what you want to say",
+    callSay: "Say",
+    callEnd: "End call",
+    callEnded: "Call ended. You can carry on in the chat.",
+    callHanded: "Our team will take it from here. We'll be in touch.",
   };
 
   const ICON_CHAT =
@@ -169,6 +195,11 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
 .foot { text-align: center; font-size: 11px; color: var(--muted); padding: 4px 0 8px; background: #fff; }
 .link { background: none; border: 0; color: var(--exa); cursor: pointer; font: inherit; font-size: 13px; padding: 0; text-decoration: underline; }
 .conv { text-align: left; }
+.typing { margin: 0; padding: 0 14px; min-height: 0; font-size: 12px; color: var(--muted); background: var(--page); }
+.typing:not(:empty) { padding: 2px 14px 6px; }
+.log.call { flex: 0 1 auto; min-height: 160px; border: 1px solid var(--line); border-radius: 8px; }
+.msg.note { color: var(--muted); }
+.row input { border: 1px solid var(--line); border-radius: 5px; padding: 8px 10px; font: inherit; color: var(--ink); min-width: 0; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 `;
 
@@ -218,9 +249,10 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
     callbacks: true,
     attachments: { enabled: true, max_bytes: 2 * 1024 * 1024, types: ["application/pdf", "image/gif", "image/jpeg", "image/png", "image/webp", "text/plain"] },
     ask_contact: "after_first",
+    ai_calls: false,
   };
 
-  type View = "chat" | "offline" | "callback" | "done" | "history";
+  type View = "chat" | "offline" | "callback" | "done" | "history" | "call";
 
   class Chat {
     private base: string;
@@ -243,6 +275,11 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
     private conversations: { id: string; state: string; created_at: string }[] = [];
     private doneText = "";
     private showContact = false;
+    private typingNote: HTMLParagraphElement | null = null;
+    private lastTypingPing = 0;
+    private callId: string | null = null;
+    private callLog: HTMLDivElement | null = null;
+    private recogniser: Recogniser | null = null;
 
     constructor(key: string, private userToken: string, private previewMode = false) {
       this.base = `${apiOrigin}/api/v1/commai/widget/${encodeURIComponent(key)}`;
@@ -425,6 +462,7 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
       else if (this.view === "callback") p.append(this.callbackForm());
       else if (this.view === "done") p.append(el("div", { class: "form" }, el("p", { role: "status" }, this.doneText), this.backButton()));
       else if (this.view === "history") p.append(this.historyView());
+      else if (this.view === "call") p.append(this.callView());
       else this.renderChat();
       p.append(el("div", { class: "foot" }, COPY.poweredBy));
     }
@@ -446,9 +484,13 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
       if (this.showContact) this.log.append(this.contactCard());
       const links = el("div", { class: "row" });
       if (this.cfg.callbacks) links.append(this.linkTo(COPY.callback, "callback"));
+      if (this.cfg.ai_calls && !this.previewMode) links.append(this.linkTo(COPY.talk, "call"));
       if (this.conversations.length > 1) links.append(this.linkTo(COPY.history, "history"));
       if (links.childNodes.length) this.log.append(links);
       this.panel.append(this.log);
+      // "Our team is writing a reply…", announced politely (ADR 0032).
+      this.typingNote = el("p", { class: "typing", role: "status", "aria-live": "polite" });
+      this.panel.append(this.typingNote);
 
       const form = el("form", { class: "compose" });
       this.input = el("textarea", { rows: "1", "aria-label": COPY.placeholder, placeholder: COPY.placeholder, maxlength: "4000" });
@@ -458,11 +500,13 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
           form.requestSubmit();
         }
       });
+      this.input.addEventListener("input", () => this.typing(this.input.value.trim() !== ""));
       form.addEventListener("submit", (e) => {
         e.preventDefault();
         const text = this.input.value.trim();
         if (!text) return;
         this.input.value = "";
+        this.typing(false);
         this.send(text, []);
       });
       if (this.cfg.attachments.enabled) {
@@ -562,6 +606,144 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
       }
     }
 
+    /** Tell the team the visitor is typing (at most every 3 seconds; it lapses on its own). */
+    private typing(on: boolean) {
+      if (!this.stored.conv || !this.session || this.previewMode) return;
+      const now = Date.now();
+      if (on && now - this.lastTypingPing < 3000) return;
+      this.lastTypingPing = on ? now : 0;
+      this.call<{ team_typing: boolean }>("POST", "/typing", { conversation_id: this.stored.conv, typing: on })
+        .then((out) => this.showTeamTyping(out.team_typing))
+        .catch(() => undefined);
+    }
+
+    private showTeamTyping(on: boolean) {
+      if (this.typingNote) this.typingNote.textContent = on ? COPY.teamTyping : "";
+    }
+
+    // ---- a call with the AI assistant (speech in the browser, text to us) ----------------------
+
+    private callView() {
+      const box = el("div", { class: "form" });
+      box.append(el("h3", {}, COPY.callTitle), el("p", { class: "note" }, COPY.callNote));
+      this.callLog = el("div", { class: "log call", role: "log", "aria-live": "polite", "aria-label": COPY.callTitle });
+      box.append(this.callLog);
+      const W = window as unknown as { SpeechRecognition?: new () => Recogniser; webkitSpeechRecognition?: new () => Recogniser };
+      const Rec = W.SpeechRecognition || W.webkitSpeechRecognition;
+      const row = el("div", { class: "row" });
+      if (Rec) {
+        const mic = el("button", { class: "btn", type: "button", "aria-pressed": "false" }, COPY.callListen);
+        mic.addEventListener("click", () => {
+          if (this.recogniser) {
+            this.recogniser.stop();
+            return;
+          }
+          const r = new Rec();
+          r.lang = document.documentElement.lang || navigator.language || "en";
+          r.interimResults = false;
+          r.continuous = false;
+          r.onresult = (e) => {
+            const said = Array.from(e.results).map((x) => x[0].transcript).join(" ").trim();
+            if (said) this.callSay(said);
+          };
+          r.onend = r.onerror = () => {
+            this.recogniser = null;
+            mic.textContent = COPY.callListen;
+            mic.setAttribute("aria-pressed", "false");
+          };
+          this.recogniser = r;
+          mic.textContent = COPY.callListening;
+          mic.setAttribute("aria-pressed", "true");
+          r.start();
+        });
+        row.append(mic);
+      }
+      const end = el("button", { class: "btn secondary", type: "button" }, COPY.callEnd);
+      end.addEventListener("click", () => this.endCall(COPY.callEnded));
+      row.append(end);
+      box.append(row);
+      const form = el("form", { class: "row" });
+      const input = el("input", { type: "text", "aria-label": COPY.callType, placeholder: COPY.callType, maxlength: "2000", style: "flex: 1" });
+      form.append(input, el("button", { class: "btn secondary", type: "submit" }, COPY.callSay));
+      form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const text = input.value.trim();
+        input.value = "";
+        if (text) this.callSay(text);
+      });
+      box.append(form);
+      if (!this.callId) this.startCall();
+      return box;
+    }
+
+    private callLine(who: string, text: string, cls = "them") {
+      if (!this.callLog) return;
+      this.callLog.append(el("div", { class: `msg ${cls}` }, el("span", { class: "who" }, who), text));
+      this.callLog.scrollTop = this.callLog.scrollHeight;
+    }
+
+    private speak(text: string) {
+      try {
+        if (!("speechSynthesis" in window) || !text) return;
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = document.documentElement.lang || navigator.language || "en";
+        window.speechSynthesis.speak(u);
+      } catch {
+        /* the words are on screen anyway */
+      }
+    }
+
+    private async startCall() {
+      this.callLine(COPY.assistant, COPY.callStarting, "them note");
+      try {
+        await this.ensureSession();
+        const out = await this.call<{ conversation_id: string; greeting: string }>("POST", "/calls", {});
+        this.callId = out.conversation_id;
+        this.callLog?.lastElementChild?.remove();
+        this.callLine(COPY.assistant, out.greeting);
+        this.speak(out.greeting);
+      } catch (e) {
+        this.callId = null;
+        this.flashIn(this.callLog, (e as Error).message);
+      }
+    }
+
+    private async callSay(text: string) {
+      if (!this.callId) return;
+      this.callLine(COPY.you, text, "you");
+      try {
+        const out = await this.call<{ reply: string; handed_over: boolean }>("POST", `/calls/${encodeURIComponent(this.callId)}/turns`, { text });
+        if (out.reply) {
+          this.callLine(COPY.assistant, out.reply);
+          this.speak(out.reply);
+        }
+        if (out.handed_over) await this.endCall(COPY.callHanded);
+      } catch (e) {
+        this.flashIn(this.callLog, (e as Error).message);
+      }
+    }
+
+    private async endCall(text: string) {
+      const id = this.callId;
+      this.callId = null;
+      if (this.recogniser) this.recogniser.stop();
+      try {
+        if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+      } catch {
+        /* nothing to stop */
+      }
+      if (id) await this.call("POST", `/calls/${encodeURIComponent(id)}/end`, {}).catch(() => undefined);
+      this.doneText = text;
+      this.view = "done";
+      this.render();
+    }
+
+    private flashIn(box: HTMLElement | null, text: string) {
+      if (!box) return;
+      box.append(el("p", { class: "err", role: "alert" }, text));
+      box.scrollTop = box.scrollHeight;
+    }
+
     private flash(text: string) {
       if (!this.log) return;
       const p = el("p", { class: "err", role: "alert" }, text);
@@ -579,6 +761,11 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
         const last = [...this.messages].reverse().find((m) => !m.pending && m.at);
         const q = `?conversation_id=${encodeURIComponent(this.stored.conv)}${last ? `&after=${encodeURIComponent(last.at)}` : ""}`;
         const out = await this.call<{ items: ChatMessage[] }>("GET", `/messages${q}`);
+        if (this.isOpen && this.view === "chat") {
+          this.call<{ team_typing: boolean }>("GET", `/typing?conversation_id=${encodeURIComponent(this.stored.conv)}`)
+            .then((t) => this.showTeamTyping(t.team_typing))
+            .catch(() => undefined);
+        }
         const known = new Set(this.messages.map((m) => m.id));
         const fresh = out.items.filter((m) => !known.has(m.id));
         if (fresh.length) {
