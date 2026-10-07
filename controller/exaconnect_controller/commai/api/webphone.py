@@ -41,7 +41,10 @@ def webphone(customer_id: str, user: UserDep, response: Response, sign_in: bool 
         try:
             me = selfservice.mine(conn, customer_id, user.id)
         except VoiceError as e:
-            raise HTTPException(e.code, str(e)) from e
+            if sign_in or e.code != 404:
+                raise HTTPException(e.code, str(e)) from e
+            # No extension is a normal state for the screen, not an error.
+            return {"enabled": False, "extension": None, "reason": str(e)}
         url = verto_url()
         if not url:
             return {

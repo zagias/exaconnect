@@ -376,7 +376,13 @@ def bulk_change(customer_id: str, body: BulkIn, user: UserDep, request: Request)
 def get_me(customer_id: str, user: UserDep) -> dict:
     access.check(user, customer_id, "commai:read")
     with db.tx() as conn, errors():
-        me = selfservice.mine(conn, customer_id, user.id)
+        try:
+            me = selfservice.mine(conn, customer_id, user.id)
+        except VoiceError as e:
+            if e.code != 404:
+                raise
+            # No extension yet is a normal state for the screen: say so without an error.
+            return {"extension": None, "message": str(e)}
         me["recording_access"] = policy(conn, customer_id)["recording_access"]
         return clean(me)
 

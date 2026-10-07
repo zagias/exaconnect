@@ -158,11 +158,16 @@ def _my_voice_user(conn, cid, user) -> dict:
 
 
 @router.get(f"{C}/me/emergency-notice")
-def my_notice(customer_id: str, user: UserDep) -> dict:
-    """The emergency calling notice every person must read for their island."""
+def my_notice(customer_id: str, user: UserDep) -> dict | None:
+    """The emergency calling notice every person must read for their island; null
+    for a person without a phone extension, who has nothing to read."""
     access.check(user, customer_id, "commai:read")
     with db.tx() as conn, errors():
-        return emergency.user_notice(conn, customer_id, _my_voice_user(conn, customer_id, user))
+        vu = conn.execute(
+            "SELECT * FROM voice_users WHERE customer_id = %s AND user_id = %s AND status = 'active'",
+            (customer_id, user.id),
+        ).fetchone()
+        return emergency.user_notice(conn, customer_id, vu) if vu else None
 
 
 class AckIn(BaseModel):

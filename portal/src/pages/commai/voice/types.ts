@@ -140,7 +140,9 @@ export interface Scheduled {
 export interface Me {
   id: string;
   name: string;
-  extension: string;
+  /** null: the person has no phone extension yet (message says so). */
+  extension: string | null;
+  message?: string;
   mobile: string;
   email: string;
   forward_to: string;
