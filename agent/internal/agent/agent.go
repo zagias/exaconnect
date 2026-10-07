@@ -39,6 +39,7 @@ type Config struct {
 	ProbeTimeout      time.Duration // default 2 s
 	ResolveInterval   time.Duration // re-resolve match domains, retry failed QoS; default 5 min
 	MaxBuffered       int           // telemetry windows kept while the controller is away
+	RenewCheck        time.Duration // how often to check the client certificate's age, default 1 h
 }
 
 // MaxFlows is how many flow aggregates one conntrack read reports.
@@ -76,6 +77,9 @@ func (c *Config) defaults() {
 	}
 	if c.MaxBuffered == 0 {
 		c.MaxBuffered = 2000
+	}
+	if c.RenewCheck == 0 {
+		c.RenewCheck = time.Hour
 	}
 }
 
@@ -143,6 +147,7 @@ type Agent struct {
 	flows       flows.Tracker
 	flowErr     string
 	inetErr     string
+	renewErr    string
 	// writeProc writes a /proc/sys file; nil uses os.WriteFile (tests stub it).
 	writeProc func(path string, data []byte) error
 }
@@ -198,6 +203,8 @@ func (a *Agent) Run(ctx context.Context) error {
 	bfd := time.NewTicker(4 * a.Cfg.BFDInterval) // backstop; the watcher wakes the loop sooner
 	str := time.NewTicker(a.Cfg.SteerInterval)
 	qos := time.NewTicker(a.Cfg.ResolveInterval)
+	renew := time.NewTicker(a.Cfg.RenewCheck)
+	defer renew.Stop()
 	defer str.Stop()
 	defer qos.Stop()
 	defer poll.Stop()
@@ -207,6 +214,7 @@ func (a *Agent) Run(ctx context.Context) error {
 
 	a.poll(ctx)
 	a.pollSteering(ctx)
+	a.renewIfDue(ctx)
 	for {
 		// A BFD change goes before anything else that is ready.
 		select {
@@ -245,7 +253,45 @@ func (a *Agent) Run(ctx context.Context) error {
 			if a.Steerer != nil && a.Steerer.RetryQoS() {
 				a.steer(ctx, "qos")
 			}
+		case <-renew.C:
+			a.renewIfDue(ctx)
 		}
+	}
+}
+
+// renewIfDue renews the mTLS client certificate once it is two thirds
+// through its lifetime. A failure is retried at the next check; the current
+// certificate keeps working meanwhile.
+func (a *Agent) renewIfDue(ctx context.Context) {
+	due, at, err := a.Client.RenewDue(time.Now())
+	if err != nil {
+		a.renewFailed(err)
+		return
+	}
+	if !due {
+		return
+	}
+	a.Log.Info("client certificate due for renewal", "since", at.Format(time.RFC3339))
+	cctx, done := a.controllerCtx(ctx)
+	cert, err := a.Client.Renew(cctx)
+	done()
+	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return
+		}
+		a.renewFailed(err)
+		return
+	}
+	a.renewErr = ""
+	a.Log.Info("client certificate renewed", "serial", cert.SerialNumber.Text(16), "not_after", cert.NotAfter.Format(time.RFC3339))
+	a.event("cert_installed", map[string]string{"not_after": cert.NotAfter.UTC().Format(time.RFC3339)})
+}
+
+func (a *Agent) renewFailed(err error) {
+	if msg := err.Error(); msg != a.renewErr {
+		a.renewErr = msg
+		a.Log.Warn("client certificate renewal failed; will retry", "err", err)
+		a.event("cert_renew_failed", map[string]string{"error": msg})
 	}
 }
 
