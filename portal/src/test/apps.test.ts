@@ -5,7 +5,7 @@ import { accountGroups, destinations, navGroups } from "../nav";
 
 const person = (extra: Partial<User>): User => ({ email: "p@example.com", role: "customer", customer_id: "c", ...extra });
 
-describe("apps (ADR 0040)", () => {
+describe("apps (ADR 0041)", () => {
   it("puts each screen in one app or the shared account pages", () => {
     expect(areaFor("/")).toBe("connect");
     expect(areaFor("/sites/1")).toBe("connect");

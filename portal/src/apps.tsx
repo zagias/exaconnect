@@ -1,6 +1,6 @@
 import type { Product, User } from "./api";
 
-/* One portal, two apps (ADR 0040). Each app is sold on its own plan; an
+/* One portal, two apps (ADR 0041). Each app is sold on its own plan; an
    organisation sees an app only while it holds that plan, and its owners and
    admins choose which people may open it. The server enforces all of this; the
    portal only follows it. Internal names stay "commai"; people see "Jibsy". */

@@ -272,7 +272,7 @@ export interface User {
   memberships?: Membership[];
   /** The plans the current organisation holds; null: not limited by plan. */
   products?: Product[] | null;
-  /** The apps this person may open there (ADR 0040); null: not limited. */
+  /** The apps this person may open there (ADR 0041); null: not limited. */
   apps?: Product[] | null;
 }
 
@@ -297,7 +297,7 @@ export interface OrgMember {
   disabled: boolean;
   primary_org: boolean;
   you: boolean;
-  /** The apps on the plan this person may open (ADR 0040). */
+  /** The apps on the plan this person may open (ADR 0041). */
   apps: Product[];
 }
 
@@ -310,7 +310,7 @@ export interface OrgMembers {
   members: OrgMember[];
 }
 
-/** An app on, asked for, or off the organisation's plan (ADR 0040). */
+/** An app on, asked for, or off the organisation's plan (ADR 0041). */
 export interface OrgApp {
   id: Product;
   name: string;

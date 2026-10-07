@@ -59,7 +59,7 @@ def list_members(customer_id: str, user: UserDep) -> dict:
         "organisation": org,
         "your_role": user.org_role if user.role == "customer" else None,
         "can_manage": manage,
-        # The apps on the plan, and which of them each person may open (ADR 0040).
+        # The apps on the plan, and which of them each person may open (ADR 0041).
         "products": list(held),
         "members": [
             {**p, "apps": list(apps_of(held, p["apps"])), "you": str(p["user_id"]) == str(user.id)} for p in people
@@ -151,7 +151,7 @@ def transfer_ownership(customer_id: str, body: TransferIn, user: UserDep) -> dic
     return {"owner": email}
 
 
-# ---- which apps each person may open (ADR 0040) ---------------------------------------
+# ---- which apps each person may open (ADR 0041) ---------------------------------------
 
 
 class AppsIn(BaseModel):

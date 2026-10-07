@@ -158,7 +158,7 @@ export default function People() {
   };
 
   const people = members.data?.members ?? [];
-  // Which apps each person may open (ADR 0040); worth a column only with two apps on the plan.
+  // Which apps each person may open (ADR 0041); worth a column only with two apps on the plan.
   const plan = APP_ORDER.filter((a) => members.data?.products.includes(a));
   const appsColumn = plan.length > 1;
   const canSetApps = (m: OrgMember) => manage && !m.you && (m.role !== "owner" || owner);

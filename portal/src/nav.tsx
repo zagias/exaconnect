@@ -276,7 +276,7 @@ export interface Item {
 export interface Group {
   label: string | null;
   items: Item[];
-  /** The app this group belongs to (ADR 0040); none for shared groups. */
+  /** The app this group belongs to (ADR 0041); none for shared groups. */
   app?: AppId;
   /** Folded away until opened (or until one of its screens is current). */
   collapsible?: boolean;
@@ -313,7 +313,7 @@ export function navGroups(
     ];
   const admin = role === "admin";
   const has = (i: Item) => !i.module || !modules || modules[i.module] !== false;
-  // The apps this person may open (ADR 0023, 0040); null: not limited.
+  // The apps this person may open (ADR 0023, 0041); null: not limited.
   const plan = (p: string) => !apps || apps.includes(p);
   const connect: Group[] = [
     {
@@ -409,7 +409,7 @@ export function navGroups(
   return groups;
 }
 
-/** The shared account pages: one sidebar for both apps (ADR 0040). */
+/** The shared account pages: one sidebar for both apps (ADR 0041). */
 export function accountGroups(opts: { carrier: boolean; jibsy: boolean }): Group[] {
   if (opts.carrier)
     return [{ label: "Your account", items: [{ to: "/account", label: "Profile and sign-in", icon: icons.account, end: true }] }];

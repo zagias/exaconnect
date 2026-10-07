@@ -1,4 +1,4 @@
-# ADR 0040: One portal, two apps, and who may open each
+# ADR 0041: One portal, two apps, and who may open each
 
 Date: 7 October 2026. Status: accepted.
 

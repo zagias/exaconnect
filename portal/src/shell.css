@@ -273,7 +273,7 @@
   .shell-jump-button .shell-icon { width: 22px; height: 22px; }
 }
 
-/* ---- Apps (ADR 0040): one switcher; each app has its own mark and accent ---- */
+/* ---- Apps (ADR 0041): one switcher; each app has its own mark and accent ---- */
 .app-mark {
   flex: none; display: inline-grid; place-items: center; border-radius: 6px;
   background: var(--blue-tint); color: var(--blue);

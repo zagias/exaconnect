@@ -63,7 +63,7 @@ function Layout() {
     }
     if (pending) navigate(`/invite/${encodeURIComponent(pending)}`);
   }, [navigate]);
-  // Someone with Jibsy but not Connect starts in Jibsy (ADR 0040).
+  // Someone with Jibsy but not Connect starts in Jibsy (ADR 0041).
   const path = useLocation().pathname;
   const mine = myApps(user);
   const connect = mine.includes("connect");

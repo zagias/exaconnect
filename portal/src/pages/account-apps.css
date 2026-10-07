@@ -1,4 +1,4 @@
-/* Account: apps and plans, and each person's apps (ADR 0040). */
+/* Account: apps and plans, and each person's apps (ADR 0041). */
 .plan-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-bottom: 16px; max-width: 960px; }
 .plan-card { display: grid; gap: 14px; align-content: start; }
 .plan-head { display: flex; gap: 12px; align-items: flex-start; }

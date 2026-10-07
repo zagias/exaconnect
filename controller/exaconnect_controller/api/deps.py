@@ -43,7 +43,7 @@ class User:
     team_permissions: dict = field(default_factory=dict)
     path: str = ""
     query_team: str | None = None
-    # The apps this person may open in that organisation (ADR 0040): the plans,
+    # The apps this person may open in that organisation (ADR 0041): the plans,
     # narrowed by what an owner or admin gave them. None when not limited.
     apps: tuple[str, ...] | None = None
 
@@ -228,7 +228,7 @@ def apps_of(products: Any, member_apps: Any) -> tuple[str, ...]:
 
 def check_product(user: User, product: str) -> None:
     """403 unless the organisation the request acts for holds this plan and the
-    person has been given that app (ADR 0040). ExaCarib admins are not limited by
+    person has been given that app (ADR 0041). ExaCarib admins are not limited by
     plan; carrier accounts keep their Connect carrier view."""
     if user.role != "customer" or user.products is None:
         return

@@ -1,4 +1,4 @@
-"""One portal, two apps (ADR 0040): owners and admins choose which of the
+"""One portal, two apps (ADR 0041): owners and admins choose which of the
 organisation's apps each person may open, and may ask ExaCarib to add an app."""
 
 from __future__ import annotations

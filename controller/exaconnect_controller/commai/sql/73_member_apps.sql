@@ -1,4 +1,4 @@
--- One portal, two apps (ADR 0040). An organisation's plans (customers.products)
+-- One portal, two apps (ADR 0041). An organisation's plans (customers.products)
 -- say which apps it holds; each member may then be given some or all of them.
 -- NULL means every app on the organisation's plan, so a plan added later
 -- reaches everyone until an owner or admin narrows it.

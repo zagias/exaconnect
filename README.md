@@ -113,7 +113,7 @@ from the header (ADR 0023). Sign-in supports passwords with reset links,
 two-step codes, passkeys, Google and Microsoft, and company single sign-on
 with SCIM. Connect and Jibsy are separate plans: an organisation sees an app
 only while it holds that plan, and owners and admins choose which apps each
-person may open. Both apps share one portal with an app switcher (ADR 0040).
+person may open. Both apps share one portal with an app switcher (ADR 0041).
 Billing works out monthly charges per plan,
 draft and issued invoices, SLA credits and partner margin (ADR 0022); online
 payment and accounting exports stay off or simulated until ExaCarib adds those

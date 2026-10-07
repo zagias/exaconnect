@@ -85,7 +85,7 @@ def sync_products(conn: psycopg.Connection, customer_id: Any) -> list[str] | Non
         return None
     held = products(conn, customer_id)
     conn.execute("UPDATE customers SET products = %s WHERE id = %s", (held, customer_id))
-    # A request to add an app (ADR 0040) is answered once the plan holds it.
+    # A request to add an app (ADR 0041) is answered once the plan holds it.
     if conn.execute("SELECT to_regclass('customer_app_requests') AS t").fetchone()["t"]:
         conn.execute(
             "DELETE FROM customer_app_requests WHERE customer_id = %s AND product = ANY(%s)", (customer_id, held)

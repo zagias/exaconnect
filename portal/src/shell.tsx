@@ -45,7 +45,7 @@ const MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator
 export function Shell({ children }: { children: ReactNode }) {
   const { user, signOut } = useAuth();
   const carrier = user?.role === "carrier";
-  // The apps this person may open (ADR 0040); the sidebar shows one at a time.
+  // The apps this person may open (ADR 0041); the sidebar shows one at a time.
   const mine = myApps(user);
   const connect = mine.includes("connect");
   const jibsy = mine.includes("commai");

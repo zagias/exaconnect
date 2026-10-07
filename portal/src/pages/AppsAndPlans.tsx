@@ -17,7 +17,7 @@ interface AppRequest {
   created_at: string;
 }
 
-/** Account > Apps and plans (ADR 0040): which apps the organisation holds, who
+/** Account > Apps and plans (ADR 0041): which apps the organisation holds, who
  * may open each, and asking ExaCarib to add one. Each app is its own plan. */
 export default function AppsAndPlans() {
   const { user } = useAuth();

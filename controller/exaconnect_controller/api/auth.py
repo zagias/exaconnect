@@ -58,7 +58,7 @@ class UserOut(BaseModel):
     # The plans the current organisation holds ('connect', 'commai'); None: not
     # limited by plan (ExaCarib admins and carrier accounts).
     products: list[str] | None = None
-    # The apps this person may open there (ADR 0040); None: not limited.
+    # The apps this person may open there (ADR 0041); None: not limited.
     apps: list[str] | None = None
 
 
