@@ -113,10 +113,19 @@ def _link_scope(user) -> dict:
 
 @router.get("/sites/{site_id}/links")
 def site_links(site_id: str, user: UserDep) -> list[dict]:
+    """A site's links: customers their own sites, carriers only their own links at a site."""
+    scope = _link_scope(user)
     with db.tx() as conn:
-        return conn.execute(
-            LINK_SQL + " AND l.site_id::text = %(s)s ORDER BY p.ordinal", {**_link_scope(user), "s": site_id}
+        site = conn.execute(
+            "SELECT id FROM sites WHERE id::text = %(s)s AND (%(c)s::uuid IS NULL OR customer_id = %(c)s)",
+            {**scope, "s": site_id},
+        ).fetchone()
+        rows = conn.execute(
+            LINK_SQL + " AND l.site_id::text = %(s)s ORDER BY p.ordinal", {**scope, "s": site_id}
         ).fetchall()
+    if site is None or (user.role == "carrier" and not rows):
+        raise HTTPException(404, "Site not found.")
+    return rows
 
 
 @router.get("/links/{link_id}")

@@ -222,10 +222,12 @@ def test_servicenow_create_update_resolve(client, org, live, fake):
     )
     fake.reply("PATCH", "/api/now/table/incident/", 200, {"result": {"sys_id": "a" * 32}})
     sn = add(
-        client, org["h"], "servicenow",
+        client,
+        org["h"],
+        "servicenow",
         config={"instance_url": fake.url, "username": "connect.api", "assignment_group": "Network"},
         secrets={"password": "pw-123"},
-    )  # fmt: skip
+    )
     fire(org["id"], "path.down")
     fire(org["id"], "path.down", data={"site": "kingston", "path": "carrier-a", "summary": "Still down"})
     fire(org["id"], "path.up")
@@ -256,10 +258,12 @@ def test_jira_create_comment_and_resolve_by_finding_the_transition(client, org, 
     fake.reply("POST", "/rest/servicedeskapi/request/NOC-7/transition", 204, b"")
     fake.reply("POST", "/rest/servicedeskapi/request/NOC-7/comment", 201, {"id": "1"})
     add(
-        client, org["h"], "jira",
+        client,
+        org["h"],
+        "jira",
         config={"site_url": fake.url, "email": "noc@bank.example", "service_desk_id": 4, "request_type_id": "21"},
         secrets={"api_token": "atl-token"},
-    )  # fmt: skip
+    )
     fire(org["id"], "path.down")
     fire(org["id"], "path.down", data={"site": "kingston", "summary": "again"})
     fire(org["id"], "path.up")
@@ -326,11 +330,18 @@ def test_opensearch_basic_auth(client, org, live, fake):
 def test_sentinel_logs_ingestion(client, org, live, fake):
     fake.reply("POST", "/tenant-1/oauth2/v2.0/token", 200, {"access_token": "eyJ.sentinel", "expires_in": 3600})
     s = add(
-        client, org["h"], "sentinel",
-        config={"tenant_id": "tenant-1", "client_id": "app-1", "endpoint": fake.url + "/dce",
-                "dcr_id": "dcr-abc", "login_url": fake.url},
+        client,
+        org["h"],
+        "sentinel",
+        config={
+            "tenant_id": "tenant-1",
+            "client_id": "app-1",
+            "endpoint": fake.url + "/dce",
+            "dcr_id": "dcr-abc",
+            "login_url": fake.url,
+        },
         secrets={"client_secret": "cs-1"},
-    )  # fmt: skip
+    )
     fire(org["id"])
     tok, post = fake.requests
     assert tok["raw"].decode().count("grant_type=client_credentials") == 1

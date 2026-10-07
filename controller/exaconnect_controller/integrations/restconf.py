@@ -64,13 +64,15 @@ def tree(conn: psycopg.Connection, customer_id: Any = None) -> dict:
     ).fetchall()
     maint = notices.under_maintenance(conn, [lk["id"] for lk in links], now)
     classes = conn.execute(
-        """SELECT st.site_id, st.class_name, st.path, st.since, sp.max_latency_ms, sp.max_jitter_ms, sp.max_loss_pct,
-                  coalesce(sp.allow_satellite, true) AS allow_satellite,
-                  (SELECT d.reason FROM decisions d WHERE d.site_id = st.site_id AND d.class_name = st.class_name
+        """SELECT s.id AS site_id, ac.name AS class_name, st.path, st.since, sp.max_latency_ms, sp.max_jitter_ms,
+                  sp.max_loss_pct, coalesce(sp.allow_satellite, true) AS allow_satellite,
+                  (SELECT d.reason FROM decisions d WHERE d.site_id = s.id AND d.class_name = ac.name
                    ORDER BY d.time DESC, d.id DESC LIMIT 1) AS last_reason
-           FROM steering st LEFT JOIN sla_policies sp
-             ON sp.customer_id = st.customer_id AND sp.class_name = st.class_name
-           WHERE %(c)s::uuid IS NULL OR st.customer_id = %(c)s ORDER BY st.class_name""",
+           FROM sites s JOIN app_classes ac ON ac.customer_id = s.customer_id
+           LEFT JOIN steering st ON st.site_id = s.id AND st.class_name = ac.name
+           LEFT JOIN sla_policies sp ON sp.customer_id = s.customer_id AND sp.class_name = ac.name
+           WHERE s.kind = 'site' AND (%(c)s::uuid IS NULL OR s.customer_id = %(c)s)
+           ORDER BY ac.ordinal, ac.name""",
         {"c": customer_id},
     ).fetchall()
     by_site_path = {(lk["site_id"], lk["path"]): lk for lk in links}
@@ -119,7 +121,7 @@ def tree(conn: psycopg.Connection, customer_id: Any = None) -> dict:
         for c in classes:
             if c["site_id"] != s["id"]:
                 continue
-            m = by_site_path.get((s["id"], c["path"]))
+            m = by_site_path.get((s["id"], c["path"])) if c["path"] else None
             parts = []
             if m is not None:
                 parts = [
@@ -131,10 +133,11 @@ def tree(conn: psycopg.Connection, customer_id: Any = None) -> dict:
                     )
                     if v is not None and lim is not None
                 ]
-            entry: dict[str, Any] = {
-                "name": c["class_name"],
-                "current-path": c["path"],
-                "since": _iso(c["since"]),
+            entry: dict[str, Any] = {"name": c["class_name"]}
+            if c["path"]:  # no path yet until the first routing pass
+                entry["current-path"] = c["path"]
+                entry["since"] = _iso(c["since"])
+            entry |= {
                 "sla": {
                     k: v
                     for k, v in {
