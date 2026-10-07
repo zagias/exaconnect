@@ -1,3 +1,6 @@
+source-path=SCRIPTDIR
+source-path=.
+external-sources=true
 # Lab checks define small functions and pass them by name to wait helpers
 # (wait_for name ...). shellcheck before 0.10, as on the CI runners, reports
 # them as unreachable (SC2317); newer versions do not.
