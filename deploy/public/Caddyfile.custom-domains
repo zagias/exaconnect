@@ -1,0 +1,49 @@
+# Partner custom domains (ADR 0025, docs/commai/partners.md).
+# Import at the end of the Caddyfile once the first partner domain is verified:
+#   import Caddyfile.custom-domains
+# Caddy asks the controller before issuing each certificate; the controller
+# answers 200 only for a domain whose DNS TXT record has been verified, so no
+# certificate is ever issued for an unverified name.
+
+https:// {
+	tls {
+		on_demand
+	}
+
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+		-Server
+	}
+
+	handle /api/v1/agent/* {
+		respond 404
+	}
+	handle /api/v1/enrol {
+		respond 404
+	}
+	handle /api/v1/ca.pem {
+		respond 404
+	}
+	handle /api/* {
+		reverse_proxy controller-api:8000
+	}
+	handle {
+		root * /srv/portal
+		try_files {path} /index.html
+		file_server
+	}
+}
+
+# This global option must sit in the Caddyfile's global block (the first block):
+#   {
+#   	on_demand_tls {
+#   		ask http://controller-api:8000/api/v1/commai/whitelabel/tls-ask
+#   	}
+#   }
