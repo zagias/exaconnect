@@ -64,7 +64,9 @@ SHARE_LEVELS = ("none", "names", "summary")
 def luhn_card(text: str) -> bool:
     """True when the text holds something shaped like a payment card number.
     Card data never passes through Jibsy, so such inputs are refused."""
-    for m in re.finditer(r"(?:\d[ -]?){13,19}", text or ""):
+    # Only a free-standing number counts: digits inside an id (a UUID's
+    # "047-5426-4661-9870") pass the Luhn check one time in ten.
+    for m in re.finditer(r"(?<![\w-])(?:\d[ -]?){12,18}\d(?![\w-])", text or ""):
         digits = [int(c) for c in re.sub(r"\D", "", m.group(0))]
         if not 13 <= len(digits) <= 19:
             continue
