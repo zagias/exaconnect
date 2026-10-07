@@ -161,7 +161,11 @@ def receive(conn: psycopg.Connection, token: str, headers: dict, body: bytes, qu
         etype, source = hook["event_type"] or "webhook", ""
     if not delivery:
         raise _reject(conn, hook, "The delivery has no id (webhook-id, ce-id or X-ExaCarib-Event-Id).", 422)
-    if not _once(conn, hook, delivery):
+    # The v1 signature covers the timestamp and body but not the event id
+    # header, so the same signed request sent again under another id is a
+    # replay: each v1 signature is accepted once.
+    v1_replay = "webhook-signature" not in h and not _once(conn, hook, "v1sig:" + h["x-exacarib-signature"][:190])
+    if v1_replay or not _once(conn, hook, delivery):
         return 200, "application/json", json.dumps({"ok": True, "duplicate": True})
     event_id = events.emit(
         conn,
