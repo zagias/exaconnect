@@ -716,9 +716,56 @@ def ask_assistant(customer_id: str, body: QuestionIn, request: Request, user: Us
     access.check(user, customer_id, "commai:admin")
     with db.tx() as conn, _errors():
         _admin(conn, user, customer_id)
-        out = assistant.ask(conn, customer_id, body.question, actor=user.actor, settings=_settings(request))
+        out = _voice_change(conn, customer_id, body.question, user)
+        if out is None:
+            out = assistant.ask(conn, customer_id, body.question, actor=user.actor, settings=_settings(request))
         audit.record(conn, user.actor, "commai.assistant.ask", out["id"] or "", customer_id)
     return out
+
+
+def _voice_change(conn, customer_id: str, text: str, user) -> dict | None:
+    """A phone-system change typed to the assistant ("forward my calls to my
+    mobile until 5") becomes the same proposal as /voice/say, with the same
+    confirm step (ADR 0033). Questions, and anything the voice parser doesn't
+    recognise, go to the diagnostics as before."""
+    from .. import entitlements
+    from ..voice import selfservice
+    from ..voice.common import VoiceError
+
+    if assistant.SECRET_HINT.search(text) or not selfservice.looks_like_change(text):
+        return None
+    if not entitlements.enabled(conn, customer_id, "voice"):
+        return None
+    try:
+        with conn.transaction():
+            vc = selfservice.propose_text(conn, customer_id, user, text)
+    except VoiceError as e:
+        vc = {"understood": False, "message": str(e)}
+    if not vc["understood"] and vc["message"].startswith("I didn't understand"):
+        return None
+    if vc["understood"]:
+        answer = f"I can make this phone change: {vc['summary']} Nothing changes until you confirm it."
+    else:
+        answer = vc["message"]
+    row = conn.execute(
+        """INSERT INTO commai_assistant_answers (customer_id, question, answer, confidence, source, asked_by)
+           VALUES (%s, %s, %s, 'confirmed', 'voice', %s) RETURNING id, question""",
+        (customer_id, text[:1000], answer, user.actor),
+    ).fetchone()
+    if vc["understood"]:
+        audit.record(
+            conn, user.actor, "commai.voice.say", vc["id"], customer_id, {"scope": vc["scope"], "via": "assistant"}
+        )
+    return {
+        "id": str(row["id"]),
+        "question": row["question"],
+        "answer": answer,
+        "confidence": "confirmed",
+        "findings": [],
+        "fixes": [],
+        "source": "voice",
+        "voice_change": vc,
+    }
 
 
 @router.get("/assistant/history")
