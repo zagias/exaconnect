@@ -200,7 +200,7 @@ KINDS: dict[str, Kind] = {
             "warning",
             "notify",
             "internet.py record (PoP telemetry)",
-            {"node": "pop-miami", "address": "198.51.100.7", "expires_s": 600},
+            {"node": "pop-example", "address": "198.51.100.7", "expires_s": 600},
         ),
         Kind(
             "carrier.fault",
