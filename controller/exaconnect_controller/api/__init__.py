@@ -56,3 +56,8 @@ from ..integrations.api_standards import router as standards_router  # noqa: E40
 
 router.include_router(integrations_router)
 router.include_router(standards_router)
+
+# Last, so fixed paths such as /customers/mine and /applications/catalogue win.
+from . import items  # noqa: E402
+
+router.include_router(items.router)
