@@ -362,6 +362,8 @@ class KitConnector(Connector):
     def auth_headers(self, conn: psycopg.Connection, connection: dict) -> dict:
         from ..automation import oauth
 
+        if self.simulated(connection):
+            return {"Authorization": "Bearer standin"}
         return {"Authorization": f"Bearer {oauth.access_token(conn, connection)}"}
 
     def cause(self, status: int, body: Any) -> str:
@@ -526,6 +528,12 @@ class KitConnector(Connector):
         """The deliveries' events as [{"type": "...", "id": "...", "data": {...}}]."""
         return []
 
+    def on_webhook_event(self, conn: psycopg.Connection, connection: dict, event: dict) -> None:
+        """Called once for each verified, first-time event from ``webhook_events``,
+        after integration.event is recorded. Connectors override it to act on the
+        change; the default does nothing."""
+        return None
+
     def webhook_handshake(self, headers: dict, body: bytes, query: dict) -> tuple[int, str, str] | None:
         """A subscription check the app makes before it sends events
         (status, content type, body), or None."""
@@ -567,6 +575,12 @@ def register(c: KitConnector) -> KitConnector:
         {"category": c.category, "env": c.env_names()},
     )
     return _register(c)
+
+
+def receives_webhooks(c: Connector) -> bool:
+    """True when the connector checks the app's own webhook signature."""
+    fn = getattr(type(c), "verify_webhook", None)
+    return fn is not None and fn is not KitConnector.verify_webhook
 
 
 def describe_any(c: Connector) -> dict:

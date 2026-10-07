@@ -1,6 +1,7 @@
 import { Route, Routes } from "react-router-dom";
 import AiAgents from "./AiAgents";
 import Assistant from "./Assistant";
+import Catalogue from "./Catalogue";
 import Onboarding from "./Onboarding";
 import Partner from "./partner";
 import GoLive from "./partner/GoLive";
@@ -34,6 +35,7 @@ export default function CommAI() {
       <Route path="/countries/*" element={<Countries />} />
       <Route path="/ai/*" element={<AiAgents />} />
       <Route path="/workflows/*" element={<Workflows />} />
+      <Route path="/catalogue/*" element={<Catalogue />} />
       <Route path="/integrations/*" element={<Integrations />} />
       <Route path="/voice/*" element={<Voice />} />
       <Route path="/reports/*" element={<Reports />} />
