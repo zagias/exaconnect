@@ -9,3 +9,4 @@ audit log and API keys. See docs/adr/0016-commai-foundation.md.
 # channels (ADR 0018), voice (ADR 0021) and automation (ADR 0020).
 from . import actions, ai, automation, diagnostics, golive, inbox, jobs, usage, voice, webhooks  # noqa: F401
 from .channels import checks, email, messaging, widget  # noqa: F401
+from .selfservice import enduser, helpcentre, staff  # noqa: F401  (self-service, ADR 0031)
