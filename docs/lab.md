@@ -154,12 +154,15 @@ Agents:
 | `make agents-stop` / `make agents-start` | Stop or start all agents; forwarding keeps running |
 | `docker exec clab-exaconnect-site-a exa-agent apply -f <file>` | Apply a desired-state file by hand |
 
-Controller outage test (demo step 7, the M2 part):
+Controller outage test (demo step 7, the M2 part). On a host that also runs
+the live site, never stop the controller or its proxy: that takes the portal
+down. Cut the agents off from it instead, as `lab/ci/checks/m7-outage.sh` does
+(ADR 0040):
 
 ```bash
-docker compose -f deploy/docker-compose.yml --env-file .env stop controller proxy
+for n in site-a site-b pop-miami; do docker exec clab-exaconnect-$n ip route add unreachable 172.30.0.5/32; done
 make lab-routing       # still passes: agents keep the last good state
-docker compose -f deploy/docker-compose.yml --env-file .env start controller proxy
+for n in site-a site-b pop-miami; do docker exec clab-exaconnect-$n ip route del unreachable 172.30.0.5/32; done
 ```
 
 The agents log `controller_silent` after 60 s and `controller_back` when it

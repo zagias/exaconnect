@@ -221,3 +221,18 @@ def test_stripe_stand_in_and_isolation(client, fake):
     run = propose_and_run(other["id"], "stripe", "payment_status", {"payment_link_id": lid}, "s1")
     assert run["status"] == "failed" and "(input)" in run["error"]  # not their link
     assert not fake.calls
+
+
+def test_card_numbers_are_spotted_but_ids_are_not():
+    from exaconnect_controller.commai.connectors.more_common import luhn_card
+
+    for card in ("4111 1111 1111 1111", "4111-1111-1111-1111", "card 4111111111111111.", "5500005555555559"):
+        assert luhn_card(card), card
+    # Digits inside ids pass the Luhn check by chance; they are not cards.
+    for not_card in (
+        "1115f047-5426-4661-9870-c3b324edf785",
+        "12345678-1234-1234-1234-123456789012",
+        "order-4111111111111111",
+        "4111111111111112",
+    ):
+        assert not luhn_card(not_card), not_card
