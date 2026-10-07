@@ -99,12 +99,23 @@ def check(deprecations: list[Deprecation] = DEPRECATIONS) -> None:
 def apply(router, mount_prefix: str = "/api/v1") -> int:
     """Mark deprecated routes on the CommAI router (before it is included in /api/v1)."""
     check()
+    return _walk(router.routes, mount_prefix)
+
+
+def _walk(routes, prefix: str) -> int:
+    # Newer FastAPI keeps included routers as lazy wrappers (original_router and
+    # include_context); the leaf APIRoute's dependencies and `deprecated` flag
+    # are read when the effective route is built, so marking the leaf is enough.
     n = 0
-    for route in router.routes:
+    for route in routes:
+        inner = getattr(route, "original_router", None)
+        if inner is not None:
+            n += _walk(inner.routes, prefix + getattr(route.include_context, "prefix", ""))
+            continue
         if not isinstance(route, APIRoute):
             continue
         for d in DEPRECATIONS:
-            if mount_prefix + route.path == d.path and d.method in route.methods:
+            if prefix + route.path == d.path and d.method in route.methods and not route.deprecated:
                 route.dependencies.append(Depends(_dependency(d)))
                 route.deprecated = True
                 n += 1

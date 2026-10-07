@@ -24,7 +24,9 @@ def _png(w: int = 64, h: int = 32) -> bytes:
 def _setup(client, admin_headers, markup: float = 20) -> dict:
     """A reseller with an admin and a member, and three businesses."""
     reseller = business(client, "Island Reseller", people=("boss", "staff"))
-    r = client.post(P, json={"name": "Island Reseller", "kind": "reseller", "markup_pct": markup}, headers=admin_headers)
+    r = client.post(
+        P, json={"name": "Island Reseller", "kind": "reseller", "markup_pct": markup}, headers=admin_headers
+    )
     assert r.status_code == 201, r.text
     pid = r.json()["id"]
     for who, role in (("boss", "admin"), ("staff", "member")):
@@ -65,10 +67,14 @@ def test_link_accept_switch_isolation_and_revoke(client, admin_headers):
     assert r.status_code == 403
     la = _link(client, s, a, ["commai:read", "commai:write", "commai:notes"])
     lb = _link(client, s, b, ["commai:read"])
-    assert client.post(  # a second open request to the same business is refused
-        f"{P}/{s['pid']}/links", json={"customer_id": a["id"], "scopes": ["commai:read"]},
-        headers=s["reseller"]["boss"]["h"],
-    ).status_code == 409  # fmt: skip
+    assert (
+        client.post(  # a second open request to the same business is refused
+            f"{P}/{s['pid']}/links",
+            json={"customer_id": a["id"], "scopes": ["commai:read"]},
+            headers=s["reseller"]["boss"]["h"],
+        ).status_code
+        == 409
+    )
 
     # Nothing works before the business accepts.
     assert _switch(client, s, a).status_code == 403
@@ -78,11 +84,15 @@ def test_link_accept_switch_isolation_and_revoke(client, admin_headers):
     assert [x["partner_name"] for x in mine] == ["Island Reseller"]
     assert client.get(f"{base(b)}/partner-links", headers=a["owner"]["h"]).status_code == 403
     r = client.post(
-        f"{base(a)}/partner-links/{la}/accept", json={"scopes": ["commai:read", "commai:admin"]}, headers=a["owner"]["h"]
+        f"{base(a)}/partner-links/{la}/accept",
+        json={"scopes": ["commai:read", "commai:admin"]},
+        headers=a["owner"]["h"],
     )
     assert r.status_code == 422  # can't grant what wasn't asked for
     r = client.post(
-        f"{base(a)}/partner-links/{la}/accept", json={"scopes": ["commai:read", "commai:write"]}, headers=a["owner"]["h"]
+        f"{base(a)}/partner-links/{la}/accept",
+        json={"scopes": ["commai:read", "commai:write"]},
+        headers=a["owner"]["h"],
     )
     assert r.status_code == 200 and r.json()["status"] == "active", r.text
     assert client.post(f"{base(b)}/partner-links/{lb}/decline", headers=b["owner"]["h"]).json()["status"] == "declined"
@@ -117,9 +127,10 @@ def test_link_accept_switch_isolation_and_revoke(client, admin_headers):
 
     # A delegate can't change the link or approve anything for the business.
     assert client.delete(f"{base(a)}/partner-links/{la}", headers=dh).status_code == 403
-    assert client.put(
-        f"{base(a)}/partner-links/{la}/scopes", json={"scopes": ["commai:read"]}, headers=dh
-    ).status_code == 403  # fmt: skip
+    assert (
+        client.put(f"{base(a)}/partner-links/{la}/scopes", json={"scopes": ["commai:read"]}, headers=dh).status_code
+        == 403
+    )
 
     # Can't switch to a declined or unlinked business.
     assert _switch(client, s, b).status_code == 403
@@ -216,7 +227,10 @@ def test_branding_validation_and_runtime(client, admin_headers):
     logo = f"/api/v1/commai/brands/{brand_id}/logo"
     svg = b"<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>"
     assert client.put(logo, content=svg, headers={**boss, "Content-Type": "image/svg+xml"}).status_code == 415
-    assert client.put(logo, content=b"\xff\xd8\xff" + b"0" * 50, headers={**boss, "Content-Type": "image/png"}).status_code == 415  # fmt: skip
+    assert (
+        client.put(logo, content=b"\xff\xd8\xff" + b"0" * 50, headers={**boss, "Content-Type": "image/png"}).status_code
+        == 415
+    )
     big = _png() + b"\x00" * (300 * 1024)
     assert client.put(logo, content=big, headers={**boss, "Content-Type": "image/png"}).status_code == 413
     assert client.put(logo, content=_png(5000, 10), headers={**boss, "Content-Type": "image/png"}).status_code == 422
@@ -256,7 +270,9 @@ def test_branding_validation_and_runtime(client, admin_headers):
 def test_custom_domain_verification(client, admin_headers):
     s = _setup(client, admin_headers)
     boss = s["reseller"]["boss"]["h"]
-    r = client.put(f"{P}/{s['pid']}/branding", json={"product_name": "Island Connect", "colour": "#0B5D3B"}, headers=boss)
+    r = client.put(
+        f"{P}/{s['pid']}/branding", json={"product_name": "Island Connect", "colour": "#0B5D3B"}, headers=boss
+    )
     brand_id = r.json()["id"]
     durl = f"/api/v1/commai/brands/{brand_id}/domains"
 
@@ -267,7 +283,10 @@ def test_custom_domain_verification(client, admin_headers):
     d = r.json()
     assert d["domain"] == "portal.island.example" and d["status"] == "pending"
     assert d["dns"]["name"] == "_exacarib-challenge.portal.island.example"
-    assert client.post(durl, json={"purpose": "widget", "domain": "portal.island.example"}, headers=boss).status_code == 409
+    assert (
+        client.post(durl, json={"purpose": "widget", "domain": "portal.island.example"}, headers=boss).status_code
+        == 409
+    )
 
     ask = "/api/v1/commai/whitelabel/tls-ask"
     assert client.get(ask, params={"domain": "portal.island.example"}).status_code == 404
