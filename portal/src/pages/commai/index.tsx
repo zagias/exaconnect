@@ -2,6 +2,9 @@ import { Route, Routes } from "react-router-dom";
 import AiAgents from "./AiAgents";
 import Assistant from "./Assistant";
 import Onboarding from "./Onboarding";
+import Partner from "./partner";
+import GoLive from "./partner/GoLive";
+import OAuthConsent from "./partner/OAuthConsent";
 import Channels from "./Channels";
 import Contacts from "./Contacts";
 import Inbox from "./Inbox";
@@ -28,6 +31,9 @@ export default function CommAI() {
       <Route path="/settings/*" element={<Settings />} />
       <Route path="/setup/*" element={<Onboarding />} />
       <Route path="/assistant/*" element={<Assistant />} />
+      <Route path="/partner/*" element={<Partner />} />
+      <Route path="/golive/*" element={<GoLive />} />
+      <Route path="/oauth/authorize" element={<OAuthConsent />} />
     </Routes>
   );
 }

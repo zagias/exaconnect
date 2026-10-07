@@ -1,0 +1,27 @@
+/* Partners, branding, go-live and consent (ADR 0025). Colours only from brand tokens. */
+.form-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 12px; margin: 8px 0; }
+.form-row label { display: grid; gap: 4px; font-weight: 600; font-size: 14px; }
+.partner-scopes { border: 0; padding: 0; margin: 0 0 12px; display: grid; gap: 6px; }
+.partner-scopes legend { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+ul.partner-scopes { padding-left: 20px; }
+.partner-colour { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.partner-colour input[type="color"] { width: 44px; height: 36px; padding: 2px; border: 1px solid var(--line); border-radius: var(--radius-btn); background: var(--card); }
+.partner-colour input.mono { width: 10ch; }
+.partner-logo { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin: 16px 0; }
+.partner-logo img { max-height: 40px; max-width: 200px; }
+.partner-domains { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 16px; }
+.partner-domains h3 { font-size: 16px; margin-bottom: 4px; }
+.partner-domain, .partner-link { border: 1px solid var(--line); border-radius: var(--radius-md); padding: 12px 16px; margin: 8px 0; display: grid; gap: 8px; }
+.partner-link .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.golive-grid { display: grid; grid-template-columns: minmax(220px, 1fr) 2fr; gap: 24px; }
+@media (max-width: 800px) { .golive-grid { grid-template-columns: 1fr; } }
+.golive-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.golive-list button { width: 100%; text-align: left; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 10px 12px; font: inherit; color: var(--ink); cursor: pointer; display: flex; justify-content: space-between; gap: 8px; }
+.golive-list button[aria-current="true"] { border-color: var(--blue); background: var(--blue-tint); }
+.golive-criterion { border-bottom: 1px solid var(--line); padding: 12px 0; display: grid; gap: 6px; }
+.golive-criterion:last-child { border-bottom: 0; }
+.consent { max-width: 520px; margin: 32px auto; }
+.consent ul { padding-left: 20px; }
+.consent .actions { display: flex; gap: 12px; flex-wrap: wrap; }
+/* A partner's logo on the navy sidebar sits on a white chip so any logo stays visible. */
+.shell-partner-logo { background: #fff; border-radius: var(--radius-sm); padding: 3px 6px; max-height: 28px; max-width: 150px; width: auto; height: auto; object-fit: contain; }

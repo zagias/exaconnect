@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "./auth";
 import { CustomerPicker, StormBanner, StormSwitch } from "./customer";
+import { useBrand } from "./pages/commai/partner/brand";
 import "./shell.css";
 
 /* ---- Icons: 24 px grid, drawn at 18 px, stroke only, currentColor ---- */
@@ -230,9 +231,17 @@ function navGroups(role: string | undefined): Group[] {
       { to: "/commai/assistant", label: "Assistant", icon: icons.ask },
       { to: "/commai/setup", label: "Set up", icon: icons.order },
       { to: "/commai/settings", label: "Settings", icon: icons.admin },
+      { to: "/commai/partner", label: admin ? "Partners" : "Partners and apps", icon: icons.carrier },
     ],
   });
-  if (admin) groups.push({ label: "Manage", items: [{ to: "/admin", label: "Admin", icon: icons.admin }] });
+  if (admin)
+    groups.push({
+      label: "Manage",
+      items: [
+        { to: "/admin", label: "Admin", icon: icons.admin },
+        { to: "/commai/golive", label: "Go-live", icon: icons.order },
+      ],
+    });
   return groups;
 }
 
@@ -266,6 +275,8 @@ export function Shell({ children }: { children: ReactNode }) {
   const { user, signOut } = useAuth();
   const carrier = user?.role === "carrier";
   const groups = navGroups(user?.role);
+  // A partner's white-label brand (ADR 0025); null keeps ExaCarib's own look.
+  const brand = useBrand();
   const location = useLocation();
   const ctx = pageContext(groups, location.pathname);
   const [drawer, setDrawer] = useState(false);
@@ -308,13 +319,17 @@ export function Shell({ children }: { children: ReactNode }) {
     <div className="shell">
       <aside id="shell-nav" className="shell-side" data-open={drawer || undefined} aria-label="Portal">
         <div className="shell-brand">
-          <NavLink to="/" className="shell-brand-link" aria-label="ExaCarib, home">
-            <img className="shell-wordmark" src="/brand/exacarib-wordmark-reversed.png" alt="ExaCarib" width={140} height={25} />
+          <NavLink to="/" className="shell-brand-link" aria-label={`${brand ? brand.product_name : "ExaCarib"}, home`}>
+            {brand?.logo_url ? (
+              <img className="shell-wordmark shell-partner-logo" src={brand.logo_url} alt={brand.product_name} />
+            ) : (
+              <img className="shell-wordmark" src="/brand/exacarib-wordmark-reversed.png" alt="ExaCarib" width={140} height={25} />
+            )}
             <span className="shell-symbol" aria-hidden="true">
               <img src="/brand/exacarib-wordmark-reversed.png" alt="" width={141} height={25} />
             </span>
           </NavLink>
-          <span className="shell-product">Connect</span>
+          <span className="shell-product">{brand ? brand.product_name : "Connect"}</span>
           <button ref={closeButton} className="shell-iconbtn shell-close" aria-label="Close menu" onClick={closeDrawer}>
             {icons.close}
           </button>
@@ -389,8 +404,12 @@ export function Shell({ children }: { children: ReactNode }) {
           >
             {icons.menu}
           </button>
-          <NavLink to="/" className="shell-top-brand" aria-label="ExaCarib, home">
-            <img src="/brand/exacarib-wordmark-reversed.png" alt="ExaCarib" width={112} height={20} />
+          <NavLink to="/" className="shell-top-brand" aria-label={`${brand ? brand.product_name : "ExaCarib"}, home`}>
+            {brand?.logo_url ? (
+              <img className="shell-partner-logo" src={brand.logo_url} alt={brand.product_name} height={20} />
+            ) : (
+              <img src="/brand/exacarib-wordmark-reversed.png" alt="ExaCarib" width={112} height={20} />
+            )}
           </NavLink>
           <div className="shell-context" aria-hidden={ctx ? undefined : true}>
             {ctx?.group && <span className="shell-context-group">{ctx.group}</span>}
