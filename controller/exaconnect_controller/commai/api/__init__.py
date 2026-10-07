@@ -16,6 +16,7 @@ from . import (  # noqa: E402
     ai,
     automation,
     channels,
+    channels_global,
     developer,
     enterprise,
     partners,
@@ -23,7 +24,7 @@ from . import (  # noqa: E402
     voice,
 )
 
-for _m in (channels, ai, automation, voice, partners, regions, developer, enterprise):
+for _m in (channels, ai, automation, voice, partners, regions, developer, enterprise, channels_global):
     router.include_router(_m.router)
     if hasattr(_m, "public"):
         router.include_router(_m.public)

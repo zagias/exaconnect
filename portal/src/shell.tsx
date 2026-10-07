@@ -223,6 +223,7 @@ function navGroups(role: string | undefined): Group[] {
       { to: "/commai", label: "Inbox", icon: icons.ask, end: true },
       { to: "/commai/contacts", label: "Contacts", icon: icons.sites },
       { to: "/commai/channels", label: "Channels", icon: icons.internet },
+      { to: "/commai/countries", label: "Countries", icon: icons.sites },
       { to: "/commai/ai", label: "AI agents", icon: icons.insights },
       { to: "/commai/workflows", label: "Workflows", icon: icons.traffic },
       { to: "/commai/integrations", label: "Integrations", icon: icons.fabric },

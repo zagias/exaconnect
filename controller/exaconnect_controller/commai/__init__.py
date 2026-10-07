@@ -27,4 +27,4 @@ from . import (  # noqa: F401
     voice,
     webhooks,
 )
-from .channels import checks, email, messaging, widget  # noqa: F401
+from .channels import checks, countries, email, messaging, sms_routing, social, whatsapp_cloud, widget  # noqa: F401

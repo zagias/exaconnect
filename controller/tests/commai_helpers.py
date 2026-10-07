@@ -73,3 +73,17 @@ def run_jobs() -> int:
     with db.tx() as conn:  # make every queued job ready now
         conn.execute("UPDATE jobs SET run_after = now() WHERE status = 'queued'")
     return jobs.run_pending()
+
+
+def switch_on(kind: str, key: str, customer_id: str | None = None) -> None:
+    """Mark every go-live criterion met and switch a capability on (for everyone,
+    or as a pilot for one business). The admin API flow is tested on its own."""
+    from exaconnect_controller.commai import golive
+
+    with db.tx() as conn:
+        for c in conn.execute(
+            "SELECT criterion FROM commai_capability_criteria WHERE kind = %s AND key = %s", (kind, key)
+        ).fetchall():
+            golive.check(conn, kind, key, c["criterion"], True, "test run", "test")
+        pilots = [customer_id] if customer_id else None
+        golive.set_status(conn, kind, key, "pilot" if customer_id else "on", "test", pilots)

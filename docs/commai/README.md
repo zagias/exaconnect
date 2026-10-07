@@ -15,6 +15,7 @@ controller and portal (ADR 0016).
 | Voice phone system, provisioning, billing | `commai/voice/`, `deploy/freeswitch/` | 0021 | voice.md |
 | Partners, white-label, regions, OAuth, sandboxes, API policy, chat SDK | `commai/partners.py`, `branding.py`, `regions.py`, `oauth.py`, `sandbox.py`, `apipolicy.py` | 0025 | partners.md, api-policy.md |
 | Organisations, calendars, roles, security settings, data governance, abuse protection | `commai/enterprise/` | 0024 | enterprise.md |
+| Messenger, Instagram, Telegram, WhatsApp Cloud API, countries, SMS carriers | `commai/channels/` | 0023 | channels-global.md |
 
 API: `/api/v1/commai/customers/{customer_id}/...` (OpenAPI at
 `/api/v1/docs`), SCIM at `/api/v1/scim/v2`. Python SDK:

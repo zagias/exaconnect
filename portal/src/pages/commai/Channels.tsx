@@ -3,6 +3,7 @@ import { Link, NavLink, Navigate, Route, Routes } from "react-router-dom";
 import { api, useApi, type Loaded } from "../../api";
 import { ErrorNote, ExampleTag } from "../../components";
 import { Card, PageHead, Tabs, useAction } from "../../ui";
+import { SocialChannel, WhatsAppExtras } from "./ChannelsGlobal";
 import { useCommaiBase, when } from "./lib";
 import "./channels.css";
 
@@ -133,6 +134,9 @@ export default function Channels() {
         <NavLink to="/commai/channels/whatsapp">WhatsApp</NavLink>
         <NavLink to="/commai/channels/sms">SMS</NavLink>
         <NavLink to="/commai/channels/email">Email</NavLink>
+        <NavLink to="/commai/channels/messenger">Messenger</NavLink>
+        <NavLink to="/commai/channels/instagram">Instagram</NavLink>
+        <NavLink to="/commai/channels/telegram">Telegram</NavLink>
       </Tabs>
       <Routes>
         <Route index element={<Navigate to="web" replace />} />
@@ -140,6 +144,9 @@ export default function Channels() {
         <Route path="whatsapp" element={<WhatsApp base={base} />} />
         <Route path="sms" element={<Sms base={base} />} />
         <Route path="email" element={<Email base={base} />} />
+        <Route path="messenger" element={<SocialChannel key="messenger" base={base} channel="messenger" />} />
+        <Route path="instagram" element={<SocialChannel key="instagram" base={base} channel="instagram" />} />
+        <Route path="telegram" element={<SocialChannel key="telegram" base={base} channel="telegram" />} />
       </Routes>
     </>
   );
@@ -894,6 +901,7 @@ function WhatsApp({ base }: { base: string }) {
       </Card>
       <Accounts base={base} channel="whatsapp" title="Numbers" placeholder="+1 868 555 0100" />
       <Templates base={base} tpls={tpls} />
+      <WhatsAppExtras base={base} />
       <Outbox base={base} channel="whatsapp" />
       <Diagnostics base={base} area="whatsapp" />
     </>

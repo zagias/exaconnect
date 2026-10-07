@@ -7,6 +7,7 @@ import GoLive from "./partner/GoLive";
 import OAuthConsent from "./partner/OAuthConsent";
 import Channels from "./Channels";
 import Contacts from "./Contacts";
+import Countries from "./Countries";
 import Inbox from "./Inbox";
 import Integrations from "./Integrations";
 import Reports from "./Reports";
@@ -23,6 +24,7 @@ export default function CommAI() {
       <Route path="/c/:id" element={<Inbox />} />
       <Route path="/contacts/*" element={<Contacts />} />
       <Route path="/channels/*" element={<Channels />} />
+      <Route path="/countries/*" element={<Countries />} />
       <Route path="/ai/*" element={<AiAgents />} />
       <Route path="/workflows/*" element={<Workflows />} />
       <Route path="/integrations/*" element={<Integrations />} />
