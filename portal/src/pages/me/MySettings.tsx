@@ -5,6 +5,7 @@ import { ErrorNote } from "../../components";
 import { PageHead, useAction } from "../../ui";
 import { useCommaiBase, when } from "../commai/lib";
 import VoiceMine from "../commai/voice/MySettings";
+import { QrCode } from "../commai/voice/QrCode";
 import "./me.css";
 
 type Kind = "assignment" | "mention" | "sla_warning";
@@ -330,7 +331,7 @@ function Softphone({ base }: { base: string }) {
     <div className="card-inset me-softphone">
       <h3>Softphone sign-in</h3>
       <p className="muted small">
-        A new sign-in link for your own softphone app. Open it on your phone, or turn it into a QR code. The previous link
+        A new sign-in link for your own softphone app. Open it on your phone, or scan the QR code with it. The previous link
         stops working.
       </p>
       <button
@@ -347,9 +348,12 @@ function Softphone({ base }: { base: string }) {
         Get a sign-in link
       </button>
       {link && (
-        <p className="secret">
-          Shown once: <code>{link}</code>
-        </p>
+        <div className="secret">
+          <p>
+            Shown once: <code>{link}</code>
+          </p>
+          <QrCode text={link} />
+        </div>
       )}
       <ErrorNote error={act.error} />
     </div>

@@ -1,9 +1,10 @@
 """How a business looks on its help centre (ADR 0031).
 
-Read only through `branding()`. White-label branding is being added by another
-part of phase 3; when its table lands, point this one function at it and the
-help centre follows. Today it uses what exists: the business's name, the help
-centre's own colour setting, else the colour of its first website chat key.
+Read only through `branding()`. The business's name always shows (its customers
+know it by that). Colour: the help centre's own setting, else the business's
+white-label brand (ADR 0025), else its first website chat key's colour. The logo
+is the business's own white-label logo. The "runs on" line names the managing
+partner's product when that partner white-labels the business, else ExaCarib.
 """
 
 from __future__ import annotations
@@ -30,8 +31,10 @@ def _contrast_ok(hex_colour: str) -> bool:
 
 
 def branding(conn: psycopg.Connection, customer_id: Any) -> dict:
-    """{"name", "colour", "logo_url"}. The colour is always one white text can
-    sit on legibly; a colour that fails falls back to ExaCarib blue."""
+    """{"name", "colour", "logo_url", "platform"}. The colour is always one white
+    text can sit on legibly; a colour that fails falls back to ExaCarib blue."""
+    from .. import branding as whitelabel
+
     row = conn.execute(
         """SELECT c.name, h.settings->>'colour' AS help_colour,
                   (SELECT w.settings->>'colour' FROM widget_keys w WHERE w.customer_id = c.id AND w.active
@@ -40,8 +43,16 @@ def branding(conn: psycopg.Connection, customer_id: Any) -> dict:
         (customer_id,),
     ).fetchone()
     if row is None:
-        return {"name": "", "colour": DEFAULT_COLOUR, "logo_url": ""}
-    colour = next((c for c in (row["help_colour"], row["widget_colour"]) if c and HEX.match(c)), DEFAULT_COLOUR)
+        return {"name": "", "colour": DEFAULT_COLOUR, "logo_url": "", "platform": "ExaCarib"}
+    own = whitelabel.public_view(whitelabel.get(conn, customer_id=customer_id)) or {}
+    partner = conn.execute(
+        """SELECT b.product_name FROM commai_partner_links l JOIN commai_whitelabel b ON b.partner_id = l.partner_id
+           WHERE l.customer_id = %s AND l.status = 'active' AND l.white_label LIMIT 1""",
+        (customer_id,),
+    ).fetchone()
+    platform = partner["product_name"] if partner else "ExaCarib"
+    colours = (row["help_colour"], own.get("colour"), row["widget_colour"])
+    colour = next((c for c in colours if c and HEX.match(c)), DEFAULT_COLOUR)
     if not _contrast_ok(colour):
         colour = DEFAULT_COLOUR
-    return {"name": row["name"], "colour": colour, "logo_url": ""}
+    return {"name": row["name"], "colour": colour, "logo_url": own.get("logo_url") or "", "platform": platform}

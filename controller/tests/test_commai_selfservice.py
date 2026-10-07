@@ -11,7 +11,7 @@ import time
 import pytest
 
 from exaconnect_controller import db
-from exaconnect_controller.commai import actions, inbox, jobs
+from exaconnect_controller.commai import actions, branding, inbox, jobs
 from exaconnect_controller.commai.ai import knowledge, runtime
 from exaconnect_controller.commai.ai.model import SimulatedModel
 from exaconnect_controller.commai.channels import widget
@@ -550,6 +550,60 @@ def test_data_requests_reach_the_business_admin(client):
     )
     assert done.json()["status"] == "done"
     assert client.get(f"{b['help']}/me/data-requests", headers=h).json()[0]["status"] == "done"
+
+
+def test_delete_request_is_carried_out_through_data_governance(client):
+    b = help_business(client)
+    contact = email_contact(b)["conversation"]["contact_id"]
+    h = sign_in(client, b)
+    rid = client.post(f"{b['help']}/me/data-requests", json={"kind": "delete"}, headers=h).json()["id"]
+    url = f"{base(b)}/help-centre/data-requests/{rid}"
+
+    # A legal hold refuses it, with the reason on the request.
+    with db.tx() as conn:
+        conn.execute("UPDATE contacts SET legal_hold = true, legal_hold_reason = 'Claim 7' WHERE id = %s", (contact,))
+    r = client.post(url, json={"status": "done"}, headers=b["agent"]["h"])
+    assert r.status_code == 200 and r.json()["status"] == "refused" and r.json()["subject_request_id"]
+    assert client.get(f"{b['help']}/me/data-requests", headers=h).json()[0]["status"] == "refused"
+
+    # Without the hold, a new request deletes the contact and records the subject request.
+    with db.tx() as conn:
+        conn.execute("UPDATE contacts SET legal_hold = false WHERE id = %s", (contact,))
+    rid = client.post(f"{b['help']}/me/data-requests", json={"kind": "delete"}, headers=h).json()["id"]
+    r = client.post(
+        f"{base(b)}/help-centre/data-requests/{rid}", json={"status": "done", "mode": "delete"}, headers=b["agent"]["h"]
+    )
+    assert r.status_code == 200 and r.json()["status"] == "done"
+    with db.tx() as conn:
+        assert conn.execute("SELECT 1 FROM contacts WHERE id = %s", (contact,)).fetchone() is None
+        sr = conn.execute(
+            "SELECT kind, status FROM commai_subject_requests WHERE id = %s", (r.json()["subject_request_id"],)
+        ).fetchone()
+    assert sr == {"kind": "delete", "status": "done"}
+
+
+def test_help_centre_uses_white_label_branding(client):
+    b = help_business(client)
+    with db.tx() as conn:
+        branding.save(
+            conn, customer_id=b["id"], product_name="Example Bank", colour="#0B5A3C", ink=None,
+            support_email="", actor="test",
+        )  # fmt: skip
+        pid = conn.execute(
+            "INSERT INTO commai_partners (name, kind) VALUES ('Example Partner', 'msp') RETURNING id"
+        ).fetchone()["id"]
+        branding.save(
+            conn, partner_id=pid, product_name="Island Desk", colour="#155EEF", ink=None, support_email="",
+            actor="test",
+        )  # fmt: skip
+        conn.execute(
+            """INSERT INTO commai_partner_links (partner_id, customer_id, status, requested_scopes, white_label)
+               VALUES (%s, %s, 'active', '{}', true)""",
+            (pid, b["id"]),
+        )
+    home = client.get(f"{b['help']}").json()
+    assert home["business"].startswith("Example Bank") and home["colour"] == "#0B5A3C"
+    assert home["platform"] == "Island Desk"
 
 
 def test_jobs_registered():

@@ -104,3 +104,6 @@ CREATE TABLE IF NOT EXISTS ss_data_requests (
   created_at    timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS ss_data_requests_customer ON ss_data_requests (customer_id, status, created_at DESC);
+-- Handled through data governance (ADR 0024): the subject request it became, and why it was refused.
+ALTER TABLE ss_data_requests ADD COLUMN IF NOT EXISTS subject_request_id uuid;
+ALTER TABLE ss_data_requests ADD COLUMN IF NOT EXISTS reason text NOT NULL DEFAULT '';

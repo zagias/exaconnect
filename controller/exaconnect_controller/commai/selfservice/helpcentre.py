@@ -285,6 +285,7 @@ def home(conn: psycopg.Connection, c: dict) -> dict:
         "business": b["name"],
         "colour": b["colour"],
         "logo_url": b["logo_url"],
+        "platform": b["platform"],
         "title": s["title"],
         "intro": s["intro"],
         "show": {**show, "ask": bool(show["ask"] and ask_available(conn, cid))},

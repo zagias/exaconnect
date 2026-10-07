@@ -23,6 +23,7 @@ from ...api.deps import UserDep
 from ...identity import sessions as staff_sessions
 from ...security import token_hash
 from .. import access
+from ..enterprise import governance
 from ..selfservice import enduser, helpcentre, staff
 from ..voice import provisioning
 from ..voice import selfservice as voice_self
@@ -280,22 +281,54 @@ def list_data_requests(customer_id: str, user: UserDep, status: str = "open") ->
 
 class DataRequestIn(BaseModel):
     status: Literal["done", "refused"]
+    # For a deletion: remove the contact and their conversations, or keep the
+    # conversation shells with everything that identifies the person removed.
+    mode: Literal["delete", "anonymise"] = "delete"
 
 
 @router.post("/help-centre/data-requests/{request_id}")
 def handle_data_request(customer_id: str, request_id: str, body: DataRequestIn, user: UserDep) -> dict:
+    """Close a request from the help centre. "done" carries it out through the
+    business's data governance (ADR 0024): a download is recorded as a subject
+    export, a deletion erases or anonymises the contact. A legal hold refuses it."""
     access.check(user, customer_id, "commai:admin")
-    with db.tx() as conn:
+    with db.tx() as conn, errors():
         _help_admin(conn, user, customer_id)
         row = conn.execute(
-            """UPDATE ss_data_requests SET status = %s, handled_by = %s, handled_at = now()
-               WHERE id = %s AND customer_id = %s AND status = 'open' RETURNING *""",
-            (body.status, user.actor, request_id, customer_id),
+            "SELECT * FROM ss_data_requests WHERE id = %s AND customer_id = %s AND status = 'open' FOR UPDATE",
+            (request_id, customer_id),
         ).fetchone()
         if row is None:
             raise HTTPException(404, "No open request with that id.")
-        audit.record(conn, user.actor, f"commai.help.data_request.{body.status}", request_id, customer_id)
+        try:
+            subject_id, status, reason = _carry_out(conn, customer_id, row, body, user.actor)
+        except governance.DataError as e:
+            raise HTTPException(getattr(e, "code", 400), str(e)) from e
+        row = conn.execute(
+            """UPDATE ss_data_requests SET status = %s, handled_by = %s, handled_at = now(), reason = %s,
+                      subject_request_id = %s
+               WHERE id = %s RETURNING *""",
+            (status, user.actor, reason, subject_id, request_id),
+        ).fetchone()
+        audit.record(conn, user.actor, f"commai.help.data_request.{status}", request_id, customer_id)
     return row
+
+
+def _carry_out(conn, customer_id: str, row: dict, body: DataRequestIn, actor: str) -> tuple:
+    """(subject request id, status, reason) after doing what the person asked."""
+    if body.status != "done" or row["contact_id"] is None:
+        return None, body.status, ""
+    if row["kind"] == "delete":
+        out = governance.subject_erase(conn, customer_id, row["contact_id"], body.mode, actor)
+        req = out.get("request") or {}
+        return req.get("id"), ("refused" if out.get("refused") else "done"), out.get("reason", "")
+    governance.subject_export(conn, customer_id, row["contact_id"], actor)
+    last = conn.execute(
+        """SELECT id FROM commai_subject_requests WHERE customer_id = %s AND contact_id = %s AND kind = 'export'
+           ORDER BY created_at DESC LIMIT 1""",
+        (customer_id, row["contact_id"]),
+    ).fetchone()
+    return (last["id"] if last else None), "done", ""
 
 
 @router.get("/help-centre/data-requests/{request_id}/export")

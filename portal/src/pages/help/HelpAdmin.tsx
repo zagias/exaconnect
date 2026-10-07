@@ -41,6 +41,7 @@ interface DataRequest {
   contact_name: string;
   contact_email: string;
   created_at: string;
+  reason?: string;
 }
 
 interface Admin {
@@ -314,9 +315,18 @@ function DataRequests({ base, onChange }: { base: string; onChange: () => void }
   const list = useApi<DataRequest[]>(`${base}/help-centre/data-requests`, 0);
   const act = useAction();
   const [exported, setExported] = useState<string | null>(null);
-  const handle = (id: string, status: "done" | "refused") =>
+  const [refused, setRefused] = useState<string | null>(null);
+  const handle = (id: string, status: "done" | "refused", mode: "delete" | "anonymise" = "delete") =>
     act.run(async () => {
-      await api(`${base}/help-centre/data-requests/${id}`, { method: "POST", body: JSON.stringify({ status }) });
+      if (status === "done" && mode && list.data?.find((r) => r.id === id)?.kind === "delete") {
+        const what = mode === "delete" ? "delete this customer and all their conversations" : "remove everything that identifies this customer";
+        if (!window.confirm(`This will ${what}. It can't be undone. Continue?`)) return;
+      }
+      const out = await api<DataRequest>(`${base}/help-centre/data-requests/${id}`, {
+        method: "POST",
+        body: JSON.stringify({ status, mode }),
+      });
+      setRefused(status === "done" && out.status === "refused" ? out.reason || "A legal hold stops it." : null);
       list.reload();
       onChange();
     });
@@ -334,8 +344,8 @@ function DataRequests({ base, onChange }: { base: string; onChange: () => void }
   return (
     <Card title="Customers' data requests">
       <p className="muted small">
-        From signed-in customers. For a copy, download their data (no private notes are included) and send it to them. For
-        deletion, remove their records, then mark it done.
+        From signed-in customers. For a copy, download their data (no private notes are included), send it to them and mark it
+        done. A deletion is carried out here, through your data rules: a contact on legal hold can't be deleted.
       </p>
       {list.data && list.data.length === 0 && <p className="muted">No open requests.</p>}
       <ul className="me-list" style={{ listStyle: "none", padding: 0 }}>
@@ -349,9 +359,20 @@ function DataRequests({ base, onChange }: { base: string; onChange: () => void }
                   Download their data{exported === r.id ? " ✓" : ""}
                 </button>
               )}
-              <button type="button" className="button small" disabled={act.busy} onClick={() => handle(r.id, "done")}>
-                Mark done
-              </button>
+              {r.kind === "delete" ? (
+                <>
+                  <button type="button" className="button small" disabled={act.busy} onClick={() => handle(r.id, "done", "delete")}>
+                    Delete their data
+                  </button>
+                  <button type="button" className="button secondary small" disabled={act.busy} onClick={() => handle(r.id, "done", "anonymise")}>
+                    Anonymise instead
+                  </button>
+                </>
+              ) : (
+                <button type="button" className="button small" disabled={act.busy} onClick={() => handle(r.id, "done")}>
+                  Mark done
+                </button>
+              )}
               <button type="button" className="button danger-text small" disabled={act.busy} onClick={() => handle(r.id, "refused")}>
                 Refuse
               </button>
@@ -359,6 +380,11 @@ function DataRequests({ base, onChange }: { base: string; onChange: () => void }
           </li>
         ))}
       </ul>
+      {refused && (
+        <p className="small" role="status">
+          ⚠ Not deleted: {refused}
+        </p>
+      )}
       <ErrorNote error={act.error ?? list.error} />
     </Card>
   );

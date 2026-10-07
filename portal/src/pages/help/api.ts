@@ -73,6 +73,7 @@ export interface HelpHome {
   business: string;
   colour: string;
   logo_url: string;
+  platform?: string;
   title: string;
   intro: string;
   show: Record<"articles" | "search" | "ask" | "contact" | "hours" | "channels" | "signin" | "bookings" | "data_requests", boolean>;

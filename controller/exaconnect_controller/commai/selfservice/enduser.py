@@ -556,8 +556,8 @@ def set_language(conn: psycopg.Connection, s: dict, lang: str) -> dict:
 
 
 def data_request(conn: psycopg.Connection, c: dict, s: dict, kind: str, detail: str = "") -> dict:
-    """Record a request to download or delete the person's data, for the business
-    admin to handle (no subject-request flow exists yet to hand it to)."""
+    """Record a request to download or delete the person's data. A business admin
+    carries it out from Help centre > Data requests, through data governance."""
     if not c["settings"]["show"]["data_requests"]:
         raise SelfServiceError("Data requests aren't available here. Contact the team instead.", 409)
     if kind not in ("download", "delete"):

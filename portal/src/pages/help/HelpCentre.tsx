@@ -58,6 +58,7 @@ export default function HelpCentre() {
       <header className="help-head">
         <div className="help-wrap help-head-row">
           <Link to={`/help/${slug}`} className="help-brand">
+            {h.logo_url && <img src={h.logo_url} alt="" className="help-logo" height={32} />}
             {h.business}
             <span className="help-brand-sub">{h.title}</span>
           </Link>
@@ -85,7 +86,7 @@ export default function HelpCentre() {
       </main>
       <footer className="help-foot help-wrap">
         <p>
-          {h.business} help centre. Runs on ExaCarib Connect.
+          {h.business} help centre. Runs on {h.platform || "ExaCarib"}.
         </p>
       </footer>
     </div>
