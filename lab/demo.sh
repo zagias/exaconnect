@@ -37,7 +37,7 @@ run 6 "Metering" \
   "Metering shows the 95th percentile, commit and burst per carrier link; the carrier view shows one carrier's links and the CSV matches." \
   lab/ci/checks/m6-metering.sh
 run 7 "Controller outage" \
-  "The portal goes quiet while the controller is down; the agents keep forwarding and fail over on BFD, then reconcile." \
+  "The agents lose the controller; they keep forwarding and fail over on BFD, then reconcile. The live controller and portal stay up." \
   lab/ci/checks/m7-outage.sh
 run + "AI insights and Ask your network" \
   "Insights shows the example hurricane warning for site-a; Ask answers from the decision log." \

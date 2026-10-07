@@ -371,3 +371,9 @@ adapters for AWS Direct Connect, Azure ExpressRoute, Google Partner Interconnect
 and Megaport. Carriers post faults and maintenance on their own links, and a
 maintenance window moves traffic before it starts. Everything is simulated until
 live sending is on and credentials exist; see docs/integrations.md.
+
+**Lab no longer takes the live site down** (ADR 0040, 2026-10-07). The
+controller-outage check (demo step 7) stopped the shared controller on every lab
+run, so the live portal answered 502 for about two minutes after each merge. The
+check now cuts the lab agents' route to the controller instead, and confirms the
+live controller stayed up.
