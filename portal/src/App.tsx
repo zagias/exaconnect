@@ -14,6 +14,8 @@ import Billing from "./pages/Billing";
 import Decisions from "./pages/Decisions";
 import Encryption from "./pages/Encryption";
 import Fabric from "./pages/Fabric";
+import Integrations from "./pages/Integrations";
+import Notices from "./pages/Notices";
 import Metering from "./pages/Metering";
 import OrderPage from "./pages/Order";
 import Overview from "./pages/Overview";
@@ -64,6 +66,8 @@ function Layout() {
       {carrier ? (
         <Routes>
           <Route path="/account" element={<Account />} />
+          <Route path="/notices" element={<Notices />} />
+          <Route path="/integrations" element={<Integrations />} />
           <Route path="*" element={<Metering carrierView />} />
         </Routes>
       ) : (
@@ -80,6 +84,8 @@ function Layout() {
           <Route path="/metering" element={<Metering />} />
           <Route path="/billing/*" element={<Billing />} />
           <Route path="/insights" element={<Insights />} />
+          <Route path="/notices" element={<Notices />} />
+          <Route path="/integrations" element={<Integrations />} />
           <Route path="/ask" element={<Ask />} />
           <Route path="/carrier" element={<Metering carrierView />} />
           <Route path="/account" element={<Account />} />

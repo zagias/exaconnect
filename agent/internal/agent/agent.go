@@ -23,6 +23,7 @@ import (
 	"github.com/zagias/exaconnect/agent/internal/desired"
 	"github.com/zagias/exaconnect/agent/internal/flows"
 	"github.com/zagias/exaconnect/agent/internal/frrstate"
+	"github.com/zagias/exaconnect/agent/internal/ipfix"
 	"github.com/zagias/exaconnect/agent/internal/probe"
 	"github.com/zagias/exaconnect/agent/internal/steer"
 	"github.com/zagias/exaconnect/agent/internal/system"
@@ -146,6 +147,8 @@ type Agent struct {
 	unreported  *client.Status     // an apply result the controller has not heard yet
 	flows       flows.Tracker
 	flowErr     string
+	ipfix       ipfix.Exporter
+	ipfixErr    string
 	inetErr     string
 	renewErr    string
 	slaWin      map[string]probe.Window // latest probe window, by tunnel
@@ -843,7 +846,9 @@ func (a *Agent) collectFlows(ctx context.Context) {
 	for _, c := range m.Classes {
 		classOf[uint32(c.Mark)] = c.Name
 	}
-	fl := a.flows.Update(flows.Parse(out), local, classOf, time.Now(), MaxFlows)
+	now := time.Now()
+	fl := a.flows.Update(flows.Parse(out), local, classOf, now, MaxFlows)
+	a.exportIPFIX(cur.IPFIX, fl, now)
 	if len(fl) == 0 {
 		return
 	}
@@ -853,6 +858,28 @@ func (a *Agent) collectFlows(ctx context.Context) {
 		a.buf.Flows = a.buf.Flows[n-a.Cfg.MaxBuffered:]
 	}
 	a.mu.Unlock()
+}
+
+// exportIPFIX sends the flow aggregates to the customer's collector when
+// desired state names one (ADR 0026). Export is best effort: a collector
+// that is down never holds up telemetry, and the error is logged once.
+func (a *Agent) exportIPFIX(cfg *desired.IPFIX, fl []flows.Flow, now time.Time) {
+	if cfg == nil {
+		a.ipfix.Close()
+		return
+	}
+	if len(fl) == 0 {
+		return
+	}
+	if _, err := a.ipfix.Export(cfg.Collector, cfg.ObservationDomain, fl, now); err != nil {
+		if msg := err.Error(); msg != a.ipfixErr {
+			a.ipfixErr = msg
+			a.Log.Warn("cannot export flows over IPFIX", "err", err)
+		}
+		a.ipfix.Close()
+		return
+	}
+	a.ipfixErr = ""
 }
 
 // usable reports whether a path can carry traffic: its tunnel exists and BFD

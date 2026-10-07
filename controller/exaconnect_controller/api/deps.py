@@ -142,6 +142,8 @@ def current_user(request: Request, authorization: Annotated[str | None, Header()
         # connect:read reaches the network API for reads only: monitoring and reporting keys.
         if not allowed and "connect:read" in user.scopes and method in SAFE_METHODS:
             allowed = True
+        # A metrics-only key may scrape the Prometheus endpoint (ADR 0026).
+        allowed = allowed or ("metrics" in user.scopes and path == "/api/v1/metrics")
         if not allowed and user.via != "key":
             allowed = path.startswith(("/api/v1/auth/", "/api/v1/invites/", "/api/v1/orgs/"))
         if not allowed:
@@ -217,6 +219,19 @@ def require_product(product: str):
     def dependency(user: Annotated[User, Depends(current_user)]) -> User:
         check_product(user, product)
         return user
+
+    return dependency
+
+
+def require_product_when_signed_in(product: str):
+    """Like require_product, for routers that also serve public documents: a
+    request without credentials passes here and meets the route's own check."""
+    if product not in PRODUCTS:
+        raise ValueError(product)
+
+    def dependency(request: Request, authorization: Annotated[str | None, Header()] = None) -> None:
+        if authorization or (getattr(request, "cookies", None) or {}).get(SESSION_COOKIE):
+            check_product(current_user(request, authorization), product)
 
     return dependency
 

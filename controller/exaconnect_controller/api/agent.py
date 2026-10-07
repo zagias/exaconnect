@@ -168,10 +168,24 @@ class StatusIn(BaseModel):
 @router.post("/agent/status", status_code=204)
 def status(body: StatusIn, node: NodeDep) -> None:
     with db.tx() as conn:
+        before = conn.execute(
+            "SELECT applied_version, apply_ok FROM nodes WHERE id = %s FOR UPDATE", (node.id,)
+        ).fetchone()
         conn.execute(
             "UPDATE nodes SET applied_version = %s, apply_ok = %s, apply_error = %s, agent_version = %s WHERE id = %s",
             (body.applied_version, body.ok, body.error, body.agent_version, node.id),
         )
+        if not body.ok and (
+            before is None or before["apply_ok"] is not False or before["applied_version"] != body.applied_version
+        ):
+            # Once per failure, not on every report of the same one (ADR 0026).
+            _event(
+                conn,
+                node.customer_id,
+                node.id,
+                "config_failed",
+                {"node": node.name, "version": body.applied_version, "error": (body.error or "")[:500]},
+            )
         audit.record(
             conn,
             f"node:{node.name}",

@@ -66,3 +66,17 @@ router.include_router(scim.router)
 from ..commai.api import router as commai_router  # noqa: E402
 
 router.include_router(commai_router)
+
+from ..integrations.api import router as integrations_router  # noqa: E402
+from ..integrations.api_standards import router as standards_router  # noqa: E402
+
+# Integrations are part of Connect; their public documents (AsyncAPI, RESTCONF
+# discovery) need no sign-in.
+_connect_if_signed_in = [Depends(deps.require_product_when_signed_in("connect"))]
+router.include_router(integrations_router, dependencies=_connect_if_signed_in)
+router.include_router(standards_router, dependencies=_connect_if_signed_in)
+
+# Last, so fixed paths such as /customers/mine and /applications/catalogue win.
+from . import items  # noqa: E402
+
+router.include_router(items.router)

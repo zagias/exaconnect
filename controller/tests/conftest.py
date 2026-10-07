@@ -63,3 +63,7 @@ def admin_headers(client):
     r = client.post("/api/v1/auth/login", json={"email": ADMIN[0], "password": ADMIN[1]})
     assert r.status_code == 200, r.text
     return {"Authorization": f"Bearer {r.json()['token']}"}
+
+
+# Fake servers and switches for the integration tests (tests/test_integrations_*.py).
+from .integrations_helpers import fake, live, vault  # noqa: E402, F401

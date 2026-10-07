@@ -48,6 +48,8 @@ class PathInput:
     bfd_down: bool = False
     over_commit: bool = False
     windows: Sequence[Window] = ()
+    # Planned carrier maintenance on this link (ADR 0026): the reason, or None.
+    maintenance: str | None = None
 
 
 @dataclass(frozen=True)
@@ -106,6 +108,7 @@ class PathEval:
     down_reason: str | None
     known: bool  # enough recent data to judge it
     metrics: dict[str, MetricView] = field(default_factory=dict)
+    maintenance: bool = False
 
     @property
     def score_now(self) -> float:
@@ -196,7 +199,9 @@ def evaluate(
     recent = [w for w in windows if w.t > now - policy.dead_after_s and w.sent > 0]
     known = any(w.t > now - policy.stale_after_s and w.sent > 0 for w in windows)
     down_reason = None
-    if p.bfd_down:
+    if p.maintenance:
+        down_reason = p.maintenance
+    elif p.bfd_down:
         down_reason = "BFD reports it down"
     elif recent and sum(w.received for w in recent) == 0:
         down_reason = f"no probe replies for {int(policy.dead_after_s)} s"
@@ -232,6 +237,7 @@ def evaluate(
         down_reason=down_reason,
         known=known,
         metrics=metrics,
+        maintenance=bool(p.maintenance),
     )
 
 
@@ -335,6 +341,8 @@ def decide(
         to = best_alternative(cur.name, True) or best_alternative(cur.name, False)
         if to is None:
             return note(f"Kept {cls} on {cur.label}: it is down ({cur.down_reason}) and no other path is up.")
+        if cur.maintenance:
+            return moved(to, "move", f"Moved {cls} from {cur.label} to {to.label} ahead of {cur.down_reason}.")
         return moved(
             to, "failover", f"Moved {cls} from {cur.label} to {to.label}: {cur.label} is down ({cur.down_reason})."
         )

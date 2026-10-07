@@ -23,7 +23,7 @@ from psycopg.types.json import Jsonb
 
 from . import audit, fabric, internet
 
-ACTIONS = ("cloud_circuit", "site_circuit", "partner_connection", "bandwidth", "internet_mode")
+ACTIONS = ("cloud_circuit", "site_circuit", "partner_connection", "bandwidth", "internet_mode", "onramp")
 MAX_ACTIONS = 5
 DEFAULT_CLOUD_MBPS = 50
 DEFAULT_SITE_MBPS = 20
@@ -536,6 +536,28 @@ def review(conn: psycopg.Connection, customer_id: Any, raw: list[dict[str, Any]]
                 summary.append(
                     f"Send {site['name']}'s internet {MODE_WORDS[mode]} (now {MODE_WORDS[site['internet_mode']]})."
                 )
+        elif kind == "onramp":
+            # Dedicated cloud on-ramps through the provider adapters (ADR 0026).
+            from .integrations import onramps
+            from .integrations.adapters.clouds import OnrampError
+
+            try:
+                r = onramps.review(conn, customer_id, a)
+            except OnrampError as e:
+                problems.append(str(e))
+                continue
+            ad = onramps.adapter(r["provider"])
+            site_name = next((s["name"] for s in ctx["sites"] if s["id"] == r["site_id"]), None)
+            actions.append(
+                {"action": "onramp", "provider": r["provider"], "name": r["name"], "site": site_name, **r["detail"]}
+            )
+            summary.append(
+                f"Order {ad.name} at {r['detail']['bandwidth_mbps']} Mbps"
+                + (f" for {site_name}" if site_name else "")
+                + (" (simulated until the provider is connected)" if not ad.live() else "")
+                + "."
+            )
+            estimate += r["detail"]["bandwidth_mbps"] * onramps.PRICE_PER_MBPS_MONTH
         elif kind is not None:
             problems.append(f"Can't order '{kind}' here.")
     return {
@@ -693,6 +715,22 @@ def confirm(conn: psycopg.Connection, order: dict, inputs: list[dict[str, Any]],
                         "ok": True,
                         "circuit_id": c["id"],
                         "message": f"{a['circuit']} is now {a['bandwidth_mbps']} Mbps.",
+                    }
+                )
+            elif a["action"] == "onramp":
+                from .integrations import onramps
+                from .integrations.adapters.clouds import OnrampError
+
+                try:
+                    o = onramps.create(conn, cid, a, actor, order_id=order["id"])
+                except OnrampError as e:
+                    raise OrderError(f"Change {i + 1}: {e}") from None
+                results.append(
+                    {
+                        "action": i,
+                        "ok": True,
+                        "onramp_id": o["id"],
+                        "message": f"Ordered {o['name']} ({o['status']}). {o['detail'].get('next_step', '')}".strip(),
                     }
                 )
             elif a["action"] == "internet_mode":

@@ -7,6 +7,7 @@ import { useCustomer, who } from "../customer";
 import { Card, PageHead, RowActions, Tabs, useAction } from "../ui";
 import { BillingAdmin } from "./BillingAdmin";
 import { Classes } from "./Classes";
+import { IntegrationsAdmin } from "./IntegrationsAdmin";
 import { PartnersAdmin } from "./PartnersAdmin";
 import { ProtectionAdmin } from "./ProtectionAdmin";
 import { ReleasesAdmin } from "./ReleasesAdmin";
@@ -34,7 +35,7 @@ export default function Admin() {
   return (
     <>
       <PageHead eyebrow="Admin" title="Administration">
-        Agents, customers and sites, classes, partners, protection, users, releases and the audit log.
+        Agents, customers and sites, classes, partners, protection, integrations, users, releases and the audit log.
       </PageHead>
       <Tabs label="Admin sections">
         <NavLink to="/admin/agents">Agents</NavLink>
@@ -43,6 +44,7 @@ export default function Admin() {
         <NavLink to="/admin/partners">Partners</NavLink>
         <NavLink to="/admin/billing">Billing</NavLink>
         <NavLink to="/admin/protection">Protection</NavLink>
+        <NavLink to="/admin/integrations">Integrations</NavLink>
         <NavLink to="/admin/users">Users</NavLink>
         <NavLink to="/admin/settings">Settings</NavLink>
         <NavLink to="/admin/releases">Releases</NavLink>
@@ -56,6 +58,7 @@ export default function Admin() {
         <Route path="partners" element={<PartnersAdmin />} />
         <Route path="billing" element={<BillingAdmin />} />
         <Route path="protection" element={<ProtectionAdmin />} />
+        <Route path="integrations" element={<IntegrationsAdmin />} />
         <Route path="users" element={<UsersAdmin />} />
         <Route path="settings" element={<SettingsAdmin />} />
         <Route path="releases" element={<ReleasesAdmin />} />

@@ -463,6 +463,16 @@ def corporate(conn: psycopg.Connection, customer_id: Any) -> list[str]:
 
 
 def record(conn: psycopg.Connection, node: dict, data: dict[str, Any]) -> None:
+    before = conn.execute("SELECT auto_blocked FROM internet_state WHERE node_id = %s", (node["id"],)).fetchone()
+    had = {b.get("address") for b in (before["auto_blocked"] if before else []) or []}
+    for b in data.get("auto_blocked", []):
+        if str(b["address"]) not in had:
+            # A newly blocked flooding source (ADR 0012), published as ddos.blocked (ADR 0026).
+            conn.execute(
+                "INSERT INTO events (time, customer_id, node_id, kind, detail)"
+                " VALUES (now(), %s, %s, 'ddos_blocked', %s)",
+                (node["customer_id"], node["id"], Jsonb({"address": str(b["address"]), "expires_s": b["expires_s"]})),
+            )
     conn.execute(
         """INSERT INTO internet_state (node_id, customer_id, mode, via, counters, auto_blocked, updated_at)
            VALUES (%s, %s, %s, %s, %s, %s, now())

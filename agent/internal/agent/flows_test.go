@@ -2,12 +2,15 @@ package agent
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
+	"net"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/zagias/exaconnect/agent/internal/desired"
 	"github.com/zagias/exaconnect/agent/internal/steer"
@@ -169,5 +172,62 @@ func TestQoSFailureReportedOnceAndSteeringContinues(t *testing.T) {
 	}
 	if qosEvents != 1 {
 		t.Fatalf("qos_failed events = %d, want 1", qosEvents)
+	}
+}
+
+func TestCollectFlowsExportsIPFIXWhenDesiredStateSaysSo(t *testing.T) {
+	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pc.Close()
+	sys := &ctSys{fakeSys: &fakeSys{files: map[string]string{}}}
+	a := quietAgent(sys)
+	ds := state(1)
+	ds.IPFIX = &desired.IPFIX{Collector: pc.LocalAddr().String(), ObservationDomain: 77}
+	a.current, a.steerMap = &ds, flowMap()
+	for i, pkts := range []int{10, 25} {
+		sys.conntrack = strings.Replace(strings.Replace(ctLine, "packets=%d", "packets="+itoa(int64(pkts)), 1), "bytes=%d", "bytes="+itoa(int64(pkts*100)), 1)
+		a.collectFlows(context.Background())
+		if i == 0 && len(a.buf.Flows) != 0 {
+			t.Fatal("the first read is a baseline")
+		}
+	}
+	buf := make([]byte, 2048)
+	pc.SetReadDeadline(time.Now().Add(5 * time.Second))
+	n, _, err := pc.ReadFrom(buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	msg := buf[:n]
+	if binary.BigEndian.Uint16(msg) != 10 || binary.BigEndian.Uint32(msg[12:]) != 77 {
+		t.Fatalf("not an IPFIX message for domain 77: % x", msg[:16])
+	}
+	if !strings.Contains(string(msg), "voice") || len(a.buf.Flows) != 1 {
+		t.Fatalf("export lacks the class or telemetry lost the flow (%d)", len(a.buf.Flows))
+	}
+
+	// A collector that can't be reached is logged once and never stops telemetry.
+	ds.IPFIX = &desired.IPFIX{Collector: "127.0.0.1:99999"} // fails without any lookup
+	sys.conntrack = strings.Replace(strings.Replace(ctLine, "packets=%d", "packets=40", 1), "bytes=%d", "bytes=4000", 1)
+	a.collectFlows(context.Background())
+	if a.ipfixErr == "" || len(a.buf.Flows) != 2 {
+		t.Fatalf("ipfix error %q, flows %d", a.ipfixErr, len(a.buf.Flows))
+	}
+	// Removed from desired state: export stops.
+	ds.IPFIX = nil
+	a.collectFlows(context.Background())
+}
+
+func TestDesiredStateChecksTheIPFIXCollector(t *testing.T) {
+	for addr, ok := range map[string]bool{
+		"192.0.2.10:4739": true, "collector.example.org:2055": true, "[2001:db8::1]:4739": true,
+		"collector.example.org": false, ":4739": false, "a b:4739": false, "host:0": false, "host:70000": false,
+	} {
+		ds := state(1)
+		ds.IPFIX = &desired.IPFIX{Collector: addr}
+		if err := ds.Validate(); (err == nil) != ok {
+			t.Errorf("%s: %v", addr, err)
+		}
 	}
 }

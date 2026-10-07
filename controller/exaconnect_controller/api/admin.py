@@ -8,6 +8,7 @@ import re
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
+from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field, field_validator
 
 from .. import audit, db, inventory
@@ -167,12 +168,16 @@ def revoke_node(node_id: str, user: AdminDep) -> dict:
     with db.tx() as conn:
         node = conn.execute(
             """UPDATE nodes SET cert_serial = 'revoked:' || id::text, prev_cert_serial = NULL
-               WHERE id = %s RETURNING name, customer_id""",
+               WHERE id = %s RETURNING id, name, customer_id""",
             (node_id,),
         ).fetchone()
         if node is None:
             raise HTTPException(404, "Node not found.")
         audit.record(conn, user.actor, "node.revoke", node["name"], node["customer_id"])
+        conn.execute(
+            "INSERT INTO events (time, customer_id, node_id, kind, detail) VALUES (now(), %s, %s, 'node_revoked', %s)",
+            (node["customer_id"], node["id"], Jsonb({"node": node["name"], "by": user.actor})),
+        )
     return {"revoked": True}
 
 

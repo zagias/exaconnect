@@ -196,7 +196,17 @@ function navGroups(user: User | null): Group[] {
   const role = user?.role;
   // The plans the current organisation holds (ADR 0023); null: not limited by plan.
   const has = (p: Product) => !user?.products || user.products.includes(p);
-  if (role === "carrier") return [{ label: null, items: [{ to: "/", label: "Carrier view", icon: icons.carrier, end: true }] }];
+  if (role === "carrier")
+    return [
+      {
+        label: null,
+        items: [
+          { to: "/", label: "Carrier view", icon: icons.carrier, end: true },
+          { to: "/notices", label: "Notices", icon: icons.insights },
+          { to: "/integrations", label: "Integrations", icon: icons.fabric },
+        ],
+      },
+    ];
   const admin = role === "admin";
   const connect: Group[] = [
     {
@@ -206,6 +216,7 @@ function navGroups(user: User | null): Group[] {
         { to: "/sites", label: "Sites", icon: icons.sites },
         { to: "/decisions", label: "Decisions", icon: icons.decisions },
         { to: "/insights", label: "Insights", icon: icons.insights },
+        { to: "/notices", label: "Carrier notices", icon: icons.carrier },
         { to: "/ask", label: "Ask", icon: icons.ask },
       ],
     },
@@ -216,6 +227,7 @@ function navGroups(user: User | null): Group[] {
         { to: "/fabric", label: "Fabric", icon: icons.fabric },
         { to: "/internet", label: "Internet", icon: icons.internet },
         { to: "/encryption", label: "Encryption", icon: icons.encryption },
+        { to: "/integrations", label: "Integrations", icon: icons.fabric },
       ],
     },
     {
