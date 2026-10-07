@@ -8,14 +8,24 @@ import { Card, PageHead, RowActions, Tabs, useAction } from "../ui";
 import { Classes } from "./Classes";
 import { PartnersAdmin } from "./PartnersAdmin";
 import { ProtectionAdmin } from "./ProtectionAdmin";
+import { ReleasesAdmin } from "./ReleasesAdmin";
+
+interface EnrolToken {
+  token: string;
+  expires_at: string;
+  ca_fingerprint: string;
+  agent_url: string;
+  /** The agent gateway on the internet; empty while it is not published. */
+  public_agent_url: string;
+}
 
 // Admin screens (CLAUDE.md §4.6, screen 6): agents, customers, sites and links,
-// enrolment tokens, classes and SLA policies, partners, DDoS protection, users, settings and the audit log.
+// enrolment tokens, classes and SLA policies, partners, DDoS protection, users, settings, releases and the audit log.
 export default function Admin() {
   return (
     <>
       <PageHead eyebrow="Admin" title="Administration">
-        Agents, customers and sites, classes, partners, protection, users and the audit log.
+        Agents, customers and sites, classes, partners, protection, users, releases and the audit log.
       </PageHead>
       <Tabs label="Admin sections">
         <NavLink to="/admin/agents">Agents</NavLink>
@@ -25,6 +35,7 @@ export default function Admin() {
         <NavLink to="/admin/protection">Protection</NavLink>
         <NavLink to="/admin/users">Users</NavLink>
         <NavLink to="/admin/settings">Settings</NavLink>
+        <NavLink to="/admin/releases">Releases</NavLink>
         <NavLink to="/admin/audit">Audit log</NavLink>
       </Tabs>
       <Routes>
@@ -36,6 +47,7 @@ export default function Admin() {
         <Route path="protection" element={<ProtectionAdmin />} />
         <Route path="users" element={<UsersAdmin />} />
         <Route path="settings" element={<SettingsAdmin />} />
+        <Route path="releases" element={<ReleasesAdmin />} />
         <Route path="audit" element={<AuditLog />} />
       </Routes>
     </>
@@ -65,10 +77,18 @@ function Secret({ label, value, children }: { label: string; value: string; chil
 // ---- Agents ----
 
 function Agents() {
-  const { data, error } = useApi<NodeRow[]>("/nodes", 10_000);
+  const { data, error, reload } = useApi<NodeRow[]>("/nodes", 10_000);
+  const act = useAction();
+  const revoke = (n: NodeRow) => {
+    if (!window.confirm(`Revoke ${n.name}? Its certificate stops working at once and it keeps forwarding on its last state. A new enrolment token brings it back.`)) return;
+    act.run(async () => {
+      await api(`/nodes/${n.id}/revoke`, { method: "POST" });
+      reload();
+    });
+  };
   return (
     <Card title="Agents" note={<span className="muted small">Each agent polls for its desired state every 10 seconds.</span>}>
-      <ErrorNote error={error} />
+      <ErrorNote error={error ?? act.error} />
       <div className="table-wrap">
         <table className="paths dt">
           <thead>
@@ -78,6 +98,9 @@ function Agents() {
               <th scope="col">Last seen</th>
               <th scope="col">Config</th>
               <th scope="col">Agent</th>
+              <th scope="col">
+                <span className="sr-only">Actions</span>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -99,11 +122,22 @@ function Agents() {
                   {n.apply_error && <span className="sub">{n.apply_error}</span>}
                 </td>
                 <td className="mono muted">{n.agent_version || "–"}</td>
+                <td className="actions">
+                  {n.revoked ? (
+                    <StatusPill health="bad">Revoked</StatusPill>
+                  ) : (
+                    <RowActions
+                      label={n.name}
+                      disabled={act.busy}
+                      items={[{ label: "Revoke certificate", danger: true, onSelect: () => revoke(n) }]}
+                    />
+                  )}
+                </td>
               </tr>
             ))}
             {data?.length === 0 && (
               <tr>
-                <td colSpan={5} className="muted">
+                <td colSpan={6} className="muted">
                   No agents yet. Add a site in Sites and links, issue an enrolment token and install the agent.
                 </td>
               </tr>
@@ -156,12 +190,12 @@ function SitesAdmin() {
   const inv = useApi<{ sites: SiteRow[] }>(current ? `/inventory?customer_id=${current.id}` : null, 0);
   const [editing, setEditing] = useState<SiteRow | "new" | null>(null);
   const [linkFor, setLinkFor] = useState<{ site: SiteRow; link: LinkRow | null } | null>(null);
-  const [token, setToken] = useState<{ site: string; token: string; expires_at: string; ca_fingerprint: string; agent_url: string } | null>(null);
+  const [token, setToken] = useState<({ site: string } & EnrolToken) | null>(null);
   const act = useAction();
 
   const issue = (s: SiteRow) =>
     act.run(async () => {
-      const t = await api<{ token: string; expires_at: string; ca_fingerprint: string; agent_url: string }>("/enrolment-tokens", {
+      const t = await api<EnrolToken>("/enrolment-tokens", {
         method: "POST",
         body: JSON.stringify({ site_id: s.id, ttl_hours: 24 }),
       });
@@ -183,11 +217,27 @@ function SitesAdmin() {
           <ErrorNote error={inv.error ?? act.error} />
           {token && (
             <Secret label={`Enrolment token for ${token.site}, valid until ${new Date(token.expires_at).toLocaleString()}`} value={token.token}>
-              <p className="small muted" style={{ marginBottom: 0 }}>
-                Install with the controller URL <span className="mono">{token.agent_url}</span> and CA fingerprint{" "}
-                <span className="mono">{token.ca_fingerprint}</span>. The agent generates its own WireGuard keys and
-                sends only the public key.
-              </p>
+              {token.public_agent_url ? (
+                <>
+                  <p className="small muted">
+                    On the site's Linux box (Debian or Ubuntu), with the site kit from the latest build, run as root:
+                  </p>
+                  <pre className="mono small">
+                    {`EXA_ENROL_TOKEN=<the token above> bash install.sh \\\n  --controller ${token.public_agent_url} \\\n  --ca-fingerprint ${token.ca_fingerprint} \\\n  --name ${token.site}`}
+                  </pre>
+                  <p className="small muted" style={{ marginBottom: 0 }}>
+                    The site needs outbound HTTPS to port 8443 only; nothing inbound. The agent generates its own
+                    WireGuard keys and sends only the public key. Lab nodes use{" "}
+                    <span className="mono">{token.agent_url}</span>.
+                  </p>
+                </>
+              ) : (
+                <p className="small muted" style={{ marginBottom: 0 }}>
+                  Install with the controller URL <span className="mono">{token.agent_url}</span> and CA fingerprint{" "}
+                  <span className="mono">{token.ca_fingerprint}</span>. The agent generates its own WireGuard keys and
+                  sends only the public key.
+                </p>
+              )}
             </Secret>
           )}
           {editing && (

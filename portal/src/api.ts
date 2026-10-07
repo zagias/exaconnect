@@ -252,6 +252,8 @@ export interface NodeRow {
   apply_ok: boolean | null;
   apply_error: string | null;
   agent_version: string | null;
+  /** Its certificate no longer works; a new enrolment token brings it back. */
+  revoked?: boolean;
 }
 
 export interface User {

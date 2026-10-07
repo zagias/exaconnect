@@ -72,7 +72,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.add_middleware(Idempotency)
     app.add_middleware(RateLimit)
-    app.state.ca = pki.load_or_create(settings.data_dir, [s.strip() for s in settings.tls_sans.split(",") if s.strip()])
+    app.state.ca = pki.load_or_create(settings.data_dir, settings.tls_names())
 
     @app.get("/healthz", tags=["ops"])
     def healthz() -> dict[str, str]:

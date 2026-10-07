@@ -651,3 +651,16 @@ INSERT INTO paths (name, label, tunnel, overlay_cidr, pop_port, bfd_profile, loc
   ('carrier-b', 'Carrier B', 'wg-b',   '100.64.2.0/24', 51821, 'terrestrial', 150, 2),
   ('sat',       'Satellite', 'wg-sat', '100.64.3.0/24', 51822, 'satellite',    50, 3)
 ON CONFLICT (name) DO NOTHING;
+
+-- Releases (ADR 0025): written by deploy/release/release.sh on the host, read by Admin > Releases.
+CREATE TABLE IF NOT EXISTS releases (
+  id           bigserial PRIMARY KEY,
+  commit       text NOT NULL,
+  previous     text,
+  started_at   timestamptz NOT NULL DEFAULT now(),
+  finished_at  timestamptz,
+  status       text NOT NULL CHECK (status IN ('deploying', 'live', 'rolled_back', 'failed')),
+  kind         text NOT NULL DEFAULT 'release' CHECK (kind IN ('release', 'rollback')),
+  backup       text,
+  detail       text NOT NULL DEFAULT ''
+);

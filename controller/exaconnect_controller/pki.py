@@ -134,10 +134,22 @@ def load_or_create(data_dir: str, sans: list[str]) -> CA:
     return ca
 
 
+def _server_names(path: Path) -> set[str]:
+    try:
+        cert = x509.load_pem_x509_certificate(path.read_bytes())
+        alt = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
+    except (ValueError, x509.ExtensionNotFound):
+        return set()
+    return {str(n.value) for n in alt}
+
+
 def _write_server_cert(ca: CA, tls_dir: Path, sans: list[str]) -> None:
     tls_dir.mkdir(parents=True, exist_ok=True)
     if (tls_dir / "server.crt").exists() and (tls_dir / "server.key").exists():
-        return  # delete data/tls to reissue (for example after changing EXA_TLS_SANS)
+        # Reissue only when a name is missing (a new public gateway name, ADR 0024). Agents
+        # trust the CA, not this certificate, so a reissue needs nothing from them.
+        if set(sans) <= _server_names(tls_dir / "server.crt"):
+            return
     key = ec.generate_private_key(ec.SECP256R1())
     alt: list[x509.GeneralName] = []
     for s in sans:

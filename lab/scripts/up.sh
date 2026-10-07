@@ -27,8 +27,13 @@ else
   make -s lab-agent || { echo "FAIL agent build"; exit 1; }
 fi
 
-step "Controller"
-make -s controller-up || { echo "FAIL controller-up"; exit 1; }
+step "Release (controller, agent gateway, public portal)"
+# Health-checked, with automatic rollback to the previous release (ADR 0025). A fresh
+# lab has no agents running yet, so the agents check waits for the next release.
+if ! EXA_RELEASE_SKIP_AGENTS=$fresh deploy/release/release.sh; then
+  echo "FAIL release: this commit was not healthy and the previous release is back (see above)"
+  exit 1
+fi
 
 step "Agents"
 if [[ $fresh == 1 || ! -s lab/.state/seed.json ]]; then
@@ -38,11 +43,6 @@ else
   umask 077
   "${COMPOSE[@]}" exec -T controller python -m exaconnect_controller.seed --lab >lab/.state/seed.json
   lab/scripts/agents.sh restart
-fi
-
-if [[ -s deploy/public/site.env ]]; then
-  step "Public portal"
-  make -s public-up || echo "FAIL public-up"
 fi
 
 step "Waiting for tunnels, BGP and BFD"

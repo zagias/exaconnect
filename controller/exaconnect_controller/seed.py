@@ -114,7 +114,7 @@ def main() -> None:
         ap.error("only --lab is supported")
     s = get_settings()
     db.init(s.database_url)
-    ca = pki.load_or_create(s.data_dir, [x.strip() for x in s.tls_sans.split(",") if x.strip()])
+    ca = pki.load_or_create(s.data_dir, s.tls_names())
     with db.tx() as conn:
         out = seed_lab(conn)
     db.close()
