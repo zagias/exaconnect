@@ -10,6 +10,7 @@ from . import (
     auth,
     circuits,
     internet,
+    inventory_admin,
     metering,
     ordering,
     protection,
@@ -32,6 +33,7 @@ def version() -> dict[str, str]:
 
 router.include_router(auth.router)
 router.include_router(admin.router)
+router.include_router(inventory_admin.router)
 router.include_router(agent.router)
 router.include_router(views.router)
 router.include_router(settings.router)

@@ -10,6 +10,14 @@ import { PartnersAdmin } from "./PartnersAdmin";
 import { ProtectionAdmin } from "./ProtectionAdmin";
 import { ReleasesAdmin } from "./ReleasesAdmin";
 
+interface OpenToken {
+  id: string;
+  site: string;
+  customer_id: string;
+  created_by: string;
+  expires_at: string;
+}
+
 interface EnrolToken {
   token: string;
   expires_at: string;
@@ -191,6 +199,7 @@ function SitesAdmin() {
   const [editing, setEditing] = useState<SiteRow | "new" | null>(null);
   const [linkFor, setLinkFor] = useState<{ site: SiteRow; link: LinkRow | null } | null>(null);
   const [token, setToken] = useState<({ site: string } & EnrolToken) | null>(null);
+  const tokens = useApi<OpenToken[]>("/enrolment-tokens", 0);
   const act = useAction();
 
   const issue = (s: SiteRow) =>
@@ -200,6 +209,36 @@ function SitesAdmin() {
         body: JSON.stringify({ site_id: s.id, ttl_hours: 24 }),
       });
       setToken({ site: s.name, ...t });
+      tokens.reload();
+    });
+
+  // Deleting asks once; if the link has samples this billing month, it says so and asks again.
+  const remove = (what: string, path: string) => {
+    if (!window.confirm(`Delete the ${what}? Agents get the change at once. This can't be undone.`)) return;
+    act.run(async () => {
+      try {
+        await api(path, { method: "DELETE" });
+      } catch (e) {
+        const msg = (e as Error).message;
+        if (!/billing month/.test(msg) || !window.confirm(`${msg}\n\nDelete it anyway?`)) throw e;
+        await api(`${path}?force=true`, { method: "DELETE" });
+      }
+      inv.reload();
+    });
+  };
+  const rename = () => {
+    if (!current) return;
+    const name = window.prompt("New name for this customer", current.name)?.trim();
+    if (!name || name === current.name) return;
+    act.run(async () => {
+      await api(`/customers/${current.id}`, { method: "PATCH", body: JSON.stringify({ name }) });
+      reloadCustomers();
+    });
+  };
+  const cancelToken = (t: OpenToken) =>
+    act.run(async () => {
+      await api(`/enrolment-tokens/${t.id}`, { method: "DELETE" });
+      tokens.reload();
     });
 
   return (
@@ -209,9 +248,14 @@ function SitesAdmin() {
         <Card
           title={`Sites for ${current.name}`}
           note={
-            <button className="button small" onClick={() => setEditing("new")}>
-              Add a site
-            </button>
+            <>
+              <button className="button secondary small" onClick={rename} disabled={act.busy}>
+                Rename
+              </button>{" "}
+              <button className="button small" onClick={() => setEditing("new")}>
+                Add a site
+              </button>
+            </>
           }
         >
           <ErrorNote error={inv.error ?? act.error} />
@@ -314,6 +358,18 @@ function SitesAdmin() {
                         items={[
                           { label: "Add a link", onSelect: () => setLinkFor({ site: s, link: null }) },
                           { label: "Issue enrolment token", disabled: act.busy, onSelect: () => issue(s) },
+                          ...s.links.map((l) => ({
+                            label: `Remove link ${l.path}`,
+                            danger: true,
+                            disabled: act.busy,
+                            onSelect: () => remove(`link ${l.path} at ${s.name}`, `/sites/${s.id}/links/${l.id}`),
+                          })),
+                          {
+                            label: "Delete site",
+                            danger: true,
+                            disabled: act.busy,
+                            onSelect: () => remove(`site ${s.name}, its links and its agent`, `/sites/${s.id}`),
+                          },
                         ]}
                       />
                     </td>
@@ -322,6 +378,24 @@ function SitesAdmin() {
               </tbody>
             </table>
           </div>
+          {(tokens.data ?? []).filter((t) => t.customer_id === current.id).length > 0 && (
+            <>
+              <h3 style={{ margin: "20px 0 8px" }}>Open enrolment tokens</h3>
+              <ul className="lines small">
+                {(tokens.data ?? [])
+                  .filter((t) => t.customer_id === current.id)
+                  .map((t) => (
+                    <li key={t.id}>
+                      <span className="mono">{t.site}</span>, issued by {t.created_by}, valid until{" "}
+                      {new Date(t.expires_at).toLocaleString("en-GB")}{" "}
+                      <button className="link" disabled={act.busy} onClick={() => cancelToken(t)}>
+                        Cancel
+                      </button>
+                    </li>
+                  ))}
+              </ul>
+            </>
+          )}
         </Card>
       )}
     </>

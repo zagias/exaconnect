@@ -494,6 +494,8 @@ export interface CustomerSettings {
   storm_allow_bulk_sat: boolean;
   /** Apply confident application detections as rules without asking. */
   auto_prioritise: boolean;
+  /** A lab or demo organisation: its screens carry "Example data". */
+  example?: boolean;
   /** Clouds reach each other through the PoP (ExaConnect Fabric). */
   cloud_to_cloud?: boolean;
   sites: StormSite[];

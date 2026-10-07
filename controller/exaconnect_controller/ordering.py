@@ -258,7 +258,7 @@ def parse_rules(text: str, ctx: dict[str, Any]) -> list[dict[str, Any]]:
 
 # ---- the AI parser -------------------------------------------------------
 
-AI_SYSTEM = """You turn a customer's request for ExaConnect, ExaCarib's connectivity platform, into JSON actions.
+AI_SYSTEM = """You turn a customer's request for ExaCarib Connect, ExaCarib's connectivity platform, into JSON actions.
 Reply with one JSON object and nothing else: {"actions": [...]} with at most 5 actions, each one of:
 {"action":"cloud_circuit","provider":"aws|azure|gcp|oracle","region":"...",
  "site":"<site name, or null for all sites>","bandwidth_mbps":int|null,"cloud_prefixes":["10.0.0.0/16"],

@@ -642,6 +642,17 @@ BEGIN
     PERFORM create_hypertable('events', 'time', if_not_exists => TRUE, migrate_data => TRUE);
     PERFORM create_hypertable('flow_stats', 'time', if_not_exists => TRUE, migrate_data => TRUE);
     PERFORM create_hypertable('circuit_metrics', 'time', if_not_exists => TRUE, migrate_data => TRUE);
+    -- Retention: the server's disk is finite. Probe and circuit samples are kept 90 days;
+    -- interface counters and events 13 months, so a full billing year and its disputes
+    -- can be re-run. Metering's 5-minute samples (usage_5m) are not dropped.
+    BEGIN
+      PERFORM add_retention_policy('path_metrics', INTERVAL '90 days', if_not_exists => TRUE);
+      PERFORM add_retention_policy('circuit_metrics', INTERVAL '90 days', if_not_exists => TRUE);
+      PERFORM add_retention_policy('iface_counters', INTERVAL '400 days', if_not_exists => TRUE);
+      PERFORM add_retention_policy('events', INTERVAL '400 days', if_not_exists => TRUE);
+    EXCEPTION WHEN OTHERS THEN
+      RAISE NOTICE 'retention policies not added: %', SQLERRM;
+    END;
   END IF;
 END
 $$;
@@ -664,3 +675,6 @@ CREATE TABLE IF NOT EXISTS releases (
   backup       text,
   detail       text NOT NULL DEFAULT ''
 );
+
+-- Lab and demo organisations: every screen showing their data carries "Example data" (CLAUDE.md 4.6).
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS example boolean NOT NULL DEFAULT false;

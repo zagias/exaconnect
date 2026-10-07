@@ -61,7 +61,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         db.close()
 
     app = FastAPI(
-        title="ExaConnect controller",
+        title="ExaCarib Connect API",
         version=__version__,
         openapi_url="/api/v1/openapi.json",
         docs_url="/api/v1/docs",

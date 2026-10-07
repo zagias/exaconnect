@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useLocation } from "react-router-dom";
-import { Eyebrow } from "./components";
+import { Eyebrow, ExampleTag } from "./components";
+import { useCustomer } from "./customer";
 import "./tables.css";
 
 export { RowActions, type RowAction } from "./menu";
@@ -37,10 +38,20 @@ export function Card({ title, children, note }: { title: string; children: React
 
 /** Eyebrow, title and one short muted line. */
 export function PageHead({ eyebrow, title, children }: { eyebrow: string; title: string; children?: ReactNode }) {
+  // Lab and demo organisations: every screen of theirs says it shows example data (CLAUDE.md 4.6).
+  const example = useCustomer().current?.example;
   return (
     <div className="page-head">
       <Eyebrow>{eyebrow}</Eyebrow>
-      <h1>{title}</h1>
+      <h1>
+        {title}
+        {example && (
+          <>
+            {" "}
+            <ExampleTag />
+          </>
+        )}
+      </h1>
       {children && <p className="muted">{children}</p>}
     </div>
   );

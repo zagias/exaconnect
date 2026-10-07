@@ -43,6 +43,7 @@ CLASSES = [
 
 def seed_lab(conn) -> dict:
     cid = inventory.ensure_customer(conn, CUSTOMER, ACTOR)
+    conn.execute("UPDATE customers SET example = true WHERE id = %s", (cid,))
     for ordinal, (name, desc, dscp, ports, lat, jit, loss, sat, prio) in enumerate(CLASSES, 1):
         conn.execute(
             """INSERT INTO app_classes (customer_id, name, description, dscp, ports, ordinal, priority, builtin)

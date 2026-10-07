@@ -133,7 +133,7 @@ def my_customers(user: UserDep) -> list[dict]:
     with db.tx() as conn:
         rows = conn.execute(
             """SELECT id, name, shadow_mode, storm_mode, storm_since, storm_by, storm_allow_bulk_sat,
-                      auto_prioritise
+                      auto_prioritise, example
                FROM customers WHERE %(c)s::uuid IS NULL OR id = %(c)s ORDER BY name""",
             {"c": None if user.role == "admin" else user.customer_id},
         ).fetchall()

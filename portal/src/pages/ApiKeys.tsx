@@ -159,8 +159,8 @@ export default function ApiKeys() {
           <pre className="code">
             {`export EXACONNECT_API_KEY=exa_...
 
-from exaconnect import ExaConnect
-exa = ExaConnect("https://connect.exacarib.com")`}
+from exaconnect import Connect
+connect = Connect("https://connect.exacarib.com")`}
           </pre>
         </div>
         <div>
