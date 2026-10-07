@@ -538,7 +538,8 @@ def test_invite_into_a_single_sign_on_domain(client, world):
             (a,),
         ).fetchone()["id"]
         conn.execute(
-            "INSERT INTO sso_domains (connection_id, customer_id, domain, status) VALUES (%s, %s, 'sso-a.example', 'approved')",
+            "INSERT INTO sso_domains (connection_id, customer_id, domain, status)"
+            " VALUES (%s, %s, 'sso-a.example', 'approved')",
             (c, a),
         )
     r = client.post(f"{API}/orgs/{a}/invites", json={"email": "new@sso-a.example"}, headers=world["h_a"])
