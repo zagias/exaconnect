@@ -14,7 +14,7 @@ of two ways, the same ways CommAI signs its own webhooks:
 Timestamps more than five minutes off are refused. The body may be a
 CloudEvent (structured or binary mode) or any JSON object. Each accepted
 delivery is recorded once per delivery id (webhook-id, ce-id or
-X-ExaCarib-Event-Id) and becomes a ``webhook.received`` event, which
+X-ExaCarib-Event-Id) and becomes an ``inbound_webhook.received`` event, which
 workflows can use as their trigger. Nothing in the body is ever run.
 
 **App hooks** carry an app's own change notifications (Zoho, Pipedrive,
@@ -37,7 +37,7 @@ from . import webhooks_std
 
 MAX_BODY = 256_000
 
-events.register("webhook.received", "integration.event")
+events.register("inbound_webhook.received", "integration.event")
 
 
 class HookError(Exception):
@@ -164,7 +164,7 @@ def receive(conn: psycopg.Connection, token: str, headers: dict, body: bytes, qu
     event_id = events.emit(
         conn,
         hook["customer_id"],
-        "webhook.received",
+        "inbound_webhook.received",
         {
             "hook_id": str(hook["id"]),
             "hook": hook["name"],
