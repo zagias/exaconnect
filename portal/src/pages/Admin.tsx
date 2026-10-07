@@ -5,6 +5,7 @@ import { useAuth } from "../auth";
 import { ErrorNote, StatusPill, ago } from "../components";
 import { useCustomer, who } from "../customer";
 import { Card, PageHead, RowActions, Tabs, useAction } from "../ui";
+import { BillingAdmin } from "./BillingAdmin";
 import { Classes } from "./Classes";
 import { PartnersAdmin } from "./PartnersAdmin";
 import { ProtectionAdmin } from "./ProtectionAdmin";
@@ -22,6 +23,7 @@ export default function Admin() {
         <NavLink to="/admin/sites">Sites and links</NavLink>
         <NavLink to="/admin/classes">Classes and SLA</NavLink>
         <NavLink to="/admin/partners">Partners</NavLink>
+        <NavLink to="/admin/billing">Billing</NavLink>
         <NavLink to="/admin/protection">Protection</NavLink>
         <NavLink to="/admin/users">Users</NavLink>
         <NavLink to="/admin/settings">Settings</NavLink>
@@ -33,6 +35,7 @@ export default function Admin() {
         <Route path="sites" element={<SitesAdmin />} />
         <Route path="classes" element={<Classes />} />
         <Route path="partners" element={<PartnersAdmin />} />
+        <Route path="billing" element={<BillingAdmin />} />
         <Route path="protection" element={<ProtectionAdmin />} />
         <Route path="users" element={<UsersAdmin />} />
         <Route path="settings" element={<SettingsAdmin />} />

@@ -7,6 +7,7 @@ import Ask from "./pages/Ask";
 import Insights from "./pages/Insights";
 import Internet from "./pages/Internet";
 import Admin from "./pages/Admin";
+import Billing from "./pages/Billing";
 import Decisions from "./pages/Decisions";
 import Encryption from "./pages/Encryption";
 import Fabric from "./pages/Fabric";
@@ -53,6 +54,7 @@ function Layout() {
           <Route path="/encryption" element={<Encryption />} />
           <Route path="/order" element={<OrderPage />} />
           <Route path="/metering" element={<Metering />} />
+          <Route path="/billing/*" element={<Billing />} />
           <Route path="/insights" element={<Insights />} />
           <Route path="/ask" element={<Ask />} />
           <Route path="/carrier" element={<Metering carrierView />} />
