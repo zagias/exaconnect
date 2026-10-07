@@ -37,6 +37,8 @@ CREATE TABLE IF NOT EXISTS connect_integrations (
   site_ids           uuid[] NOT NULL DEFAULT '{}',
   min_severity       text NOT NULL DEFAULT 'info' CHECK (min_severity IN ('info', 'warning', 'critical')),
   origin             text NOT NULL DEFAULT 'portal' CHECK (origin IN ('portal', 'api', 'resthook', 'tmf688')),
+  -- For REST hooks (Zapier, Make, n8n): which platform made it.
+  platform           text NOT NULL DEFAULT '',
   state              jsonb NOT NULL DEFAULT '{}',
   last_status        text NOT NULL DEFAULT '',
   last_delivery_at   timestamptz,
@@ -160,21 +162,31 @@ CREATE INDEX IF NOT EXISTS connect_std_documents_customer ON connect_std_documen
 ALTER TABLE nodes ADD COLUMN IF NOT EXISTS offline_since timestamptz;
 
 -- Publishing without slowing the hot paths: a row trigger queues one job in
--- the writer's own transaction, and only when somebody is listening.
+-- the writer's own transaction, and only when somebody is listening. The job
+-- worker turns the row into a CloudEvent and fans it out (publish.py).
 CREATE OR REPLACE FUNCTION connect_publish() RETURNS trigger AS $$
 BEGIN
   IF TG_ARGV[0] = 'events' THEN
     IF NEW.kind NOT IN ('bfd_down', 'bfd_up', 'storm_on', 'storm_off', 'insight', 'enrolled', 'node_revoked',
-                        'node_offline', 'node_online', 'config_failed', 'config_rolled_back', 'ddos_blocked',
-                        'carrier_notice', 'maintenance_start', 'maintenance_end', 'sla_breach',
-                        'sla_breach_forecast') THEN
+                        'node_offline', 'node_online', 'config_failed', 'ddos_blocked',
+                        'carrier_notice', 'maintenance_start', 'maintenance_end') THEN
       RETURN NULL;
     END IF;
-  ELSIF NEW.kind = 'hold' THEN
-    RETURN NULL;
+  ELSIF TG_ARGV[0] = 'decisions' THEN
+    -- A hold is a note; it matters only when no path within SLA is left.
+    IF NEW.kind = 'hold' AND position('no other path' in NEW.reason) = 0 THEN
+      RETURN NULL;
+    END IF;
+  ELSIF TG_ARGV[0] = 'audit' THEN
+    IF NEW.customer_id IS NULL OR NOT EXISTS (
+         SELECT 1 FROM connect_integrations i
+         WHERE i.enabled AND i.customer_id = NEW.customer_id AND 'audit.recorded' = ANY(i.event_types)) THEN
+      RETURN NULL;
+    END IF;
   END IF;
   IF NOT EXISTS (SELECT 1 FROM connect_integrations i
-                 WHERE i.enabled AND (i.customer_id = NEW.customer_id OR i.carrier_id IS NOT NULL)) THEN
+                 WHERE i.enabled AND cardinality(i.event_types) > 0
+                   AND (i.customer_id = NEW.customer_id OR i.carrier_id IS NOT NULL)) THEN
     RETURN NULL;
   END IF;
   INSERT INTO jobs (kind, customer_id, payload)
@@ -190,3 +202,6 @@ CREATE TRIGGER connect_publish_events AFTER INSERT ON events
 DROP TRIGGER IF EXISTS connect_publish_decisions ON decisions;
 CREATE TRIGGER connect_publish_decisions AFTER INSERT ON decisions
   FOR EACH ROW EXECUTE FUNCTION connect_publish('decisions');
+DROP TRIGGER IF EXISTS connect_publish_audit ON audit_log;
+CREATE TRIGGER connect_publish_audit AFTER INSERT ON audit_log
+  FOR EACH ROW EXECUTE FUNCTION connect_publish('audit');
