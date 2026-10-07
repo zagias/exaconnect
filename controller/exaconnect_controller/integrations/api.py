@@ -245,6 +245,14 @@ def create_integration(conn, user, body: IntegrationIn, origin: str = "api", pla
     return row, shown_secret
 
 
+def _desired(conn, row: dict) -> None:
+    """IPFIX export lives in desired state: new versions for the organisation's nodes."""
+    if row["provider"] == "ipfix" and row["customer_id"]:
+        from .. import desired
+
+        desired.refresh(conn, row["customer_id"])
+
+
 @router.get("/integrations")
 def list_integrations(user: UserDep, customer_id: str | None = None, carrier_id: str | None = None) -> list[dict]:
     where, args = _owner_where(user, customer_id, carrier_id)
@@ -258,6 +266,7 @@ def create(body: IntegrationIn, user: UserDep) -> dict:
     """Add a connector or webhook. Secrets are write-only; a webhook's signing secret is shown once here."""
     with db.tx() as conn:
         row, shown = create_integration(conn, user, body)
+        _desired(conn, row)
     out = public(row)
     if shown:
         out["signing_secret"] = shown
@@ -325,6 +334,7 @@ def update_integration(integration_id: int, body: IntegrationPatch, user: UserDe
             row["customer_id"],
             {"id": row["id"], "fields": sorted(changes)},
         )
+        _desired(conn, row)
     return public(row)
 
 
@@ -334,6 +344,7 @@ def delete_integration(integration_id: int, user: UserDep) -> None:
         row = _get(conn, user, integration_id, lock=True)
         conn.execute("DELETE FROM connect_integrations WHERE id = %s", (integration_id,))
         audit.record(conn, user.actor, "integration.delete", row["name"], row["customer_id"], {"id": row["id"]})
+        _desired(conn, row)
 
 
 @router.post("/integrations/{integration_id}/test")
@@ -343,7 +354,8 @@ def test_send(integration_id: int, user: UserDep) -> dict:
         row = _get(conn, user, integration_id)
         p = providers.get(row["provider"])
         if p is not None and not p.receives_events:
-            raise HTTPException(400, f"{p.name} takes no events; use Sync now.")
+            how = "use Sync now" if p.key == "netbox" else "your sites' agents carry it out"
+            raise HTTPException(400, f"{p.name} takes no events; {how}.")
         stamp = dt.datetime.now(dt.UTC)
         eid = publish.emit(
             conn,

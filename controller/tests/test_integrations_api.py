@@ -1209,3 +1209,60 @@ def test_a_decision_is_readable_by_its_owner_only(client, L):
     got = client.get(f"/api/v1/decisions/{d['id']}", headers=L["customer"])
     assert got.status_code == 200 and got.json()["reason"] == "test"
     assert client.get(f"/api/v1/decisions/{d['id']}", headers=other["h"]).status_code == 404
+
+
+# ---- IPFIX export through desired state ---------------------------------------------------
+
+
+def test_ipfix_export_reaches_sites_through_desired_state(client, L):
+    tokens = L["tokens"]
+    _, pop_h = _enrol(client, tokens, "pop-miami")
+    _, a_h = _enrol(client, tokens, "site-a")
+    _, b_h = _enrol(client, tokens, "site-b")
+    before = client.get("/api/v1/agent/desired-state", headers=a_h).json()
+    assert "ipfix" not in before
+    h = L["customer"]
+    assert (
+        client.post(
+            "/api/v1/integrations",
+            json={"provider": "ipfix", "name": "x", "config": {"collector_host": "a b"}},
+            headers=h,
+        ).status_code
+        == 400
+    )
+    assert (
+        client.post(
+            "/api/v1/integrations",
+            json={"provider": "ipfix", "name": "x", "config": {"collector_host": "c.example", "collector_port": 0}},
+            headers=h,
+        ).status_code
+        == 400
+    )
+    ix = add(
+        client,
+        h,
+        "ipfix",
+        config={"collector_host": "flows.bank.example", "collector_port": 2055},
+        site_ids=[L["sites"]["site-a"]],
+    )
+    assert ix["event_types"] == [] and ix["mode"] == "simulated"  # no events; the live switch is off
+    a = client.get("/api/v1/agent/desired-state", headers=a_h).json()
+    assert a["version"] > before["version"]
+    assert a["ipfix"]["collector"] == "flows.bank.example:2055" and a["ipfix"]["observation_domain"] > 0
+    assert "ipfix" not in client.get("/api/v1/agent/desired-state", headers=b_h).json()  # not chosen
+    assert "ipfix" not in client.get("/api/v1/agent/desired-state", headers=pop_h).json()  # never the PoP
+    # Every site, an IPv6 collector and a fixed observation domain.
+    client.patch(
+        f"/api/v1/integrations/{ix['id']}",
+        json={"site_ids": [], "config": {"collector_host": "2001:db8::10", "observation_domain": 9}},
+        headers=h,
+    )
+    b = client.get("/api/v1/agent/desired-state", headers=b_h).json()
+    assert b["ipfix"] == {"collector": "[2001:db8::10]:2055", "observation_domain": 9}
+    assert client.post(f"/api/v1/integrations/{ix['id']}/test", headers=h).status_code == 400
+    # Switched off, then deleted: gone from desired state.
+    client.patch(f"/api/v1/integrations/{ix['id']}", json={"enabled": False}, headers=h)
+    assert "ipfix" not in client.get("/api/v1/agent/desired-state", headers=b_h).json()
+    client.patch(f"/api/v1/integrations/{ix['id']}", json={"enabled": True}, headers=h)
+    assert client.delete(f"/api/v1/integrations/{ix['id']}", headers=h).status_code == 204
+    assert "ipfix" not in client.get("/api/v1/agent/desired-state", headers=a_h).json()
