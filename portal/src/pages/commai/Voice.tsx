@@ -5,6 +5,7 @@ import { PageHead, Tabs } from "../../ui";
 import { useCommaiBase } from "./lib";
 import Billing from "./voice/Billing";
 import { Carriers, Emergency, EmergencyNotice, Fraud, Numbers, Ports, VoiceNotices } from "./voice/Global";
+import Dialer from "./voice/Dialer";
 import MySettings from "./voice/MySettings";
 import Orders from "./voice/Orders";
 import { Access, Changes, PeopleAndNumbers, PendingChange, Routing, usePending } from "./voice/PhoneSystem";
@@ -20,6 +21,7 @@ const OTHER_TABS = [
   "/commai/voice/emergency",
   "/commai/voice/fraud",
   "/commai/voice/carriers",
+  "/commai/voice/phone",
 ];
 
 /** CommAI voice (ADR 0021): phone system, orders, billing and each person's own settings. */
@@ -41,6 +43,7 @@ export default function Voice() {
         <VoiceNotices base={base} />
         <EmergencyNotice base={base} />
         <MySettings base={base} />
+        <Dialer base={base} />
       </>
     );
   }
@@ -63,6 +66,7 @@ export default function Voice() {
         <NavLink to="/commai/voice/billing">Billing</NavLink>
         <NavLink to="/commai/voice/me">My settings</NavLink>
         {v?.is_exacarib && <NavLink to="/commai/voice/carriers">Carriers</NavLink>}
+        <NavLink to="/commai/voice/phone">Browser phone</NavLink>
       </Tabs>
       <ErrorNote error={ov.error} />
       <VoiceNotices base={base} />
@@ -94,6 +98,7 @@ export default function Voice() {
           <Route path="/emergency" element={<Emergency base={base} />} />
           <Route path="/fraud" element={<Fraud base={base} v={v} />} />
           {v.is_exacarib && <Route path="/carriers" element={<Carriers customerId={base.split("/").pop() ?? ""} />} />}
+          <Route path="/phone" element={<Dialer base={base} />} />
         </Routes>
       )}
     </>

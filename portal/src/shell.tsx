@@ -226,10 +226,12 @@ function navGroups(role: string | undefined): Group[] {
       { to: "/commai/countries", label: "Countries", icon: icons.sites },
       { to: "/commai/ai", label: "AI agents", icon: icons.insights },
       { to: "/commai/workflows", label: "Workflows", icon: icons.traffic },
+      { to: "/commai/approvals", label: "Approvals", icon: icons.decisions },
       { to: "/commai/integrations", label: "Integrations", icon: icons.fabric },
       { to: "/commai/catalogue", label: "App catalogue", icon: icons.fabric },
       { to: "/commai/voice", label: "Voice", icon: icons.decisions },
       { to: "/commai/reports", label: "Reports", icon: icons.metering },
+      { to: "/commai/bill", label: "Usage and bill", icon: icons.metering },
       { to: "/commai/assistant", label: "Assistant", icon: icons.ask },
       { to: "/commai/team", label: "Team", icon: icons.sites },
       { to: "/commai/quality", label: "Quality", icon: icons.insights },
@@ -239,6 +241,7 @@ function navGroups(role: string | undefined): Group[] {
       { to: "/commai/settings", label: "Settings", icon: icons.admin },
       { to: "/commai/partner", label: admin ? "Partners" : "Partners and apps", icon: icons.carrier },
       { to: "/commai/me", label: "My settings", icon: icons.account },
+      ...(admin ? [{ to: "/commai/support", label: "Support queue", icon: icons.admin }] : []),
     ],
   });
   if (admin)

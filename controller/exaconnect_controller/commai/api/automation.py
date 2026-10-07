@@ -25,6 +25,7 @@ from ... import audit, db
 from ...api.deps import UserDep
 from .. import access, diagnostics
 from ..automation import assistant, compose, integrations, onboarding, reports, vault, workflows
+from . import paging
 from .common import errors
 
 router = APIRouter(prefix="/customers/{customer_id}", tags=["commai: automation"])
@@ -311,13 +312,21 @@ class TextIn(BaseModel):
 
 
 @router.get("/workflows")
-def list_workflows(customer_id: str, user: UserDep) -> list[dict]:
+def list_workflows(
+    customer_id: str, user: UserDep, cursor: str | None = None, limit: int = Query(500, ge=1, le=500)
+) -> Any:
+    """Every workflow (a plain list), or a page with `cursor` (empty for the first page)."""
     access.check(user, customer_id, "commai:read")
+    after, args = paging.where(cursor)
     with db.tx() as conn:
         rows = conn.execute(
-            "SELECT * FROM commai_workflows WHERE customer_id = %s ORDER BY created_at DESC", (customer_id,)
+            f"SELECT * FROM commai_workflows WHERE customer_id = %s{after} ORDER BY created_at DESC, id::text DESC"
+            " LIMIT %s",
+            (customer_id, *args, limit + 1),
         ).fetchall()
-        return [workflows.summary(conn, w) for w in rows]
+        return paging.result(
+            [workflows.summary(conn, w) | {"created_at": w["created_at"]} for w in rows], cursor, limit
+        )
 
 
 @router.post("/workflows/draft")
@@ -389,6 +398,7 @@ def get_workflow(customer_id: str, workflow_id: str, user: UserDep) -> dict:
             "problems": v["problems"],
             "warnings": v["warnings"],
             "tools_needed": workflows.tools_needed(latest["definition"]),
+            "schedule": workflows.schedule_of(conn, wf["id"]),
         }
 
 
@@ -497,13 +507,32 @@ def test_workflow(customer_id: str, workflow_id: str, body: TestIn, user: UserDe
     return out
 
 
+class TriggerIn(BaseModel):
+    conversation_id: str | None = None
+    data: dict[str, Any] = Field(default_factory=dict)
+
+
+@router.post("/workflows/{workflow_id}/trigger", status_code=201)
+def trigger_workflow(customer_id: str, workflow_id: str, body: TriggerIn, user: UserDep) -> dict:
+    """Start a live workflow now (ADR 0033), optionally for one conversation.
+    `data` is available to its steps as {{event.data.input.<name>}}."""
+    access.check(user, customer_id, "commai:write")
+    with db.tx() as conn, _errors():
+        access.require_reply_seat(conn, user, customer_id)
+        run = workflows.trigger(
+            conn, customer_id, workflow_id, actor=user.actor, conversation_id=body.conversation_id, data=body.data
+        )
+        audit.record(conn, user.actor, "commai.workflow.trigger", workflow_id, customer_id, {"run": str(run["id"])})
+    return {"run_id": str(run["id"]), "status": run["status"], "workflow_id": workflow_id}
+
+
 @router.get("/workflows/{workflow_id}/sample-events")
 def sample_events(customer_id: str, workflow_id: str, user: UserDep) -> list[dict]:
     """Recent events that could start this workflow, to test against."""
     access.check(user, customer_id, "commai:read")
     with db.tx() as conn, _errors():
         wf = workflows.get(conn, customer_id, workflow_id)
-        ev = workflows.version(conn, wf)["definition"]["trigger"]["event"]
+        ev = workflows.start_event_type(workflows.version(conn, wf)["definition"])
         return conn.execute(
             "SELECT id, type, subject, at FROM commai_events WHERE customer_id = %s AND type = %s"
             " ORDER BY seq DESC LIMIT 10",
@@ -513,17 +542,24 @@ def sample_events(customer_id: str, workflow_id: str, user: UserDep) -> list[dic
 
 @router.get("/workflows/{workflow_id}/runs")
 def list_runs(
-    customer_id: str, workflow_id: str, user: UserDep, test: bool | None = None, limit: int = Query(50, ge=1, le=200)
-) -> list[dict]:
+    customer_id: str,
+    workflow_id: str,
+    user: UserDep,
+    test: bool | None = None,
+    cursor: str | None = None,
+    limit: int = Query(50, ge=1, le=200),
+) -> Any:
     access.check(user, customer_id, "commai:read")
+    after, args = paging.where(cursor, "started_at")
     with db.tx() as conn:
-        return conn.execute(
-            """SELECT id, version, event_id, conversation_id, test, status, step_index, error, started_at, finished_at,
+        rows = conn.execute(
+            f"""SELECT id, version, event_id, conversation_id, test, status, step_index, error, started_at, finished_at,
                       wait->>'prompt' AS approval_prompt
                FROM commai_workflow_runs WHERE workflow_id = %s AND customer_id = %s
-               AND (%s::boolean IS NULL OR test = %s) ORDER BY started_at DESC LIMIT %s""",
-            (workflow_id, customer_id, test, test, limit),
+               AND (%s::boolean IS NULL OR test = %s){after} ORDER BY started_at DESC, id::text DESC LIMIT %s""",
+            (workflow_id, customer_id, test, test, *args, limit + 1),
         ).fetchall()
+    return paging.result(rows, cursor, limit, "started_at")
 
 
 @router.get("/workflow-runs/{run_id}")
@@ -608,6 +644,7 @@ class OnboardingIn(BaseModel):
     website_text: str = Field(default="", max_length=60_000)
     website_url: str = Field(default="", max_length=300)
     hours: str = Field(default="", max_length=500)
+    opening_hours: dict[str, list[str] | None] | None = None  # {"mon": ["09:00", "17:00"], "sun": None}
     locations: list[str] = Field(default_factory=list, max_length=20)
     channels: list[str] = Field(default_factory=list, max_length=10)
     teams: list[TeamIn | str] = Field(default_factory=list, max_length=20)
@@ -697,25 +734,77 @@ def ask_assistant(customer_id: str, body: QuestionIn, request: Request, user: Us
     access.check(user, customer_id, "commai:admin")
     with db.tx() as conn, _errors():
         _admin(conn, user, customer_id)
-        out = assistant.ask(conn, customer_id, body.question, actor=user.actor, settings=_settings(request))
+        out = _voice_change(conn, customer_id, body.question, user)
+        if out is None:
+            out = assistant.ask(conn, customer_id, body.question, actor=user.actor, settings=_settings(request))
         audit.record(conn, user.actor, "commai.assistant.ask", out["id"] or "", customer_id)
     return out
 
 
+def _voice_change(conn, customer_id: str, text: str, user) -> dict | None:
+    """A phone-system change typed to the assistant ("forward my calls to my
+    mobile until 5") becomes the same proposal as /voice/say, with the same
+    confirm step (ADR 0033). Questions, and anything the voice parser doesn't
+    recognise, go to the diagnostics as before."""
+    from .. import entitlements
+    from ..voice import selfservice
+    from ..voice.common import VoiceError
+
+    if assistant.SECRET_HINT.search(text) or not selfservice.looks_like_change(text):
+        return None
+    if not entitlements.enabled(conn, customer_id, "voice"):
+        return None
+    try:
+        with conn.transaction():
+            vc = selfservice.propose_text(conn, customer_id, user, text)
+    except VoiceError as e:
+        vc = {"understood": False, "message": str(e)}
+    if not vc["understood"] and vc["message"].startswith("I didn't understand"):
+        return None
+    if vc["understood"]:
+        answer = f"I can make this phone change: {vc['summary']} Nothing changes until you confirm it."
+    else:
+        answer = vc["message"]
+    row = conn.execute(
+        """INSERT INTO commai_assistant_answers (customer_id, question, answer, confidence, source, asked_by)
+           VALUES (%s, %s, %s, 'confirmed', 'voice', %s) RETURNING id, question""",
+        (customer_id, text[:1000], answer, user.actor),
+    ).fetchone()
+    if vc["understood"]:
+        audit.record(
+            conn, user.actor, "commai.voice.say", vc["id"], customer_id, {"scope": vc["scope"], "via": "assistant"}
+        )
+    return {
+        "id": str(row["id"]),
+        "question": row["question"],
+        "answer": answer,
+        "confidence": "confirmed",
+        "findings": [],
+        "fixes": [],
+        "source": "voice",
+        "voice_change": vc,
+    }
+
+
 @router.get("/assistant/history")
-def assistant_history(customer_id: str, user: UserDep, limit: int = Query(20, ge=1, le=100)) -> list[dict]:
+def assistant_history(
+    customer_id: str, user: UserDep, cursor: str | None = None, limit: int = Query(20, ge=1, le=100)
+) -> Any:
     access.check(user, customer_id, "commai:admin")
+    after, args = paging.where(cursor)
     with db.tx() as conn:
         rows = conn.execute(
-            """SELECT id, question, answer, confidence, findings, source, asked_by, created_at
-               FROM commai_assistant_answers WHERE customer_id = %s ORDER BY created_at DESC LIMIT %s""",
-            (customer_id, limit),
+            f"""SELECT id, question, answer, confidence, findings, source, asked_by, created_at
+               FROM commai_assistant_answers WHERE customer_id = %s{after}
+               ORDER BY created_at DESC, id::text DESC LIMIT %s""",
+            (customer_id, *args, limit + 1),
         ).fetchall()
+        rows = rows[: limit + (cursor is not None)]
         for r in rows:
             r["fixes"] = conn.execute(
                 "SELECT * FROM commai_assistant_fixes WHERE answer_id = %s ORDER BY proposed_at", (r["id"],)
             ).fetchall()
-    return rows
+    return paging.result(rows, cursor, limit)
 
 
 @router.get("/assistant/checks")
@@ -778,14 +867,19 @@ def open_case(customer_id: str, body: CaseIn, user: UserDep) -> dict:
 
 
 @router.get("/support-cases")
-def list_cases(customer_id: str, user: UserDep) -> list[dict]:
+def list_cases(
+    customer_id: str, user: UserDep, cursor: str | None = None, limit: int = Query(100, ge=1, le=200)
+) -> Any:
     access.check(user, customer_id, "commai:admin")
+    after, args = paging.where(cursor)
     with db.tx() as conn:
-        return conn.execute(
-            "SELECT id, reference, subject, status, created_by, created_at FROM commai_support_cases"
-            " WHERE customer_id = %s ORDER BY created_at DESC LIMIT 100",
-            (customer_id,),
+        rows = conn.execute(
+            "SELECT id, reference, subject, status, priority, updated_at, created_by, created_at"
+            f" FROM commai_support_cases WHERE customer_id = %s{after} ORDER BY created_at DESC, id::text DESC"
+            " LIMIT %s",
+            (customer_id, *args, limit + 1),
         ).fetchall()
+    return paging.result(rows, cursor, limit)
 
 
 @router.get("/support-cases/{case_id}")

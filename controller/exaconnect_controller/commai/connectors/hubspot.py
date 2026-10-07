@@ -134,6 +134,7 @@ class HubSpot(Connector):
         "contact": ["firstname", "lastname", "email", "phone", "company", "message", "lifecyclestage"],
         "deal": ["dealname", "amount", "description", "closedate", "pipeline", "dealstage"],
         "ticket": ["subject", "content", "hs_ticket_priority", "hs_pipeline", "hs_pipeline_stage"],
+        "company": ["name", "domain", "phone", "industry", "city", "country", "numberofemployees"],
     }
 
     def _call(self, conn, connection: dict, method: str, path: str, **kw):

@@ -77,9 +77,15 @@ SOURCE_FIELDS = {
     "ticket": ["subject", "description", "priority"],
     "order": ["title", "reference", "amount", "currency", "description"],
     "appointment": ["start", "end", "reason", "location", "contact"],
+    # The organisation a contact belongs to: a company in HubSpot, an account in Salesforce or Zoho.
+    "company": ["company_name", "domain", "company_phone", "industry", "city", "country"],
 }
 # Which provider object each CommAI object maps to, when the names differ.
-OBJECT_ALIASES = {"order": ("deal", "order"), "appointment": ("appointment", "event")}
+OBJECT_ALIASES = {
+    "order": ("deal", "order"),
+    "appointment": ("appointment", "event"),
+    "company": ("company", "account", "organisation", "organization"),
+}
 SYNONYMS = {
     "name": {"firstname", "fullname", "name", "contactname"},
     "email": {"email", "emailaddress", "attendeesemail"},
@@ -96,6 +102,12 @@ SYNONYMS = {
     "reason": {"summary", "description", "reason"},
     "location": {"location", "place"},
     "contact": {"attendeesemail", "contact"},
+    "company_name": {"name", "companyname", "accountname", "organisationname", "organizationname"},
+    "domain": {"domain", "website", "websiteurl", "url"},
+    "company_phone": {"phone", "phonenumber", "mainphone"},
+    "industry": {"industry", "sector"},
+    "city": {"city", "town", "billingcity"},
+    "country": {"country", "billingcountry", "countryregion"},
 }
 
 

@@ -1,5 +1,8 @@
 import { Route, Routes } from "react-router-dom";
 import AiAgents from "./AiAgents";
+import Approvals from "./Approvals";
+import Bill from "./Bill";
+import SupportQueue from "./SupportQueue";
 import Assistant from "./Assistant";
 import Catalogue from "./Catalogue";
 import Onboarding from "./Onboarding";
@@ -50,6 +53,9 @@ export default function CommAI() {
       <Route path="/governance/*" element={<Governance />} />
       <Route path="/languages/*" element={<Languages />} />
       <Route path="/team/*" element={<Team />} />
+      <Route path="/approvals" element={<Approvals />} />
+      <Route path="/bill" element={<Bill />} />
+      <Route path="/support" element={<SupportQueue />} />
     </Routes>
     </I18nProvider>
   );

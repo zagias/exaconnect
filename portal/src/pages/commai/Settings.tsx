@@ -65,6 +65,7 @@ function Service({ base }: { base: string }) {
   const s = useApi<ServiceSettings>(`${base}/settings`, 0);
   const save = useAction();
   const [draft, setDraft] = useState<ServiceSettings | null>(null);
+  const [saved, setSaved] = useState(false);
   const d = draft ?? s.data;
   if (!d) return <ErrorNote error={s.error} />;
 
@@ -76,10 +77,14 @@ function Service({ base }: { base: string }) {
         body: JSON.stringify({ mode: d.mode, timezone: d.timezone, first_reply_minutes: d.first_reply_minutes, resolve_hours: d.resolve_hours }),
       });
       setDraft(null);
+      setSaved(true);
       s.reload();
     });
   };
-  const set = (patch: Partial<ServiceSettings>) => setDraft({ ...d, ...patch });
+  const set = (patch: Partial<ServiceSettings>) => {
+    setSaved(false);
+    setDraft({ ...d, ...patch });
+  };
 
   return (
     <Card title="Who answers first, and service targets">
@@ -102,7 +107,10 @@ function Service({ base }: { base: string }) {
         </fieldset>
         <label>
           Time zone
-          <input value={d.timezone} onChange={(e) => set({ timezone: e.target.value })} maxLength={60} />
+          <input value={d.timezone} onChange={(e) => set({ timezone: e.target.value })} maxLength={60} aria-describedby="tz-hint" autoComplete="off" />
+          <span id="tz-hint" className="small muted">
+            For example America/Port_of_Spain
+          </span>
         </label>
         {PRIORITIES.map((p) => (
           <fieldset key={p}>
@@ -131,6 +139,9 @@ function Service({ base }: { base: string }) {
           <button className="button" disabled={save.busy || !draft}>
             Save
           </button>
+          <span className="small" role="status" aria-live="polite">
+            {saved ? "Saved." : ""}
+          </span>
         </div>
       </form>
       <ErrorNote error={save.error} />
@@ -182,6 +193,7 @@ function TeamsAndPeople({ base }: { base: string }) {
         <ErrorNote error={members.error} />
         <div className="table-wrap">
           <table className="paths dt stack">
+            <caption className="sr-only">People, their seats, languages and availability</caption>
             <thead>
               <tr>
                 <th scope="col">Person</th>
@@ -194,7 +206,7 @@ function TeamsAndPeople({ base }: { base: string }) {
             <tbody>
               {people.map((m) => (
                 <tr key={m.id}>
-                  <td>{m.email}</td>
+                  <th scope="row">{m.email}</th>
                   <td data-label="Seat">
                     <select aria-label={`Seat for ${m.email}`} value={m.seat} disabled={act.busy} onChange={(e) => setSeat(m, { seat: e.target.value as Member["seat"] })}>
                       <option value="agent">Replies to customers</option>
@@ -325,7 +337,7 @@ function Routing({ base }: { base: string }) {
         fewest open conversations is assigned.
       </p>
       <ErrorNote error={rules.error} />
-      <ol>
+      <ol aria-label="Routing rules, first match wins">
         {(rules.data ?? []).map((r) => (
           <li key={r.id} className="row-between">
             <span>
@@ -525,7 +537,7 @@ function Developers({ base }: { base: string }) {
               <tbody>
                 {(deliveries.data ?? []).map((d) => (
                   <tr key={d.id}>
-                    <td>{d.event_type}</td>
+                    <th scope="row">{d.event_type}</th>
                     <td data-label="Status">
                       <span className={`pill ${d.status === "delivered" ? "ok" : d.status === "failed" ? "bad" : "warn"}`}>{d.status}</span>
                     </td>
