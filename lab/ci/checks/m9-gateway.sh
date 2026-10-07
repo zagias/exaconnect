@@ -69,15 +69,20 @@ else
   bad "agent enrolment through the gateway failed: $(tail -n 2 <<<"${out:-no output}" | tr '\n' ' ' | cut -c1-200)"
 fi
 unset token
-mtls="curl -s -o /dev/null -w '%{http_code}' --cacert /state/ca.crt --cert /state/client.crt --key /state/client.key $base/api/v1/agent/desired-state"
-# The status code, then curl's exit code, so a failure says what happened.
-mtls_try() { probe "$mtls; echo \" curl exit \$?\"" | tr '\n' ' '; }
-res=$(mtls_try)
+# The agent's own certificate and key, used from this host over the public name
+# (the container's output did not come back on the lab host). The status code,
+# then curl's exit code and any error, so a failure says what happened.
+mtls_try() {
+  curl -sS --max-time 15 -o /dev/null -w '%{http_code}' --cacert "$tmp/ca.crt" --cert "$tmp/client.crt" \
+    --key "$tmp/client.key" "$base/api/v1/agent/desired-state" 2>&1
+  echo " curl exit $?"
+}
+res=$(mtls_try | tr '\n' ' ')
 c=$(grep -oE '^[0-9]{3}' <<<"$res")
 if [[ $c == 200 || $c == 204 || $c == 404 ]]; then ok "it polls desired state over mutual TLS ($c)"; else bad "desired state over mutual TLS answered ${c:-nothing}: $(cut -c1-200 <<<"$res")"; fi
 node=$(sql "SELECT id FROM nodes WHERE name = 'gw-probe'")
 [[ -n $node ]] && api POST "/nodes/$node/revoke" >/dev/null
-res=$(mtls_try)
+res=$(mtls_try | tr '\n' ' ')
 c=$(grep -oE '^[0-9]{3}' <<<"$res")
 if [[ $c == 401 || $c == 403 ]]; then ok "after revoking, its certificate is refused ($c)"; else bad "a revoked certificate answered ${c:-nothing}: $(cut -c1-200 <<<"$res")"; fi
 sql "DELETE FROM sites WHERE name = 'gw-probe'" >/dev/null
