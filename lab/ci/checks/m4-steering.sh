@@ -74,6 +74,7 @@ note "$(sql "SELECT 'maps: ' || string_agg(n.name || ' v' || m.v, ', ') FROM nod
              JOIN (SELECT node_id, max(version) v FROM steering_maps GROUP BY node_id) m ON m.node_id = n.id")"
 
 echo "-- brownout: carrier A loss 0 -> 3% over 180 s (demo step 2)"
+t0=$(date +%s) # also bounds the decision summary when the brownout is skipped
 if ((start_ok == 0)); then
   skip "brownout: voice was not on carrier A to start with (see above)"
 else
