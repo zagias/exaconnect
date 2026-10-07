@@ -103,6 +103,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: shellcheck
-        run: shellcheck -x lab/netem/*.sh lab/faults/*.sh lab/scripts/*.sh lab/host/*.sh deploy/agent/*.sh deploy/release/*.sh
+        run: >-
+          shellcheck -x lab/netem/*.sh lab/faults/*.sh lab/scripts/*.sh lab/host/*.sh
+          lab/ci/checks/*.sh lab/ci/run.sh lab/demo.sh lab/runner/*.sh
+          deploy/agent/*.sh deploy/release/*.sh
       - name: topology parses
         run: python3 -c "import yaml,sys; t=yaml.safe_load(open('lab/exaconnect.clab.yml')); print(len(t['topology']['nodes']), 'nodes')"

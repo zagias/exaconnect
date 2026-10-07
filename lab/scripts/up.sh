@@ -41,7 +41,7 @@ if [[ $fresh == 1 || ! -s lab/.state/seed.json ]]; then
 else
   # Re-seeding upserts inventory (new classes, SLAs) without re-enrolling.
   umask 077
-  "${COMPOSE[@]}" exec -T controller python -m exaconnect_controller.seed --lab >lab/.state/seed.json
+  "${COMPOSE[@]}" exec -T controller python -m exaconnect_controller.seed --lab --sat "$SAT_PROFILE" >lab/.state/seed.json
   lab/scripts/agents.sh restart
 fi
 

@@ -107,6 +107,23 @@ carrier (both sites).
 Profiles are in `lab/netem/profiles.env` and are round-trip figures; see
 [ADR 0002](adr/0002-netem-profile-semantics.md).
 
+### Traffic
+
+`make traffic` starts the three classes in both directions between `lan-a`
+and `lan-b`, through the PoP; `make traffic-stop` stops them and
+`lab/scripts/traffic.sh status` shows what runs. Each class can be started or
+stopped on its own (`lab/scripts/traffic.sh start voice`).
+
+| Class | Traffic | Classified by |
+|---|---|---|
+| voice | 160-byte UDP datagrams, 50 a second, to UDP 10000 | voice ports |
+| business | iperf3 TCP at `BUSINESS_RATE` (5M) to port 5301 | DSCP AF31 |
+| bulk | iperf3 TCP at `BULK_RATE` (50M) to port 5302 | DSCP CS1 |
+
+Senders and receivers restart on their own after a cut. `make demo` runs this
+traffic through steps 2 to 5 and stops it for the metering step, which
+measures its own 20 Mbit/s; `DEMO_TRAFFIC=0 make demo` leaves it off.
+
 ## 4. Controller, agents and routing (M1 to M3)
 
 ```bash
