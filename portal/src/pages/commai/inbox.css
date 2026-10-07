@@ -73,4 +73,8 @@
   .bubble { max-width: 92%; }
   .conv-handler { justify-items: start; }
   .timeline { max-height: none; }
+  .composer .actions { justify-content: stretch; }
+  .composer .actions .button, .file-pick { min-height: 44px; flex: 1; justify-content: center; }
+  .facts { grid-template-columns: 1fr; }
+  .facts dd { margin: 0 0 6px; }
 }
