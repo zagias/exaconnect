@@ -9,22 +9,30 @@ from fastapi import APIRouter, HTTPException, Query
 from ... import audit, db
 from ...api.deps import UserDep
 from .. import access, impact
+from . import paging
 
 router = APIRouter(prefix="/customers/{customer_id}", tags=["commai: approvals"])
 
 
 @router.get("/approvals")
-def approvals(customer_id: str, user: UserDep, limit: int = Query(100, ge=1, le=200)) -> dict:
-    """Pending actions (with their impact preview) and workflow approval steps, oldest first."""
+def approvals(
+    customer_id: str, user: UserDep, cursor: str | None = None, limit: int = Query(100, ge=1, le=200)
+) -> dict:
+    """Pending actions (with their impact preview) and workflow approval steps, oldest first.
+    With `cursor`, actions come a page at a time ("next" is the cursor for the following page)."""
     access.check(user, customer_id, "commai:read")
+    after, args = paging.where(cursor, "a.created_at", "a.id", desc=False)
     with db.tx() as conn:
         acts = conn.execute(
-            """SELECT a.id, a.app, a.action, a.role, a.inputs, a.preview, a.proposed_by, a.conversation_id,
+            f"""SELECT a.id, a.app, a.action, a.role, a.inputs, a.preview, a.proposed_by, a.conversation_id,
                       a.test, a.created_at, c.subject AS conversation_subject, c.channel
                FROM action_runs a LEFT JOIN conversations c ON c.id = a.conversation_id
-               WHERE a.customer_id = %s AND a.status = 'awaiting_approval' ORDER BY a.created_at LIMIT %s""",
-            (customer_id, limit),
+               WHERE a.customer_id = %s AND a.status = 'awaiting_approval'{after}
+               ORDER BY a.created_at, a.id::text LIMIT %s""",
+            (customer_id, *args, limit + 1),
         ).fetchall()
+        nxt = paging.result(acts, cursor if cursor is not None else "", limit)["next"]
+        acts = acts[:limit]
         flows = conn.execute(
             """SELECT r.id, r.workflow_id, w.name AS workflow, r.conversation_id, r.wait->>'prompt' AS prompt,
                       r.wait->>'since' AS since, r.wait->>'until' AS expires_at
@@ -35,7 +43,7 @@ def approvals(customer_id: str, user: UserDep, limit: int = Query(100, ge=1, le=
     me = user.actor
     for a in acts:
         a["own_proposal"] = a["proposed_by"] == me  # the proposer can't approve their own
-    return {"actions": acts, "workflow_steps": flows, "count": len(acts) + len(flows)}
+    return {"actions": acts, "workflow_steps": flows, "count": len(acts) + len(flows), "next": nxt}
 
 
 @router.get("/actions/{run_id}")
