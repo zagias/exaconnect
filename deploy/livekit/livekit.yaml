@@ -1,0 +1,19 @@
+# Self-hosted LiveKit server for AI on phone calls (ADR 0027). Compose profile "voice".
+# The API key pair comes from the environment (LIVEKIT_KEYS="<key>: <secret>"),
+# never from this file. The controller uses the same pair as EXA_LIVEKIT_API_KEY
+# and EXA_LIVEKIT_API_SECRET.
+port: 7880
+bind_addresses:
+  - 0.0.0.0
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 60000
+  use_external_ip: true
+redis:
+  address: livekit-redis:6379
+room:
+  empty_timeout: 60
+  max_participants: 4
+logging:
+  level: info

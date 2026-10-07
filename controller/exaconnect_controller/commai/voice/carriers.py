@@ -172,6 +172,7 @@ def save(conn: psycopg.Connection, body: dict, actor: str) -> dict:
     golive.declare("carrier", key, name, CARRIER_CRITERIA, {"adapter": adapter})
     golive.sync(conn)
     ensure_health_loop(conn)
+    render_kamailio(conn)  # Kamailio's trunk and allow-list files follow the carriers
     return _out(conn, row)
 
 
