@@ -14,6 +14,7 @@ import json
 import sys
 
 from . import db, desired, inventory, pki
+from .billing import plans
 from .settings import get_settings
 
 ACTOR = "system:seed"
@@ -103,6 +104,8 @@ def seed_lab(conn) -> dict:
             )
         tokens[name], _ = inventory.issue_token(conn, sid, ACTOR, ttl_hours=2)
     desired.refresh(conn, cid)
+    # The lab organisation holds Connect (ADR 0022): the standard plan from the day it was added.
+    plans.ensure_connect(conn, cid, ACTOR)
     return {"customer_id": str(cid), "tokens": tokens}
 
 

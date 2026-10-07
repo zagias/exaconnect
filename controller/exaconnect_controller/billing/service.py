@@ -268,9 +268,7 @@ def window(sub: dict, start: dt.date) -> tuple[dt.date, dt.date]:
     return frm, to
 
 
-def compute_subscription(
-    conn: psycopg.Connection, sub: dict, start: dt.date, now: dt.datetime | None = None
-) -> dict:
+def compute_subscription(conn: psycopg.Connection, sub: dict, start: dt.date, now: dt.datetime | None = None) -> dict:
     """Every charge and credit for one subscription in one calendar month (UTC)."""
     now = _today(now)
     end = next_month(start)
@@ -841,9 +839,7 @@ def generate(
                 made.append(generate_draft(conn, sub, start, actor, now))
         except BillingError as e:
             name = conn.execute("SELECT name FROM customers WHERE id = %s", (sub["customer_id"],)).fetchone()["name"]
-            skipped.append(
-                {"customer_id": sub["customer_id"], "customer": name, "plan": sub["plan"], "reason": str(e)}
-            )
+            skipped.append({"customer_id": sub["customer_id"], "customer": name, "plan": sub["plan"], "reason": str(e)})
     return {"drafts": made, "skipped": skipped}
 
 
@@ -962,7 +958,8 @@ def get_invoice(conn: psycopg.Connection, invoice_id: Any, customer_id: Any | No
     inv["label"] = period_label(inv["period_start"])
     inv["lines"] = conn.execute(
         """SELECT id, position, product, plan, kind, description, site_id, link_id, circuit_id, class_name, quantity,
-                  unit, unit_price, amount, inputs FROM billing_invoice_lines WHERE invoice_id = %s ORDER BY position""",
+                  unit, unit_price, amount, inputs FROM billing_invoice_lines WHERE invoice_id = %s
+           ORDER BY position""",
         (str(invoice_id),),
     ).fetchall()
     return inv
@@ -1045,7 +1042,8 @@ h1{{font-weight:650;letter-spacing:-.01em;margin:0 0 4px}}
 table{{width:100%;border-collapse:collapse;margin-top:16px}} td,th{{border-bottom:1px solid #DFE6EE;padding:6px 8px;
 vertical-align:top;text-align:left}} th{{color:#52647A;font-weight:600;font-size:12px}}
 .tag{{display:inline-block;border:1px solid #DFE6EE;border-radius:5px;padding:4px 8px;margin:4px 0;color:#9A5B00}}
-.danger{{color:#B42318}} .ok{{color:#18704B;font-weight:600}} .total td{{font-weight:650;border-bottom:2px solid #10213D}}
+.danger{{color:#B42318}} .ok{{color:#18704B;font-weight:600}}
+.total td{{font-weight:650;border-bottom:2px solid #10213D}}
 .logo{{font-weight:700;font-size:20px}} .logo b{{color:#155EEF}} .logo i{{color:#07182E;font-style:normal}}
 @media print{{body{{margin:0}}}}
 </style></head><body>
@@ -1190,7 +1188,13 @@ def payables(conn: psycopg.Connection, start: dt.date) -> dict:
     for x in partner_payables(conn, None, s_dt, e_dt):
         p = partners.setdefault(
             x["partner"],
-            {"partner": x["partner"], "partner_id": x["partner_id"], "total": Decimal(0), "unpriced": 0, "circuits": []},
+            {
+                "partner": x["partner"],
+                "partner_id": x["partner_id"],
+                "total": Decimal(0),
+                "unpriced": 0,
+                "circuits": [],
+            },
         )
         if x["total"] is None:
             p["unpriced"] += 1

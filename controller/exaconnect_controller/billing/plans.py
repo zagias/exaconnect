@@ -143,9 +143,10 @@ def update_plan(conn: psycopg.Connection, plan_id: Any, values: dict, actor: str
     name = str(values["name"]).strip() if values.get("name") is not None else plan["name"]
     if not name or len(name) > 80:
         raise BillingError("Give the plan a name of up to 80 characters.")
-    if name != plan["name"] and conn.execute(
-        "SELECT 1 FROM plans WHERE product = %s AND name = %s", (plan["product"], name)
-    ).fetchone():
+    if (
+        name != plan["name"]
+        and conn.execute("SELECT 1 FROM plans WHERE product = %s AND name = %s", (plan["product"], name)).fetchone()
+    ):
         raise BillingError(f"There is already a {PRODUCTS[plan['product']]} plan called {name}.", 409)
     desc = values["description"] if values.get("description") is not None else plan["description"]
     active = values["active"] if values.get("active") is not None else plan["active"]
@@ -220,7 +221,8 @@ def subscribe(
         raise BillingError(f"{plan['name']} is no longer offered.", 409)
     start = _date(starts_on or _today(), "start date")
     conn.execute(
-        "SELECT pg_advisory_xact_lock(hashtext('subscription:' || %s || ':' || %s))", (str(customer_id), plan["product"])
+        "SELECT pg_advisory_xact_lock(hashtext('subscription:' || %s || ':' || %s))",
+        (str(customer_id), plan["product"]),
     )
     clash = conn.execute(
         """SELECT s.*, p.name AS plan FROM subscriptions s JOIN plans p ON p.id = s.plan_id
@@ -304,9 +306,7 @@ def end(conn: psycopg.Connection, customer_id: Any, subscription_id: Any, on: An
     return {**row, "plan": sub["plan"], "state": _status(row, _today())}
 
 
-def change(
-    conn: psycopg.Connection, customer_id: Any, subscription_id: Any, plan_id: Any, on: Any, actor: str
-) -> dict:
+def change(conn: psycopg.Connection, customer_id: Any, subscription_id: Any, plan_id: Any, on: Any, actor: str) -> dict:
     """Move an organisation to another plan of the same product from a day: the
     old subscription ends that day and the new one starts on it."""
     cust = _customer(conn, customer_id)
