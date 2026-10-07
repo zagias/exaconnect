@@ -434,7 +434,7 @@ def _customer_brand_access(conn, user: User, customer_id: str) -> None:
 
 
 def _brand_access(conn, user: User, brand_id: str) -> dict:
-    b = conn.execute(f"SELECT {branding.BRAND_COLUMNS} FROM commai_brands WHERE id = %s", (brand_id,)).fetchone()
+    b = conn.execute(f"SELECT {branding.BRAND_COLUMNS} FROM commai_whitelabel WHERE id = %s", (brand_id,)).fetchone()
     if b is None:
         raise HTTPException(404, "Brand not found.")
     if b["partner_id"]:
@@ -469,7 +469,7 @@ def brand_logo(brand_id: str) -> Response:
     except ValueError:
         return Response(status_code=404)
     with db.tx() as conn:
-        row = conn.execute("SELECT logo, logo_type FROM commai_brands WHERE id = %s", (brand_id,)).fetchone()
+        row = conn.execute("SELECT logo, logo_type FROM commai_whitelabel WHERE id = %s", (brand_id,)).fetchone()
     if row is None or not row["logo"]:
         return Response(status_code=404)
     return Response(
@@ -531,7 +531,7 @@ def put_customer_brand(customer_id: str, body: BrandIn, user: UserDep) -> dict:
 def delete_customer_brand(customer_id: str, user: UserDep) -> None:
     with db.tx() as conn:
         _customer_brand_access(conn, user, customer_id)
-        conn.execute("DELETE FROM commai_brands WHERE customer_id = %s", (customer_id,))
+        conn.execute("DELETE FROM commai_whitelabel WHERE customer_id = %s", (customer_id,))
         audit.record(conn, user.actor, "commai.brand.delete", customer_id, customer_id)
 
 

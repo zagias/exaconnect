@@ -10,7 +10,7 @@ import pytest
 from exaconnect_controller import db
 from exaconnect_controller.commai.voice import freeswitch, selfservice
 
-from .commai_helpers import base, business, run_jobs
+from .commai_helpers import base, business, run_jobs, switch_on
 
 PEOPLE = ("boss", "lead", "ana", "ben")
 TZ = ZoneInfo("America/Port_of_Spain")
@@ -20,6 +20,9 @@ def setup_voice(client, name="Voice Bank"):
     """boss: voice admin with spend; lead: voice admin without spend; ana, ben: staff."""
     b = business(client, name, PEOPLE)
     u = base(b)
+    # Countries start off (ADR 0022/0023); these tests run in Trinidad and the US.
+    for country in ("TT", "US"):
+        switch_on("country", country)
     r = client.put(
         f"{u}/voice/permissions",
         json={

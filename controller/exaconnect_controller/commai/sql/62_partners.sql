@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS commai_partner_statements (
 );
 
 -- ---- White-label ---------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS commai_brands (
+CREATE TABLE IF NOT EXISTS commai_whitelabel (
   id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   partner_id     uuid UNIQUE REFERENCES commai_partners(id) ON DELETE CASCADE,
   customer_id    uuid UNIQUE REFERENCES customers(id) ON DELETE CASCADE,
@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS commai_brands (
 -- (by Caddy, on demand) only once the DNS TXT record proves the domain.
 CREATE TABLE IF NOT EXISTS commai_brand_domains (
   id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  brand_id         uuid NOT NULL REFERENCES commai_brands(id) ON DELETE CASCADE,
+  brand_id         uuid NOT NULL REFERENCES commai_whitelabel(id) ON DELETE CASCADE,
   purpose          text NOT NULL CHECK (purpose IN ('portal', 'widget')),
   domain           text NOT NULL UNIQUE,
   token            text NOT NULL,

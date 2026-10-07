@@ -13,7 +13,7 @@ import pytest
 from exaconnect_controller import db
 from exaconnect_controller.commai.channels import providers
 
-from .commai_helpers import base, business, run_jobs
+from .commai_helpers import base, business, run_jobs, switch_on
 
 P = "/api/v1/commai/partners"
 OA = "/api/v1/commai/oauth"
@@ -172,6 +172,7 @@ def test_confidential_client_needs_its_secret(client, admin_headers):
 def test_sandbox_key_never_sends_for_real(client, monkeypatch):
     b = business(client, "Sandbox Co", people=("owner",))
     u = base(b)
+    switch_on("country", "TT")  # SMS destinations start off (ADR 0023)
     assert client.post(f"{u}/sandbox/keys", json={}, headers=b["owner"]["h"]).status_code == 409
     sb = client.post(f"{u}/sandbox", headers=b["owner"]["h"])
     assert sb.status_code == 201, sb.text

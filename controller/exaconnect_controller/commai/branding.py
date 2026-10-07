@@ -162,9 +162,11 @@ def public_view(row: dict | None) -> dict | None:
 def get(conn: psycopg.Connection, partner_id: Any = None, customer_id: Any = None) -> dict | None:
     if partner_id is not None:
         return conn.execute(
-            f"SELECT {BRAND_COLUMNS} FROM commai_brands WHERE partner_id = %s", (partner_id,)
+            f"SELECT {BRAND_COLUMNS} FROM commai_whitelabel WHERE partner_id = %s", (partner_id,)
         ).fetchone()
-    return conn.execute(f"SELECT {BRAND_COLUMNS} FROM commai_brands WHERE customer_id = %s", (customer_id,)).fetchone()
+    return conn.execute(
+        f"SELECT {BRAND_COLUMNS} FROM commai_whitelabel WHERE customer_id = %s", (customer_id,)
+    ).fetchone()
 
 
 def save(
@@ -184,7 +186,7 @@ def save(
     email = check_email(support_email)
     owner = "partner_id" if partner_id is not None else "customer_id"
     return conn.execute(
-        f"""INSERT INTO commai_brands ({owner}, product_name, colour, ink, support_email, updated_by)
+        f"""INSERT INTO commai_whitelabel ({owner}, product_name, colour, ink, support_email, updated_by)
             VALUES (%s, %s, %s, %s, %s, %s)
             ON CONFLICT ({owner}) DO UPDATE SET product_name = EXCLUDED.product_name, colour = EXCLUDED.colour,
               ink = EXCLUDED.ink, support_email = EXCLUDED.support_email, updated_by = EXCLUDED.updated_by,
@@ -197,7 +199,7 @@ def save(
 def set_logo(conn: psycopg.Connection, brand_id: Any, data: bytes, content_type: str, actor: str) -> dict:
     data, ctype = check_logo(data, content_type)
     return conn.execute(
-        f"""UPDATE commai_brands SET logo = %s, logo_type = %s, logo_sha = %s, updated_by = %s, updated_at = now()
+        f"""UPDATE commai_whitelabel SET logo = %s, logo_type = %s, logo_sha = %s, updated_by = %s, updated_at = now()
             WHERE id = %s RETURNING {BRAND_COLUMNS}""",
         (data, ctype, hashlib.sha256(data).hexdigest(), actor, brand_id),
     ).fetchone()
@@ -212,7 +214,7 @@ def for_customer(conn: psycopg.Connection, customer_id: Any) -> dict | None:
         return own
     return conn.execute(
         f"""SELECT {", ".join("b." + c.strip() for c in BRAND_COLUMNS.split(","))}
-            FROM commai_partner_links l JOIN commai_brands b ON b.partner_id = l.partner_id
+            FROM commai_partner_links l JOIN commai_whitelabel b ON b.partner_id = l.partner_id
             WHERE l.customer_id = %s AND l.status = 'active' AND l.white_label""",
         (customer_id,),
     ).fetchone()
@@ -347,7 +349,7 @@ def for_host(conn: psycopg.Connection, host: str) -> dict | None:
     h = (host or "").split(":")[0].strip().lower()
     return conn.execute(
         f"""SELECT {", ".join("b." + c.strip() for c in BRAND_COLUMNS.split(","))}
-            FROM commai_brand_domains d JOIN commai_brands b ON b.id = d.brand_id
+            FROM commai_brand_domains d JOIN commai_whitelabel b ON b.id = d.brand_id
             WHERE d.domain = %s AND d.status = 'verified' AND d.purpose = 'portal'""",
         (h,),
     ).fetchone()
