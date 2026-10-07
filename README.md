@@ -116,6 +116,18 @@ draft and issued invoices, SLA credits and partner margin (ADR 0022); online
 payment and accounting exports stay off or simulated until ExaCarib adds those
 accounts. API keys can be limited, for example to read-only Connect access.
 
+## Integrations
+
+Open standards first: signed CloudEvents webhooks (Standard Webhooks), REST
+hooks for Zapier, Make and n8n, Prometheus and OpenTelemetry, syslog, SNMP
+traps, IPFIX from the agents, read-only RESTCONF/YANG, TM Forum (TMF621, 622,
+688) and MEF LSO Sonata. On top sit ready-made connectors: Slack, Teams,
+PagerDuty, Opsgenie, ServiceNow, Jira Service Management, Datadog, Splunk,
+Elastic, Sentinel, Grafana Cloud, NetBox and cloud on-ramps (AWS, Azure,
+Google, Megaport). Carriers post faults and maintenance on their own links.
+Each connector is simulated until `EXA_INTEGRATIONS_LIVE=1` and its account
+exists. Details: [docs/integrations.md](docs/integrations.md) (ADR 0026).
+
 ## Configuration
 
 Secrets live only in `.env` on the host (git-ignored); `.env.example` lists the
