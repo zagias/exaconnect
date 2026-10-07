@@ -230,6 +230,7 @@ function navGroups(role: string | undefined): Group[] {
       { to: "/commai/assistant", label: "Assistant", icon: icons.ask },
       { to: "/commai/setup", label: "Set up", icon: icons.order },
       { to: "/commai/settings", label: "Settings", icon: icons.admin },
+      { to: "/commai/me", label: "My settings", icon: icons.account },
     ],
   });
   if (admin) groups.push({ label: "Manage", items: [{ to: "/admin", label: "Admin", icon: icons.admin }] });

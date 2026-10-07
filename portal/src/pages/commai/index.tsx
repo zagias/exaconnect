@@ -10,6 +10,7 @@ import Reports from "./Reports";
 import Settings from "./Settings";
 import Voice from "./Voice";
 import Workflows from "./Workflows";
+import MySettings from "../me/MySettings";
 import "./commai.css";
 
 /** CommAI screens (ADR 0016). Each screen owns its own file. */
@@ -28,6 +29,7 @@ export default function CommAI() {
       <Route path="/settings/*" element={<Settings />} />
       <Route path="/setup/*" element={<Onboarding />} />
       <Route path="/assistant/*" element={<Assistant />} />
+      <Route path="/me/*" element={<MySettings />} />
     </Routes>
   );
 }
