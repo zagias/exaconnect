@@ -1,6 +1,19 @@
-"""CommAI voice (ADR 0021): phone system, provisioning and billing.
+"""CommAI voice (ADR 0021, stage 5 in ADR 0027): phone system, provisioning,
+billing, numbers by country, porting, emergency addresses, carriers and fraud.
 
 Importing the package registers the voice job handlers and event types.
 """
 
-from . import billing, bulk, config, freeswitch, provisioning, selfservice  # noqa: F401
+from . import (  # noqa: F401
+    billing,
+    bulk,
+    carriers,
+    config,
+    countries,
+    emergency,
+    fraud,
+    freeswitch,
+    porting,
+    provisioning,
+    selfservice,
+)

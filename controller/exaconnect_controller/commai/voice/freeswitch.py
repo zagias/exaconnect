@@ -37,6 +37,7 @@ import psycopg
 from psycopg.types.json import Jsonb
 
 from .. import jobs
+from . import emergency
 from .billing import EMERGENCY, fraud_limits
 from .common import domain as tenant_domain
 from .common import now
@@ -102,6 +103,7 @@ def gather(conn: psycopg.Connection, cid: Any) -> dict:
                       fallback FROM voice_ai_rules WHERE customer_id = %s AND enabled ORDER BY name"""
         ),
         "blocked_prefixes": sorted(fraud_limits(conn, cid)["blocked_prefixes"]),
+        "emergency_numbers": sorted(emergency.business_numbers(conn, cid)),  # each island's (ADR 0027)
     }
 
 
@@ -232,7 +234,7 @@ def _dialplan(data: dict) -> str:
 
     # Emergency numbers first, never blocked. Island-specific routing and the
     # caller's address go to the provider in phase 3.
-    em = "|".join(sorted(EMERGENCY))
+    em = "|".join(sorted(EMERGENCY | set(data.get("emergency_numbers") or ())))
     out += [
         '    <extension name="emergency">',
         f'      <condition field="destination_number" expression={a("^(" + em + ")$")}>',
