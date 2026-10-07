@@ -13,6 +13,7 @@ controller and portal (ADR 0016).
 | AI runtime, knowledge, copilot, memory, browser calls | `commai/ai/` | 0019 | ai.md |
 | Integrations, workflows, onboarding, assistant, reports | `commai/automation/`, `commai/connectors/` | 0020 | automation.md |
 | Voice phone system, provisioning, billing | `commai/voice/`, `deploy/freeswitch/` | 0021 | voice.md |
+| Organisations, calendars, roles, security settings, data governance, abuse protection | `commai/enterprise/` | 0024 | enterprise.md |
 
 API: `/api/v1/commai/customers/{customer_id}/...` (OpenAPI at
 `/api/v1/docs`), SCIM at `/api/v1/scim/v2`. Python SDK:
