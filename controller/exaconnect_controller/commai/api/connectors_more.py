@@ -17,15 +17,21 @@ Reads need commai:read; changes need commai:admin. Every write is audited.
 
 from __future__ import annotations
 
+import json
+import os
+import urllib.parse
+import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from ... import audit, db
 from ...api.deps import UserDep
 from .. import access, connectors
+from ..actions import ActionRefused
 from ..connectors import more_common
 from .common import errors
 
@@ -88,6 +94,136 @@ def linked_tickets(customer_id: str, conversation_id: str, user: UserDep) -> lis
         return more_common.tickets_for(conn, customer_id, conversation_id)
 
 
+CHAT_APPS = ("slack", "teams")
+
+
 class IdentityIn(BaseModel):
     external_user: str = Field(min_length=1, max_length=120, pattern=r"^[A-Za-z0-9._:-]+$")
     user_email: str = Field(min_length=3, max_length=255)
+
+
+@router.get("/connectors/{app}/identities")
+def list_identities(customer_id: str, app: str, user: UserDep) -> list[dict]:
+    """Slack or Teams users linked to CommAI people (who may press Approve there)."""
+    access.check(user, customer_id, "commai:read")
+    if app not in CHAT_APPS:
+        raise HTTPException(404, "Only Slack and Teams link people.")
+    with db.tx() as conn:
+        return conn.execute(
+            """SELECT external_user, user_email, created_by, created_at FROM commai_chat_identities
+               WHERE customer_id = %s AND app = %s ORDER BY user_email""",
+            (customer_id, app),
+        ).fetchall()
+
+
+@router.put("/connectors/{app}/identities")
+def link_identity(customer_id: str, app: str, body: IdentityIn, user: UserDep) -> dict:
+    """Link a Slack user ID (U...) or Teams user (Entra object id) to a member
+    of this business. Only members with a reply seat can approve."""
+    access.check(user, customer_id, "commai:admin")
+    if app not in CHAT_APPS:
+        raise HTTPException(404, "Only Slack and Teams link people.")
+    with db.tx() as conn:
+        _admin(conn, user, customer_id)
+        member = conn.execute(
+            """SELECT u.email, m.seat FROM users u JOIN commai_members m ON m.user_id = u.id
+               WHERE m.customer_id = %s AND lower(u.email) = lower(%s)""",
+            (customer_id, body.user_email),
+        ).fetchone()
+        if member is None:
+            raise HTTPException(422, "That person is not a member of this business.")
+        if member["seat"] == "internal":
+            raise HTTPException(422, "That person's seat can't approve actions.")
+        row = conn.execute(
+            """INSERT INTO commai_chat_identities (customer_id, app, external_user, user_email, created_by)
+               VALUES (%s, %s, %s, %s, %s)
+               ON CONFLICT (customer_id, app, external_user) DO UPDATE SET user_email = EXCLUDED.user_email,
+                 created_by = EXCLUDED.created_by, created_at = now()
+               RETURNING external_user, user_email, created_by, created_at""",
+            (customer_id, app, body.external_user, member["email"], user.actor),
+        ).fetchone()
+        audit.record(
+            conn,
+            user.actor,
+            "commai.connector.identity",
+            f"{app}:{body.external_user}",
+            customer_id,
+            {"email": member["email"]},
+        )
+    return row
+
+
+@router.delete("/connectors/{app}/identities/{external_user}", status_code=204)
+def unlink_identity(customer_id: str, app: str, external_user: str, user: UserDep) -> None:
+    access.check(user, customer_id, "commai:admin")
+    with db.tx() as conn:
+        _admin(conn, user, customer_id)
+        cur = conn.execute(
+            "DELETE FROM commai_chat_identities WHERE customer_id = %s AND app = %s AND external_user = %s",
+            (customer_id, app, external_user),
+        )
+        if cur.rowcount == 0:
+            raise HTTPException(404, "Not linked.")
+        audit.record(conn, user.actor, "commai.connector.identity_removed", f"{app}:{external_user}", customer_id)
+
+
+# ---- Slack interactivity ---------------------------------------------------------------
+
+
+def _slack_reply(text: str, replace: bool) -> JSONResponse:
+    if replace:
+        return JSONResponse({"replace_original": True, "text": text})
+    return JSONResponse({"response_type": "ephemeral", "replace_original": False, "text": text})
+
+
+@public.post("/slack/interactions", include_in_schema=False)
+async def slack_interactions(request: Request) -> JSONResponse:
+    """Approve and Reject buttons pressed in Slack. Checked with Slack request
+    signing; the workspace must be the business's; the Slack user must be
+    linked to a CommAI person; then the action service decides."""
+    from ..connectors import slack
+
+    raw = await request.body()
+    secret = os.environ.get(slack.SIGNING_ENV, "")
+    if not slack.verify_request(
+        secret,
+        request.headers.get("X-Slack-Request-Timestamp", ""),
+        raw,
+        request.headers.get("X-Slack-Signature", ""),
+    ):
+        raise HTTPException(401, "Signature check failed.")
+    form = dict(urllib.parse.parse_qsl(raw.decode("utf-8", "replace")))
+    try:
+        payload = json.loads(form.get("payload", ""))
+    except ValueError:
+        raise HTTPException(400, "No payload.") from None
+    if payload.get("type") != "block_actions":
+        return JSONResponse({})
+    act = next(
+        (a for a in payload.get("actions") or [] if a.get("action_id") in ("commai_approve", "commai_reject")), None
+    )
+    if act is None:
+        return JSONResponse({})
+    try:
+        value = json.loads(act.get("value") or "{}")
+        customer_id, run_id = str(uuid.UUID(value["c"])), str(uuid.UUID(value["r"]))
+    except (ValueError, KeyError, TypeError):
+        return _slack_reply("That button is not valid.", False)
+    decision = "approve" if act["action_id"] == "commai_approve" else "reject"
+    team = (payload.get("team") or {}).get("id", "")
+    slack_user = (payload.get("user") or {}).get("id", "")
+    with db.tx() as conn:
+        known = more_common.state_get(conn, customer_id, "slack", "team").get("id", "")
+        if not known or known != team:
+            return _slack_reply("This Slack workspace is not connected to that business.", False)
+        approver = more_common.person_for(conn, customer_id, "slack", slack_user)
+        if approver is None:
+            return _slack_reply("Your Slack user is not linked to a CommAI person who may approve.", False)
+        try:
+            with conn.transaction():
+                run = more_common.decide(conn, customer_id, run_id, decision, approver)
+        except ActionRefused as e:
+            return _slack_reply(f"Not done: {e}", False)
+        audit.record(conn, approver, f"commai.action.{decision}", run_id, customer_id, {"via": "slack"})
+    word = "Approved" if run["status"] == "approved" else "Rejected"
+    return _slack_reply(f"{word} by <@{slack_user}> in CommAI.", True)
