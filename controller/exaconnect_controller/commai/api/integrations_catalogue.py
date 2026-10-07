@@ -21,6 +21,7 @@ from contextlib import contextmanager
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request, Response
+from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field
 
 from ... import audit, db
@@ -28,8 +29,8 @@ from ...api.deps import UserDep
 from .. import access
 from ..automation import catalogue, integrations, vault
 from ..channels import mailbox
-from ..connectors import kit
-from ..standards import inbound, webhooks_std
+from ..connectors import kit, rest_generic
+from ..standards import inbound, openapi_import, webhooks_std
 from .common import errors
 
 router = APIRouter(prefix="/customers/{customer_id}", tags=["commai: integrations catalogue"])
@@ -315,3 +316,201 @@ def poll_mailbox(customer_id: str, account_id: str, user: UserDep) -> dict:
     access.check(user, customer_id, "commai:admin")
     with db.tx() as conn, _mailbox_errors():
         return mailbox.poll(conn, _mailbox_row(conn, customer_id, account_id))
+
+
+# ==== your own REST API, from its OpenAPI document ======================================
+
+
+class RestAppIn(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    document: str | dict = Field(description="The OpenAPI 3.0 or 3.1 document, as JSON (or YAML) text or an object")
+    base_url: str = Field(default="", max_length=500, description="Defaults to the document's first server")
+
+
+class RestAppPatch(BaseModel):
+    actions: list[dict] | None = None
+    auth: dict | None = None
+    base_url: str | None = Field(default=None, max_length=500)
+    client_secret: str | None = Field(default=None, max_length=2000, description="OAuth client secret; kept encrypted")
+
+
+def _rest_out(row: dict, full: bool = False) -> dict:
+    auth = {k: v for k, v in (row["auth"] or {}).items() if k != "client_secret_ref"}
+    out = {
+        "id": str(row["id"]),
+        "app": rest_generic.app_name(row["id"]),
+        "name": row["name"],
+        "base_url": row["base_url"],
+        "status": row["status"],
+        "version": row["version"],
+        "actions": row["actions"],
+        "auth": auth | {"client_secret_set": bool((row["auth"] or {}).get("client_secret_ref"))},
+        "operation_count": len(row["operations"]),
+        "approved_by": row["approved_by"],
+        "approved_at": row["approved_at"],
+        "drafted_by": row["drafted_by"],
+    }
+    if full:
+        out["operations"] = row["operations"]
+        out["security_schemes"] = openapi_import.security_schemes(row["document"])
+        out["servers"] = openapi_import.servers(row["document"])
+        out["title"] = row["document"].get("info", {}).get("title", "")
+    return out
+
+
+def _rest_row(conn, customer_id: str, rest_id: str, lock: bool = False) -> dict:
+    row = conn.execute(
+        "SELECT * FROM commai_rest_apps WHERE id::text = %s AND customer_id = %s" + (" FOR UPDATE" if lock else ""),
+        (rest_id, customer_id),
+    ).fetchone()
+    if row is None:
+        raise HTTPException(404, "REST app not found.")
+    return row
+
+
+def _check_base(url: str) -> str:
+    from .. import webhooks
+
+    url = url.strip().rstrip("/")
+    try:
+        webhooks.check_url(url)
+    except webhooks.UnsafeURL as e:
+        raise HTTPException(422, f"Base address: {e}") from None
+    return url
+
+
+@router.get("/rest-apps")
+def list_rest_apps(customer_id: str, user: UserDep) -> list[dict]:
+    access.check(user, customer_id, "commai:admin")
+    with db.tx() as conn:
+        rows = conn.execute(
+            "SELECT * FROM commai_rest_apps WHERE customer_id = %s ORDER BY name", (customer_id,)
+        ).fetchall()
+    return [_rest_out(r) for r in rows]
+
+
+@router.post("/rest-apps", status_code=201)
+def import_rest_app(customer_id: str, body: RestAppIn, user: UserDep) -> dict:
+    """Import an OpenAPI document. Nothing in it runs; its operations are listed
+    for you to choose as actions. The app stays a draft until a person approves it."""
+    access.check(user, customer_id, "commai:admin")
+    try:
+        doc = openapi_import.parse(body.document)
+        ops = openapi_import.operations(doc)
+    except openapi_import.OpenAPIError as e:
+        raise HTTPException(422, str(e)) from None
+    if not ops:
+        raise HTTPException(422, "The document has no operations CommAI can call.")
+    servers = openapi_import.servers(doc)
+    base_url = body.base_url or next((s for s in servers if s.startswith("http")), "")
+    if not base_url:
+        raise HTTPException(422, "Give the API's base address (the document has no absolute server URL).")
+    base_url = _check_base(base_url)
+    slug = openapi_import._slug(body.name)
+    with db.tx() as conn:
+        _admin(conn, user, customer_id)
+        if conn.execute(
+            "SELECT 1 FROM commai_rest_apps WHERE customer_id = %s AND slug = %s", (customer_id, slug)
+        ).fetchone():
+            raise HTTPException(409, "You already have an API with that name.")
+        row = conn.execute(
+            """INSERT INTO commai_rest_apps (customer_id, slug, name, base_url, document, operations, created_by)
+               VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING *""",
+            (customer_id, slug, body.name, base_url, Jsonb(doc), Jsonb(ops), user.actor),
+        ).fetchone()
+        audit.record(conn, user.actor, "commai.rest_app.import", body.name, customer_id, {"operations": len(ops)})
+    return _rest_out(row, full=True)
+
+
+@router.get("/rest-apps/{rest_id}")
+def get_rest_app(customer_id: str, rest_id: str, user: UserDep) -> dict:
+    access.check(user, customer_id, "commai:admin")
+    with db.tx() as conn:
+        return _rest_out(_rest_row(conn, customer_id, rest_id), full=True)
+
+
+@router.post("/rest-apps/{rest_id}/draft")
+def draft_rest_actions(customer_id: str, rest_id: str, user: UserDep) -> dict:
+    """A suggested first choice of actions with field mapping, made only from the
+    document's operations. Nothing is saved: review it, then save it with PUT."""
+    access.check(user, customer_id, "commai:admin")
+    with db.tx() as conn:
+        row = _rest_row(conn, customer_id, rest_id)
+    return {"actions": openapi_import.draft_actions(row["operations"]), "drafted_by": "suggestion"}
+
+
+@router.put("/rest-apps/{rest_id}")
+def update_rest_app(customer_id: str, rest_id: str, body: RestAppPatch, user: UserDep) -> dict:
+    """Choose operations as actions, map fields, set the sign-in method. Any change
+    sends the app back to draft for a person to approve again."""
+    access.check(user, customer_id, "commai:admin")
+    with db.tx() as conn, _errors():
+        _admin(conn, user, customer_id)
+        row = _rest_row(conn, customer_id, rest_id, lock=True)
+        ops = row["operations"]
+        actions = row["actions"] if body.actions is None else rest_generic.check_actions(ops, body.actions)
+        auth = row["auth"] or {}
+        if body.auth is not None:
+            ref = auth.get("client_secret_ref", "")
+            auth = rest_generic.check_auth(row["document"], body.auth)
+            if ref and auth["type"] == "oauth2_auth_code":
+                auth["client_secret_ref"] = ref
+        if body.client_secret:
+            if auth.get("type") != "oauth2_auth_code":
+                raise HTTPException(422, "A client secret is entered here only for OAuth sign-in with your client.")
+            auth["client_secret_ref"] = vault.put(
+                conn, customer_id, f"rest:{rest_id}", {"client_secret": body.client_secret},
+                auth.get("client_secret_ref", ""),
+            )  # fmt: skip
+        base_url = row["base_url"] if body.base_url is None else _check_base(body.base_url)
+        row = conn.execute(
+            """UPDATE commai_rest_apps SET actions = %s, auth = %s, base_url = %s, status = 'draft',
+                      version = version + 1, approved_by = '', approved_at = NULL, drafted_by = 'person',
+                      updated_at = now() WHERE id = %s RETURNING *""",
+            (Jsonb(actions), Jsonb(auth), base_url, row["id"]),
+        ).fetchone()
+        audit.record(
+            conn,
+            user.actor,
+            "commai.rest_app.update",
+            row["name"],
+            customer_id,
+            {"actions": [a["name"] for a in actions], "auth": auth.get("type", "none"), "version": row["version"]},
+        )
+    return _rest_out(row, full=True)
+
+
+@router.post("/rest-apps/{rest_id}/approve")
+def approve_rest_app(customer_id: str, rest_id: str, user: UserDep) -> dict:
+    """A person approves the chosen actions; the app then appears in this business's
+    catalogue. API keys can't approve."""
+    access.check(user, customer_id, "commai:admin")
+    if user.via == "key":
+        raise HTTPException(403, "A person approves an API's actions, not an API key.")
+    with db.tx() as conn, _errors():
+        _admin(conn, user, customer_id)
+        row = _rest_row(conn, customer_id, rest_id, lock=True)
+        if not row["actions"]:
+            raise HTTPException(409, "Choose at least one operation first.")
+        rest_generic.check_actions(row["operations"], row["actions"])  # every one still in the document
+        if (row["auth"] or {}).get("type") == "oauth2_auth_code" and not row["auth"].get("client_secret_ref"):
+            raise HTTPException(409, "Enter your OAuth client secret first.")
+        row = conn.execute(
+            """UPDATE commai_rest_apps SET status = 'approved', approved_by = %s, approved_at = now(),
+                      updated_at = now() WHERE id = %s RETURNING *""",
+            (user.actor, row["id"]),
+        ).fetchone()
+        audit.record(conn, user.actor, "commai.rest_app.approve", row["name"], customer_id, {"version": row["version"]})
+    return _rest_out(row)
+
+
+@router.delete("/rest-apps/{rest_id}", status_code=204)
+def delete_rest_app(customer_id: str, rest_id: str, user: UserDep) -> None:
+    access.check(user, customer_id, "commai:admin")
+    with db.tx() as conn:
+        _admin(conn, user, customer_id)
+        row = _rest_row(conn, customer_id, rest_id, lock=True)
+        app = rest_generic.app_name(row["id"])
+        conn.execute("DELETE FROM integration_connections WHERE customer_id = %s AND app = %s", (customer_id, app))
+        conn.execute("DELETE FROM commai_rest_apps WHERE id = %s", (row["id"],))
+        audit.record(conn, user.actor, "commai.rest_app.delete", row["name"], customer_id)

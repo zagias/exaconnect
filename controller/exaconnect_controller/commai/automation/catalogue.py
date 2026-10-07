@@ -93,11 +93,36 @@ VIA_STANDARD = [
 ]
 
 
+def _own_apis(conn: psycopg.Connection, customer_id: Any) -> list[dict]:
+    """This business's approved REST apps (only its own), shaped like any app."""
+    from ..connectors import rest_generic
+
+    out = []
+    for c in rest_generic.owned(conn, customer_id):
+        item = kit.describe_any(c)
+        row = integrations._row(conn, customer_id, c.app)
+        real, reasons = c.real_ready(conn, customer_id)
+        out.append(
+            {
+                **item,
+                "simulated": (row is None and not real) or bool(row and row.get("auth_method") == "simulated"),
+                "sign_in_ready": real,
+                "not_live_reason": " ".join(reasons),
+                "token_entry": False,
+                "read_actions": [a["name"] for a in item["actions"] if a["kind"] == "read"],
+                "write_actions": [a["name"] for a in item["actions"] if a["kind"] in integrations.WRITE_KINDS],
+                "mapping_objects": [],
+                "connection": integrations.public(row),
+            }
+        )
+    return out
+
+
 def grouped(conn: psycopg.Connection, customer_id: Any) -> dict:
     """The catalogue by category. Each app: its actions (read kept apart from
     writes), whether this business has it live or on a stand-in, and what is
     still needed from ExaCarib."""
-    items = integrations.catalogue(conn, customer_id)
+    items = integrations.catalogue(conn, customer_id) + _own_apis(conn, customer_id)
     by: dict[str, list[dict]] = {}
     for it in items:
         it["status"] = (it.get("connection") or {}).get("status") or "not connected"
