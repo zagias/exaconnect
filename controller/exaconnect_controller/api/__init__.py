@@ -16,6 +16,7 @@ from . import (
     metering,
     ordering,
     orgs,
+    password_reset,
     protection,
     releases,
     scim,
@@ -39,6 +40,7 @@ def version() -> dict[str, str]:
 
 
 router.include_router(auth.router)
+router.include_router(password_reset.router)
 router.include_router(admin.router, dependencies=_connect)
 router.include_router(inventory_admin.router, dependencies=_connect)
 router.include_router(agent.router)

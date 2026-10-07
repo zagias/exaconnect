@@ -920,3 +920,15 @@ CREATE TABLE IF NOT EXISTS releases (
 
 -- Lab and demo organisations: every screen showing their data carries "Example data" (CLAUDE.md 4.6).
 ALTER TABLE customers ADD COLUMN IF NOT EXISTS example boolean NOT NULL DEFAULT false;
+
+-- Forgotten-password links (api/password_reset.py). Only the hash is stored.
+CREATE TABLE IF NOT EXISTS password_resets (
+  id          bigserial PRIMARY KEY,
+  user_id     uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash  text NOT NULL UNIQUE,
+  ip          text,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  expires_at  timestamptz NOT NULL,
+  used_at     timestamptz
+);
+CREATE INDEX IF NOT EXISTS password_resets_user ON password_resets (user_id, created_at DESC);

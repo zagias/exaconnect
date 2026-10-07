@@ -7,6 +7,7 @@ import Ask from "./pages/Ask";
 import Insights from "./pages/Insights";
 import InvitePage, { inviteToken, PENDING_INVITE } from "./pages/Invite";
 import People from "./pages/People";
+import { ForgotPage, ResetPage, resetRoute } from "./pages/Reset";
 import Internet from "./pages/Internet";
 import Admin from "./pages/Admin";
 import Billing from "./pages/Billing";
@@ -25,8 +26,12 @@ const CommAI = lazy(() => import("./pages/commai"));
 
 export default function App() {
   // An invitation link works signed out, so it sits outside the sign-in gate.
-  const token = inviteToken(useLocation().pathname);
+  const path = useLocation().pathname;
+  const token = inviteToken(path);
   if (token) return <InvitePage token={token} />;
+  // So do the forgotten-password screens.
+  const reset = resetRoute(path);
+  if (reset) return reset.kind === "forgot" ? <ForgotPage /> : <ResetPage token={reset.token} />;
   return (
     <AuthGate>
       <CustomerProvider>
