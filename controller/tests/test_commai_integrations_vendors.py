@@ -18,6 +18,7 @@ from __future__ import annotations
 import base64
 import datetime as dt
 import json
+import os
 import time
 import urllib.parse
 
@@ -25,6 +26,7 @@ import pytest
 
 from exaconnect_controller import db
 from exaconnect_controller.commai import actions, connectors
+from exaconnect_controller.commai.automation import oauth
 from exaconnect_controller.commai.connectors import kit
 
 from .commai_connector_kit import (  # noqa: F401
@@ -273,7 +275,8 @@ def sign_in(client, b, app, fake) -> None:
     if spec.get("basic_token_auth"):
         assert call["headers"]["Authorization"].startswith("Basic ") and "client_secret" not in call["body"]
     else:
-        assert call["body"]["client_secret"] == f"{app}-client-secret"
+        # Apps that share one OAuth client (Microsoft 365 and OneDrive) read the same setting.
+        assert call["body"]["client_secret"] == os.environ[f"{oauth.PROVIDERS[app].env}_CLIENT_SECRET"]
     with db.tx() as conn:
         row = connectors.connection(conn, b["id"], app)
         assert all("FAKE" not in s["ciphertext"] for s in conn.execute("SELECT ciphertext FROM commai_secrets"))
