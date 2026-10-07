@@ -87,7 +87,7 @@ class Syslog(Provider):
         Field("transport", "Transport", default="tls", kind="choice", choices=("udp", "tcp", "tls")),
         Field("facility", "Facility", default="local0", kind="choice", choices=tuple(FACILITIES)),
         Field("hostname", "Host name in messages", default="exacarib-connect"),
-        Field("ca_pem", "CA certificate (PEM, for TLS)", help="Only for a collector with a private CA."),
+        Field("ca_pem", "CA certificate (PEM, for TLS)", kind="pem", help="Only for a collector with a private CA."),
     )
     owners = ("customer",)
 

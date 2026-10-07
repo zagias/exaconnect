@@ -231,7 +231,10 @@ def test_sigv4_matches_the_aws_documented_example():
 def test_adapter_validation():
     aws = clouds.ADAPTERS["aws_dx"]
     assert aws.validate({"bandwidth_mbps": 50, "aws_account_id": "123456789012", "region": "us-east-1"})
-    for bad in ({"bandwidth_mbps": 70, "aws_account_id": "123456789012"}, {"bandwidth_mbps": 50, "aws_account_id": "12"}):
+    for bad in (
+        {"bandwidth_mbps": 70, "aws_account_id": "123456789012"},
+        {"bandwidth_mbps": 50, "aws_account_id": "12"},
+    ):
         with pytest.raises(clouds.OnrampError):
             aws.validate(bad)
     gcp = clouds.ADAPTERS["gcp_pi"]

@@ -139,6 +139,7 @@ class Tcp:
         self.sock.listen(5)
         self.port = self.sock.getsockname()[1]
         self.received: list[bytes] = []
+        self.errors: list[Exception] = []
         self.done = threading.Event()
         self.tls = tls
         threading.Thread(target=self._serve, daemon=True).start()
@@ -149,20 +150,21 @@ class Tcp:
                 c, _ = self.sock.accept()
             except OSError:
                 return
+            data = b""
             try:
                 if self.tls:
                     c = self.tls.wrap_socket(c, server_side=True)
-                data = b""
                 c.settimeout(5)
                 while True:
                     chunk = c.recv(65535)
                     if not chunk:
                         break
                     data += chunk
-                self.received.append(data)
-            except (OSError, ssl.SSLError):
-                pass
+            except (OSError, ssl.SSLError) as e:
+                self.errors.append(e)
             finally:
+                if data:
+                    self.received.append(data)
                 c.close()
                 self.done.set()
 
@@ -247,7 +249,10 @@ def link(lab_: dict, site: str, path: str) -> str:
 def other_org(client, name: str = "Other Bank") -> dict:
     with db.tx() as conn:
         cid = str(conn.execute("INSERT INTO customers (name) VALUES (%s) RETURNING id", (name,)).fetchone()["id"])
-    return {"id": cid, "h": user(client, "customer", customer_id=cid, email=f"ops@{name.replace(' ', '').lower()}.example")}
+    return {
+        "id": cid,
+        "h": user(client, "customer", customer_id=cid, email=f"ops@{name.replace(' ', '').lower()}.example"),
+    }
 
 
 def run_jobs() -> int:

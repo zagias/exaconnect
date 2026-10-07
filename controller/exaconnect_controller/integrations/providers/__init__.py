@@ -146,6 +146,16 @@ class Provider:
                 if isinstance(v, str):
                     v = [x.strip() for x in v.split(",") if x.strip()]
                 v = [str(x)[:120] for x in v][:50]
+            elif f.kind == "pem":
+                v = str(v).strip()
+                if len(v) > 20_000 or "-----BEGIN CERTIFICATE-----" not in v:
+                    raise ValueError(f"{f.label} must be one or more PEM certificates.")
+                try:
+                    import ssl
+
+                    ssl.create_default_context().load_verify_locations(cadata=v)
+                except (ssl.SSLError, ValueError):
+                    raise ValueError(f"{f.label} is not a certificate that can be read.") from None
             else:
                 v = str(v).strip()[:500]
             out[f.name] = v
@@ -209,9 +219,10 @@ def raise_for(resp: Http, what: str) -> None:
 REGISTRY: dict[str, Provider] = {}
 
 
-def register(p: Provider) -> Provider:
-    REGISTRY[p.key] = p
-    return p
+def register(cls: type[Provider]) -> type[Provider]:
+    """Class decorator: one shared instance per provider."""
+    REGISTRY[cls.key] = cls()
+    return cls
 
 
 def get(key: str) -> Provider | None:
