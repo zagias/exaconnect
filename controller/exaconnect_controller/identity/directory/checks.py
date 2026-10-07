@@ -121,13 +121,22 @@ def parse_saml(xml: str | bytes, expected_name_id: str = "") -> list[dict]:
         ]
     ed = root if root.tag == f"{{{_MD}}}EntityDescriptor" else root.find(f"{{{_MD}}}EntityDescriptor")
     if ed is None or not ed.get("entityID"):
-        return [result("metadata", False, f"The XML is not SAML metadata: no EntityDescriptor (found <{_local(root.tag)}>).")]
+        return [
+            result(
+                "metadata", False, f"The XML is not SAML metadata: no EntityDescriptor (found <{_local(root.tag)}>)."
+            )
+        ]
     out.append(result("metadata", True, f"SAML metadata for {ed.get('entityID')}."))
     idp = ed.find(f"{{{_MD}}}IDPSSODescriptor")
     if idp is None:
         if ed.find(f"{{{_MD}}}SPSSODescriptor") is not None:
-            out.append(result("identity provider", False, "This is service provider metadata. Upload your identity "
-                              "provider's metadata, not ExaCarib's."))  # fmt: skip
+            out.append(
+                result(
+                    "identity provider",
+                    False,
+                    "This is service provider metadata. Upload your identity provider's metadata, not ExaCarib's.",
+                )
+            )
         else:
             out.append(result("identity provider", False, "The metadata has no IDPSSODescriptor."))
         return out
@@ -152,8 +161,14 @@ def parse_saml(xml: str | bytes, expected_name_id: str = "") -> list[dict]:
         out.append(_cert_check(certs))
     formats = [(n.text or "").strip() for n in idp.findall(f"{{{_MD}}}NameIDFormat")]
     if expected_name_id and formats and expected_name_id not in formats:
-        out.append(result("name ID format", True, f"The provider doesn't list {expected_name_id}; set it in the "
-                          "app's settings.", warn=True))  # fmt: skip
+        out.append(
+            result(
+                "name ID format",
+                True,
+                f"The provider doesn't list {expected_name_id}; set it in the app's settings.",
+                warn=True,
+            )
+        )
     return out
 
 
@@ -174,7 +189,9 @@ def _cert_check(certs: list[str]) -> dict:
     if soonest < now:
         return result("signing certificate", False, f"The signing certificate expired on {day}.")
     if soonest < now + dt.timedelta(days=30):
-        return result("signing certificate", True, f"The signing certificate expires on {day}. Renew it soon.", warn=True)
+        return result(
+            "signing certificate", True, f"The signing certificate expires on {day}. Renew it soon.", warn=True
+        )
     return result("signing certificate", True, f"{len(certs)} signing certificate(s), valid until {day}.")
 
 
@@ -193,8 +210,13 @@ def parse_discovery(body: bytes | str, url: str) -> list[dict]:
     try:
         doc = json.loads(body)
     except ValueError:
-        return [result("discovery", False, "The discovery address did not return JSON. Check it ends in "
-                       "/.well-known/openid-configuration.")]  # fmt: skip
+        return [
+            result(
+                "discovery",
+                False,
+                "The discovery address did not return JSON. Check it ends in /.well-known/openid-configuration.",
+            )
+        ]
     if not isinstance(doc, dict):
         return [result("discovery", False, "The discovery document is not a JSON object.")]
     out = []

@@ -135,11 +135,23 @@ ENTRA = Template(
     console="Microsoft Entra admin centre",
     summary="Microsoft 365 and Azure AD tenants. SAML or OpenID Connect sign-in; SCIM or Microsoft Graph for people.",
     inputs=(
-        Input("tenant_id", "Directory (tenant) ID", _GUID, "00000000-0000-0000-0000-000000000000",
-              "Entra admin centre > Overview > Tenant ID.", ("saml", "oidc", "pull")),
-        Input("app_id", "Application (client) ID", _GUID, "11111111-1111-1111-1111-111111111111",
-              "Shown on the enterprise application's Overview page after you create it.", ("saml", "oidc")),
-    ),  # fmt: skip
+        Input(
+            "tenant_id",
+            "Directory (tenant) ID",
+            _GUID,
+            "00000000-0000-0000-0000-000000000000",
+            "Entra admin centre > Overview > Tenant ID.",
+            ("saml", "oidc", "pull"),
+        ),
+        Input(
+            "app_id",
+            "Application (client) ID",
+            _GUID,
+            "11111111-1111-1111-1111-111111111111",
+            "Shown on the enterprise application's Overview page after you create it.",
+            ("saml", "oidc"),
+        ),
+    ),
     saml=Saml(
         metadata_url="https://login.microsoftonline.com/{tenant_id}/federationmetadata/2007-06/federationmetadata.xml?appid={app_id}",
         name_id_format=SAML_EMAIL,
@@ -158,15 +170,21 @@ ENTRA = Template(
     ),
     oidc=Oidc(
         discovery_url="https://login.microsoftonline.com/{tenant_id}/v2.0/.well-known/openid-configuration",
-        claims=Claims("email", "name", "given_name", "family_name", "groups",
-                      "Add the optional claims email, given_name and family_name in Token configuration. "
-                      "The groups claim carries object IDs unless you choose to emit names."),
-    ),  # fmt: skip
+        claims=Claims(
+            "email",
+            "name",
+            "given_name",
+            "family_name",
+            "groups",
+            "Add the optional claims email, given_name and family_name in Token configuration. "
+            "The groups claim carries object IDs unless you choose to emit names.",
+        ),
+    ),
     scim=Scim(
         supported=True,
         mappings=(
             ("userName", "userPrincipalName"),
-            ("active", "Switch([IsSoftDeleted], , \"False\", \"True\", \"True\", \"False\")"),
+            ("active", 'Switch([IsSoftDeleted], , "False", "True", "True", "False")'),
             ("displayName", "displayName"),
             ("name.givenName", "givenName"),
             ("name.familyName", "surname"),
@@ -177,9 +195,9 @@ ENTRA = Template(
         ),
         quirks=(
             "PATCH operations arrive in title case ('Replace', 'Add', 'Remove'). Handled.",
-            "active arrives as the strings \"True\" and \"False\". Handled.",
-            "Members are removed with a members[value eq \"id\"] path or a value list. Both handled.",
-            "Email changes use the path emails[type eq \"work\"].value. Handled.",
+            'active arrives as the strings "True" and "False". Handled.',
+            'Members are removed with a members[value eq "id"] path or a value list. Both handled.',
+            'Email changes use the path emails[type eq "work"].value. Handled.',
             "Without the feature flag, older PATCH shapes are sent; add ?aadOptscim062020 to the Tenant URL.",
             "Provisioning runs about every 40 minutes. Use 'Provision on demand' to test one person.",
         ),
@@ -195,24 +213,43 @@ ENTRA = Template(
         "admin_consent_url": "Admin consent link (Microsoft Graph pull)",
     },
     steps=(
-        Step("saml", "In the Microsoft Entra admin centre, open Enterprise applications > New application > "
-                     "Create your own application, name it 'ExaCarib Connect' and choose 'Integrate any other "
-                     "application you don't find in the gallery'."),
-        Step("saml", "Open Single sign-on > SAML. In Basic SAML Configuration, paste the Identifier (Entity ID) "
-                     "{entity_id}, the Reply URL {acs_url} and the Sign on URL {sign_on_url}."),
-        Step("saml", "In Attributes & Claims, set the Unique User Identifier to user.mail with the Email address "
-                     "format, then add a group claim for groups assigned to the application."),
-        Step("oidc", "Open App registrations > New registration. Add a Web redirect URI {redirect_uri}. Under "
-                     "Certificates & secrets make a client secret and paste it here with the Application (client) "
-                     "ID. ExaCarib passes the secret to the sign-in gateway and does not keep it."),
-        Step("all", "Under Users and groups, assign the groups who should use ExaCarib (for example "
-                    "'ExaCarib Agents')."),
-        Step("scim", "Open Provisioning, set the mode to Automatic, paste the Tenant URL {scim_url}?aadOptscim062020 "
-                     "and the Secret Token (made when you choose Connect), then Test Connection and Start provisioning."),
-        Step("pull", "Instead of SCIM, ExaCarib can read your users and groups through Microsoft Graph. A Global "
-                     "Administrator opens {admin_consent_url} once and grants the read-only permissions."),
+        Step(
+            "saml",
+            "In the Microsoft Entra admin centre, open Enterprise applications > New application > "
+            "Create your own application, name it 'ExaCarib Connect' and choose 'Integrate any other "
+            "application you don't find in the gallery'.",
+        ),
+        Step(
+            "saml",
+            "Open Single sign-on > SAML. In Basic SAML Configuration, paste the Identifier (Entity ID) "
+            "{entity_id}, the Reply URL {acs_url} and the Sign on URL {sign_on_url}.",
+        ),
+        Step(
+            "saml",
+            "In Attributes & Claims, set the Unique User Identifier to user.mail with the Email address "
+            "format, then add a group claim for groups assigned to the application.",
+        ),
+        Step(
+            "oidc",
+            "Open App registrations > New registration. Add a Web redirect URI {redirect_uri}. Under "
+            "Certificates & secrets make a client secret and paste it here with the Application (client) "
+            "ID. ExaCarib passes the secret to the sign-in gateway and does not keep it.",
+        ),
+        Step(
+            "all", "Under Users and groups, assign the groups who should use ExaCarib (for example 'ExaCarib Agents')."
+        ),
+        Step(
+            "scim",
+            "Open Provisioning, set the mode to Automatic, paste the Tenant URL {scim_url}?aadOptscim062020 "
+            "and the Secret Token (made when you choose Connect), then Test Connection and Start provisioning.",
+        ),
+        Step(
+            "pull",
+            "Instead of SCIM, ExaCarib can read your users and groups through Microsoft Graph. A Global "
+            "Administrator opens {admin_consent_url} once and grants the read-only permissions.",
+        ),
         *_COMMON_TAIL,
-    ),  # fmt: skip
+    ),
     metadata_hosts=("login.microsoftonline.com",),
     presets=_PRESETS,
     modes=("scim", "pull", "none"),
@@ -224,21 +261,38 @@ GOOGLE = Template(
     console="Google Admin console",
     summary="Google Workspace and Cloud Identity. SAML sign-in; the Admin SDK Directory API for people and groups.",
     inputs=(
-        Input("idp_id", "SAML IdP ID (idpid)", r"^[A-Za-z0-9]{5,20}$", "C01abc2de",
-              "The idpid value in the SSO URL Google shows when you add the custom SAML app."),
-        Input("admin_email", "A Google admin to read the directory as", r"^[^@\s]+@[^@\s]+\.[a-z]{2,63}$",
-              "it-admin@example.com", "Needed for the Directory API pull only. Read-only.", ("pull",)),
-    ),  # fmt: skip
+        Input(
+            "idp_id",
+            "SAML IdP ID (idpid)",
+            r"^[A-Za-z0-9]{5,20}$",
+            "C01abc2de",
+            "The idpid value in the SSO URL Google shows when you add the custom SAML app.",
+        ),
+        Input(
+            "admin_email",
+            "A Google admin to read the directory as",
+            r"^[^@\s]+@[^@\s]+\.[a-z]{2,63}$",
+            "it-admin@example.com",
+            "Needed for the Directory API pull only. Read-only.",
+            ("pull",),
+        ),
+    ),
     saml=Saml(
         metadata_url="",
         name_id_format=SAML_EMAIL,
         name_id_value="Basic Information > Primary email",
         signing=RSA_SHA256 + " (Google's default; keep 'Signed response' ticked)",
-        claims=Claims("email", "displayName", "firstName", "lastName", "groups",
-                      "Map Primary email to email, First name to firstName, Last name to lastName, and add "
-                      "Group membership for the ExaCarib groups as groups. Download the IdP metadata file "
-                      "and upload it here."),
-    ),  # fmt: skip
+        claims=Claims(
+            "email",
+            "displayName",
+            "firstName",
+            "lastName",
+            "groups",
+            "Map Primary email to email, First name to firstName, Last name to lastName, and add "
+            "Group membership for the ExaCarib groups as groups. Download the IdP metadata file "
+            "and upload it here.",
+        ),
+    ),
     oidc=None,
     scim=Scim(
         supported=False,
@@ -253,19 +307,31 @@ GOOGLE = Template(
         "google_scopes": "OAuth scopes (comma-delimited)",
     },
     steps=(
-        Step("saml", "In the Google Admin console, open Apps > Web and mobile apps > Add app > Add custom SAML app "
-                     "and name it 'ExaCarib Connect'."),
+        Step(
+            "saml",
+            "In the Google Admin console, open Apps > Web and mobile apps > Add app > Add custom SAML app "
+            "and name it 'ExaCarib Connect'.",
+        ),
         Step("saml", "Download the IdP metadata and upload it here. Note the idpid from the SSO URL."),
-        Step("saml", "On Service provider details, paste the ACS URL {acs_url}, the Entity ID {entity_id} and the "
-                     "Start URL {sign_on_url}. Tick Signed response. Name ID format EMAIL, Name ID Primary email."),
-        Step("saml", "On Attribute mapping, map Primary email to email, First name to firstName, Last name to "
-                     "lastName, and add the ExaCarib groups under Group membership as groups."),
+        Step(
+            "saml",
+            "On Service provider details, paste the ACS URL {acs_url}, the Entity ID {entity_id} and the "
+            "Start URL {sign_on_url}. Tick Signed response. Name ID format EMAIL, Name ID Primary email.",
+        ),
+        Step(
+            "saml",
+            "On Attribute mapping, map Primary email to email, First name to firstName, Last name to "
+            "lastName, and add the ExaCarib groups under Group membership as groups.",
+        ),
         Step("saml", "Switch the app on for the organisational units or groups who should use ExaCarib."),
-        Step("pull", "For people and groups, open Security > Access and data control > API controls > Manage "
-                     "domain-wide delegation > Add new. Paste the Client ID {google_client_id} and the scopes "
-                     "{google_scopes}. They are read-only."),
+        Step(
+            "pull",
+            "For people and groups, open Security > Access and data control > API controls > Manage "
+            "domain-wide delegation > Add new. Paste the Client ID {google_client_id} and the scopes "
+            "{google_scopes}. They are read-only.",
+        ),
         *_COMMON_TAIL,
-    ),  # fmt: skip
+    ),
     metadata_hosts=("accounts.google.com",),
     presets=_PRESETS,
     modes=("pull", "none"),
@@ -277,26 +343,48 @@ OKTA = Template(
     console="Okta Admin Console",
     summary="Okta Workforce Identity. SAML or OpenID Connect sign-in; SCIM with Group Push.",
     inputs=(
-        Input("okta_domain", "Okta domain", r"^[a-z0-9-]+\.(okta|oktapreview|okta-emea)\.com$",
-              "example.okta.com", "Your Okta organisation address, without https://."),
-        Input("app_id", "Okta app ID", r"^0oa[A-Za-z0-9]{10,24}$", "0oa1b2c3d4e5f6g7h8i9",
-              "In the app's address in the Admin Console after you create it.", ("saml",)),
-    ),  # fmt: skip
+        Input(
+            "okta_domain",
+            "Okta domain",
+            r"^[a-z0-9-]+\.(okta|oktapreview|okta-emea)\.com$",
+            "example.okta.com",
+            "Your Okta organisation address, without https://.",
+        ),
+        Input(
+            "app_id",
+            "Okta app ID",
+            r"^0oa[A-Za-z0-9]{10,24}$",
+            "0oa1b2c3d4e5f6g7h8i9",
+            "In the app's address in the Admin Console after you create it.",
+            ("saml",),
+        ),
+    ),
     saml=Saml(
         metadata_url="https://{okta_domain}/app/{app_id}/sso/saml/metadata",
         name_id_format=SAML_EMAIL,
         name_id_value="Application username: Email",
         signing=RSA_SHA256 + " with SHA-256 digest; response and assertion signed",
-        claims=Claims("email", "displayName", "firstName", "lastName", "groups",
-                      "Attribute statements: email = user.email, firstName = user.firstName, lastName = "
-                      "user.lastName. Group attribute statement: groups, filter 'Starts with' ExaCarib."),
-    ),  # fmt: skip
+        claims=Claims(
+            "email",
+            "displayName",
+            "firstName",
+            "lastName",
+            "groups",
+            "Attribute statements: email = user.email, firstName = user.firstName, lastName = "
+            "user.lastName. Group attribute statement: groups, filter 'Starts with' ExaCarib.",
+        ),
+    ),
     oidc=Oidc(
         discovery_url="https://{okta_domain}/.well-known/openid-configuration",
-        claims=Claims("email", "name", "given_name", "family_name", "groups",
-                      "Add a groups claim to the ID token on the org authorisation server, filter 'Starts with' "
-                      "ExaCarib."),
-    ),  # fmt: skip
+        claims=Claims(
+            "email",
+            "name",
+            "given_name",
+            "family_name",
+            "groups",
+            "Add a groups claim to the ID token on the org authorisation server, filter 'Starts with' ExaCarib.",
+        ),
+    ),
     scim=Scim(
         supported=True,
         mappings=(
@@ -309,7 +397,7 @@ OKTA = Template(
             ("Group displayName", "Push Groups name"),
         ),
         quirks=(
-            "Looks a person up with GET /Users?filter=userName eq \"...\" before it creates them. Handled.",
+            'Looks a person up with GET /Users?filter=userName eq "..." before it creates them. Handled.',
             "Deactivates with PATCH active=false and never deletes. The person is signed out at once.",
             "Group Push renames with PATCH replace and a value {id, displayName} without a path. Handled.",
             "Group Push adds and removes members with PATCH members operations. Handled.",
@@ -326,24 +414,42 @@ OKTA = Template(
         "scim_token": "Bearer token (Authentication Mode: HTTP Header)",
     },
     steps=(
-        Step("saml", "In the Okta Admin Console open Applications > Create App Integration > SAML 2.0 and name it "
-                     "'ExaCarib Connect'."),
-        Step("saml", "Paste the Single sign-on URL {acs_url} (tick 'Use this for Recipient URL and Destination "
-                     "URL') and the Audience URI {entity_id}. Name ID format EmailAddress, Application username "
-                     "Email."),
-        Step("saml", "Add the attribute statements and the groups statement shown below, then copy the app ID "
-                     "from the address bar."),
-        Step("oidc", "Create an OIDC Web Application. Sign-in redirect URI {redirect_uri}, Initiate login URI "
-                     "{sign_on_url}. Paste the client ID and secret here; the secret goes to the sign-in gateway "
-                     "only."),
-        Step("scim", "On the General tab tick 'Enable SCIM provisioning'. On Provisioning > Integration paste the "
-                     "SCIM connector base URL {scim_url}, Unique identifier field userName, actions Push New Users, "
-                     "Push Profile Updates and Push Groups, Authentication Mode HTTP Header with the Bearer token "
-                     "made when you choose Connect."),
-        Step("scim", "Under Provisioning > To App, switch on Create Users, Update User Attributes and Deactivate "
-                     "Users. Assign the ExaCarib groups and add them under Push Groups."),
+        Step(
+            "saml",
+            "In the Okta Admin Console open Applications > Create App Integration > SAML 2.0 and name it "
+            "'ExaCarib Connect'.",
+        ),
+        Step(
+            "saml",
+            "Paste the Single sign-on URL {acs_url} (tick 'Use this for Recipient URL and Destination "
+            "URL') and the Audience URI {entity_id}. Name ID format EmailAddress, Application username "
+            "Email.",
+        ),
+        Step(
+            "saml",
+            "Add the attribute statements and the groups statement shown below, then copy the app ID "
+            "from the address bar.",
+        ),
+        Step(
+            "oidc",
+            "Create an OIDC Web Application. Sign-in redirect URI {redirect_uri}, Initiate login URI "
+            "{sign_on_url}. Paste the client ID and secret here; the secret goes to the sign-in gateway "
+            "only.",
+        ),
+        Step(
+            "scim",
+            "On the General tab tick 'Enable SCIM provisioning'. On Provisioning > Integration paste the "
+            "SCIM connector base URL {scim_url}, Unique identifier field userName, actions Push New Users, "
+            "Push Profile Updates and Push Groups, Authentication Mode HTTP Header with the Bearer token "
+            "made when you choose Connect.",
+        ),
+        Step(
+            "scim",
+            "Under Provisioning > To App, switch on Create Users, Update User Attributes and Deactivate "
+            "Users. Assign the ExaCarib groups and add them under Push Groups.",
+        ),
         *_COMMON_TAIL,
-    ),  # fmt: skip
+    ),
     metadata_hosts=(".okta.com", ".oktapreview.com", ".okta-emea.com"),
     presets=_PRESETS,
     modes=("scim", "none"),
@@ -360,10 +466,16 @@ JUMPCLOUD = Template(
         name_id_format=SAML_EMAIL,
         name_id_value="email",
         signing=RSA_SHA256 + "; choose 'Sign Assertion'",
-        claims=Claims("email", "displayName", "firstname", "lastname", "memberOf",
-                      "Add attributes email, firstname and lastname, and tick 'Include group attribute' with the "
-                      "name memberOf. Export the metadata and upload it here."),
-    ),  # fmt: skip
+        claims=Claims(
+            "email",
+            "displayName",
+            "firstname",
+            "lastname",
+            "memberOf",
+            "Add attributes email, firstname and lastname, and tick 'Include group attribute' with the "
+            "name memberOf. Export the metadata and upload it here.",
+        ),
+    ),
     oidc=Oidc(
         discovery_url="https://oauth.id.jumpcloud.com/.well-known/openid-configuration",
         claims=Claims("email", "name", "given_name", "family_name", "groups"),
@@ -379,7 +491,7 @@ JUMPCLOUD = Template(
             ("Group displayName", "user group name"),
         ),
         quirks=(
-            "Activation sends a test GET /Users?filter=userName eq \"<test email>\". An empty list is the right "
+            'Activation sends a test GET /Users?filter=userName eq "<test email>". An empty list is the right '
             "answer. Handled.",
             "Deactivates with PATCH active=false (a boolean). Handled; the person is signed out at once.",
             "Group membership arrives as PATCH members add and remove. Handled.",
@@ -395,19 +507,34 @@ JUMPCLOUD = Template(
         "scim_token": "Token Key",
     },
     steps=(
-        Step("saml", "In the JumpCloud Admin Portal open SSO Applications > Add New Application > Custom "
-                     "Application, choose Manage Single Sign-On (SSO) with SAML 2.0, name it 'ExaCarib Connect'."),
-        Step("saml", "Set the SP Entity ID {entity_id}, the ACS URL {acs_url} and the Login URL {sign_on_url}. "
-                     "Choose a unique IdP Entity ID, SAMLSubject NameID email, signature 'Sign Assertion'."),
-        Step("saml", "Add the attributes shown below and tick 'Include group attribute' (memberOf). Save, then "
-                     "Export Metadata and upload the file here."),
-        Step("oidc", "Choose 'Manage Single Sign-On (SSO) with OIDC' instead. Redirect URI {redirect_uri}, Login "
-                     "URL {sign_on_url}. Paste the client ID and secret here."),
-        Step("scim", "On Identity Management choose SCIM 2.0, paste the Base URL {scim_url} and the Token Key made "
-                     "when you choose Connect, give a test email and Activate."),
+        Step(
+            "saml",
+            "In the JumpCloud Admin Portal open SSO Applications > Add New Application > Custom "
+            "Application, choose Manage Single Sign-On (SSO) with SAML 2.0, name it 'ExaCarib Connect'.",
+        ),
+        Step(
+            "saml",
+            "Set the SP Entity ID {entity_id}, the ACS URL {acs_url} and the Login URL {sign_on_url}. "
+            "Choose a unique IdP Entity ID, SAMLSubject NameID email, signature 'Sign Assertion'.",
+        ),
+        Step(
+            "saml",
+            "Add the attributes shown below and tick 'Include group attribute' (memberOf). Save, then "
+            "Export Metadata and upload the file here.",
+        ),
+        Step(
+            "oidc",
+            "Choose 'Manage Single Sign-On (SSO) with OIDC' instead. Redirect URI {redirect_uri}, Login "
+            "URL {sign_on_url}. Paste the client ID and secret here.",
+        ),
+        Step(
+            "scim",
+            "On Identity Management choose SCIM 2.0, paste the Base URL {scim_url} and the Token Key made "
+            "when you choose Connect, give a test email and Activate.",
+        ),
         Step("all", "Under User Groups, bind the ExaCarib groups to the application."),
         *_COMMON_TAIL,
-    ),  # fmt: skip
+    ),
     metadata_hosts=("oauth.id.jumpcloud.com", "sso.jumpcloud.com"),
     presets=_PRESETS,
     modes=("scim", "none"),
@@ -419,20 +546,37 @@ ONELOGIN = Template(
     console="OneLogin Administration",
     summary="OneLogin. SAML or OpenID Connect sign-in; SCIM through the SCIM Provisioner connector.",
     inputs=(
-        Input("subdomain", "OneLogin subdomain", r"^[a-z0-9-]{2,63}$", "example",
-              "The part before .onelogin.com in your OneLogin address."),
-        Input("app_id", "OneLogin app ID", r"^[0-9]{3,12}$", "1234567",
-              "The number in the app's address after you save it.", ("saml",)),
-    ),  # fmt: skip
+        Input(
+            "subdomain",
+            "OneLogin subdomain",
+            r"^[a-z0-9-]{2,63}$",
+            "example",
+            "The part before .onelogin.com in your OneLogin address.",
+        ),
+        Input(
+            "app_id",
+            "OneLogin app ID",
+            r"^[0-9]{3,12}$",
+            "1234567",
+            "The number in the app's address after you save it.",
+            ("saml",),
+        ),
+    ),
     saml=Saml(
         metadata_url="https://{subdomain}.onelogin.com/saml/metadata/{app_id}",
         name_id_format=SAML_EMAIL,
         name_id_value="Email",
         signing="SHA-256 ('SAML Signature Algorithm: SHA-256'; sign the assertion)",
-        claims=Claims("Email", "DisplayName", "FirstName", "LastName", "memberOf",
-                      "Add parameters Email, FirstName and LastName, and memberOf (MemberOf, 'Include in SAML "
-                      "assertion', semicolon-delimited input)."),
-    ),  # fmt: skip
+        claims=Claims(
+            "Email",
+            "DisplayName",
+            "FirstName",
+            "LastName",
+            "memberOf",
+            "Add parameters Email, FirstName and LastName, and memberOf (MemberOf, 'Include in SAML "
+            "assertion', semicolon-delimited input).",
+        ),
+    ),
     oidc=Oidc(
         discovery_url="https://{subdomain}.onelogin.com/oidc/2/.well-known/openid-configuration",
         claims=Claims("email", "name", "given_name", "family_name", "groups"),
@@ -451,7 +595,7 @@ ONELOGIN = Template(
             "Updates people with PUT (a full replace). Anything left out of the SCIM JSON Template is cleared, so "
             "the template must send name.givenName and name.familyName.",
             "Groups are pushed by Rules ('Set Groups in ExaCarib Connect'), not by group assignment.",
-            "Some versions send single values wrapped in a list ([{\"value\": ...}]). Handled.",
+            'Some versions send single values wrapped in a list ([{"value": ...}]). Handled.',
         ),
     ),
     pull=None,
@@ -466,20 +610,35 @@ ONELOGIN = Template(
         "scim_token": "SCIM Bearer Token",
     },
     steps=(
-        Step("saml", "In OneLogin Administration open Applications > Add App and choose 'SCIM Provisioner with "
-                     "SAML (SCIM v2 Enterprise)'. Name it 'ExaCarib Connect'."),
-        Step("saml", "On Configuration paste the Audience {entity_id}, the Recipient {recipient}, the ACS (Consumer) "
-                     "URL Validator {acs_validator} and the ACS (Consumer) URL {acs_url}. Set SAML Signature "
-                     "Algorithm to SHA-256."),
-        Step("oidc", "Or add 'OpenId Connect (OIDC)', set the Login URL {sign_on_url} and Redirect URI "
-                     "{redirect_uri}, and paste the client ID and secret here."),
-        Step("scim", "Still on Configuration, paste the SCIM Base URL {scim_url} and the SCIM Bearer Token made "
-                     "when you choose Connect. In the SCIM JSON Template keep name.givenName and name.familyName. "
-                     "Then Enable the API connection."),
-        Step("scim", "On Provisioning tick 'Enable provisioning' and set 'When users are deleted' to Suspend. Add a "
-                     "Rule that sets Groups in ExaCarib Connect from your OneLogin roles or groups."),
+        Step(
+            "saml",
+            "In OneLogin Administration open Applications > Add App and choose 'SCIM Provisioner with "
+            "SAML (SCIM v2 Enterprise)'. Name it 'ExaCarib Connect'.",
+        ),
+        Step(
+            "saml",
+            "On Configuration paste the Audience {entity_id}, the Recipient {recipient}, the ACS (Consumer) "
+            "URL Validator {acs_validator} and the ACS (Consumer) URL {acs_url}. Set SAML Signature "
+            "Algorithm to SHA-256.",
+        ),
+        Step(
+            "oidc",
+            "Or add 'OpenId Connect (OIDC)', set the Login URL {sign_on_url} and Redirect URI "
+            "{redirect_uri}, and paste the client ID and secret here.",
+        ),
+        Step(
+            "scim",
+            "Still on Configuration, paste the SCIM Base URL {scim_url} and the SCIM Bearer Token made "
+            "when you choose Connect. In the SCIM JSON Template keep name.givenName and name.familyName. "
+            "Then Enable the API connection.",
+        ),
+        Step(
+            "scim",
+            "On Provisioning tick 'Enable provisioning' and set 'When users are deleted' to Suspend. Add a "
+            "Rule that sets Groups in ExaCarib Connect from your OneLogin roles or groups.",
+        ),
         *_COMMON_TAIL,
-    ),  # fmt: skip
+    ),
     metadata_hosts=(".onelogin.com",),
     presets=_PRESETS,
     modes=("scim", "none"),
@@ -491,26 +650,54 @@ PING = Template(
     console="PingOne admin console",
     summary="PingOne (and PingFederate). SAML or OpenID Connect sign-in; SCIM outbound provisioning.",
     inputs=(
-        Input("region", "PingOne region domain", r"^(com|eu|ca|asia|com\.au|sg)$", "eu",
-              "The ending of your PingOne address: com, eu, ca, asia, com.au or sg."),
-        Input("env_id", "Environment ID", _GUID, "22222222-2222-2222-2222-222222222222",
-              "PingOne > Environment > Properties."),
-        Input("app_id", "Application ID", _GUID, "33333333-3333-3333-3333-333333333333",
-              "On the application's Overview after you save it.", ("saml",)),
-    ),  # fmt: skip
+        Input(
+            "region",
+            "PingOne region domain",
+            r"^(com|eu|ca|asia|com\.au|sg)$",
+            "eu",
+            "The ending of your PingOne address: com, eu, ca, asia, com.au or sg.",
+        ),
+        Input(
+            "env_id",
+            "Environment ID",
+            _GUID,
+            "22222222-2222-2222-2222-222222222222",
+            "PingOne > Environment > Properties.",
+        ),
+        Input(
+            "app_id",
+            "Application ID",
+            _GUID,
+            "33333333-3333-3333-3333-333333333333",
+            "On the application's Overview after you save it.",
+            ("saml",),
+        ),
+    ),
     saml=Saml(
         metadata_url="https://auth.pingone.{region}/{env_id}/saml20/metadata/{app_id}",
         name_id_format=SAML_EMAIL,
         name_id_value="saml_subject = Email Address",
         signing="RSA_SHA256; sign the assertion",
-        claims=Claims("email", "displayName", "given_name", "family_name", "memberOf",
-                      "Attribute mappings: email, given_name, family_name, and memberOf from Group Names."),
-    ),  # fmt: skip
+        claims=Claims(
+            "email",
+            "displayName",
+            "given_name",
+            "family_name",
+            "memberOf",
+            "Attribute mappings: email, given_name, family_name, and memberOf from Group Names.",
+        ),
+    ),
     oidc=Oidc(
         discovery_url="https://auth.pingone.{region}/{env_id}/as/.well-known/openid-configuration",
-        claims=Claims("email", "name", "given_name", "family_name", "groups",
-                      "Add a groups attribute mapped from Group Names to the ID token."),
-    ),  # fmt: skip
+        claims=Claims(
+            "email",
+            "name",
+            "given_name",
+            "family_name",
+            "groups",
+            "Add a groups attribute mapped from Group Names to the ID token.",
+        ),
+    ),
     scim=Scim(
         supported=True,
         mappings=(
@@ -522,7 +709,7 @@ PING = Template(
             ("externalId", "User ID"),
         ),
         quirks=(
-            "The default Users Filter Expression is userName Eq \"%s\" with a capital Eq. Handled: SCIM operators "
+            'The default Users Filter Expression is userName Eq "%s" with a capital Eq. Handled: SCIM operators '
             "are case-insensitive.",
             "Some paths arrive with the core schema prefix (urn:ietf:params:scim:schemas:core:2.0:User:active). "
             "Handled.",
@@ -540,20 +727,38 @@ PING = Template(
         "scim_filter": "Users Filter Expression",
     },
     steps=(
-        Step("saml", "In PingOne open Applications > Applications > Add, choose SAML Application and name it "
-                     "'ExaCarib Connect'. Choose 'Manually enter' for the configuration."),
-        Step("saml", "Paste the ACS URL {acs_url} and the Entity ID {entity_id}. Signing RSA_SHA256, sign the "
-                     "assertion. Save and copy the Application ID."),
+        Step(
+            "saml",
+            "In PingOne open Applications > Applications > Add, choose SAML Application and name it "
+            "'ExaCarib Connect'. Choose 'Manually enter' for the configuration.",
+        ),
+        Step(
+            "saml",
+            "Paste the ACS URL {acs_url} and the Entity ID {entity_id}. Signing RSA_SHA256, sign the "
+            "assertion. Save and copy the Application ID.",
+        ),
         Step("saml", "On Attribute Mappings set saml_subject to Email Address and add the attributes shown below."),
-        Step("oidc", "Or add an OIDC Web App. Redirect URI {redirect_uri}, Initiate Login URI {sign_on_url}. Paste "
-                     "the client ID and secret here."),
-        Step("scim", "Open Integrations > Provisioning > New Connection > SCIM Outbound. SCIM BASE URL {scim_url}, "
-                     "Authentication Method OAuth 2 Bearer Token with the token made when you choose Connect, "
-                     "Users Filter Expression {scim_filter}. Add a rule for the ExaCarib groups."),
+        Step(
+            "oidc",
+            "Or add an OIDC Web App. Redirect URI {redirect_uri}, Initiate Login URI {sign_on_url}. Paste "
+            "the client ID and secret here.",
+        ),
+        Step(
+            "scim",
+            "Open Integrations > Provisioning > New Connection > SCIM Outbound. SCIM BASE URL {scim_url}, "
+            "Authentication Method OAuth 2 Bearer Token with the token made when you choose Connect, "
+            "Users Filter Expression {scim_filter}. Add a rule for the ExaCarib groups.",
+        ),
         *_COMMON_TAIL,
-    ),  # fmt: skip
-    metadata_hosts=("auth.pingone.com", "auth.pingone.eu", "auth.pingone.ca", "auth.pingone.asia",
-                    "auth.pingone.com.au", "auth.pingone.sg"),  # fmt: skip
+    ),
+    metadata_hosts=(
+        "auth.pingone.com",
+        "auth.pingone.eu",
+        "auth.pingone.ca",
+        "auth.pingone.asia",
+        "auth.pingone.com.au",
+        "auth.pingone.sg",
+    ),
     presets=_PRESETS,
     modes=("scim", "none"),
 )
@@ -564,27 +769,49 @@ AUTH0 = Template(
     console="Auth0 Dashboard",
     summary="Auth0 tenants. OpenID Connect (or the SAML2 Web App add-on) for sign-in. Auth0 does not push SCIM.",
     inputs=(
-        Input("auth0_domain", "Auth0 domain", r"^[a-z0-9-]+(\.[a-z]{2})?\.auth0\.com$", "example.eu.auth0.com",
-              "Your tenant domain from Settings, without https://."),
-        Input("client_id", "Application client ID", r"^[A-Za-z0-9_-]{16,64}$", "AbCdEf0123456789AbCdEf0123456789",
-              "The application's Client ID.", ("saml",)),
-    ),  # fmt: skip
+        Input(
+            "auth0_domain",
+            "Auth0 domain",
+            r"^[a-z0-9-]+(\.[a-z]{2})?\.auth0\.com$",
+            "example.eu.auth0.com",
+            "Your tenant domain from Settings, without https://.",
+        ),
+        Input(
+            "client_id",
+            "Application client ID",
+            r"^[A-Za-z0-9_-]{16,64}$",
+            "AbCdEf0123456789AbCdEf0123456789",
+            "The application's Client ID.",
+            ("saml",),
+        ),
+    ),
     saml=Saml(
         metadata_url="https://{auth0_domain}/samlp/metadata/{client_id}",
         name_id_format=SAML_EMAIL,
         name_id_value="email (nameIdentifierProbes: email)",
         signing='rsa-sha256: set "signatureAlgorithm": "rsa-sha256" and "digestAlgorithm": "sha256" in the add-on '
         "settings (the add-on's default is SHA-1)",
-        claims=Claims(f"{_MS}/emailaddress", f"{_MS}/name", f"{_MS}/givenname", f"{_MS}/surname",
-                      "http://schemas.xmlsoap.org/claims/Group",
-                      "The add-on's default mappings. Groups come from an Action that sets app_metadata.groups."),
-    ),  # fmt: skip
+        claims=Claims(
+            f"{_MS}/emailaddress",
+            f"{_MS}/name",
+            f"{_MS}/givenname",
+            f"{_MS}/surname",
+            "http://schemas.xmlsoap.org/claims/Group",
+            "The add-on's default mappings. Groups come from an Action that sets app_metadata.groups.",
+        ),
+    ),
     oidc=Oidc(
         discovery_url="https://{auth0_domain}/.well-known/openid-configuration",
-        claims=Claims("email", "name", "given_name", "family_name", "https://exacarib.com/groups",
-                      "Auth0 has no groups claim of its own. Add a post-login Action that sets the custom claim "
-                      "https://exacarib.com/groups on the ID token."),
-    ),  # fmt: skip
+        claims=Claims(
+            "email",
+            "name",
+            "given_name",
+            "family_name",
+            "https://exacarib.com/groups",
+            "Auth0 has no groups claim of its own. Add a post-login Action that sets the custom claim "
+            "https://exacarib.com/groups on the ID token.",
+        ),
+    ),
     scim=Scim(
         supported=False,
         note="Auth0 does not send SCIM. Accounts are made the first time someone from an approved domain signs in, "
@@ -598,17 +825,26 @@ AUTH0 = Template(
         "entity_id": "audience (SAML2 Web App add-on settings)",
     },
     steps=(
-        Step("oidc", "In the Auth0 Dashboard open Applications > Create Application > Regular Web Application and "
-                     "name it 'ExaCarib Connect'."),
-        Step("oidc", "In Settings paste the Allowed Callback URLs {redirect_uri} and the Application Login URI "
-                     "{sign_on_url}. Paste the Client ID and Client Secret here; the secret goes to the sign-in "
-                     "gateway only."),
+        Step(
+            "oidc",
+            "In the Auth0 Dashboard open Applications > Create Application > Regular Web Application and "
+            "name it 'ExaCarib Connect'.",
+        ),
+        Step(
+            "oidc",
+            "In Settings paste the Allowed Callback URLs {redirect_uri} and the Application Login URI "
+            "{sign_on_url}. Paste the Client ID and Client Secret here; the secret goes to the sign-in "
+            "gateway only.",
+        ),
         Step("oidc", "Add a post-login Action that puts the person's groups in the claim https://exacarib.com/groups."),
-        Step("saml", "Or, on the application's Addons tab, switch on SAML2 Web App. Application Callback URL "
-                     "{acs_url}; in Settings set audience {entity_id}, signatureAlgorithm rsa-sha256 and "
-                     "digestAlgorithm sha256."),
+        Step(
+            "saml",
+            "Or, on the application's Addons tab, switch on SAML2 Web App. Application Callback URL "
+            "{acs_url}; in Settings set audience {entity_id}, signatureAlgorithm rsa-sha256 and "
+            "digestAlgorithm sha256.",
+        ),
         *_COMMON_TAIL,
-    ),  # fmt: skip
+    ),
     metadata_hosts=(".auth0.com",),
     presets=_PRESETS,
     default_protocol="oidc",
@@ -621,9 +857,15 @@ ACTIVE_DIRECTORY = Template(
     console="AD FS Management and Active Directory Users and Computers",
     summary="Windows Server Active Directory. AD FS for SAML sign-in; scheduled LDAPS sync for people and groups.",
     inputs=(
-        Input("adfs_host", "AD FS host name", _HOST, "adfs.example.com",
-              "The public name of your AD FS farm, without https://.", ("saml",)),
-    ),  # fmt: skip
+        Input(
+            "adfs_host",
+            "AD FS host name",
+            _HOST,
+            "adfs.example.com",
+            "The public name of your AD FS farm, without https://.",
+            ("saml",),
+        ),
+    ),
     saml=Saml(
         metadata_url="https://{adfs_host}/FederationMetadata/2007-06/FederationMetadata.xml",
         name_id_format=SAML_EMAIL,
@@ -649,22 +891,40 @@ ACTIVE_DIRECTORY = Template(
         "ldap_attributes": "Attributes read (read-only)",
     },
     steps=(
-        Step("saml", "In AD FS Management choose Add Relying Party Trust > Claims aware > 'Import data about the "
-                     "relying party published online' and give {sp_metadata_url}. If AD FS can't reach it, enter "
-                     "the identifier {entity_id} and the SAML 2.0 SSO service URL {acs_url} by hand."),
-        Step("saml", "Add the claim rules shown below, and a Transform rule from E-Mail Address to Name ID with the "
-                     "Email format. Set the secure hash algorithm to SHA-256."),
-        Step("ldap", "Create a read-only service account (for example svc-exacarib) in a locked-down OU. It needs "
-                     "only 'Read' on the users and groups it should see; it never needs to write."),
-        Step("ldap", "Make sure a domain controller answers LDAPS on port 636 with a certificate your public or "
-                     "internal CA signed, and that ExaCarib's addresses can reach it (VPN or firewall rule)."),
-        Step("ldap", "Enter the host, base DN, bind DN and password below. The password goes into ExaCarib's "
-                     "encrypted store and is never shown again. If your CA is internal, paste its certificate."),
-        Step("ldap", "Put the people who should use ExaCarib in groups whose names start with the group prefix "
-                     "(for example 'ExaCarib Agents'). The sync runs on a schedule; someone removed or disabled is "
-                     "signed out at once."),
+        Step(
+            "saml",
+            "In AD FS Management choose Add Relying Party Trust > Claims aware > 'Import data about the "
+            "relying party published online' and give {sp_metadata_url}. If AD FS can't reach it, enter "
+            "the identifier {entity_id} and the SAML 2.0 SSO service URL {acs_url} by hand.",
+        ),
+        Step(
+            "saml",
+            "Add the claim rules shown below, and a Transform rule from E-Mail Address to Name ID with the "
+            "Email format. Set the secure hash algorithm to SHA-256.",
+        ),
+        Step(
+            "ldap",
+            "Create a read-only service account (for example svc-exacarib) in a locked-down OU. It needs "
+            "only 'Read' on the users and groups it should see; it never needs to write.",
+        ),
+        Step(
+            "ldap",
+            "Make sure a domain controller answers LDAPS on port 636 with a certificate your public or "
+            "internal CA signed, and that ExaCarib's addresses can reach it (VPN or firewall rule).",
+        ),
+        Step(
+            "ldap",
+            "Enter the host, base DN, bind DN and password below. The password goes into ExaCarib's "
+            "encrypted store and is never shown again. If your CA is internal, paste its certificate.",
+        ),
+        Step(
+            "ldap",
+            "Put the people who should use ExaCarib in groups whose names start with the group prefix "
+            "(for example 'ExaCarib Agents'). The sync runs on a schedule; someone removed or disabled is "
+            "signed out at once.",
+        ),
         *_COMMON_TAIL,
-    ),  # fmt: skip
+    ),
     presets=_PRESETS,
     modes=("ldap", "none"),
 )
@@ -683,15 +943,24 @@ LDAP = Template(
     labels={"ldap_attributes": "Attributes read (read-only)"},
     steps=(
         Step("ldap", "Create a read-only bind account that can read people and groups under your base DN."),
-        Step("ldap", "Make sure the server answers LDAPS on port 636 and that ExaCarib's addresses can reach it. "
-                     "Plain LDAP is refused outside ExaCarib's lab."),
-        Step("ldap", "Enter the host, base DN, bind DN and password below. People are read with the user filter "
-                     "(default: inetOrgPerson with an email address); groups are groupOfNames or "
-                     "groupOfUniqueNames whose names start with the group prefix."),
-        Step("ldap", "Disabled accounts (pwdAccountLockedTime or nsAccountLock) and people who disappear from the "
-                     "directory are switched off and signed out at once."),
+        Step(
+            "ldap",
+            "Make sure the server answers LDAPS on port 636 and that ExaCarib's addresses can reach it. "
+            "Plain LDAP is refused outside ExaCarib's lab.",
+        ),
+        Step(
+            "ldap",
+            "Enter the host, base DN, bind DN and password below. People are read with the user filter "
+            "(default: inetOrgPerson with an email address); groups are groupOfNames or "
+            "groupOfUniqueNames whose names start with the group prefix.",
+        ),
+        Step(
+            "ldap",
+            "Disabled accounts (pwdAccountLockedTime or nsAccountLock) and people who disappear from the "
+            "directory are switched off and signed out at once.",
+        ),
         *_COMMON_TAIL,
-    ),  # fmt: skip
+    ),
     presets=_PRESETS,
     default_protocol="",
     modes=("ldap",),
@@ -727,7 +996,7 @@ def get(key: str) -> Template:
     return t
 
 
-_PLACEHOLDER = re.compile(r"\{([a-z_]+)\}")
+_PLACEHOLDER = re.compile(r"\{([a-z0-9_]+)\}")
 
 
 def fill(pattern: str, values: dict[str, str]) -> str:
@@ -830,10 +1099,15 @@ def render(t: Template, ctx: Context, protocol: str, mode: str) -> dict:
         "google_client_id": "Waiting for ExaCarib to set up its Google service account.",
     }
     values = [
-        {"key": k, "label": t.labels[k], "value": ours.get(k, ""), "missing": "" if ours.get(k) else unavailable.get(k, "")}
+        {
+            "key": k,
+            "label": t.labels[k],
+            "value": ours.get(k, ""),
+            "missing": "" if ours.get(k) else unavailable.get(k, ""),
+        }
         for k in t.labels
         if k in wanted
-    ]  # fmt: skip
+    ]
     fills = {**ours, **ctx.inputs}
     spec = t.saml if protocol == "saml" else t.oidc if protocol == "oidc" else None
     provider_url = ""
@@ -855,10 +1129,16 @@ def render(t: Template, ctx: Context, protocol: str, mode: str) -> dict:
         "protocol": protocol,
         "mode": mode,
         "inputs": [
-            {"key": i.key, "label": i.label, "example": i.example, "help": i.help, "needed_for": list(i.needed_for),
-             "value": ctx.inputs.get(i.key, "")}
+            {
+                "key": i.key,
+                "label": i.label,
+                "example": i.example,
+                "help": i.help,
+                "needed_for": list(i.needed_for),
+                "value": ctx.inputs.get(i.key, ""),
+            }
             for i in t.inputs
-        ],  # fmt: skip
+        ],
         "values": values,
         "provider_metadata": {
             "kind": "saml" if protocol == "saml" else "oidc" if protocol == "oidc" else "",

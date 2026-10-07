@@ -27,8 +27,9 @@ for _t in TEMPLATES.values():
     elif _t.pull == "google":
         _criteria["pull"] = "Directory API pull ran with ExaCarib's service account and read-only scopes."
     elif _t.pull == "ldap":
-        _criteria["pull"] = "LDAPS sync ran against a real directory with a read-only bind account and a CA-checked "
-        "certificate."
+        _criteria["pull"] = (
+            "LDAPS sync ran against a real directory with a read-only bind account and a CA-checked certificate."
+        )
     golive.declare(
         "feature",
         f"directory-{_t.key}",

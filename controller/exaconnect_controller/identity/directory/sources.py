@@ -139,7 +139,9 @@ class GraphSource:
         for r, what in ((users, "users"), (groups, "groups")):
             if r.status != 200:
                 raise SourceError(f"Reading {what} from Microsoft Graph failed ({r.status}).")
-        return [{"check": "Microsoft Graph", "ok": True, "detail": "Signed in to the tenant and read users and groups."}]
+        return [
+            {"check": "Microsoft Graph", "ok": True, "detail": "Signed in to the tenant and read users and groups."}
+        ]
 
     def snapshot(self) -> Snapshot:
         groups = [
@@ -421,9 +423,7 @@ class LdapSource:
         out: list[dict] = []
         cookie = None
         for _ in range(MAX_PAGES):
-            c.search(
-                self.cfg.base_dn, flt, ldap3.SUBTREE, attributes=attrs, paged_size=500, paged_cookie=cookie
-            )
+            c.search(self.cfg.base_dn, flt, ldap3.SUBTREE, attributes=attrs, paged_size=500, paged_cookie=cookie)
             if c.result.get("result") not in (0, None):
                 raise SourceError(f"The directory search failed ({c.result.get('description')}).")
             out.extend(e for e in c.response if e.get("type", "searchResEntry") == "searchResEntry")
@@ -437,11 +437,20 @@ class LdapSource:
         self._bind()
         n = len(self._search(self.cfg.users_filter(), ["cn"]))
         return [
-            {"check": "LDAP bind", "ok": True, "detail": f"Bound to {self.cfg.host} as {self.cfg.bind_dn} over "
-             + ("LDAPS." if self.cfg.use_ssl else "plain LDAP (lab only).")},
-            {"check": "LDAP search", "ok": n > 0, "detail": f"{n} people match the user filter."
-             if n else "No one matches the user filter under the base DN."},
-        ]  # fmt: skip
+            {
+                "check": "LDAP bind",
+                "ok": True,
+                "detail": f"Bound to {self.cfg.host} as {self.cfg.bind_dn} over "
+                + ("LDAPS." if self.cfg.use_ssl else "plain LDAP (lab only)."),
+            },
+            {
+                "check": "LDAP search",
+                "ok": n > 0,
+                "detail": f"{n} people match the user filter."
+                if n
+                else "No one matches the user filter under the base DN.",
+            },
+        ]
 
     def _user_id(self, e: dict) -> str:
         raw = e.get("raw_attributes") or {}
@@ -456,8 +465,11 @@ class LdapSource:
     def snapshot(self) -> Snapshot:
         ad = self.cfg.flavour == "ad"
         attrs = ["mail", "givenName", "sn", "displayName", "cn"]
-        attrs += ["objectGUID", "userAccountControl", "userPrincipalName"] if ad else [
-            "entryUUID", "pwdAccountLockedTime", "nsAccountLock"]  # fmt: skip
+        attrs += (
+            ["objectGUID", "userAccountControl", "userPrincipalName"]
+            if ad
+            else ["entryUUID", "pwdAccountLockedTime", "nsAccountLock"]
+        )
         users: list[DirUser] = []
         by_dn: dict[str, str] = {}
         for e in self._search(self.cfg.users_filter(), attrs):

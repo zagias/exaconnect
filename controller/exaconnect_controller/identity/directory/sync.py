@@ -263,9 +263,12 @@ def apply(conn: psycopg.Connection, setup: dict, snap: sources.Snapshot) -> dict
             )
             apply_presets(conn, setup, g["id"])
             g = conn.execute("SELECT * FROM scim_groups WHERE id = %s", (g["id"],)).fetchone()
-        elif g["display_name"] != dg.name[:120] and not conn.execute(
-            "SELECT 1 FROM scim_groups WHERE customer_id = %s AND display_name = %s", (cid, dg.name[:120])
-        ).fetchone():
+        elif (
+            g["display_name"] != dg.name[:120]
+            and not conn.execute(
+                "SELECT 1 FROM scim_groups WHERE customer_id = %s AND display_name = %s", (cid, dg.name[:120])
+            ).fetchone()
+        ):
             g = scim.patch_group(conn, cid, g, [{"op": "replace", "path": "displayName", "value": dg.name}])
         members = [str(ids[m]) for m in dg.members if m in ids]
         active = [

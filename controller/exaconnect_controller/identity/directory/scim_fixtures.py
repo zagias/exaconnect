@@ -27,92 +27,178 @@ def _patch(*ops: dict) -> dict:
 
 ENTRA = [
     ("GET", '/Users?filter=userName eq "{email}"', None),
-    ("POST", "/Users", {
-        "schemas": [USER, ENTERPRISE], "externalId": "ana.lee", "userName": "{email}", "active": True,
-        "displayName": "Ana Lee", "emails": [{"primary": True, "type": "work", "value": "{email}"}],
-        "meta": {"resourceType": "User"}, "name": {"formatted": "Ana Lee", "familyName": "Lee", "givenName": "Ana"},
-        ENTERPRISE: {"department": "Customer Care", "employeeNumber": "1001"},
-    }),
-    ("PATCH", "/Users/{user_id}", _patch(
-        {"op": "Replace", "path": "displayName", "value": "Ana M. Lee"},
-        {"op": "Replace", "path": "name.givenName", "value": "Ana M."},
-        {"op": "Replace", "path": 'emails[type eq "work"].value', "value": "{email}"},
-        {"op": "Add", "path": f"{ENTERPRISE}:department", "value": "Sales"},
-    )),
-    ("POST", "/Groups", {"schemas": [GROUP], "externalId": "8aa1a5c0-0000-4000-8000-000000000001",
-                         "displayName": "ExaCarib Agents", "meta": {"resourceType": "Group"}}),
+    (
+        "POST",
+        "/Users",
+        {
+            "schemas": [USER, ENTERPRISE],
+            "externalId": "ana.lee",
+            "userName": "{email}",
+            "active": True,
+            "displayName": "Ana Lee",
+            "emails": [{"primary": True, "type": "work", "value": "{email}"}],
+            "meta": {"resourceType": "User"},
+            "name": {"formatted": "Ana Lee", "familyName": "Lee", "givenName": "Ana"},
+            ENTERPRISE: {"department": "Customer Care", "employeeNumber": "1001"},
+        },
+    ),
+    (
+        "PATCH",
+        "/Users/{user_id}",
+        _patch(
+            {"op": "Replace", "path": "displayName", "value": "Ana M. Lee"},
+            {"op": "Replace", "path": "name.givenName", "value": "Ana M."},
+            {"op": "Replace", "path": 'emails[type eq "work"].value', "value": "{email}"},
+            {"op": "Add", "path": f"{ENTERPRISE}:department", "value": "Sales"},
+        ),
+    ),
+    (
+        "POST",
+        "/Groups",
+        {
+            "schemas": [GROUP],
+            "externalId": "8aa1a5c0-0000-4000-8000-000000000001",
+            "displayName": "ExaCarib Agents",
+            "meta": {"resourceType": "Group"},
+        },
+    ),
     ("PATCH", "/Groups/{group_id}", _patch({"op": "Add", "path": "members", "value": [{"value": "{user_id}"}]})),
     ("PATCH", "/Groups/{group_id}", _patch({"op": "Remove", "path": "members", "value": [{"value": "{user_id}"}]})),
     ("PATCH", "/Groups/{group_id}", _patch({"op": "Add", "path": "members", "value": [{"value": "{user_id}"}]})),
     ("PATCH", "/Groups/{group_id}", _patch({"op": "Remove", "path": 'members[value eq "{user_id}"]'})),
     ("PATCH", "/Users/{user_id}", _patch({"op": "Replace", "path": "active", "value": "False"})),
-]  # fmt: skip
+]
 
 OKTA = [
     ("GET", '/Users?filter=userName eq "{email}"&startIndex=1&count=100', None),
-    ("POST", "/Users", {
-        "schemas": [USER], "userName": "{email}", "name": {"givenName": "Ana", "familyName": "Lee"},
-        "emails": [{"primary": True, "value": "{email}", "type": "work"}], "displayName": "Ana Lee",
-        "locale": "en-US", "externalId": "00u1abcdEFGH2345ijk6", "groups": [], "password": "{password}",
-        "active": True,
-    }),
-    ("PUT", "/Users/{user_id}", {
-        "schemas": [USER], "id": "{user_id}", "userName": "{email}", "name": {"givenName": "Ana", "familyName": "Lee-Brown"},
-        "emails": [{"primary": True, "value": "{email}", "type": "work"}], "displayName": "Ana Lee-Brown",
-        "active": True,
-    }),
+    (
+        "POST",
+        "/Users",
+        {
+            "schemas": [USER],
+            "userName": "{email}",
+            "name": {"givenName": "Ana", "familyName": "Lee"},
+            "emails": [{"primary": True, "value": "{email}", "type": "work"}],
+            "displayName": "Ana Lee",
+            "locale": "en-US",
+            "externalId": "00u1abcdEFGH2345ijk6",
+            "groups": [],
+            "password": "{password}",
+            "active": True,
+        },
+    ),
+    (
+        "PUT",
+        "/Users/{user_id}",
+        {
+            "schemas": [USER],
+            "id": "{user_id}",
+            "userName": "{email}",
+            "name": {"givenName": "Ana", "familyName": "Lee-Brown"},
+            "emails": [{"primary": True, "value": "{email}", "type": "work"}],
+            "displayName": "Ana Lee-Brown",
+            "active": True,
+        },
+    ),
     ("POST", "/Groups", {"schemas": [GROUP], "displayName": "ExaCarib Agents", "members": []}),
-    ("PATCH", "/Groups/{group_id}", _patch({"op": "replace", "value": {"id": "{group_id}", "displayName": "ExaCarib Support"}})),
-    ("PATCH", "/Groups/{group_id}", _patch({"op": "add", "path": "members", "value": [{"value": "{user_id}", "display": "{email}"}]})),
-    ("PATCH", "/Groups/{group_id}", _patch({"op": "remove", "path": "members", "value": [{"value": "{user_id}", "display": "{email}"}]})),
+    (
+        "PATCH",
+        "/Groups/{group_id}",
+        _patch({"op": "replace", "value": {"id": "{group_id}", "displayName": "ExaCarib Support"}}),
+    ),
+    (
+        "PATCH",
+        "/Groups/{group_id}",
+        _patch({"op": "add", "path": "members", "value": [{"value": "{user_id}", "display": "{email}"}]}),
+    ),
+    (
+        "PATCH",
+        "/Groups/{group_id}",
+        _patch({"op": "remove", "path": "members", "value": [{"value": "{user_id}", "display": "{email}"}]}),
+    ),
     ("PATCH", "/Users/{user_id}", _patch({"op": "replace", "value": {"active": False}})),
-]  # fmt: skip
+]
 
 JUMPCLOUD = [
     ("GET", '/Users?filter=userName eq "test.connection@{domain}"', None),
-    ("POST", "/Users", {
-        "schemas": [USER], "userName": "{email}", "externalId": "5f1e2d3c4b5a69788796a5b4",
-        "name": {"givenName": "Ana", "familyName": "Lee"}, "displayName": "Ana Lee",
-        "emails": [{"value": "{email}", "type": "work", "primary": True}], "active": True,
-    }),
+    (
+        "POST",
+        "/Users",
+        {
+            "schemas": [USER],
+            "userName": "{email}",
+            "externalId": "5f1e2d3c4b5a69788796a5b4",
+            "name": {"givenName": "Ana", "familyName": "Lee"},
+            "displayName": "Ana Lee",
+            "emails": [{"value": "{email}", "type": "work", "primary": True}],
+            "active": True,
+        },
+    ),
     ("POST", "/Groups", {"schemas": [GROUP], "displayName": "ExaCarib Agents"}),
     ("PATCH", "/Groups/{group_id}", _patch({"op": "add", "path": "members", "value": [{"value": "{user_id}"}]})),
     ("PATCH", "/Users/{user_id}", _patch({"op": "replace", "path": "active", "value": False})),
-]  # fmt: skip
+]
 
 ONELOGIN = [
     ("GET", '/Users?filter=userName eq "{email}"', None),
-    ("POST", "/Users", {
-        "schemas": [USER], "userName": "{email}", "name": {"givenName": "Ana", "familyName": "Lee"},
-        "emails": [{"value": "{email}", "primary": True}], "displayName": "Ana Lee", "externalId": "123456789",
-        "active": True,
-    }),
-    ("PUT", "/Users/{user_id}", {
-        "schemas": [USER], "userName": "{email}", "name": {"givenName": "Ana", "familyName": "Lee"},
-        "emails": [{"value": "{email}", "primary": True}], "displayName": "Ana Lee", "externalId": "123456789",
-        "active": True,
-    }),
+    (
+        "POST",
+        "/Users",
+        {
+            "schemas": [USER],
+            "userName": "{email}",
+            "name": {"givenName": "Ana", "familyName": "Lee"},
+            "emails": [{"value": "{email}", "primary": True}],
+            "displayName": "Ana Lee",
+            "externalId": "123456789",
+            "active": True,
+        },
+    ),
+    (
+        "PUT",
+        "/Users/{user_id}",
+        {
+            "schemas": [USER],
+            "userName": "{email}",
+            "name": {"givenName": "Ana", "familyName": "Lee"},
+            "emails": [{"value": "{email}", "primary": True}],
+            "displayName": "Ana Lee",
+            "externalId": "123456789",
+            "active": True,
+        },
+    ),
     ("PATCH", "/Users/{user_id}", _patch({"op": "replace", "path": "displayName", "value": [{"value": "Ana J. Lee"}]})),
     ("POST", "/Groups", {"schemas": [GROUP], "displayName": "ExaCarib Agents", "members": [{"value": "{user_id}"}]}),
     ("PATCH", "/Groups/{group_id}", _patch({"op": "remove", "path": "members", "value": {"value": "{user_id}"}})),
     ("PATCH", "/Users/{user_id}", _patch({"op": "replace", "path": "active", "value": False})),
-]  # fmt: skip
+]
 
 PING = [
     ("GET", '/Users?filter=userName Eq "{email}"', None),
-    ("POST", "/Users", {
-        "schemas": [USER], "userName": "{email}", "name": {"givenName": "Ana", "familyName": "Lee"},
-        "emails": [{"value": "{email}", "type": "work", "primary": True}], "active": True,
-        "externalId": "44444444-4444-4444-4444-444444444444",
-    }),
-    ("PATCH", "/Users/{user_id}", _patch(
-        {"op": "replace", "path": f"{USER}:name.familyName", "value": "Lee-Brown"},
-        {"op": "replace", "value": {USER: {"displayName": "Ana Lee-Brown"}}},
-    )),
+    (
+        "POST",
+        "/Users",
+        {
+            "schemas": [USER],
+            "userName": "{email}",
+            "name": {"givenName": "Ana", "familyName": "Lee"},
+            "emails": [{"value": "{email}", "type": "work", "primary": True}],
+            "active": True,
+            "externalId": "44444444-4444-4444-4444-444444444444",
+        },
+    ),
+    (
+        "PATCH",
+        "/Users/{user_id}",
+        _patch(
+            {"op": "replace", "path": f"{USER}:name.familyName", "value": "Lee-Brown"},
+            {"op": "replace", "value": {USER: {"displayName": "Ana Lee-Brown"}}},
+        ),
+    ),
     ("POST", "/Groups", {"schemas": [GROUP], "displayName": "ExaCarib Agents"}),
     ("PATCH", "/Groups/{group_id}", _patch({"op": "add", "path": "members", "value": [{"value": "{user_id}"}]})),
     ("PATCH", "/Users/{user_id}", _patch({"op": "replace", "path": f"{USER}:active", "value": False})),
-]  # fmt: skip
+]
 
 FIXTURES: dict[str, list] = {"entra": ENTRA, "okta": OKTA, "jumpcloud": JUMPCLOUD, "onelogin": ONELOGIN, "ping": PING}
 
@@ -157,8 +243,22 @@ def dry_run(conn: psycopg.Connection, provider: str, customer_id: Any, domain: s
         with conn.transaction():
             user = group = None
             for i, (method, path, body) in enumerate(seq, 1):
-                path = _fill(path, {**values, "user_id": str(user["id"]) if user else "", "group_id": str(group["id"]) if group else ""})
-                body = _fill(copy.deepcopy(body), {**values, "user_id": str(user["id"]) if user else "", "group_id": str(group["id"]) if group else ""})
+                path = _fill(
+                    path,
+                    {
+                        **values,
+                        "user_id": str(user["id"]) if user else "",
+                        "group_id": str(group["id"]) if group else "",
+                    },
+                )
+                body = _fill(
+                    copy.deepcopy(body),
+                    {
+                        **values,
+                        "user_id": str(user["id"]) if user else "",
+                        "group_id": str(group["id"]) if group else "",
+                    },
+                )
                 step = f"request {i} ({method} {path.split('?')[0]})"
                 if method == "GET":
                     f = quirks.normalise_filter(re.search(r"filter=([^&]+)", path).group(1))

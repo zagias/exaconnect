@@ -11,6 +11,7 @@ dependencies = [
   "psycopg-pool>=3.2",
   "cryptography>=43",
   "webauthn>=2.0",  # passkeys (ADR 0017)
+  "ldap3>=2.9",  # directory sync over LDAPS (ADR 0030)
 ]
 
 [project.optional-dependencies]
