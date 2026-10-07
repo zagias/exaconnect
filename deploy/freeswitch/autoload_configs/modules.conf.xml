@@ -53,7 +53,8 @@
     <!-- ExaCarib: mod_signalwire off (it phones home to SignalWire). -->
     <load module="mod_commands"/>
     <load module="mod_conference"/>
-    <!-- <load module="mod_curl"/> -->
+    <!-- ExaCarib: mod_curl on (the dial plan asks the controller before each outside call). -->
+    <load module="mod_curl"/>
     <load module="mod_db"/>
     <load module="mod_dptools"/>
     <load module="mod_expr"/>

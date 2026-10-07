@@ -1,0 +1,20 @@
+<!--
+  exa-edge: kamailio
+  The gateway the rendered dial plans send outside calls to ("exacarib_sip"), for
+  EXA_VOICE_EDGE=kamailio (ADR 0027): FreeSWITCH hands every outside call to Kamailio,
+  which holds the carrier list (dispatcher sets) and fails over in the order the
+  controller gave in X-Exa-Route. No registration and no credentials here: carriers
+  trust Kamailio's address, and Kamailio allows FreeSWITCH by address (address.list
+  group 2, EXA_KAMAILIO_PBX_NETS). `make voice-up` installs this as exacarib_sip.xml.
+-->
+<include>
+  <gateway name="exacarib_sip">
+    <!-- sofia needs a user name even without registration; it is never sent as a login. -->
+    <param name="username" value="exacarib"/>
+    <param name="password" value="not-used"/>
+    <param name="realm" value="kamailio"/>
+    <param name="proxy" value="kamailio:5060"/>
+    <param name="register" value="false"/>
+    <param name="caller-id-in-from" value="true"/>
+  </gateway>
+</include>

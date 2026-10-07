@@ -206,7 +206,11 @@ def check(
             (cid, digits(from_number)),
         ).fetchone()
         if n is not None and not n["outbound_enabled"]:
-            return {"allowed": False, "reason": n["outbound_reason"] or "This number can't make outbound calls yet."}
+            return {
+                "allowed": False,
+                "code": "number_outbound_off",
+                "reason": n["outbound_reason"] or "This number can't make outbound calls yet.",
+            }
     home = origin(conn, cid)["country"]
     if not is_international(to_number, home):
         return None
@@ -214,29 +218,37 @@ def check(
     if lim["intl_suspended"]:
         return {
             "allowed": False,
+            "code": "intl_suspended",
             "reason": "International calling is suspended after unusual activity. A voice admin can restore it.",
         }
     hr = high_risk(conn, home, to_number)
     if hr and not any(digits(to_number).startswith(p) for p in lim["allowed_high_risk"]):
         return {
             "allowed": False,
+            "code": "high_risk",
             "reason": f"Calls to {hr['name'] or '+' + hr['prefix']} are blocked as a high-risk destination "
             f"(+{hr['prefix']}). A voice admin can allow it.",
         }
     if not _open_now(conn, cid, lim, at):
         if lim["after_hours_international"] == "block":
-            return {"allowed": False, "reason": "International calls are blocked outside business hours."}
+            return {
+                "allowed": False,
+                "code": "after_hours",
+                "reason": "International calls are blocked outside business hours.",
+            }
         if lim["after_hours_international"] == "alert":
             _alert_once(conn, cid, "after_hours_international", {"to": digits(to_number)[:4] + "…"})
     today = _intl_today(conn, cid)
     if today["calls"] >= lim["intl_daily_calls"]:
         return {
             "allowed": False,
+            "code": "intl_daily_calls",
             "reason": f"Today's international calls have reached the cap of {lim['intl_daily_calls']}.",
         }
     if lim["intl_daily_cap"] is not None and today["spend"] >= money(lim["intl_daily_cap"]):
         return {
             "allowed": False,
+            "code": "intl_daily_cap",
             "reason": f"Today's international spend has reached the cap of {lim['intl_daily_cap']}.",
         }
     r = _rates(conn, cid, lim)
@@ -251,6 +263,7 @@ def check(
         )
         return {
             "allowed": False,
+            "code": "intl_spike",
             "reason": "International calling is suspended after a sudden rise in calls. A voice admin can restore it.",
         }
     return None

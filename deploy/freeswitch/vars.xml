@@ -15,7 +15,10 @@
   <!-- ExaCarib: the stock demo users (directory/default) are hidden by an empty mount, so nothing
        signs in with this. Set EXA_FS_DEFAULT_PASSWORD on the host to replace it anyway. -->
   <X-PRE-PROCESS cmd="set" data="default_password=stock-users-disabled"/>
-  <X-PRE-PROCESS cmd="env-set" data="default_password=EXA_FS_DEFAULT_PASSWORD"/>
+  <X-PRE-PROCESS cmd="exec-set" data="default_password=echo ${EXA_FS_DEFAULT_PASSWORD:-stock-users-disabled}"/>
+  <!-- ExaCarib: the key the dial plan signs its check with the controller with, before each
+       outside call (controller voice/pbx.py). Read at run time as ${exa_pbx_secret}; never in a file. -->
+  <X-PRE-PROCESS cmd="exec-set" data="exa_pbx_secret=echo $EXA_PBX_SECRET"/>
   <X-PRE-PROCESS cmd="set" data="disable_system_api_commands=false"/>
   <!-- Did you change it yet? -->
   <!--
@@ -297,7 +300,7 @@
   -->
   <!-- ExaCarib: no STUN lookup. The address carriers send media to; set EXA_VOICE_PUBLIC_IP once the voice host is public. -->
   <X-PRE-PROCESS cmd="set" data="external_rtp_ip=$${local_ip_v4}"/>
-  <X-PRE-PROCESS cmd="env-set" data="external_rtp_ip=EXA_VOICE_PUBLIC_IP"/>
+  <X-PRE-PROCESS cmd="exec-set" data="external_rtp_ip=echo ${EXA_VOICE_PUBLIC_IP:-$${local_ip_v4}}"/>
 
   <!-- external_sip_ip
       Used as the public IP address for SDP.
@@ -311,7 +314,7 @@
        Used by: sofia.conf.xml dingaling.conf.xml
   -->
   <X-PRE-PROCESS cmd="set" data="external_sip_ip=$${local_ip_v4}"/>
-  <X-PRE-PROCESS cmd="env-set" data="external_sip_ip=EXA_VOICE_PUBLIC_IP"/>
+  <X-PRE-PROCESS cmd="exec-set" data="external_sip_ip=echo ${EXA_VOICE_PUBLIC_IP:-$${local_ip_v4}}"/>
 
   <!-- unroll-loops
        Used to turn on sip loopback unrolling.

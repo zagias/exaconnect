@@ -9,6 +9,7 @@ chmod 600 .env
 add() { grep -q "^$1=" .env || echo "$1=$2" >> .env; }
 add POSTGRES_PASSWORD "$(openssl rand -hex 16)"
 add EXA_PROXY_SECRET "$(openssl rand -hex 24)"
+add EXA_PBX_SECRET "$(openssl rand -hex 24)"
 add EXA_ADMIN_EMAIL "admin@exacarib.local"
 add EXA_ADMIN_PASSWORD "$(openssl rand -base64 18 | tr -d '/+=')"
 echo ".env ready (admin: $(grep '^EXA_ADMIN_EMAIL=' .env | cut -d= -f2))"

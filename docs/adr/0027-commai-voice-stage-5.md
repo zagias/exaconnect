@@ -135,10 +135,44 @@ spend permission restores calling, with a note, and it is audited.
   yes to the spend.
 - **Emergency rules**: to confirm with each regulator or carrier before go-live.
 - **High-risk list**: a starting list. Review it with each carrier's fraud team.
-- **FreeSWITCH to Kamailio**: the header that carries the controller's carrier
-  order (`X-Exa-Route`) is set by the dial plan's authorise step. It is wired
-  when the first carrier is live, because the other voice work is changing the
-  FreeSWITCH profiles.
+- **FreeSWITCH to Kamailio**: wired (addendum below). It has been run against
+  the real FreeSWITCH and Kamailio images with a stand-in controller and dead
+  carriers, not with a real carrier.
+
+## Addendum: the dial plan asks before every outside call
+
+Real calls skipped the controller: the dial plan bridged outside calls straight
+to the gateway. Now each business's rendered dial plan asks the controller
+first, with mod_curl, at `GET /api/v1/commai/internal/voice/authorise`
+(`voice/pbx.py`). It reuses `billing.authorise` and `carriers.plan`, the same
+code as simulated calls. The answer is one line the dial plan matches with a
+regular expression: `OK <set ids> <caller id>` or `NO <code>`. `OK` sets
+`X-Exa-Route` and the caller id, then bridges. A refusal is kept as a blocked
+call and in `voice_pbx_authorisations`.
+
+- **Fail closed.** No answer, or anything that is not `OK`, refuses the call.
+  Emergency calls never ask. They bridge at once with every carrier switched
+  on for the business in `X-Exa-Route`.
+- **Signed, not a bare secret.** mod_curl logs request headers at debug level.
+  So the request carries a digest of its fields made with `EXA_PBX_SECRET`,
+  not the secret. FreeSWITCH's dial plan offers only md5, so the digest is
+  md5(secret:fields:secret). A leaked digest is good for that one call only.
+  It runs on the private compose network, and the public proxy refuses the
+  path.
+- **The business is the tenant the dial plan was rendered for**, never a value
+  the caller sends.
+- **Forwarding to an outside number** goes back through the same check
+  (loopback).
+- **`EXA_VOICE_EDGE`** chooses the gateway: the single provider, as in stage 4,
+  or Kamailio. Kamailio's allow-list now has FreeSWITCH in group 2
+  (`EXA_KAMAILIO_PBX_NETS`).
+
+Known limits:
+- Calls that were allowed count towards spike detection only when their call
+  record arrives. FreeSWITCH's call records (`mod_json_cdr`) are not wired yet.
+- When Kamailio cannot open a connection to a carrier at once (TCP refused), it
+  answers an error instead of trying the next set. Timeouts and SIP errors do
+  fail over.
 
 ## Consequences
 

@@ -16,6 +16,45 @@ FreeSWITCH has no public SIP port.
 - **Trunk health**: the dispatcher sends SIP OPTIONS every 30 s. Three failures
   mark a destination inactive, and one answer brings it back.
 
+## Outside calls: the controller decides, Kamailio carries
+
+Before every outside call except an emergency call, FreeSWITCH's dial plan asks the controller
+(`GET /api/v1/commai/internal/voice/authorise`, with mod_curl; `controller/.../voice/pbx.py`). The
+controller runs the same checks as simulated calls: blocked prefixes, international on or off, the
+daily spend cap, revenue share fraud rules and the emergency address rule for the calling number.
+It answers in plain text:
+
+- `OK 2,1 +18685550101`: go ahead. `2,1` is the carrier order as dispatcher set ids, which the dial
+  plan puts in `X-Exa-Route` (`none`: the single provider, no header). The number is the caller id
+  to show (`none`: unchanged).
+- `NO <code>`, for example `NO daily_cap`: refused. The caller hears "cannot be completed as dialled"
+  and the call ends with `CALL_REJECTED`. The refusal is kept as a blocked call.
+
+**Fail closed.** If the controller cannot be reached, answers anything else or refuses the request,
+the call is refused (`SERVICE_UNAVAILABLE`). Only emergency calls never ask: they bridge at once,
+with `X-Exa-Route` listing every carrier switched on for the business when there are any.
+
+The request is signed: `X-Exa-Pbx-Auth` is a digest of its fields with `EXA_PBX_SECRET`, which the
+controller and FreeSWITCH both read from `.env` (`lab/scripts/init-env.sh` generates it). It is a
+digest rather than the secret because mod_curl writes request headers to FreeSWITCH's debug log.
+With no secret, every outside call is refused. The path is not served by the public proxy
+(`deploy/public/Caddyfile`). Forwarding to an outside number goes back through the same check.
+
+## Provider or Kamailio: `EXA_VOICE_EDGE`
+
+FreeSWITCH sends outside calls to the gateway `exacarib_sip`. `make voice-up` installs it in
+`deploy/freeswitch/sip_profiles/external/exacarib_sip.xml` (git-ignored, mounted into FreeSWITCH)
+from the example for the edge set in `.env`:
+
+| `EXA_VOICE_EDGE` | Gateway | Use |
+| --- | --- | --- |
+| `provider` (default) | `exacarib_sip.xml.example`: registers to `EXA_SIP_REALM` with `EXA_SIP_USERNAME` / `EXA_SIP_PASSWORD`. Installed once `EXA_SIP_USERNAME` is set. | One SIP provider (stage 4). Carriers in the controller are ignored on the wire. |
+| `kamailio` | `exacarib_sip.kamailio.xml.example`: `kamailio:5060`, no registration. | Several carriers (ADR 0027). Kamailio holds the carrier list and follows `X-Exa-Route`. |
+
+With `kamailio`, `make voice-up` also writes `EXA_KAMAILIO_PBX_NETS` to `.env` (the compose network
+FreeSWITCH and Kamailio share) and restarts the controller once, so the rendered `address.list` lets
+FreeSWITCH in (group 2). Switching back to `provider` removes the Kamailio gateway file.
+
 ## Files
 
 | File | From |
@@ -37,9 +76,13 @@ allow-list, and checks that FreeSWITCH starts with ExaCarib's files and both SIP
 `lab/ci/checks/voice-sbc.sh` runs the same checks on a host where the SBC is started.
 
 FreeSWITCH runs with three hardened stock files from `deploy/freeswitch/`: `vars.xml` (no STUN
-lookup; the external address is `EXA_VOICE_PUBLIC_IP`, else the container address),
-`event_socket.conf.xml` (loopback only) and `modules.conf.xml` (no `mod_signalwire`). The image's
-demo users 1000 to 1019 are hidden by an empty mount.
+lookup; the external address is `EXA_VOICE_PUBLIC_IP`, else the container address; `EXA_PBX_SECRET`
+as the global `exa_pbx_secret`; values from the environment are read with `exec-set` and `echo`,
+because the image's `env-set` does not read the environment and it has no `printenv`),
+`event_socket.conf.xml` (loopback only) and `modules.conf.xml` (no `mod_signalwire`; `mod_curl` on
+for the check above). The image's demo users 1000 to 1019 are hidden by an empty mount.
+`make voice-check` also checks that mod_curl is loaded, that the secret reaches FreeSWITCH and that
+the Kamailio gateway loads.
 
 ## What Dudley must provide
 
