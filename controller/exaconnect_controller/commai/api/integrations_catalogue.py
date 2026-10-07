@@ -27,6 +27,7 @@ from ... import audit, db
 from ...api.deps import UserDep
 from .. import access
 from ..automation import catalogue, integrations, vault
+from ..channels import mailbox
 from ..connectors import kit
 from ..standards import inbound, webhooks_std
 from .common import errors
@@ -221,3 +222,96 @@ def enter_credentials(customer_id: str, app: str, body: CredentialsIn, user: Use
         row = integrations.enter_credentials(conn, customer_id, app, body.credentials, user.actor)
         audit.record(conn, user.actor, "commai.integration.credentials", app, customer_id)  # never the values
     return row
+
+
+# ==== a business's own mailbox (IMAP and SMTP) ==========================================
+
+
+class MailboxIn(BaseModel):
+    imap_host: str = Field(min_length=3, max_length=253)
+    imap_port: int = Field(default=993, ge=1, le=65535)
+    imap_security: Literal["ssl", "starttls"] = "ssl"
+    smtp_host: str = Field(min_length=3, max_length=253)
+    smtp_port: int = Field(default=587, ge=1, le=65535)
+    smtp_security: Literal["ssl", "starttls"] = "starttls"
+    username: str = Field(min_length=1, max_length=320)
+    password: str | None = Field(default=None, max_length=1000, description="Stored encrypted; never shown again")
+    folder: str = Field(default="INBOX", max_length=200, pattern=r'^[^"\r\n]+$')
+    mode: Literal["poll", "idle"] = "poll"
+    poll_seconds: int = Field(default=60, ge=30, le=3600)
+
+
+@contextmanager
+def _mailbox_errors() -> Iterator[None]:
+    with _errors():
+        try:
+            yield
+        except mailbox.MailboxError as e:
+            raise HTTPException(422 if e.cause == "input" else 409, f"{e} ({e.cause})") from e
+
+
+def _mail_account(conn, customer_id: str, account_id: str) -> dict:
+    a = conn.execute(
+        "SELECT * FROM channel_accounts WHERE id::text = %s AND customer_id = %s", (account_id, customer_id)
+    ).fetchone()
+    if a is None:
+        raise HTTPException(404, "Account not found.")
+    return a
+
+
+def _mailbox_row(conn, customer_id: str, account_id: str) -> dict:
+    a = _mail_account(conn, customer_id, account_id)
+    row = mailbox.get(conn, customer_id, a["id"])
+    if row is None:
+        raise HTTPException(404, "Set up the mailbox first.")
+    if not mailbox.live(conn, customer_id):
+        raise HTTPException(409, "ExaCarib has not switched business mailboxes on yet.")
+    return row
+
+
+@router.get("/channel-accounts/{account_id}/mailbox")
+def get_mailbox(customer_id: str, account_id: str, user: UserDep) -> dict:
+    access.check(user, customer_id, "commai:admin")
+    with db.tx() as conn:
+        a = _mail_account(conn, customer_id, account_id)
+        return {
+            "mailbox": mailbox.out(mailbox.get(conn, customer_id, a["id"])),
+            "live": mailbox.live(conn, customer_id),
+        }
+
+
+@router.put("/channel-accounts/{account_id}/mailbox")
+def put_mailbox(customer_id: str, account_id: str, body: MailboxIn, user: UserDep) -> dict:
+    """Set the IMAP and SMTP servers of an email account with the mailbox provider.
+    Until ExaCarib switches the mailbox feature on, nothing is read and replies
+    go to the simulated outbox."""
+    access.check(user, customer_id, "commai:admin")
+    with db.tx() as conn, _mailbox_errors():
+        _admin(conn, user, customer_id)
+        a = _mail_account(conn, customer_id, account_id)
+        row = mailbox.configure(conn, a, body.model_dump(exclude={"password"}), body.password, user.actor)
+        audit.record(
+            conn,
+            user.actor,
+            "commai.mailbox.configure",
+            a["address"],
+            customer_id,
+            body.model_dump(exclude={"password"}) | {"password_changed": bool(body.password)},
+        )
+        return {"mailbox": mailbox.out(row), "live": mailbox.live(conn, customer_id)}
+
+
+@router.post("/channel-accounts/{account_id}/mailbox/check")
+def check_mailbox(customer_id: str, account_id: str, user: UserDep) -> dict:
+    """Sign in to IMAP and SMTP; nothing is read or sent."""
+    access.check(user, customer_id, "commai:admin")
+    with db.tx() as conn, _mailbox_errors():
+        return mailbox.check(conn, _mailbox_row(conn, customer_id, account_id))
+
+
+@router.post("/channel-accounts/{account_id}/mailbox/poll")
+def poll_mailbox(customer_id: str, account_id: str, user: UserDep) -> dict:
+    """Read new mail now."""
+    access.check(user, customer_id, "commai:admin")
+    with db.tx() as conn, _mailbox_errors():
+        return mailbox.poll(conn, _mailbox_row(conn, customer_id, account_id))
