@@ -34,6 +34,10 @@ python3 voice/sip_probe.py "$ip" 5060 | tee "$tmp/answer"
 grep -q "^SIP/2.0 403" "$tmp/answer"
 
 echo "-- freeswitch starts with ExaCarib's files"
+# The gateway as make voice-up installs it for EXA_VOICE_EDGE=kamailio.
+mkdir -p "$tmp/external"
+cp freeswitch/sip_profiles/external/*.example "$tmp/external/"
+cp freeswitch/sip_profiles/external/exacarib_sip.kamailio.xml.example "$tmp/external/exacarib_sip.xml"
 docker run -d --name exa-sbc-fs --tmpfs /etc/freeswitch/directory/default \
   -v "$tmp/exacarib:/exacarib:ro" \
   -v "$PWD/freeswitch/directory/exacarib.xml:/etc/freeswitch/directory/exacarib.xml:ro" \
@@ -44,6 +48,7 @@ docker run -d --name exa-sbc-fs --tmpfs /etc/freeswitch/directory/default \
   -v "$PWD/freeswitch/vars.xml:/etc/freeswitch/vars.xml:ro" \
   -v "$PWD/freeswitch/autoload_configs/event_socket.conf.xml:/etc/freeswitch/autoload_configs/event_socket.conf.xml:ro" \
   -v "$PWD/freeswitch/autoload_configs/modules.conf.xml:/etc/freeswitch/autoload_configs/modules.conf.xml:ro" \
+  -v "$tmp/external:/etc/freeswitch/sip_profiles/external:ro" -e EXA_PBX_SECRET=check-only \
   "$FS_IMAGE" >/dev/null
 for _ in $(seq 60); do
   docker exec exa-sbc-fs fs_cli -x status 2>/dev/null | grep -q '^UP' && break
@@ -57,4 +62,9 @@ for _ in $(seq 30); do
 done
 cat "$tmp/sofia"
 [[ $(grep -c RUNNING "$tmp/sofia") == 2 ]]
+
+echo "-- freeswitch can ask the controller before outside calls"
+docker exec exa-sbc-fs fs_cli -x "module_exists mod_curl" | grep -qx true
+docker exec exa-sbc-fs fs_cli -x "global_getvar exa_pbx_secret" | grep -qx check-only
+docker exec exa-sbc-fs fs_cli -x "sofia status gateway exacarib_sip" | grep -E "^(Name|Proxy|Status)"
 echo "SBC check passed"

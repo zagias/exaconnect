@@ -271,7 +271,8 @@ def authorise(
     voice_user_id: Any = None,
     from_number: str | None = None,
 ) -> dict:
-    """May this outbound call go ahead? -> {"allowed", "reason", "route"}.
+    """May this outbound call go ahead? -> {"allowed", "reason", "route"}, and
+    "code" when refused (see refused()).
     Emergency numbers (every island's, ADR 0027) are never stopped. Unusual
     patterns raise an alert; revenue share fraud rules (fraud.py) can stop a
     call or suspend international calling. "route" is the carriers to try, in
@@ -284,11 +285,11 @@ def authorise(
     lim = fraud_limits(conn, customer_id)
     for p in lim["blocked_prefixes"]:
         if d.startswith(p):
-            return {"allowed": False, "reason": f"Calls to numbers starting {p} are blocked (premium or high-risk)."}
+            return refused("blocked_prefix", f"Calls to numbers starting {p} are blocked (premium or high-risk).")
     if not lim["international"] and not d.startswith("1"):
-        return {"allowed": False, "reason": "International calls are switched off for your company."}
+        return refused("international_off", "International calls are switched off for your company.")
     if lim["daily_cap"] is not None and spend_today(conn, customer_id) >= money(lim["daily_cap"]):
-        return {"allowed": False, "reason": f"Today's call spend has reached the daily cap of {lim['daily_cap']}."}
+        return refused("daily_cap", f"Today's call spend has reached the daily cap of {lim['daily_cap']}.")
     recent = conn.execute(
         """SELECT count(*) AS n FROM voice_cdrs WHERE customer_id = %s AND direction = 'outbound'
            AND started_at > now() - interval '1 hour'""",
@@ -312,8 +313,13 @@ def authorise(
         return {**stop, "route": None}
     route = carriers.route_keys(conn, customer_id, d)
     if route == []:
-        return {"allowed": False, "reason": "No carrier can take calls to this destination right now.", "route": []}
+        return {**refused("no_carrier", "No carrier can take calls to this destination right now."), "route": []}
     return {"allowed": True, "reason": "", "route": route}
+
+
+def refused(code: str, reason: str) -> dict:
+    """A refused call: "code" is the short name the PBX gets (voice/pbx.py)."""
+    return {"allowed": False, "code": code, "reason": reason}
 
 
 # ---- rating --------------------------------------------------------------------------

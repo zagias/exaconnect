@@ -43,6 +43,10 @@ services:
       EXA_SIP_PROVIDER_KEY: ${EXA_SIP_PROVIDER_KEY:-}
       EXA_SIP_PROVIDER_ACCOUNT: ${EXA_SIP_PROVIDER_ACCOUNT:-}
       EXA_KAMAILIO_DIR: /data/kamailio
+      # FreeSWITCH's address range in Kamailio's allow-list (group 2); written by make voice-up.
+      EXA_KAMAILIO_PBX_NETS: ${EXA_KAMAILIO_PBX_NETS:-}
+      # FreeSWITCH signs its check before each outside call with this (voice/pbx.py).
+      EXA_PBX_SECRET: ${EXA_PBX_SECRET:-}
       EXA_LIVEKIT_URL: ${EXA_LIVEKIT_URL:-}
       EXA_LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
       EXA_LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
@@ -167,11 +171,19 @@ services:
       - ./freeswitch/vars.xml:/etc/freeswitch/vars.xml:ro
       - ./freeswitch/autoload_configs/event_socket.conf.xml:/etc/freeswitch/autoload_configs/event_socket.conf.xml:ro
       - ./freeswitch/autoload_configs/modules.conf.xml:/etc/freeswitch/autoload_configs/modules.conf.xml:ro
+      # The outside-call gateway, installed by make voice-up for EXA_VOICE_EDGE (provider or kamailio).
+      - ./freeswitch/sip_profiles/external:/etc/freeswitch/sip_profiles/external:ro
     # Hide the image's demo users (1000-1019 with a shared password).
     tmpfs:
       - /etc/freeswitch/directory/default
     environment:
       EXA_VOICE_PUBLIC_IP: ${EXA_VOICE_PUBLIC_IP:-}
+      # The dial plan asks the controller before each outside call; no secret means every one is refused.
+      EXA_PBX_SECRET: ${EXA_PBX_SECRET:-}
+      # Only for EXA_VOICE_EDGE=provider (exacarib_sip.xml.example).
+      EXA_SIP_USERNAME: ${EXA_SIP_USERNAME:-}
+      EXA_SIP_PASSWORD: ${EXA_SIP_PASSWORD:-}
+      EXA_SIP_REALM: ${EXA_SIP_REALM:-}
     depends_on:
       - controller
 

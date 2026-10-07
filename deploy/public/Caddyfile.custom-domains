@@ -31,6 +31,9 @@ https:// {
 	handle /api/v1/ca.pem {
 		respond 404
 	}
+	handle /api/v1/commai/internal/* {
+		respond 404
+	}
 	handle /api/* {
 		reverse_proxy controller-api:8000
 	}

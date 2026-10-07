@@ -36,6 +36,7 @@ from . import (  # noqa: E402
     team,
     voice,
     voice_global,
+    voice_pbx,
     webphone,
 )
 
@@ -50,6 +51,7 @@ for _m in (
     enterprise,
     channels_global,
     voice_global,
+    voice_pbx,
     selfservice,
     languages,
     quality,

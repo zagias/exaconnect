@@ -67,6 +67,10 @@ Jobs: `voice.port_poll`, `voice.port_cutover`, `voice.emergency_check` and
 | --- | --- |
 | `EXA_SIP_PROVIDER` | `simulated` (the default) or `sip`. `sip` refuses until `EXA_SIP_PROVIDER_URL`, `EXA_SIP_PROVIDER_KEY` and `EXA_SIP_PROVIDER_ACCOUNT` are set. |
 | `EXA_KAMAILIO_DIR` | Where the controller writes Kamailio's `dispatcher.list` and `address.list` (`/data/kamailio` in compose). |
+| `EXA_KAMAILIO_PBX_NETS` | FreeSWITCH's addresses (CIDR, comma-separated) in `address.list` group 2. `make voice-up` writes it for `EXA_VOICE_EDGE=kamailio`. |
+| `EXA_PBX_SECRET` | Shared by the controller and FreeSWITCH: the dial plan signs its check before each outside call with it (`GET /api/v1/commai/internal/voice/authorise`, `voice/pbx.py`). Unset: every outside call is refused. |
+| `EXA_PBX_CONTROLLER_URL` | Where FreeSWITCH reaches the controller (default `http://controller:8000`), rendered into the dial plans. |
+| `EXA_VOICE_EDGE` | `provider` (default) or `kamailio`: which gateway `make voice-up` installs for outside calls (`deploy/kamailio/README.md`). |
 | `EXA_LIVEKIT_URL`, `EXA_LIVEKIT_API_KEY`, `EXA_LIVEKIT_API_SECRET`, `EXA_LIVEKIT_AGENT_SECRET` | LiveKit for AI phone calls. Nothing runs until they are set. |
 
 ## Testing

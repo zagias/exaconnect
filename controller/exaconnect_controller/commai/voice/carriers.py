@@ -507,12 +507,18 @@ def dispatcher_list(conn: psycopg.Connection) -> str:
 
 
 def address_list(conn: psycopg.Connection) -> str:
-    """Kamailio permissions address.list: carrier signalling addresses allowed in (group 1)."""
+    """Kamailio permissions address.list: carrier signalling addresses allowed in
+    (group 1), and FreeSWITCH (group 2): the networks in EXA_KAMAILIO_PBX_NETS,
+    which `make voice-up` sets to the compose network both run on."""
     lines = ["# Rendered by the ExaCarib controller. group ip mask port tag"]
     for c in conn.execute("SELECT * FROM voice_carriers WHERE enabled ORDER BY key").fetchall():
         for net in (c["inbound"] or {}).get("allow_ips", []):
             n = ipaddress.ip_network(net, strict=False)
             lines.append(f"1 {n.network_address} {n.prefixlen} 0 {c['key']}")
+    for net in os.environ.get("EXA_KAMAILIO_PBX_NETS", "").split(","):
+        if net.strip():
+            n = ipaddress.ip_network(net.strip(), strict=False)
+            lines.append(f"2 {n.network_address} {n.prefixlen} 0 freeswitch")
     return "\n".join(lines) + "\n"
 
 

@@ -29,6 +29,10 @@
 	handle /api/v1/ca.pem {
 		respond 404
 	}
+	# The PBX's own check before outside calls (voice/pbx.py) stays on the private network.
+	handle /api/v1/commai/internal/* {
+		respond 404
+	}
 	handle /api/* {
 		reverse_proxy controller-api:8000
 	}
