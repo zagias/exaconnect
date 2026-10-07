@@ -94,6 +94,39 @@ def linked_tickets(customer_id: str, conversation_id: str, user: UserDep) -> lis
         return more_common.tickets_for(conn, customer_id, conversation_id)
 
 
+@router.post("/connectors/{app}/sync", status_code=202)
+def sync_files(customer_id: str, app: str, user: UserDep) -> dict:
+    """Re-read the chosen folders now (Google Drive, OneDrive/SharePoint).
+    New and changed files wait for a person's approval in Knowledge."""
+    access.check(user, customer_id, "commai:admin")
+    c = _connector(app)
+    if not hasattr(c, "sync"):
+        raise HTTPException(404, f"{c.label} is not a knowledge source.")
+    with db.tx() as conn, _errors():
+        _admin(conn, user, customer_id)
+        row = _connection(conn, customer_id, app)
+        if not c.folders(row):
+            raise HTTPException(409, f"Choose the {c.label} folders to sync first.")
+        more_common.queue_sync(conn, customer_id, app)
+        audit.record(conn, user.actor, "commai.connector.sync", app, customer_id)
+    return {"queued": True}
+
+
+@router.get("/connectors/{app}/files")
+def synced_files(customer_id: str, app: str, user: UserDep) -> list[dict]:
+    """Each file seen in the chosen folders: synced (waiting for or past
+    approval), skipped (and why) or removed."""
+    access.check(user, customer_id, "commai:read")
+    with db.tx() as conn:
+        return conn.execute(
+            """SELECT f.file_id, f.name, f.status, f.reason, f.url, f.synced_at, f.source_id,
+                      s.approved AS approved
+               FROM commai_knowledge_files f LEFT JOIN knowledge_sources s ON s.id = f.source_id
+               WHERE f.customer_id = %s AND f.app = %s ORDER BY f.status, f.name""",
+            (customer_id, app),
+        ).fetchall()
+
+
 CHAT_APPS = ("slack", "teams")
 
 

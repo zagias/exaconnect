@@ -41,8 +41,12 @@ def _urllib_transport(method: str, url: str, headers: dict, data: bytes | None, 
         body: Any = json.loads(text) if text else {}
     except ValueError:
         ctype = str({k.lower(): v for k, v in hdrs.items()}.get("content-type", ""))
-        # XML (WebDAV multistatus), iCalendar and vCard documents are kept whole.
-        body = text if any(t in ctype for t in ("xml", "calendar", "vcard")) else text[:2000]
+        # XML (WebDAV multistatus), iCalendar, vCard and plain-text files (knowledge sync) are kept whole.
+        body = (
+            text
+            if any(t in ctype for t in ("xml", "calendar", "vcard", "text/plain", "text/markdown", "text/csv"))
+            else text[:2000]
+        )
     return Response(status, body, hdrs)
 
 

@@ -20,6 +20,7 @@ from __future__ import annotations
 import os
 import re
 import secrets
+import time
 from collections.abc import Callable, Iterable
 from typing import Any
 
@@ -446,7 +447,8 @@ def queue_sync(conn, customer_id: Any, app: str, delay_s: float = 0) -> None:
         "connector.knowledge_sync",
         {"app": app},
         customer_id=customer_id,
-        dedupe_key=f"ksync:{customer_id}:{app}:{secrets.token_hex(4) if delay_s else 'now'}",
+        dedupe_key=f"ksync:{customer_id}:{app}:"
+        + (f"at:{int((time.time() + delay_s) // delay_s)}" if delay_s else "now"),
         delay_s=delay_s,
     )
 
@@ -459,7 +461,10 @@ def _knowledge_sync(conn: psycopg.Connection, job: dict):
     c = connectors.get(app)
     row = connectors.connection(conn, job["customer_id"], app)
     # The 'now' key is freed once this runs, so the next change queues again.
-    conn.execute("UPDATE jobs SET dedupe_key = dedupe_key || ':' || id WHERE id = %s", (job["id"],))
+    conn.execute(
+        "UPDATE jobs SET dedupe_key = dedupe_key || ':' || id WHERE id = %s AND dedupe_key LIKE '%%:now'",
+        (job["id"],),
+    )
     if row is None or row["status"] not in ("authorised", "testing", "live"):
         return None
     try:
