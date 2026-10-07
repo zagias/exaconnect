@@ -41,3 +41,22 @@ for d in exa.decisions.list(limit=5):
   `docs/*-contract.md` files and at `/docs` on the controller.
 
 `examples/inventory.py` prints a customer's sites, circuits and encryption.
+
+## Integrations
+
+```python
+pd = exa.integrations.create(
+    "pagerduty", "NOC on-call",
+    secrets={"routing_key": os.environ["PD_ROUTING_KEY"]},
+    event_types=["path.*", "sla.breach", "node.offline"], min_severity="warning",
+)
+exa.integrations.test(pd["id"])            # simulated until the controller is set live
+print(exa.integrations.metrics())           # Prometheus text for your organisation
+
+# In your webhook receiver: check the Standard Webhooks signature on the raw body.
+from exaconnect import verify_event
+ok = verify_event(os.environ["CONNECT_WEBHOOK_SECRET"], request.headers, request.body)
+```
+
+`exa.hooks`, `exa.notices`, `exa.onramps` and `exa.links` cover REST hooks,
+carrier notices, cloud on-ramps and single links. See `docs/integrations.md`.
