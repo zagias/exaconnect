@@ -103,7 +103,9 @@ class Opsgenie(Provider):
     category = "alerting"
     docs = "https://docs.opsgenie.com/docs/alert-api"
     api = "Alert API v2: create alert with alias, close alert by alias"
-    live_needs = "An API key from an Opsgenie API integration (GenieKey), and the EU address if your account is in the EU."
+    live_needs = (
+        "An API key from an Opsgenie API integration (GenieKey), and the EU address if your account is in the EU."
+    )
     fields = (
         Field("api_key", "API key", secret=True, required=True),
         Field(

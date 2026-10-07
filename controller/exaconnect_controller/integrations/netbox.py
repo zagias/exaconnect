@@ -44,8 +44,14 @@ class NetBox(Provider):
     fields = (
         Field("url", "NetBox address", required=True, kind="url"),
         Field("token", "API token", secret=True, required=True),
-        Field("direction", "Source of truth", default="push", kind="choice", choices=("push", "pull"),
-              help="push: Connect updates NetBox. pull: NetBox updates Connect's site details and prefixes."),
+        Field(
+            "direction",
+            "Source of truth",
+            default="push",
+            kind="choice",
+            choices=("push", "pull"),
+            help="push: Connect updates NetBox. pull: NetBox updates Connect's site details and prefixes.",
+        ),
         Field("interval_minutes", "Sync every (minutes)", default=60, kind="int"),
     )
 
@@ -85,7 +91,9 @@ class Api:
             changed = {k: v for k, v in body.items() if _differs(cur.get(k), v)}
             if not changed:
                 return cur, "unchanged"
-            resp = self.http.request("PATCH", f"{self.base}/api/{path}/{cur['id']}/", headers=self.headers, json_body=changed)
+            resp = self.http.request(
+                "PATCH", f"{self.base}/api/{path}/{cur['id']}/", headers=self.headers, json_body=changed
+            )
             raise_for(resp, "NetBox")
             return resp.json(), "updated"
         resp = self.http.request("POST", f"{self.base}/api/{path}/", headers=self.headers, json_body=body)
@@ -142,7 +150,9 @@ def push(conn: psycopg.Connection, api: Api, customer_id: Any) -> dict:
     for lk in links:
         if lk["carrier"] not in providers:
             obj, what = api.upsert(
-                "circuits/providers", {"slug": slug(lk["carrier"])}, {"name": lk["carrier"], "slug": slug(lk["carrier"])}
+                "circuits/providers",
+                {"slug": slug(lk["carrier"])},
+                {"name": lk["carrier"], "slug": slug(lk["carrier"])},
             )
             providers[lk["carrier"]] = obj["id"]
             tally(what)
@@ -200,9 +210,11 @@ def pull(conn: psycopg.Connection, api: Api, customer_id: Any, actor: str) -> di
         if nb.get("description") and nb["description"] != s["location"]:
             updates["location"] = nb["description"][:200]
         if nb.get("latitude") is not None and nb.get("longitude") is not None:
-            if s["latitude"] is None or abs(float(nb["latitude"]) - float(s["latitude"])) > 1e-6 or abs(
-                float(nb["longitude"]) - float(s["longitude"])
-            ) > 1e-6:
+            if (
+                s["latitude"] is None
+                or abs(float(nb["latitude"]) - float(s["latitude"])) > 1e-6
+                or abs(float(nb["longitude"]) - float(s["longitude"])) > 1e-6
+            ):
                 updates["latitude"], updates["longitude"] = float(nb["latitude"]), float(nb["longitude"])
         if prefixes and sorted(str(p) for p in s["lan_prefixes"]) != prefixes:
             updates["lan_prefixes"] = prefixes
@@ -226,4 +238,3 @@ def sync(conn: psycopg.Connection, integ: dict, http: Transport, secrets: dict, 
     else:
         out = {"direction": "push", **push(conn, api, integ["customer_id"])}
     return out
-

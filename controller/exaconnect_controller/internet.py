@@ -469,7 +469,8 @@ def record(conn: psycopg.Connection, node: dict, data: dict[str, Any]) -> None:
         if str(b["address"]) not in had:
             # A newly blocked flooding source (ADR 0012), published as ddos.blocked (ADR 0026).
             conn.execute(
-                "INSERT INTO events (time, customer_id, node_id, kind, detail) VALUES (now(), %s, %s, 'ddos_blocked', %s)",
+                "INSERT INTO events (time, customer_id, node_id, kind, detail)"
+                " VALUES (now(), %s, %s, 'ddos_blocked', %s)",
                 (node["customer_id"], node["id"], Jsonb({"address": str(b["address"]), "expires_s": b["expires_s"]})),
             )
     conn.execute(

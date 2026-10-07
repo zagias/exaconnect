@@ -111,9 +111,7 @@ class ServiceNow(Provider):
 
     def simulate(self, method: str, url: str, headers: dict, body: bytes) -> Http:
         if method == "POST":
-            return sim_ok(
-                201, {"result": {"sys_id": secrets.token_hex(16), "number": "INC0010001", "state": "1"}}
-            )
+            return sim_ok(201, {"result": {"sys_id": secrets.token_hex(16), "number": "INC0010001", "state": "1"}})
         return sim_ok(200, {"result": {"sys_id": url.rsplit("/", 1)[-1], "state": "6"}})
 
 

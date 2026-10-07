@@ -98,6 +98,8 @@ def current_user(request: Request, authorization: Annotated[str | None, Header()
         # limited account (directory-provisioned) may still manage its own sign-in.
         path = str(request.url.path)
         allowed = path.startswith("/api/v1/commai/") or path == "/api/v1/auth/me"
+        # A metrics-only key may scrape the Prometheus endpoint (ADR 0026).
+        allowed = allowed or ("metrics" in user.scopes and path == "/api/v1/metrics")
         if not allowed and user.via != "key":
             allowed = path.startswith("/api/v1/auth/")
         if not allowed:

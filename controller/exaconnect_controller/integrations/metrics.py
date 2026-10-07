@@ -28,7 +28,9 @@ def collect(conn: psycopg.Connection, customer_id: Any = None, carrier_id: Any =
     jit = _fam("exacarib_path_jitter_ms", "Jitter (RFC 3550) over the last 30 s.", "ms", "exacarib.path.jitter")
     loss = _fam("exacarib_path_loss_percent", "Probe loss over the last 30 s.", "%", "exacarib.path.loss")
     up = _fam("exacarib_path_up", "1 when BFD reports the path's tunnel up.", "", "exacarib.path.up")
-    lin = _fam("exacarib_link_in_mbps", "Average inbound Mbps in the latest 5-minute sample.", "Mbit/s", "exacarib.link.in")
+    lin = _fam(
+        "exacarib_link_in_mbps", "Average inbound Mbps in the latest 5-minute sample.", "Mbit/s", "exacarib.link.in"
+    )
     lout = _fam(
         "exacarib_link_out_mbps", "Average outbound Mbps in the latest 5-minute sample.", "Mbit/s", "exacarib.link.out"
     )
@@ -107,7 +109,11 @@ def collect(conn: psycopg.Connection, customer_id: Any = None, carrier_id: Any =
             continue
         scores = [
             score(float(v), float(lim))
-            for v, lim in ((m["rtt"], r["max_latency_ms"]), (m["jitter"], r["max_jitter_ms"]), (m["loss"], r["max_loss_pct"]))
+            for v, lim in (
+                (m["rtt"], r["max_latency_ms"]),
+                (m["jitter"], r["max_jitter_ms"]),
+                (m["loss"], r["max_loss_pct"]),
+            )
             if v is not None and lim is not None
         ]
         sla["samples"].append(

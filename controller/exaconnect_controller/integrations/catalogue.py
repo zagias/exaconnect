@@ -132,7 +132,12 @@ KINDS: dict[str, Kind] = {
             "warning",
             "trigger",
             "insights of kind hazard or storm_warning (ai/hazards.py, ai/storms.py)",
-            {"insight": 41, "kind": "hazard", "title": "Tropical Storm Ana: Kingston inside the cone", "site": "kingston"},
+            {
+                "insight": 41,
+                "kind": "hazard",
+                "title": "Tropical Storm Ana: Kingston inside the cone",
+                "site": "kingston",
+            },
         ),
         Kind(
             "insight.raised",

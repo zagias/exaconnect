@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from . import __version__, commai, db, pki  # noqa: F401 - commai registers its jobs
+from . import __version__, commai, db, integrations, pki  # noqa: F401 - commai and integrations register jobs
 from .api import router as api_router
 from .settings import Settings, get_settings
 
@@ -53,6 +53,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 from .commai import jobs as commai_jobs
 
                 tasks.append(asyncio.create_task(commai_jobs.loop()))
+                from .integrations import runner as integrations_runner
+
+                tasks.append(asyncio.create_task(integrations_runner.loop()))
         yield
         for t in tasks:
             t.cancel()
@@ -79,6 +82,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"status": "ok"}
 
     app.include_router(api_router, prefix="/api/v1")
+    from .integrations.api import host_meta
+
+    # RESTCONF root discovery (RFC 8040 §3.1).
+    app.add_api_route("/.well-known/host-meta", host_meta, methods=["GET"], tags=["restconf"])
     return app
 
 

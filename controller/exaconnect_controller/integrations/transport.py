@@ -166,7 +166,6 @@ class Transport:
             return Http(202, "{}", {})
         return self.simulator(method, url, h, body or b"")
 
-
     def raw(self, proto: str, host: str, port: int, payload: bytes, send: Callable[[], None]) -> None:
         """A non-HTTP send (syslog, SNMP). Live: check the address and send; else record it."""
         shown = self.redact(payload.decode("utf-8", "replace"))[:20_000]

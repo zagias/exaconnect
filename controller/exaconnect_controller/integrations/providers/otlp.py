@@ -151,7 +151,13 @@ class Otlp(_Otlp):
     name = "OpenTelemetry (OTLP/HTTP)"
     live_needs = "An OTLP/HTTP endpoint (a collector or a vendor's gateway) and, if it needs one, an auth header."
     fields = (
-        Field("endpoint", "OTLP/HTTP endpoint", required=True, kind="url", help="Without /v1/logs, e.g. https://otel.example.org:4318"),
+        Field(
+            "endpoint",
+            "OTLP/HTTP endpoint",
+            required=True,
+            kind="url",
+            help="Without /v1/logs, e.g. https://otel.example.org:4318",
+        ),
         Field("header_name", "Auth header name", default="Authorization"),
         Field("header_value", "Auth header value", secret=True),
         Field("export_metrics", "Export metrics every minute", default=True, kind="bool"),

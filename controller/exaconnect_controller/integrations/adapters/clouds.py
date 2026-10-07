@@ -204,7 +204,9 @@ class AwsDirectConnect(Adapter):
             {
                 "connectionId": os.environ.get("EXA_AWS_DX_INTERCONNECT_ID", "dxcon-simulated"),
                 "ownerAccount": d["aws_account_id"],
-                "bandwidth": f"{o['bandwidth_mbps']}Mbps" if o["bandwidth_mbps"] < 1000 else f"{o['bandwidth_mbps'] // 1000}Gbps",
+                "bandwidth": f"{o['bandwidth_mbps']}Mbps"
+                if o["bandwidth_mbps"] < 1000
+                else f"{o['bandwidth_mbps'] // 1000}Gbps",
                 "connectionName": o["name"][:100],
                 "vlan": vlan,
                 "tags": [{"key": "exacarib:onramp", "value": str(o["id"])}],
@@ -247,13 +249,20 @@ class AwsDirectConnect(Adapter):
                 },
             )
         if target.endswith("DescribeConnections"):
-            return sim_ok(200, {"connections": [{"connectionId": req.get("connectionId"), "connectionState": "available"}]})
+            return sim_ok(
+                200, {"connections": [{"connectionId": req.get("connectionId"), "connectionState": "available"}]}
+            )
         return sim_ok(200, {"connectionId": req.get("connectionId"), "connectionState": "deleted"})
 
 
 # ---- Azure ExpressRoute ---------------------------------------------------------
 
-AZ_STATE = {"NotProvisioned": "pending", "Provisioning": "pending", "Provisioned": "available", "Deprovisioning": "deleting"}
+AZ_STATE = {
+    "NotProvisioned": "pending",
+    "Provisioning": "pending",
+    "Provisioned": "available",
+    "Deprovisioning": "deleting",
+}
 AZ_API = "2023-09-01"
 
 
@@ -369,8 +378,18 @@ GCP_STATE = {
     "UNPROVISIONED": "failed",
     "DEFUNCT": "failed",
 }
-GCP_BW = {50: "BPS_50M", 100: "BPS_100M", 200: "BPS_200M", 300: "BPS_300M", 400: "BPS_400M", 500: "BPS_500M",
-          1000: "BPS_1G", 2000: "BPS_2G", 5000: "BPS_5G", 10000: "BPS_10G"}
+GCP_BW = {
+    50: "BPS_50M",
+    100: "BPS_100M",
+    200: "BPS_200M",
+    300: "BPS_300M",
+    400: "BPS_400M",
+    500: "BPS_500M",
+    1000: "BPS_1G",
+    2000: "BPS_2G",
+    5000: "BPS_5G",
+    10000: "BPS_10G",
+}
 
 
 def gcp_token(http: Transport) -> str:
@@ -463,7 +482,7 @@ class GooglePartnerInterconnect(Adapter):
             "provider_state": "PENDING_CUSTOMER",
             "status": "pending",
             "pairing": {"pairing_key": d["pairing_key"], "operation": resp.json().get("name", "")},
-            "next_step": "Activate the VLAN attachment in the Google Cloud console, then configure BGP on Cloud Router.",
+            "next_step": "Activate the VLAN attachment in the Google Cloud console, then set up BGP on Cloud Router.",
         }
 
     def check(self, http: Transport, o: dict) -> dict:
@@ -492,8 +511,14 @@ class GooglePartnerInterconnect(Adapter):
 
 # ---- Megaport ---------------------------------------------------------------------
 
-MP_STATE = {"NEW": "ordering", "DEPLOYABLE": "pending", "CONFIGURED": "pending", "LIVE": "available",
-            "CANCELLED": "deleted", "DECOMMISSIONED": "deleted"}
+MP_STATE = {
+    "NEW": "ordering",
+    "DEPLOYABLE": "pending",
+    "CONFIGURED": "pending",
+    "LIVE": "available",
+    "CANCELLED": "deleted",
+    "DECOMMISSIONED": "deleted",
+}
 
 
 class Megaport(Adapter):
@@ -503,7 +528,10 @@ class Megaport(Adapter):
     api = "Megaport API v3: OAuth client credentials, POST /v3/networkdesign/buy (VXC), GET /v2/product/{uid}"
     env = ("EXA_MEGAPORT_CLIENT_ID", "EXA_MEGAPORT_CLIENT_SECRET", "EXA_MEGAPORT_PORT_UID")
     live_needs = "A Megaport account with ExaCarib's port, and an API key (client ID and secret)."
-    fields = (("b_end_product_uid", "The cloud or partner port's product UID"), ("service_key", "Service or pairing key, if the cloud needs one"))
+    fields = (
+        ("b_end_product_uid", "The cloud or partner port's product UID"),
+        ("service_key", "Service or pairing key, if the cloud needs one"),
+    )
     speeds = (50, 100, 200, 500, 1000, 2000, 5000, 10000)
 
     def validate(self, req: dict) -> dict:
@@ -588,7 +616,10 @@ class Megaport(Adapter):
         if url.endswith("/networkdesign/buy"):
             return sim_ok(
                 200,
-                {"message": "VXC ordered", "data": [{"technicalServiceUid": str(_uuid()), "provisioningStatus": "DEPLOYABLE"}]},
+                {
+                    "message": "VXC ordered",
+                    "data": [{"technicalServiceUid": str(_uuid()), "provisioningStatus": "DEPLOYABLE"}],
+                },
             )
         if method == "GET":
             return sim_ok(200, {"data": {"productUid": url.rsplit("/", 1)[-1], "provisioningStatus": "LIVE"}})

@@ -50,3 +50,9 @@ router.include_router(scim.router)
 from ..commai.api import router as commai_router  # noqa: E402
 
 router.include_router(commai_router)
+
+from ..integrations.api import router as integrations_router  # noqa: E402
+from ..integrations.api_standards import router as standards_router  # noqa: E402
+
+router.include_router(integrations_router)
+router.include_router(standards_router)

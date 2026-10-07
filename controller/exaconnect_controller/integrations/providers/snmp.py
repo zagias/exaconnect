@@ -13,8 +13,8 @@ from __future__ import annotations
 import socket
 import time
 
-from .syslog import pen
 from . import Context, Field, Outcome, Provider, kind_name, register, summary
+from .syslog import pen
 
 START = time.monotonic()
 SEV = {"info": 1, "warning": 2, "critical": 3}

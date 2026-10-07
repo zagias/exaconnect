@@ -197,7 +197,8 @@ def windows(conn: psycopg.Connection, now: dt.datetime) -> tuple[int, int]:
         """UPDATE connect_notices SET window_state = 'ended',
                   status = CASE WHEN status IN ('cancelled', 'closed') THEN status ELSE 'resolved' END,
                   resolved_at = coalesce(resolved_at, now()), updated_at = now()
-           WHERE kind = 'maintenance' AND window_state = 'started' AND (ends_at <= %s OR status IN ('cancelled', 'closed'))
+           WHERE kind = 'maintenance' AND window_state = 'started'
+             AND (ends_at <= %s OR status IN ('cancelled', 'closed'))
            RETURNING *""",
         (now,),
     ).fetchall()
@@ -266,9 +267,7 @@ def list_for(conn, user, notice_id: int | None = None, limit: int = 200) -> list
         q += " AND n.carrier_id = %(k)s"
         args["k"] = user.carrier_id
     elif user.role == "customer":
-        own = {
-            str(r["id"]) for r in conn.execute("SELECT id FROM links WHERE customer_id = %s", (user.customer_id,))
-        }
+        own = {str(r["id"]) for r in conn.execute("SELECT id FROM links WHERE customer_id = %s", (user.customer_id,))}
         q += " AND n.link_ids && %(own)s::uuid[]"
         args["own"] = list(own)
     rows = conn.execute(q + " ORDER BY n.id DESC LIMIT %(l)s", args).fetchall()

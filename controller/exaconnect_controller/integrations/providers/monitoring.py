@@ -130,10 +130,7 @@ class ElasticBulk(Provider):
         index = ctx.config.get("index", "exacarib-connect-events")
         doc = {"@timestamp": ev["time"], "event": {"kind": "event", "dataset": "exacarib.connect"}, **ev}
         body = (
-            json.dumps({"create": {"_index": index, "_id": ev["id"]}})
-            + "\n"
-            + json.dumps(doc, default=str)
-            + "\n"
+            json.dumps({"create": {"_index": index, "_id": ev["id"]}}) + "\n" + json.dumps(doc, default=str) + "\n"
         ).encode()
         headers = {"Content-Type": "application/x-ndjson"}
         if ctx.secrets.get("api_key"):
@@ -145,7 +142,7 @@ class ElasticBulk(Provider):
         raise_for(resp, "The cluster")
         out = resp.json()
         if out.get("errors"):
-            item = ((out.get("items") or [{}])[0].get("create") or {})
+            item = (out.get("items") or [{}])[0].get("create") or {}
             if item.get("status") != 409:  # 409: already indexed (a retry), which is fine
                 err = (item.get("error") or {}).get("reason", "unknown")
                 raise ProviderError(f"The cluster refused the document: {err}", item.get("status"), retry=False)

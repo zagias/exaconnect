@@ -93,4 +93,3 @@ def tmf_event(ce: dict) -> dict:
         "event": ce.get("data") or {},
         "@type": "Event",
     }
-

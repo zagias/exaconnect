@@ -342,9 +342,7 @@ def decide(
         if to is None:
             return note(f"Kept {cls} on {cur.label}: it is down ({cur.down_reason}) and no other path is up.")
         if cur.maintenance:
-            return moved(
-                to, "move", f"Moved {cls} from {cur.label} to {to.label} ahead of {cur.down_reason}."
-            )
+            return moved(to, "move", f"Moved {cls} from {cur.label} to {to.label} ahead of {cur.down_reason}.")
         return moved(
             to, "failover", f"Moved {cls} from {cur.label} to {to.label}: {cur.label} is down ({cur.down_reason})."
         )

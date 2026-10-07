@@ -114,9 +114,7 @@ class Provider:
         return [f.name for f in self.fields if f.secret]
 
     def credentials_present(self, config: dict, secrets: dict) -> bool:
-        return all(
-            (secrets.get(f.name) if f.secret else config.get(f.name)) for f in self.fields if f.required
-        )
+        return all((secrets.get(f.name) if f.secret else config.get(f.name)) for f in self.fields if f.required)
 
     def validate(self, config: dict) -> dict:
         """Normalise settings (not secrets). Raise ValueError with a message people can read."""

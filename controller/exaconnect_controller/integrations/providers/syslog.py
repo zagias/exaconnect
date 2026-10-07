@@ -61,8 +61,7 @@ def format_5424(ev: dict, facility: str = "local0", hostname: str = "exacarib-co
             params[k] = data[k]
     sd = f"[exacarib@{pen()} " + " ".join(f'{k}="{_sd_value(v)}"' for k, v in params.items()) + "]"
     return (
-        f"<{pri}>1 {ts} {_token(hostname, 255)} {_token(app, 48)} - {_token(kind_name(ev), 32)} {sd} "
-        f"{BOM}{summary(ev)}"
+        f"<{pri}>1 {ts} {_token(hostname, 255)} {_token(app, 48)} - {_token(kind_name(ev), 32)} {sd} {BOM}{summary(ev)}"
     )
 
 
@@ -103,7 +102,9 @@ class Syslog(Provider):
     def deliver(self, ctx: Context, ev: dict) -> Outcome:
         cfg = ctx.config
         transport = cfg.get("transport", "tls")
-        payload = frame(format_5424(ev, cfg.get("facility", "local0"), cfg.get("hostname", "exacarib-connect")), transport)
+        payload = frame(
+            format_5424(ev, cfg.get("facility", "local0"), cfg.get("hostname", "exacarib-connect")), transport
+        )
         send_bytes(ctx, cfg["host"], int(cfg.get("port", 6514)), transport, payload, cfg.get("ca_pem", ""))
         return Outcome(None, {"transport": transport, "bytes": len(payload)})
 

@@ -621,7 +621,7 @@ def _record_test(conn, conn_row: dict, ok: bool, message: str, email: str) -> No
 
 MAX_KEYS = 20
 KEY_COLUMNS = "id, name, prefix, scopes, created_at, last_used_at, expires_at"
-KEY_SCOPES = ("connect", "commai:read", "commai:write", "commai:notes", "commai:admin")
+KEY_SCOPES = ("connect", "metrics", "commai:read", "commai:write", "commai:notes", "commai:admin")
 
 
 class KeyIn(BaseModel):

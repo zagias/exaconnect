@@ -483,7 +483,9 @@ def tick(conn: psycopg.Connection, now: dt.datetime | None = None) -> dict[str, 
            RETURNING id, name, customer_id, last_seen""",
         (now, now, OFFLINE_S),
     ).fetchall():
-        event_row(conn, n["customer_id"], n["id"], "node_offline", {"node": n["name"], "last_seen": _iso(n["last_seen"])}, now)
+        event_row(
+            conn, n["customer_id"], n["id"], "node_offline", {"node": n["name"], "last_seen": _iso(n["last_seen"])}, now
+        )
         out["offline"] += 1
     for n in conn.execute(
         """WITH back AS (SELECT id, offline_since FROM nodes
