@@ -1,10 +1,10 @@
-# CommAI for Make
+# Jibsy for Make
 
-`app.json` describes a Make custom app for ExaCarib Connect CommAI: one section
+`app.json` describes a Make custom app for Jibsy by ExaCarib: one section
 per part of Make's app editor (base, connection, webhooks, rpcs, modules).
-It uses only the public CommAI API.
+It uses only the public Jibsy API.
 
-| Module              | Kind            | CommAI endpoint                                  |
+| Module              | Kind            | Jibsy endpoint                                  |
 | ------------------- | --------------- | ------------------------------------------------ |
 | Watch events        | instant trigger | `POST /webhooks` (attach), `DELETE /webhooks/{id}` (detach) |
 | Watch events (polling) | trigger      | `GET /events?type=&after=`                       |
@@ -25,7 +25,7 @@ business that needs signed deliveries checked should use the polling trigger,
 Zapier or n8n instead.
 
 A test in `controller/tests/test_commai_automation_apps.py` checks that every
-endpoint used here exists in the CommAI OpenAPI schema.
+endpoint used here exists in the Jibsy OpenAPI schema.
 
 ## Publishing (Dudley)
 

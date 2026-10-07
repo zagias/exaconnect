@@ -1,6 +1,6 @@
 """Countries for voice numbers (ADR 0033).
 
-What CommAI voice needs to know about each country: its calling code, the
+What Jibsy voice needs to know about each country: its calling code, the
 area codes numbers come from, and which number ranges the simulated provider
 hands out. The country capability matrix itself (kind "country" in the
 go-live registry) belongs to the countries module; voice declares only its
@@ -111,7 +111,7 @@ for _c in COUNTRIES.values():
 def get(code: str) -> Country:
     c = COUNTRIES.get(str(code or "").upper())
     if c is None:
-        raise VoiceError(f"CommAI voice doesn't offer numbers in {code or 'that country'} yet.", 422)
+        raise VoiceError(f"Jibsy voice doesn't offer numbers in {code or 'that country'} yet.", 422)
     return c
 
 
@@ -129,7 +129,7 @@ def require(conn: psycopg.Connection, code: str, customer_id: Any, what: str = "
         )
     row = conn.execute("SELECT 1 FROM commai_capabilities WHERE kind = 'country' AND key = %s", (c.code,)).fetchone()
     if row and not golive.enabled(conn, "country", c.code, customer_id):
-        raise VoiceError(f"CommAI is not switched on in {c.name} yet.", 409)
+        raise VoiceError(f"Jibsy is not switched on in {c.name} yet.", 409)
     return c
 
 

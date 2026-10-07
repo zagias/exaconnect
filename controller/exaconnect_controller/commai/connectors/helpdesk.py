@@ -8,7 +8,7 @@ same way.
   update_ticket   update   status and priority
   add_comment     update   a private note (default) or a public reply
 
-Statuses are shown in CommAI's words: new, open, pending, on_hold, solved,
+Statuses are shown in Jibsy's words: new, open, pending, on_hold, solved,
 closed. A created ticket carries a reference derived from the action's
 idempotency key, and the connector looks for it before creating, so a retry
 never makes a second ticket. The helpdesk's change notifications (webhooks)
@@ -178,7 +178,7 @@ class Helpdesk(MoreConnector):
     # ---- change notifications -----------------------------------------------------------
 
     def on_webhook_event(self, conn, connection: dict, event: dict) -> None:
-        """Apply one verified event: sync a ticket's status back to CommAI."""
+        """Apply one verified event: sync a ticket's status back to Jibsy."""
         if event.get("type") == "ticket.updated":
             d = event.get("data") or {}
             sync_ticket_status(

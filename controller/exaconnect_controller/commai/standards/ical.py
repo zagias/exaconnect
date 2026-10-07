@@ -13,7 +13,7 @@ import re
 from dataclasses import dataclass, field
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-PRODID = "-//ExaCarib//CommAI//EN"
+PRODID = "-//ExaCarib//Jibsy//EN"
 
 
 def escape(text: str) -> str:

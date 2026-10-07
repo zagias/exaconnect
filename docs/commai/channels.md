@@ -1,4 +1,4 @@
-# CommAI channels: operator note
+# Jibsy channels: operator note
 
 Website chat, WhatsApp, SMS and email, all landing in the shared inbox.
 Decision record: `docs/adr/0018-commai-channels.md`.
@@ -14,7 +14,7 @@ Decision record: `docs/adr/0018-commai-channels.md`.
 - `widget/src/widget.ts`: the website chat script. Build it with
   `portal/node_modules/.bin/tsc -p widget`; the output,
   `controller/exaconnect_controller/commai/static/widget.js`, is committed.
-- Portal: CommAI → Channels (`portal/src/pages/commai/Channels.tsx`).
+- Portal: Jibsy → Channels (`portal/src/pages/commai/Channels.tsx`).
 
 ## Endpoints
 

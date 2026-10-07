@@ -7,7 +7,7 @@ request it would have sent is kept in connect_sim_outbox (with every secret
 replaced by ``[secret]``), so the portal can show exactly what would go out.
 
 Secrets (tokens, routing keys, webhook URLs that embed a signature) are
-encrypted with Fernet under EXA_SECRETS_KEY, the same key CommAI uses, and
+encrypted with Fernet under EXA_SECRETS_KEY, the same key Jibsy uses, and
 are never returned, logged or stored in the clear.
 """
 

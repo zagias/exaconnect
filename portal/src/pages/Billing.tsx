@@ -75,7 +75,7 @@ function BillingHome() {
   return (
     <>
       <PageHead eyebrow="Billing" title="Plans, charges and invoices">
-        Connect and CommAI are separate plans, each with its own invoice. Months run on UTC.
+        Connect and Jibsy are separate plans, each with its own invoice. Months run on UTC.
       </PageHead>
       <ErrorNote error={held.error ?? charges.error ?? invoices.error ?? dlError} />
 
@@ -568,7 +568,7 @@ export function InvoiceDocument({ inv }: { inv: Invoice }) {
       <p className="small muted bill-foot">
         {inv.product === "connect"
           ? "Burst is the 95th percentile of the month's 5-minute samples above commit, the same samples as the metering screen and CSV. SLA credits come from Connect's probe measurements for each class."
-          : "Usage comes from CommAI's metered records; voice is rated by CommAI Voice's rate card and appears here as rated."}
+          : "Usage comes from Jibsy's metered records; voice is rated by Jibsy Voice's rate card and appears here as rated."}
       </p>
     </article>
   );

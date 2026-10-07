@@ -37,7 +37,7 @@ def clean_env(monkeypatch):
 
 
 def _issued(client, admin_headers, name="Chat Only Ltd", email="owner@chat.example"):
-    """A CommAI-only organisation with one issued invoice of 49.00 (the example plan fee)."""
+    """A Jibsy-only organisation with one issued invoice of 49.00 (the example plan fee)."""
     billed, _, _ = months()
     with db.tx() as conn:
         cid = new_customer(conn, name)
@@ -304,13 +304,13 @@ def test_accounting_exports(client, admin_headers):
         "Chat Only Ltd",
         "USD",
     )
-    assert x["Reference"].startswith("CommAI Standard") and x["Total"] == "49.00"
+    assert x["Reference"].startswith("Jibsy Standard") and x["Total"] == "49.00"
     assert sum(Decimal(li["LineAmount"]) for li in x["LineItems"]) == Decimal(x["SubTotal"])
     issued_on = dt.date.fromisoformat(x["Date"])
     assert dt.date.fromisoformat(x["DueDate"]) == issued_on + dt.timedelta(days=30)
     q = client.get(f"/api/v1/billing/invoices/{inv['id']}/export/quickbooks", headers=admin_headers).json()
     assert q["DocNumber"] == inv["number"] and q["TotalAmt"] == 49.0
-    assert q["Line"][0]["SalesItemLineDetail"]["ItemRef"]["name"] == "CommAI"
+    assert q["Line"][0]["SalesItemLineDetail"]["ItemRef"]["name"] == "Jibsy"
     assert q["Line"][0]["DetailType"] == "SalesItemLineDetail"
     text = client.get(f"/api/v1/billing/invoices/{inv['id']}/export/csv", headers=admin_headers).text
     rows = list(csv.reader(io.StringIO(text)))

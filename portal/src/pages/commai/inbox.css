@@ -1,4 +1,4 @@
-/* CommAI inbox (ADR 0016): list, conversation and details side by side. */
+/* Jibsy inbox (ADR 0016): list, conversation and details side by side. */
 .inbox { display: grid; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr) minmax(220px, 280px); gap: 16px; align-items: start; }
 .inbox-list, .inbox-conv, .inbox-side, .inbox-empty { margin: 0; min-width: 0; }
 .inbox-empty { grid-column: span 2; padding: 48px 24px; text-align: center; }

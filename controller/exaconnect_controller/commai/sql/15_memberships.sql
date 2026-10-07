@@ -6,7 +6,7 @@
 -- membership row from the trigger below, so nothing that predates memberships
 -- loses access. Carrier and ExaCarib admin accounts have no memberships.
 
--- The plans an organisation holds: Connect, CommAI or both. Existing (and, until
+-- The plans an organisation holds: Connect, Jibsy or both. Existing (and, until
 -- the billing work's subscriptions land, new) organisations hold both; NULL is
 -- read as both too. The billing layer reconciles this column when it merges.
 ALTER TABLE customers ADD COLUMN IF NOT EXISTS products text[] DEFAULT ARRAY['connect', 'commai']::text[];

@@ -1,4 +1,4 @@
-# CommAI inbox load test
+# Jibsy inbox load test
 
 Date: 2026-10-07. Machine: a shared cloud container (4 vCPU, 15 GB), not the
 production server. The load generator, the controller and PostgreSQL all ran
@@ -7,7 +7,7 @@ on the same 4 cores, so absolute numbers are a floor, not a capacity figure.
 ## What it does
 
 `controller/tests/load/inbox_load.py` (not collected by pytest) starts the
-real controller with uvicorn on a local port, one process, its CommAI job
+real controller with uvicorn on a local port, one process, its Jibsy job
 worker running in-process as in production (`EXA_ROUTING_INTERVAL_S` > 0),
 against an emptied test database. It seeds one business with M agents, a
 team, a routing rule, a website chat key and a simulated SMS number, then

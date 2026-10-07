@@ -169,7 +169,7 @@ def test_teams_bot_link_and_approve(client, fake, bot):
     assert post(_activity(f"link {code}"), bot(exp=int(time.time()) - 3600)).status_code == 401
     assert post({**_activity(f"link {code}"), "serviceUrl": "https://evil.example/"}).status_code == 401
     assert post(_activity("link 00000000")).json()["text"] == "That code is not valid."
-    r = post(_activity(f"<at>CommAI</at> link {code}"))
+    r = post(_activity(f"<at>Jibsy</at> link {code}"))
     assert r.status_code == 200 and "linked" in r.json()["text"], r.text
     assert post(_activity(f"link {code}")).json()["text"] == "That code is not valid."  # single use
 
@@ -183,7 +183,7 @@ def test_teams_bot_link_and_approve(client, fake, bot):
     assert value == {"commai": "approve", "c": b["id"], "r": run_id}
 
     assert "not linked to that business" in post(_activity(value=value, tenant="tenant-evil")).json()["text"]
-    assert "not linked to a CommAI person" in post(_activity(value=value)).json()["text"]
+    assert "not linked to a Jibsy person" in post(_activity(value=value)).json()["text"]
     client.put(
         f"{base(b)}/connectors/teams/identities",
         json={"external_user": "aad-agent2", "user_email": b["agent2"]["email"]},

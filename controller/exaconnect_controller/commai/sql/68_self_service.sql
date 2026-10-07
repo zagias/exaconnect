@@ -1,7 +1,7 @@
--- CommAI self-service (ADR 0037): "My settings" for staff and the help centre
+-- Jibsy self-service (ADR 0037): "My settings" for staff and the help centre
 -- for a business's own customers. Idempotent; applied at startup.
 
--- A person's own CommAI preferences, per business. Only that person changes
+-- A person's own Jibsy preferences, per business. Only that person changes
 -- them (the API takes the person from the session, never from the request).
 CREATE TABLE IF NOT EXISTS ss_staff_prefs (
   customer_id    uuid NOT NULL REFERENCES customers(id) ON DELETE CASCADE,

@@ -140,7 +140,7 @@ export function SocialChannel({ base, channel }: { base: string; channel: Social
       <Card title="What it takes">
         {info && !info.available && <NotOn label={label} />}
         {info && <Needs items={info.needs} />}
-        <p className="muted small">Private notes never leave CommAI on any channel.</p>
+        <p className="muted small">Private notes never leave Jibsy on any channel.</p>
       </Card>
       <Card title={channel === "telegram" ? "Bots" : channel === "instagram" ? "Instagram accounts" : "Pages"}>
         <ErrorNote error={list.error} />

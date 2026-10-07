@@ -1,4 +1,4 @@
-"""CommAI voice stage 5 API (ADR 0033): numbers by country, port orders,
+"""Jibsy voice stage 5 API (ADR 0033): numbers by country, port orders,
 emergency addresses, fraud protection, carriers and the LiveKit agent.
 
 Who may call what:
@@ -70,7 +70,7 @@ def _admin(conn, user, cid) -> None:
 
 @router.get(f"{C}/countries")
 def list_countries(customer_id: str, user: UserDep) -> list[dict]:
-    """Countries where CommAI voice offers numbers, and whether each is on for you."""
+    """Countries where Jibsy voice offers numbers, and whether each is on for you."""
     access.check(user, customer_id, "commai:read")
     with db.tx() as conn:
         return countries.available(conn, customer_id)

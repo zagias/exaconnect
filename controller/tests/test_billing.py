@@ -28,7 +28,7 @@ carrier B (50) and satellite (20). The PoP is not billed to the customer.
                                                              Tax 10%       394.85
                                                              Total       4,343.35
 
-COMMAI, on CommAI Standard with its own price list: plan fee 50.00 a month,
+COMMAI, on Jibsy Standard with its own price list: plan fee 50.00 a month,
 ai_reply 0.02, message_out:* 0.01, tax 10%. Copilot is not priced on it.
 
   Plan fee                                                             =    50.00
@@ -43,7 +43,7 @@ ai_reply 0.02, message_out:* 0.01, tax 10%. Copilot is not priced on it.
                                                              Tax 10%         8.75 (8.745 half up)
                                                              Total          96.20
 
-Issued in that order: Connect is EXA-<year>-0001, CommAI EXA-<year>-0002.
+Issued in that order: Connect is EXA-<year>-0001, Jibsy EXA-<year>-0002.
 """
 
 import csv
@@ -158,7 +158,7 @@ def test_billing_hand_worked_month(client, admin_headers):
         add_user(conn, "it@demo.example", "customer", cid)
     demo_h = login(client, "it@demo.example")
 
-    # Demo takes CommAI from the first day of the billed month.
+    # Demo takes Jibsy from the first day of the billed month.
     sub = {"plan_id": commai, "starts_on": billed.isoformat()}
     r = client.post(f"/api/v1/customers/{cid}/plans", json=sub, headers=admin_headers)
     assert r.status_code == 201, r.text
@@ -203,7 +203,7 @@ def test_billing_hand_worked_month(client, admin_headers):
     assert r.status_code == 201 and r.json()["version"] == 1, r.text
     for bad in (
         {**body, "commit_per_mbps": "-1"},
-        {**body, "meter_prices": {"ai_reply": "1"}},  # meters belong on CommAI lists
+        {**body, "meter_prices": {"ai_reply": "1"}},  # meters belong on Jibsy lists
         {**cbody, "site_monthly": "5"},  # sites belong on Connect lists
         {**cbody, "meter_prices": {"voice_minute": "0.1"}},  # voice rates itself
         {**cbody, "meter_prices": {"Bad Meter!": "0.1"}},
@@ -221,14 +221,14 @@ def test_billing_hand_worked_month(client, admin_headers):
     )
     lists = client.get(f"/api/v1/billing/price-lists?customer_id={cid}", headers=admin_headers).json()
     assert [(p["plan"], p["version"]) for p in lists["customer"]] == [
-        ("CommAI Standard", 1),
+        ("Jibsy Standard", 1),
         ("Connect Standard", 2),
         ("Connect Standard", 1),
     ]
     assert all(p["example"] for p in lists["plans"])  # the plans' own lists are examples until prices are agreed
     assert {x["plan"]: x["price_list"]["version"] for x in lists["in_effect"]} == {
         "Connect Standard": 2,
-        "CommAI Standard": 1,
+        "Jibsy Standard": 1,
     }
 
     # The month's charges, worked out live, one block per plan.
@@ -283,9 +283,9 @@ def test_billing_hand_worked_month(client, admin_headers):
     voice_a = next(x for x in con["lines"] if x["kind"] == "credit")
     assert (voice_a["inputs"]["windows"], voice_a["inputs"]["met"]) == (1000, 987)
 
-    assert com["plan"] == "CommAI Standard"
+    assert com["plan"] == "Jibsy Standard"
     assert [(x["kind"], x["description"], x["amount"]) for x in com["lines"]] == [
-        ("plan", "CommAI Standard: monthly plan fee", "50.00"),
+        ("plan", "Jibsy Standard: monthly plan fee", "50.00"),
         ("usage", "AI replies: 1000", "20.00"),
         ("usage", "Copilot suggestions: 5 (not priced on this plan)", "0.00"),
         ("usage", "Outbound messages (sms): 200", "2.00"),
@@ -312,7 +312,7 @@ def test_billing_hand_worked_month(client, admin_headers):
     d2 = client.post("/api/v1/billing/invoices/generate", json=gen, headers=admin_headers).json()["drafts"]
     assert [d["id"] for d in d1] == [d["id"] for d in d2] and [d["plan"] for d in d2] == [
         "Connect Standard",
-        "CommAI Standard",
+        "Jibsy Standard",
     ]
     assert [_strip(d) for d in d1] == [_strip(d) for d in d2]
     cinv, minv = d2
@@ -358,11 +358,11 @@ def test_billing_hand_worked_month(client, admin_headers):
     iss = iss.json()
     assert iss["status"] == "issued" and iss["number"] == f"EXA-{year}-0001" and iss["total"] == "4343.35"
     iss2 = client.post(f"/api/v1/billing/invoices/{minv['id']}/issue", headers=admin_headers).json()
-    assert iss2["number"] == f"EXA-{year}-0002" and iss2["plan"] == "CommAI Standard"
+    assert iss2["number"] == f"EXA-{year}-0002" and iss2["plan"] == "Jibsy Standard"
     assert client.post(f"/api/v1/billing/invoices/{cinv['id']}/issue", headers=admin_headers).status_code == 409
     again = client.post("/api/v1/billing/invoices/generate", json=gen, headers=admin_headers).json()
     assert again["drafts"] == [] and all("Void it first" in s["reason"] for s in again["skipped"])
-    assert [s["plan"] for s in again["skipped"]] == ["Connect Standard", "CommAI Standard"]
+    assert [s["plan"] for s in again["skipped"]] == ["Connect Standard", "Jibsy Standard"]
     for sql in (
         "UPDATE billing_invoices SET total = 1 WHERE id = %s",
         "UPDATE billing_invoices SET plan = 'Other' WHERE id = %s",
@@ -396,7 +396,7 @@ def test_billing_hand_worked_month(client, admin_headers):
     assert ["total", "4343.35"] in rows and ["tax", "394.85"] in rows
     page = client.get(f"/api/v1/billing/invoices/{minv['id']}/print", headers=demo_h)
     assert page.status_code == 200 and page.headers["content-type"].startswith("text/html")
-    assert f"EXA-{year}-0002" in page.text and "96.20" in page.text and "CommAI Standard" in page.text
+    assert f"EXA-{year}-0002" in page.text and "96.20" in page.text and "Jibsy Standard" in page.text
     assert "Example data" in page.text and "default-src 'none'" in page.headers["content-security-policy"]
 
     # Margin: what ExaCarib owes carriers for this customer's links (every link, the PoP's too,
@@ -412,7 +412,7 @@ def test_billing_hand_worked_month(client, admin_headers):
     )
     assert [(p["plan"], p["source"], p["number"]) for p in demo["plans"]] == [
         ("Connect Standard", "issued", f"EXA-{year}-0001"),
-        ("CommAI Standard", "issued", f"EXA-{year}-0002"),
+        ("Jibsy Standard", "issued", f"EXA-{year}-0002"),
     ]
     svc = {s["service"]: (s["revenue"], s["cost"], s["margin"]) for s in demo["services"]}
     assert svc == {
@@ -486,12 +486,12 @@ def test_connect_only_commai_only_and_all_at_once(client, admin_headers):
         (d["customer"], d["plan"]): (d["total"], d["example"], [x["kind"] for x in d["lines"]]) for d in out["drafts"]
     }
     assert got == {
-        ("Chat Only Ltd", "CommAI Standard"): ("49.00", True, ["plan"]),
+        ("Chat Only Ltd", "Jibsy Standard"): ("49.00", True, ["plan"]),
         ("Connect Only Ltd", "Connect Standard"): ("150.00", True, ["site"]),
     }
     assert out["skipped"] == []  # a customer without a plan is not billed at all
 
-    # The CommAI-only organisation's running charges have no Connect block, and vice versa.
+    # The Jibsy-only organisation's running charges have no Connect block, and vice versa.
     ch = client.get(f"/api/v1/billing/charges?customer_id={chat_only}&period={period}", headers=admin_headers).json()
     assert [b["product"] for b in ch["plans"]] == ["commai"] and ch["example"] is True
     ch = client.get(f"/api/v1/billing/charges?customer_id={neither}&period={period}", headers=admin_headers).json()

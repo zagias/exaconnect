@@ -40,7 +40,7 @@ WRITE_KINDS = ("create", "update", "cancel", "refund", "delete")
 CAUSES = {
     "expired_signin": {
         "label": "Sign-in expired",
-        "explain": "The sign-in to {app} has expired or was revoked, so CommAI can't reach it.",
+        "explain": "The sign-in to {app} has expired or was revoked, so Jibsy can't reach it.",
         "steps": [("sign_in", "Sign in to {app} again"), ("recheck", "Check the connection again")],
     },
     "permission": {
@@ -71,7 +71,7 @@ CAUSES = {
     },
 }
 
-# CommAI fields that can be mapped, per object (the inputs connectors receive).
+# Jibsy fields that can be mapped, per object (the inputs connectors receive).
 SOURCE_FIELDS = {
     "contact": ["name", "email", "phone", "company", "notes"],
     "ticket": ["subject", "description", "priority"],
@@ -80,7 +80,7 @@ SOURCE_FIELDS = {
     # The organisation a contact belongs to: a company in HubSpot, an account in Salesforce or Zoho.
     "company": ["company_name", "domain", "company_phone", "industry", "city", "country"],
 }
-# Which provider object each CommAI object maps to, when the names differ.
+# Which provider object each Jibsy object maps to, when the names differ.
 OBJECT_ALIASES = {
     "order": ("deal", "order"),
     "appointment": ("appointment", "event"),
@@ -350,7 +350,7 @@ def check_settings(app: str, settings: dict) -> None:
 
 
 def set_allowed(conn: psycopg.Connection, customer_id: Any, app: str, names: list[str], actor: str) -> dict:
-    """Step 3: which actions CommAI may run. Read is listed apart from writes."""
+    """Step 3: which actions Jibsy may run. Read is listed apart from writes."""
     c = _connector(app)
     row = _row(conn, customer_id, app, lock=True)
     if row is None:
@@ -434,7 +434,7 @@ def _model_mapping(settings: Any, c: connectors.Connector, objects: dict, open_i
     }
     got = llm.complete_json(
         settings,
-        "You map CommAI fields to fields of a business app. Answer JSON only: "
+        "You map Jibsy fields to fields of a business app. Answer JSON only: "
         '{"<source>": {"target": "<one of the targets or empty>", "confidence": "high|low"}}. '
         "Never invent a target that is not listed. Leave target empty when unsure.",
         f"App: {c.label}\n" + json.dumps(ask),
@@ -819,7 +819,7 @@ def repair(conn: psycopg.Connection, customer_id: Any, app: str, step: str, acto
         return {"step": step, "ok": True, "detail": f"{n} failed action(s) queued again with their original keys."}
     if step in ("sign_in", "edit_mapping", "remove_action", "review"):
         where = {
-            "sign_in": "Sign in again from the Integrations screen. CommAI never asks for passwords or keys in chat.",
+            "sign_in": "Sign in again from the Integrations screen. Jibsy never asks for passwords or keys in chat.",
             "edit_mapping": "Open the field mapping for this integration and fix the field it names.",
             "remove_action": "Switch off the action that needs the missing permission under Allowed actions.",
             "review": "Open the failed actions listed as evidence.",

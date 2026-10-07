@@ -1,10 +1,10 @@
 """Messaging providers for WhatsApp and SMS (ADR 0018).
 
-CommAI reaches WhatsApp through the official WhatsApp Business Platform via an
+Jibsy reaches WhatsApp through the official WhatsApp Business Platform via an
 approved provider, and SMS through the same provider. Each provider adapter
 does five things behind one interface: send text, send a template, verify an
 inbound webhook's signature, parse inbound messages, and map delivery and
-read receipts to CommAI's statuses.
+read receipts to Jibsy's statuses.
 
 - `simulated` works end to end with no account. It is the default, and every
   screen that uses it says "Simulated".

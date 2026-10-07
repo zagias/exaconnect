@@ -272,6 +272,8 @@ export interface User {
   memberships?: Membership[];
   /** The plans the current organisation holds; null: not limited by plan. */
   products?: Product[] | null;
+  /** The apps this person may open there (ADR 0040); null: not limited. */
+  apps?: Product[] | null;
 }
 
 export type OrgRole = "owner" | "admin" | "member" | "viewer";
@@ -295,13 +297,32 @@ export interface OrgMember {
   disabled: boolean;
   primary_org: boolean;
   you: boolean;
+  /** The apps on the plan this person may open (ADR 0040). */
+  apps: Product[];
 }
 
 export interface OrgMembers {
   organisation: { id: string; name: string };
   your_role: OrgRole | null;
   can_manage: boolean;
+  /** The apps on the organisation's plan. */
+  products: Product[];
   members: OrgMember[];
+}
+
+/** An app on, asked for, or off the organisation's plan (ADR 0040). */
+export interface OrgApp {
+  id: Product;
+  name: string;
+  status: "active" | "requested" | "off";
+  requested_by?: string;
+  requested_at?: string;
+}
+
+export interface OrgApps {
+  customer_id: string;
+  apps: OrgApp[];
+  can_manage: boolean;
 }
 
 export interface OrgInvite {
@@ -1210,9 +1231,9 @@ export const createApiKey = (body: { name: string; days?: number; scopes?: strin
 export const revokeApiKey = (id: number) => api<void>(`${apiKeysPath}/${id}`, { method: "DELETE" });
 
 // ---- Billing (ADR 0022) ----
-// Connect and CommAI are separate plans. Money arrives as strings (Postgres numeric), never floats.
+// Connect and Jibsy are separate plans. Money arrives as strings (Postgres numeric), never floats.
 
-export const PRODUCT_NAMES: Record<Product, string> = { connect: "Connect", commai: "CommAI" };
+export const PRODUCT_NAMES: Record<Product, string> = { connect: "Connect", commai: "Jibsy" };
 
 export interface CreditTier {
   below_pct: number;

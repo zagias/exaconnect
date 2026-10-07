@@ -65,7 +65,7 @@ class Salesforce(KitConnector):
         Setting("login_host", "Login host", r"(login|test)\.salesforce\.com|[a-z0-9-]+\.my\.salesforce\.com"),
     )
     needs_from_exacarib = "A Salesforce connected app (OAuth web server flow, scopes api and refresh_token)."
-    webhooks = "Salesforce changes reach CommAI through Flow or Apex callouts to a generic inbound webhook."
+    webhooks = "Salesforce changes reach Jibsy through Flow or Apex callouts to a generic inbound webhook."
     docs_url = "https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/"
     actions = {
         "find_contact": ActionSpec(
@@ -249,7 +249,7 @@ class Salesforce(KitConnector):
             fields = self._fields(connection, name, inputs)
             if obj == "Lead":
                 fields.setdefault("Company", inputs.get("company") or "Not given")
-                fields.setdefault("LeadSource", "CommAI")
+                fields.setdefault("LeadSource", "Jibsy")
             if self.dry(connection):
                 return {"dry_run": True, "would_send": {obj: fields}}
             hit = self._by_email(conn, connection, obj, inputs["email"])

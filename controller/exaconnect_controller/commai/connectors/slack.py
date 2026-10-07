@@ -15,7 +15,7 @@ groups:history (to check a message was not already posted), the redirect URI
   numbers are always masked in free text.
 - Buttons: a press is checked with Slack's request signing (v0, HMAC-SHA256
   of "v0:{timestamp}:{body}", five-minute window), the Slack workspace must be
-  the business's own, and the Slack user must be linked to a CommAI person
+  the business's own, and the Slack user must be linked to a Jibsy person
   with a reply seat. Approval then goes through the action service, so every
   rule (a second person approves, never the AI) still holds.
 - Idempotency: Slack has no idempotency key, so each message carries
@@ -284,7 +284,7 @@ class Slack(MoreConnector):
                 raise ConnectorError(str(e), "input") from None
             head = "A conversation needs a person" + (" (urgent)" if brief["priority"] == "urgent" else "") + "."
             lines = [mask(x) for x in brief["lines"]]
-            text = "\n".join([head, *lines, f"Open it in CommAI: {brief['link']}"])
+            text = "\n".join([head, *lines, f"Open it in Jibsy: {brief['link']}"])
             blocks = [
                 {"type": "section", "text": {"type": "mrkdwn", "text": "\n".join([f"*{head}*", *lines])}},
                 {
@@ -292,7 +292,7 @@ class Slack(MoreConnector):
                     "elements": [
                         {
                             "type": "button",
-                            "text": {"type": "plain_text", "text": "Open in CommAI"},
+                            "text": {"type": "plain_text", "text": "Open in Jibsy"},
                             "url": brief["link"],
                             "action_id": "commai_open",
                         }
@@ -333,7 +333,7 @@ class Slack(MoreConnector):
                             "type": "button",
                             "action_id": "commai_open",
                             "url": brief["link"],
-                            "text": {"type": "plain_text", "text": "Open in CommAI"},
+                            "text": {"type": "plain_text", "text": "Open in Jibsy"},
                         },
                     ],
                 },

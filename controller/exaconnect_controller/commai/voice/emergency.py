@@ -91,7 +91,7 @@ def rules(country: str, island: str = "") -> dict:
 
 def notice_text(rule: dict) -> str:
     nums = " or ".join(rule["numbers"])
-    parts = [f"Emergency calls to {nums} work from your ExaCarib Connect phone."]
+    parts = [f"Emergency calls to {nums} work from your Jibsy phone."]
     if rule["location_delivery"]:
         parts.append(rule["extra"] or "Your registered address is sent with the call.")
         parts.append("Keep your address up to date: tell your administrator when you move.")

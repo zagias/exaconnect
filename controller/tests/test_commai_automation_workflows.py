@@ -1,5 +1,5 @@
 # ruff: noqa: F811  (pytest fixtures imported from test_commai_automation_helpers)
-"""CommAI workflows (ADR 0020): plain English to a draft, versions, publish
+"""Jibsy workflows (ADR 0020): plain English to a draft, versions, publish
 with explicit permission, trigger dispatch from the event log, collect /
 action / assign / remind steps, approvals, pause, test mode with no external
 effects, idempotent runs and starter packs."""

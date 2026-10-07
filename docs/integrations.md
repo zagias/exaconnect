@@ -18,7 +18,7 @@ stored encrypted with `EXA_SECRETS_KEY`; they never go in `.env`.
 
 | Setting | Purpose | Status |
 | --- | --- | --- |
-| `EXA_SECRETS_KEY` | Encrypts integration secrets (shared with CommAI). Required before any secret can be saved. | Set in production |
+| `EXA_SECRETS_KEY` | Encrypts integration secrets (shared with Jibsy). Required before any secret can be saved. | Set in production |
 | `EXA_INTEGRATIONS_LIVE` | `1` lets integrations with credentials send for real. | Off |
 | `EXA_PUBLIC_URL` | Links back to the portal in alerts. | Set in production |
 | `EXA_IANA_PEN` | ExaCarib's IANA private enterprise number for syslog, SNMP and IPFIX. 32473 (documentation) until set. | Dudley: apply at iana.org/assignments/enterprise-numbers (free) |

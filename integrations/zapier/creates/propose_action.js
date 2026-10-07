@@ -1,5 +1,5 @@
 // Proposes a connector action. Sensitive ones (refunds, payment links,
-// messages to many people) wait for a person to approve them in CommAI.
+// messages to many people) wait for a person to approve them in Jibsy.
 const { api } = require('../lib');
 
 module.exports = {
@@ -7,7 +7,7 @@ module.exports = {
   noun: 'Action',
   display: {
     label: 'Propose Action',
-    description: 'Asks CommAI to run an action in a connected app, with approval where the business requires it.',
+    description: 'Asks Jibsy to run an action in a connected app, with approval where the business requires it.',
   },
   operation: {
     inputFields: [

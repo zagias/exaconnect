@@ -10,7 +10,7 @@
   approves); an event already cancelled counts as done.
 - Webhooks: ``invitee.created`` and ``invitee.canceled`` arrive signed with
   ``Calendly-Webhook-Signature: t=<unix>,v1=<hex HMAC-SHA256 of "<t>.<body>">``
-  using the signing key CommAI gave when subscribing; older than three
+  using the signing key Jibsy gave when subscribing; older than three
   minutes is refused.
 
 Sign-in is OAuth 2.0; the token answer names the user (``owner``) and
@@ -41,7 +41,7 @@ class Calendly(KitConnector):
     label = "Calendly"
     category = "calendar"
     description = "Send a customer a one-time Calendly booking link, see their scheduled events and cancel one."
-    needs_from_exacarib = "A Calendly developer app (OAuth) and a webhook signing key per business (made by CommAI)."
+    needs_from_exacarib = "A Calendly developer app (OAuth) and a webhook signing key per business (made by Jibsy)."
     webhooks = "Calendly webhooks (invitee created and cancelled), checked by Calendly-Webhook-Signature."
     docs_url = "https://developer.calendly.com/api-docs"
     actions = {
@@ -157,7 +157,7 @@ class Calendly(KitConnector):
                 connection,
                 "POST",
                 f"/scheduled_events/{eid}/cancellation",
-                json_body={"reason": inputs.get("reason") or "Cancelled through ExaCarib CommAI."},
+                json_body={"reason": inputs.get("reason") or "Cancelled through Jibsy by ExaCarib."},
                 allow=(403,),
             )
             if r.status == 403 and "already" not in json.dumps(r.body).lower():

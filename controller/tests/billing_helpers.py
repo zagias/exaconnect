@@ -42,7 +42,7 @@ def add_user(conn, email, role, customer_id=None, carrier_id=None):
 
 
 def plan_id(conn, product: str, name: str | None = None) -> str:
-    name = name or ("Connect Standard" if product == "connect" else "CommAI Standard")
+    name = name or ("Connect Standard" if product == "connect" else "Jibsy Standard")
     return str(conn.execute("SELECT id FROM plans WHERE product = %s AND name = %s", (product, name)).fetchone()["id"])
 
 
@@ -151,7 +151,7 @@ def build_connect_month(cid, start: dt.datetime) -> None:
 
 
 def build_commai_month(cid, start: dt.datetime) -> None:
-    """CommAI usage and voice charges for the billed month (see test_billing.py)."""
+    """Jibsy usage and voice charges for the billed month (see test_billing.py)."""
     from exaconnect_controller.commai.voice import billing as voice_billing
 
     with db.tx() as conn:

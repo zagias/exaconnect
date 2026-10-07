@@ -11,8 +11,8 @@ connection leaves the simulated stand-in.
   idempotency key, searched for before creating.
 - Pages: the ``Link: <...>; rel="next"`` header. Rate limits: 429 with
   Retry-After.
-- Status back: Freshdesk automation webhooks are not signed, so CommAI gives
-  the business a secret to send in an ``X-CommAI-Token`` header (compared in
+- Status back: Freshdesk automation webhooks are not signed, so Jibsy gives
+  the business a secret to send in an ``X-Jibsy-Token`` header (compared in
   constant time) along with a per-business address.
 """
 
@@ -56,7 +56,7 @@ class FreshdeskSim(kit.Simulator):
 
     @kit.Simulator.route("GET", r"/api/v2/agents/me$")
     def me(self, conn, c, req, m):
-        return 200, {"id": 1, "contact": {"name": "CommAI"}}
+        return 200, {"id": 1, "contact": {"name": "Jibsy"}}
 
     @kit.Simulator.route("POST", r"/api/v2/tickets$")
     def create(self, conn, c, req, m):
@@ -133,7 +133,7 @@ class Freshdesk(Helpdesk):
     simulator = FreshdeskSim()
     health_path = "/api/v2/agents/me"
     needs_from_exacarib = "Nothing to register: each business pastes an agent's Freshdesk API key."
-    webhooks = "A Freshdesk automation rule calls CommAI with a secret header when a ticket's status changes."
+    webhooks = "A Freshdesk automation rule calls Jibsy with a secret header when a ticket's status changes."
     docs_url = "https://developers.freshdesk.com/api/"
     mapping_targets = {"ticket": ["subject", "description", "email", "name", "priority", "tags"]}
 
@@ -229,7 +229,7 @@ class Freshdesk(Helpdesk):
             "manual": True,
             "address": hook_url(hook),
             "method": "POST",
-            "headers": {"X-CommAI-Token": hook["secret"]},
+            "headers": {"X-Jibsy-Token": hook["secret"]},
             "body": json.dumps(
                 {"ticket_id": "{{ticket.id}}", "status": "{{ticket.status}}", "id": "{{ticket.id}}-{{ticket.status}}"}
             ),
@@ -237,7 +237,7 @@ class Freshdesk(Helpdesk):
         }
 
     def verify_webhook(self, conn, connection, hook, headers, body, query) -> bool:
-        return kit.same(kit.header(headers, "X-CommAI-Token"), hook.get("secret", ""))
+        return kit.same(kit.header(headers, "X-Jibsy-Token"), hook.get("secret", ""))
 
     def webhook_events(self, body: bytes, headers: dict) -> list[dict]:
         try:

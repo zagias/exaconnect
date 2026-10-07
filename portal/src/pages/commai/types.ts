@@ -1,4 +1,4 @@
-/** Shapes returned by the CommAI inbox API (controller/exaconnect_controller/commai/api/inbox.py). */
+/** Shapes returned by the Jibsy inbox API (controller/exaconnect_controller/commai/api/inbox.py). */
 
 export interface Conversation {
   id: string;

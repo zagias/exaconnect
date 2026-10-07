@@ -285,7 +285,7 @@ def test_carddav_create_update_etag_delete_and_sync(client, real_env, fake, monk
     assert run["status"] == "succeeded", run["error"]
     assert fake.last("PUT", r"\.vcf$")["headers"]["If-Match"].startswith('"')
 
-    # Sync into CommAI contacts, then only what changed.
+    # Sync into Jibsy contacts, then only what changed.
     first = execute_direct(b["id"], "carddav", "sync_contacts", {}, "s-1")
     assert first["created"] == 1 and first["sync_token_saved"]
     with db.tx() as conn:
@@ -297,7 +297,7 @@ def test_carddav_create_update_etag_delete_and_sync(client, real_env, fake, monk
     run = propose_and_run(b["id"], "carddav", "delete_contact", {"contact_id": cid}, "d-1", approve_as="user:approver")
     assert run["status"] == "succeeded" and run["sensitive"]
     third = execute_direct(b["id"], "carddav", "sync_contacts", {}, "s-3")
-    assert third["removed_upstream"] == 1  # never deleted from CommAI by a sync
+    assert third["removed_upstream"] == 1  # never deleted from Jibsy by a sync
 
 
 def test_dav_tenant_isolation(client):

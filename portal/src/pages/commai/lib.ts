@@ -1,6 +1,6 @@
 import { useCustomer } from "../../customer";
 
-/** The base path of the CommAI API for the business being viewed. */
+/** The base path of the Jibsy API for the business being viewed. */
 export function useCommaiBase(): string | null {
   const { current } = useCustomer();
   return current ? `/commai/customers/${current.id}` : null;

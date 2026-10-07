@@ -1,4 +1,4 @@
-# CommAI phase 3 channels, countries and SMS carriers: operator note
+# Jibsy phase 3 channels, countries and SMS carriers: operator note
 
 Decision record: `docs/adr/0029-commai-channels-global.md`.
 
@@ -9,7 +9,7 @@ Decision record: `docs/adr/0029-commai-channels-global.md`.
 - `.../channels/countries.py`: the country matrix and the SMS rules the gateway enforces.
 - `.../channels/sms_routing.py`: SMS carriers, route table, failover; replaces the SMS channel.
 - `.../commai/api/channels_global.py`: the API. `.../commai/sql/60_channels_global.sql`: the tables.
-- Portal: CommAI → Channels (Messenger, Instagram, Telegram tabs; Cloud API and Click to WhatsApp on the WhatsApp tab) and CommAI → Countries.
+- Portal: Jibsy → Channels (Messenger, Instagram, Telegram tabs; Cloud API and Click to WhatsApp on the WhatsApp tab) and Jibsy → Countries.
 
 ## Switching things on
 

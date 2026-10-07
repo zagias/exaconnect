@@ -2,7 +2,7 @@
 OneDrive/SharePoint.
 
 A business picks folders (``folders`` setting); a sync lists them (and
-their sub-folders, three levels down), reads the text of each file CommAI
+their sub-folders, three levels down), reads the text of each file Jibsy
 can read, and turns it into a knowledge source **that a person approves**
 before the AI uses it (``knowledge.add_source(approved=False)``). A changed
 file is updated and needs approving again; a file that left the folders, or
@@ -95,7 +95,7 @@ class KnowledgeFiles(MoreConnector):
                     continue
                 why = self.rule(connection, i)
                 if not why and not i.get("kind"):
-                    why = "CommAI reads documents, text, Markdown and CSV files only."
+                    why = "Jibsy reads documents, text, Markdown and CSV files only."
                 if not why and int(i.get("size") or 0) > MAX_BYTES:
                     why = "The file is larger than 2 MB."
                 out.append({**i, "allowed": not why, "reason": why})

@@ -1,6 +1,6 @@
 """Module entitlements (ADR 0039).
 
-CommAI is sold as four modules: messaging, voice, AI agents and automation.
+Jibsy is sold as four modules: messaging, voice, AI agents and automation.
 The shared inbox, contacts, notes, the developer platform, the platform
 assistant, support cases, reports and the bill belong to every business.
 

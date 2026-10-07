@@ -551,7 +551,7 @@ def build_export(conn: psycopg.Connection, customer_id: Any, include_notes: bool
         z.writestr("users.json", _json(people))
         z.writestr(
             "README.txt",
-            "ExaCarib Connect business export. One JSON file per table, rows for your organisation only.\n"
+            "ExaCarib business export. One JSON file per table, rows for your organisation only.\n"
             "Secrets (keys, webhook secrets, password hashes) are never included."
             + ("" if include_notes else "\nPrivate notes were left out of this export.")
             + "\n",

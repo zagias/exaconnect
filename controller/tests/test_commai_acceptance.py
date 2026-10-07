@@ -1,4 +1,4 @@
-"""The ten CommAI acceptance tests of the scope document ("ExaCarib CommAI
+"""The ten Jibsy acceptance tests of the scope document ("Jibsy by ExaCarib
 architecture and scope", Acceptance tests), end to end.
 
 Each test drives the product through its public surfaces: the website widget

@@ -426,7 +426,7 @@ def hand_over(
     tried and why. The customer gets a holding reply, never silence."""
     conv = get(conn, customer_id, conversation_id, lock=True)
     if holding_reply:
-        _insert_out(conn, conv, holding_reply, "system", "CommAI")
+        _insert_out(conn, conv, holding_reply, "system", "Jibsy")
     conn.execute(
         "INSERT INTO handovers (customer_id, conversation_id, reason, packet) VALUES (%s, %s, %s, %s)",
         (customer_id, conv["id"], reason, Jsonb(packet)),

@@ -12,8 +12,8 @@ must be switched on before a connection leaves the simulated stand-in.
 - Pages: ``sysparm_offset`` and the ``Link: <...>;rel="next"`` header. Rate
   limits: 429 with Retry-After.
 - Status back: a business rule on incident sends an outbound REST message
-  to CommAI, signed with ``X-CommAI-Signature`` = base64 HMAC-SHA256 of the
-  body under a secret CommAI gives the business.
+  to Jibsy, signed with ``X-Jibsy-Signature`` = base64 HMAC-SHA256 of the
+  body under a secret Jibsy gives the business.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ from .more_common import app_hook, hook_url
 
 STATE_IN = {"1": "new", "2": "open", "3": "on_hold", "6": "solved", "7": "closed", "8": "closed"}
 STATE_OUT = {"new": "1", "open": "2", "pending": "3", "on_hold": "3", "solved": "6", "closed": "7"}
-# CommAI priority -> (urgency, impact); ServiceNow derives priority from both.
+# Jibsy priority -> (urgency, impact); ServiceNow derives priority from both.
 URGENCY = {"urgent": ("1", "1"), "high": ("1", "2"), "normal": ("2", "2"), "low": ("3", "3")}
 PRIORITY_IN = {"1": "urgent", "2": "high", "3": "normal", "4": "low", "5": "low"}
 FIELDS = "sys_id,number,short_description,state,priority,sys_updated_on,correlation_id"
@@ -41,7 +41,7 @@ BUSINESS_RULE = """(function executeRule(current, previous) {
   var mac = new GlideCertificateEncryption().generateMac(gs.base64Encode('SECRET'), 'HmacSHA256', body);
   var r = new sn_ws.RESTMessageV2();
   r.setEndpoint('ADDRESS'); r.setHttpMethod('post');
-  r.setRequestHeader('Content-Type', 'application/json'); r.setRequestHeader('X-CommAI-Signature', mac);
+  r.setRequestHeader('Content-Type', 'application/json'); r.setRequestHeader('X-Jibsy-Signature', mac);
   r.setRequestBody(body); r.executeAsync();
 })(current, previous);"""
 
@@ -135,7 +135,7 @@ class ServiceNow(Helpdesk):
     simulator = ServiceNowSim()
     health_path = "/api/now/table/incident?sysparm_limit=1&sysparm_fields=sys_id"
     needs_from_exacarib = "Nothing to register: each business creates a REST API key for an integration user."
-    webhooks = "A business rule sends signed incident changes to CommAI (script given in CommAI)."
+    webhooks = "A business rule sends signed incident changes to Jibsy (script given in Jibsy)."
     docs_url = "https://developer.servicenow.com/dev.do#!/reference/api/latest/rest/c_TableAPI"
     mapping_targets = {
         "ticket": ["short_description", "description", "urgency", "impact", "caller_id", "assignment_group", "category"]
@@ -209,12 +209,12 @@ class ServiceNow(Helpdesk):
         who = f"{inputs.get('name', '')} <{inputs['email']}>".strip()
         return {
             "short_description": inputs["subject"][:160],
-            "description": f"{inputs['description']}\n\nRequester: {who}\nRaised through ExaCarib CommAI.",
+            "description": f"{inputs['description']}\n\nRequester: {who}\nRaised through Jibsy by ExaCarib.",
             "contact_type": "chat",
             "urgency": urgency,
             "impact": impact,
             "correlation_id": ref,
-            "correlation_display": "ExaCarib CommAI",
+            "correlation_display": "Jibsy by ExaCarib",
         }
 
     def _create(self, conn, connection, inputs, ref, key):
@@ -242,7 +242,7 @@ class ServiceNow(Helpdesk):
         if status:
             body["state"] = STATE_OUT[status]
             if status in ("solved", "closed"):
-                body.update(close_code="Solved (Permanently)", close_notes="Resolved through ExaCarib CommAI.")
+                body.update(close_code="Solved (Permanently)", close_notes="Resolved through Jibsy by ExaCarib.")
         if priority:
             body["urgency"], body["impact"] = URGENCY[priority]
         r = self.call(conn, connection, "PATCH", f"/api/now/table/incident/{sid}", json_body=body)
@@ -275,7 +275,7 @@ class ServiceNow(Helpdesk):
         }
 
     def verify_webhook(self, conn, connection, hook, headers, body, query) -> bool:
-        return kit.same(kit.header(headers, "X-CommAI-Signature"), kit.hmac_b64(hook.get("secret", ""), body))
+        return kit.same(kit.header(headers, "X-Jibsy-Signature"), kit.hmac_b64(hook.get("secret", ""), body))
 
     def webhook_events(self, body: bytes, headers: dict) -> list[dict]:
         try:

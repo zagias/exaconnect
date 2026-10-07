@@ -1,4 +1,4 @@
-# CommAI voice: operator note
+# Jibsy voice: operator note
 
 Stage 5 (numbers by country, porting, emergency addresses per island, carriers,
 fraud protection, Kamailio and LiveKit) is in `voice-global.md` and ADR 0033.

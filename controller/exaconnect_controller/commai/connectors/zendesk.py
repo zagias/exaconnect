@@ -71,7 +71,7 @@ class ZendeskSim(kit.Simulator):
 
     @kit.Simulator.route("GET", r"/api/v2/users/me\.json$")
     def me(self, conn, c, req, m):
-        return 200, {"user": {"id": 1, "name": "CommAI", "role": "admin"}}
+        return 200, {"user": {"id": 1, "name": "Jibsy", "role": "admin"}}
 
     @kit.Simulator.route("POST", r"/api/v2/tickets\.json$")
     def create(self, conn, c, req, m):
@@ -164,7 +164,7 @@ class Zendesk(Helpdesk):
         "EXA_ZENDESK_CLIENT_ID and EXA_ZENDESK_CLIENT_SECRET, redirect URI "
         "{EXA_PUBLIC_URL}/api/v1/commai/oauth/zendesk/callback."
     )
-    webhooks = "A Zendesk webhook for ticket status changes, signed with HMAC-SHA256 (set up from CommAI)."
+    webhooks = "A Zendesk webhook for ticket status changes, signed with HMAC-SHA256 (set up from Jibsy)."
     docs_url = "https://developer.zendesk.com/api-reference/"
     mapping_targets = {"ticket": ["subject", "comment.body", "priority", "requester.name", "requester.email", "tags"]}
 
@@ -262,7 +262,7 @@ class Zendesk(Helpdesk):
             "/api/v2/webhooks",
             json_body={
                 "webhook": {
-                    "name": "ExaCarib CommAI: ticket status",
+                    "name": "Jibsy by ExaCarib: ticket status",
                     "endpoint": hook_url(hook),
                     "http_method": "POST",
                     "request_format": "json",

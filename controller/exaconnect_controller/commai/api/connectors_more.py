@@ -3,9 +3,9 @@ connectors (ADR 0035). Setting up an app (connect, sign in, credentials,
 actions, mapping, test, approve, health) uses the integrations API (ADR 0020,
 ADR 0034); these are the extras:
 
-- set up the app's change notifications (webhooks) from CommAI;
+- set up the app's change notifications (webhooks) from Jibsy;
 - tickets linked to a conversation;
-- link a Slack or Teams user to a CommAI person (approvals from team chat);
+- link a Slack or Teams user to a Jibsy person (approvals from team chat);
 - a one-time code that links a Teams channel to the business;
 - knowledge sync from Google Drive and OneDrive/SharePoint: run now, and see
   each file's state;
@@ -73,7 +73,7 @@ def _connection(conn, customer_id: str, app: str) -> dict:
 
 @router.post("/connectors/{app}/webhooks")
 def register_webhooks(customer_id: str, app: str, user: UserDep) -> dict:
-    """Set up the app's change notifications to CommAI. Where the app can't be
+    """Set up the app's change notifications to Jibsy. Where the app can't be
     set up from here, the answer says what to paste into it (shown once)."""
     access.check(user, customer_id, "commai:admin")
     c = _connector(app)
@@ -137,7 +137,7 @@ class IdentityIn(BaseModel):
 
 @router.get("/connectors/{app}/identities")
 def list_identities(customer_id: str, app: str, user: UserDep) -> list[dict]:
-    """Slack or Teams users linked to CommAI people (who may press Approve there)."""
+    """Slack or Teams users linked to Jibsy people (who may press Approve there)."""
     access.check(user, customer_id, "commai:read")
     if app not in CHAT_APPS:
         raise HTTPException(404, "Only Slack and Teams link people.")
@@ -213,7 +213,7 @@ def _slack_reply(text: str, replace: bool) -> JSONResponse:
 async def slack_interactions(request: Request) -> JSONResponse:
     """Approve and Reject buttons pressed in Slack. Checked with Slack request
     signing; the workspace must be the business's; the Slack user must be
-    linked to a CommAI person; then the action service decides."""
+    linked to a Jibsy person; then the action service decides."""
     from ..connectors import slack
 
     raw = await request.body()
@@ -251,7 +251,7 @@ async def slack_interactions(request: Request) -> JSONResponse:
             return _slack_reply("This Slack workspace is not connected to that business.", False)
         approver = more_common.person_for(conn, customer_id, "slack", slack_user)
         if approver is None:
-            return _slack_reply("Your Slack user is not linked to a CommAI person who may approve.", False)
+            return _slack_reply("Your Slack user is not linked to a Jibsy person who may approve.", False)
         try:
             with conn.transaction():
                 run = more_common.decide(conn, customer_id, run_id, decision, approver)
@@ -259,7 +259,7 @@ async def slack_interactions(request: Request) -> JSONResponse:
             return _slack_reply(f"Not done: {e}", False)
         audit.record(conn, approver, f"commai.action.{decision}", run_id, customer_id, {"via": "slack"})
     word = "Approved" if run["status"] == "approved" else "Rejected"
-    return _slack_reply(f"{word} by <@{slack_user}> in CommAI.", True)
+    return _slack_reply(f"{word} by <@{slack_user}> in Jibsy.", True)
 
 
 # ---- Microsoft Teams bot -----------------------------------------------------------------
@@ -267,7 +267,7 @@ async def slack_interactions(request: Request) -> JSONResponse:
 
 @router.post("/connectors/teams/link-code", status_code=201)
 def teams_link_code(customer_id: str, user: UserDep) -> dict:
-    """A one-time code (30 minutes) to send the CommAI bot in a Teams channel:
+    """A one-time code (30 minutes) to send the Jibsy bot in a Teams channel:
     "link <code>". Shown once."""
     access.check(user, customer_id, "commai:admin")
     from ..connectors import teams
@@ -318,7 +318,7 @@ async def teams_messages(request: Request) -> JSONResponse:
             cid = owners[0]
             code = more_common.state_get(conn, cid, "teams", "link_code")
             if code.get("expires", 0) < time.time():
-                return JSONResponse({"type": "message", "text": "That code has expired. Make a new one in CommAI."})
+                return JSONResponse({"type": "message", "text": "That code has expired. Make a new one in Jibsy."})
             more_common.state_put(conn, cid, "teams", "link_code", {})
             more_common.state_put(
                 conn,
@@ -328,8 +328,8 @@ async def teams_messages(request: Request) -> JSONResponse:
                 {"id": tenant, "service_url": service_url, "conversation_id": str(conv.get("id", ""))},
             )
             audit.record(conn, f"teams:{sender}", "commai.connector.teams_linked", "teams", cid)
-            connectors.get("teams").bot_reply(conn, cid, "This channel is now linked to CommAI.")
-            return JSONResponse({"type": "message", "text": "This channel is now linked to CommAI."})
+            connectors.get("teams").bot_reply(conn, cid, "This channel is now linked to Jibsy.")
+            return JSONResponse({"type": "message", "text": "This channel is now linked to Jibsy."})
         if value.get("commai") not in ("approve", "reject"):
             return JSONResponse({})
         try:
@@ -341,7 +341,7 @@ async def teams_messages(request: Request) -> JSONResponse:
             return JSONResponse({"type": "message", "text": "This Teams organisation is not linked to that business."})
         approver = more_common.person_for(conn, customer_id, "teams", sender)
         if approver is None:
-            return JSONResponse({"type": "message", "text": "Your Teams user is not linked to a CommAI person."})
+            return JSONResponse({"type": "message", "text": "Your Teams user is not linked to a Jibsy person."})
         try:
             with conn.transaction():
                 run = more_common.decide(conn, customer_id, run_id, value["commai"], approver)
@@ -349,6 +349,6 @@ async def teams_messages(request: Request) -> JSONResponse:
             return JSONResponse({"type": "message", "text": f"Not done: {e}"})
         audit.record(conn, approver, f"commai.action.{value['commai']}", run_id, customer_id, {"via": "teams"})
         word = "Approved" if run["status"] == "approved" else "Rejected"
-        connectors.get("teams").bot_reply(conn, customer_id, f"{word} in CommAI by {approver[5:]}.")
+        connectors.get("teams").bot_reply(conn, customer_id, f"{word} in Jibsy by {approver[5:]}.")
     # Bot Framework does not show a reply in the HTTP answer; bot_reply posts it.
-    return JSONResponse({"type": "message", "text": f"{word} in CommAI."})
+    return JSONResponse({"type": "message", "text": f"{word} in Jibsy."})

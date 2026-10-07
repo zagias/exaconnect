@@ -147,7 +147,7 @@ function List() {
   return (
     <>
       <PageHead title="Workflows">
-        Describe what should happen in plain English. CommAI turns it into steps you can edit, test and switch on.
+        Describe what should happen in plain English. Jibsy turns it into steps you can edit, test and switch on.
       </PageHead>
       <Card title="Describe a workflow">
         <label className="sr-only" htmlFor="wf-text">
@@ -171,7 +171,7 @@ function List() {
         {draft && (
           <div style={{ marginTop: 16 }}>
             <p className="small muted">
-              {draft.source === "model" ? "Drafted by the AI." : "Drafted by CommAI's rules."} Nothing runs until you publish it.
+              {draft.source === "model" ? "Drafted by the AI." : "Drafted by Jibsy's rules."} Nothing runs until you publish it.
             </p>
             <ul className="auto-preview">
               {draft.preview.map((l) => (

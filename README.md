@@ -1,7 +1,8 @@
 # ExaConnect
 
 The code behind ExaCarib Connect, ExaCarib's connectivity platform, and
-CommAI, its customer communications app ([docs/commai](docs/commai/README.md)).
+Jibsy by ExaCarib, its customer conversations app ([docs/commai](docs/commai/README.md);
+the code and API still call it `commai`).
 Connect is a Go edge agent (WireGuard + FRR), a FastAPI
 controller, AI SLA routing, customer traffic rules with priority queues and
 application detection, virtual circuits to clouds and between sites
@@ -11,7 +12,7 @@ an encryption report, a partner directory with plain-English ordering, API
 keys with a Python SDK and a Terraform provider, per-site Storm Mode, carrier
 metering and settlement, AI insights (hurricane and disaster watch, bill
 forecast, carrier anomalies, "Ask your network") and an ExaCarib-branded
-portal for customers, carriers and admins. Organisations hold Connect, CommAI
+portal for customers, carriers and admins. Organisations hold Connect, Jibsy
 or both as separate plans, with shared people, sign-in and billing.
 The build brief is [CLAUDE.md](CLAUDE.md); progress per milestone is in
 [docs/progress.md](docs/progress.md).
@@ -110,8 +111,10 @@ People belong to one or more organisations as owner, admin, member or viewer
 (read only); they are invited from Account, People and switch organisation
 from the header (ADR 0023). Sign-in supports passwords with reset links,
 two-step codes, passkeys, Google and Microsoft, and company single sign-on
-with SCIM. Connect and CommAI are separate plans: an organisation sees an app
-only while it holds that plan. Billing works out monthly charges per plan,
+with SCIM. Connect and Jibsy are separate plans: an organisation sees an app
+only while it holds that plan, and owners and admins choose which apps each
+person may open. Both apps share one portal with an app switcher (ADR 0040).
+Billing works out monthly charges per plan,
 draft and issued invoices, SLA credits and partner margin (ADR 0022); online
 payment and accounting exports stay off or simulated until ExaCarib adds those
 accounts. API keys can be limited, for example to read-only Connect access.
@@ -137,5 +140,5 @@ network" (DeepInfra by default, model `deepseek-ai/DeepSeek-V4-Flash`), and
 `EXA_NHC_URL` points the hurricane watch elsewhere or, set empty, turns it off;
 `EXA_USGS_URL`, `EXA_GDACS_URL` and `EXA_TSUNAMI_URLS` do the same for the
 disaster watch (ADR 0008). `EXA_SMTP_HOST` and its login turn on outgoing
-email (password resets, CommAI email); without it, nothing is sent. Payment
+email (password resets, Jibsy email); without it, nothing is sent. Payment
 and accounting settings are listed, off, in `.env.example`.

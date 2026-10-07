@@ -187,7 +187,7 @@ def check(conn: psycopg.Connection, conv: dict, target: str, stage: str) -> str 
             conn,
             conv["customer_id"],
             conv["id"],
-            author="CommAI service targets",
+            author="Jibsy service targets",
             body=(f"@{owner_email} " if owner_email else "")
             + f"Reminder: the {what} target is due at {conv[due_col]:%H:%M} UTC.",
             mentions=[owner_email] if owner_email else [],
@@ -216,7 +216,7 @@ def escalate(conn: psycopg.Connection, conv: dict, reason: str, team_id: Any = N
         conn,
         conv["customer_id"],
         conv["id"],
-        author="CommAI service targets",
+        author="Jibsy service targets",
         body=f"Escalated: {reason} Priority is now {new_priority}.",
     )
     events.emit(

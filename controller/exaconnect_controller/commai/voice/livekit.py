@@ -93,7 +93,7 @@ def business_for(conn: psycopg.Connection, dialled: str) -> dict:
         (d,),
     ).fetchone()
     if row is None:
-        raise VoiceError("That number is not live on ExaCarib Connect.", 404)
+        raise VoiceError("That number is not live on Jibsy.", 404)
     return row
 
 

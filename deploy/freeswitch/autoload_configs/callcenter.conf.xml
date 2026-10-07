@@ -1,4 +1,4 @@
-<!-- CommAI voice (ADR 0021): call queues (mod_callcenter), rendered per business. -->
+<!-- Jibsy voice (ADR 0021): call queues (mod_callcenter), rendered per business. -->
 <configuration name="callcenter.conf" description="CallCenter">
   <settings>
   </settings>

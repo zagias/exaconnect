@@ -1,4 +1,4 @@
-"""CommAI's published OpenAPI and AsyncAPI documents (ADR 0034): served without
+"""Jibsy's published OpenAPI and AsyncAPI documents (ADR 0034): served without
 sign-in, structurally valid, complete, and consistent with what is sent."""
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ def test_openapi_document_is_valid_and_covers_commai(client):
     assert r.status_code == 200, r.text
     doc = r.json()
     assert api_docs.check_openapi(doc) == []
-    assert doc["info"]["title"] == "ExaCarib Connect: CommAI API"
+    assert doc["info"]["title"] == "ExaCarib Connect: Jibsy API"
     paths = doc["paths"]
     assert paths and all(p.startswith("/api/v1/commai") for p in paths)
     for p in (
@@ -22,7 +22,7 @@ def test_openapi_document_is_valid_and_covers_commai(client):
         "/api/v1/commai/openapi.json",
     ):
         assert p in paths, p
-    # Everything CommAI serves is described: compare with the app's own routes.
+    # Everything Jibsy serves is described: compare with the app's own routes.
     full = client.get("/api/v1/openapi.json").json()
     assert {p for p in full["paths"] if p.startswith("/api/v1/commai")} == set(paths)
     # Our own importer reads it: the document is usable by others' tools too.

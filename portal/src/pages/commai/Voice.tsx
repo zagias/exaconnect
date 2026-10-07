@@ -24,7 +24,7 @@ const OTHER_TABS = [
   "/commai/voice/phone",
 ];
 
-/** CommAI voice (ADR 0021): phone system, orders, billing and each person's own settings. */
+/** Jibsy voice (ADR 0021): phone system, orders, billing and each person's own settings. */
 export default function Voice() {
   const base = useCommaiBase();
   const ov = useApi<VoiceOverview>(base ? `${base}/voice` : null, 30_000);

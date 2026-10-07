@@ -40,7 +40,7 @@ CARRIER_CRITERIA = {
     "agreement": "Commercial agreement and rates agreed with the carrier (not needed for a simulator).",
     "idempotency": "The carrier's handling of a repeated request with the same reference is confirmed, so a "
     "retry after a timeout cannot send twice.",
-    "receipts": "Delivery receipts mapped to CommAI statuses and tested.",
+    "receipts": "Delivery receipts mapped to Jibsy statuses and tested.",
 }
 
 

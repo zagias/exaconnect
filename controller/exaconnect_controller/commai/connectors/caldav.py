@@ -144,7 +144,7 @@ class CalDAV(DavConnector):
                 start=start,
                 end=finish,
                 summary=f"{inputs.get('reason') or 'Appointment'}: {inputs['name']}",
-                description=f"Contact: {inputs['contact']}\nBooked through ExaCarib CommAI.",
+                description=f"Contact: {inputs['contact']}\nBooked through Jibsy by ExaCarib.",
             )
             body = ical.calendar([event])
             if self.dry(connection):

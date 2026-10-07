@@ -371,3 +371,11 @@ adapters for AWS Direct Connect, Azure ExpressRoute, Google Partner Interconnect
 and Megaport. Carriers post faults and maintenance on their own links, and a
 maintenance window moves traffic before it starts. Everything is simulated until
 live sending is on and credentials exist; see docs/integrations.md.
+
+**One portal, two apps** (ADR 0040, 2026-10-07). Connect and Jibsy by ExaCarib
+(formerly CommAI; code names stay `commai`) share one portal with an app
+switcher; the sidebar shows one app's menu at a time and Account is shared.
+Owners and admins choose which apps each person may open on People and can ask
+ExaCarib to add an app on Apps and plans. Checked in a browser as an ExaCarib
+admin, an owner with both apps, a Connect-only person, a Jibsy-only person, and
+the owner and a member of a Connect-only organisation: 184 checks pass.

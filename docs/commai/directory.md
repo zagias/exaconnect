@@ -1,9 +1,9 @@
 # Directory templates and connectors (operator note)
 
 Design: [ADR 0036](../adr/0036-directory-templates-and-connectors.md). Builds on
-[identity](identity.md) (ADR 0017). Covers sign-in for Connect and CommAI.
+[identity](identity.md) (ADR 0017). Covers sign-in for Connect and Jibsy.
 
-Portal: CommAI Settings, "Sign-in" tab, card "Connect your directory"
+Portal: Jibsy Settings, "Sign-in" tab, card "Connect your directory"
 (`portal/src/pages/commai/settings/Directory.tsx`). Pick a provider; the guided
 set-up shows (1) your details, (2) the values to paste, with copy buttons,
 (3) the steps, (4) the connection test, (5) group mappings and the preview,

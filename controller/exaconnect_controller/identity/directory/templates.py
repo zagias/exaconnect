@@ -109,7 +109,7 @@ class Template:
 
 
 _PRESETS = (
-    Preset("agents", "ExaCarib Agents", "agent", note="Reply to customers in CommAI."),
+    Preset("agents", "ExaCarib Agents", "agent", note="Reply to customers in Jibsy."),
     Preset("internal", "ExaCarib Internal", "internal", note="Read conversations and write private notes."),
     Preset(
         "admins",

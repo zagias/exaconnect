@@ -1,7 +1,7 @@
 {
   "name": "exacarib-connect-commai-zapier",
   "version": "1.0.0",
-  "description": "ExaCarib Connect CommAI app for the Zapier Platform.",
+  "description": "Jibsy by ExaCarib app for the Zapier Platform.",
   "main": "index.js",
   "private": true,
   "scripts": { "test": "zapier test" },

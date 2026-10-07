@@ -947,7 +947,7 @@ def _finish(conn, run: dict, status: str, error: str = "") -> None:
                 conn,
                 run["customer_id"],
                 run["conversation_id"],
-                author="CommAI workflows",
+                author="Jibsy workflows",
                 body="".join(f"@{w} " for w in notify) + f'Workflow "{name["name"] if name else ""}" stopped: {error}',
                 mentions=notify,
             )
@@ -1107,7 +1107,7 @@ def _resume(conn, run: dict, wf: dict, step: dict, i: int, ctx: dict, resume: di
                 conn,
                 run["customer_id"],
                 conv_id,
-                author="CommAI workflows",
+                author="Jibsy workflows",
                 body=(f"@{owner} " if owner else "") + body,
                 mentions=[owner] if owner else [],
             )
@@ -1140,7 +1140,7 @@ def _resume(conn, run: dict, wf: dict, step: dict, i: int, ctx: dict, resume: di
                 conn,
                 run["customer_id"],
                 conv_id,
-                author="CommAI workflows",
+                author="Jibsy workflows",
                 body=render(step.get("body") or "", ctx)
                 or f'Escalated by "{name}": nobody replied for {_fmt_s(step["after_s"])}.',
             )
@@ -1321,7 +1321,7 @@ def _execute(conn, run: dict, wf: dict, step: dict, i: int, ctx: dict) -> str:
         )
         return "next"
     if t == "add_note":
-        inbox.add_note(conn, run["customer_id"], conv_id, author="CommAI workflows", body=render(step["body"], ctx))
+        inbox.add_note(conn, run["customer_id"], conv_id, author="Jibsy workflows", body=render(step["body"], ctx))
         _log_step(conn, run, i, step, "done", "Note added")
         return "next"
     if t == "wait":

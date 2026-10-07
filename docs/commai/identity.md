@@ -11,7 +11,7 @@ Design: [ADR 0017](../adr/0017-identity-and-backups.md). Provider templates and 
   Your account page, "Two-step sign-in".
 - Google and Microsoft sign-in through Keycloak (existing accounts only).
 - Enterprise SSO (SAML 2.0, OpenID Connect) per business, with email-domain
-  routing and "require SSO". CommAI Settings, "Sign-in" tab
+  routing and "require SSO". Jibsy Settings, "Sign-in" tab
   (`portal/src/pages/commai/settings/SignIn.tsx`).
 - SCIM 2.0 provisioning with directory groups mapped to teams, seats and
   (after a second approval) business-admin rights.

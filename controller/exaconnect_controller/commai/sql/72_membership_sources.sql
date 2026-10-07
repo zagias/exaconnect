@@ -1,4 +1,4 @@
--- Who manages a membership (ADR 0023), widened for CommAI's own account kinds:
+-- Who manages a membership (ADR 0023), widened for Jibsy's own account kinds:
 -- 'directory' (directory connectors, ADR 0036), 'sandbox' (sandbox users,
 -- ADR 0031) and 'partner' (a partner's staff in a linked business, ADR 0031).
 -- Like 'scim' and 'sso', the portal does not change or remove these.

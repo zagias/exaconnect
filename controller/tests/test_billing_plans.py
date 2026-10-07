@@ -51,9 +51,9 @@ def test_plans_and_subscription_lifecycle(client, admin_headers):
     )
     assert r.status_code == 201, r.text
     listed = {p["name"]: p for p in client.get("/api/v1/billing/plans", headers=admin_headers).json()}
-    assert set(listed) == {"Connect Standard", "Connect Plus", "CommAI Standard"}
+    assert set(listed) == {"Connect Standard", "Connect Plus", "Jibsy Standard"}
     assert listed["Connect Plus"]["price_list"]["site_monthly"] == "300.0000"
-    assert listed["CommAI Standard"]["price_list"]["monthly_fee"] == "49.0000"
+    assert listed["Jibsy Standard"]["price_list"]["monthly_fee"] == "49.0000"
 
     # Subscribe: one subscription per product at a time.
     base = f"/api/v1/customers/{cid}/plans"
@@ -197,7 +197,7 @@ def test_lab_seed_holds_both_plans(client, admin_headers):
     cid = lab(client, connect_only=False)["customer_id"]
     r = client.get(f"/api/v1/customers/{cid}/plans", headers=admin_headers).json()
     assert r["products"] == ["connect", "commai"]
-    assert sorted(s["plan"] for s in r["subscriptions"]) == ["CommAI Standard", "Connect Standard"]
+    assert sorted(s["plan"] for s in r["subscriptions"]) == ["Jibsy Standard", "Connect Standard"]
 
 
 def test_payables_and_margin(client, admin_headers):
@@ -304,7 +304,7 @@ def test_every_endpoint_by_role(client, admin_headers):
 
     admin_only = [
         ("GET", "/api/v1/billing/plans", None),
-        ("POST", "/api/v1/billing/plans", {"product": "commai", "name": "CommAI Lite"}),
+        ("POST", "/api/v1/billing/plans", {"product": "commai", "name": "Jibsy Lite"}),
         ("PATCH", f"/api/v1/billing/plans/{connect}", {"description": "x"}),
         ("POST", f"/api/v1/customers/{cid}/plans", {"plan_id": connect}),
         ("POST", f"/api/v1/customers/{cid}/plans/{sid}/change", {"plan_id": connect}),

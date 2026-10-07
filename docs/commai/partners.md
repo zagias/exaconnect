@@ -3,7 +3,7 @@
 Decision record: ADR 0031. Code: `commai/partners.py`, `branding.py`,
 `regions.py`, `oauth.py`, `sandbox.py`, `apipolicy.py`, routers in
 `commai/api/partners.py`, `regions.py`, `developer.py`, SQL in
-`commai/sql/62_partners.sql`. Portal: CommAI > Partners (or Partners and apps),
+`commai/sql/62_partners.sql`. Portal: Jibsy > Partners (or Partners and apps),
 Manage > Go-live, and the consent page `/commai/oauth/authorize`.
 
 ## Partners
@@ -14,7 +14,7 @@ Manage > Go-live, and the consent page `/commai/oauth/authorize`.
    ordinary customer accounts first (normally of the partner's own business).
 2. A partner admin asks to manage a business with its id and the permissions
    wanted (`POST /commai/partners/{id}/links`).
-3. Someone at the business accepts in CommAI > Partners and apps, choosing which
+3. Someone at the business accepts in Jibsy > Partners and apps, choosing which
    permissions to grant; they can narrow or revoke later. Only the business's
    own people can do this, never the partner.
 4. Partner people press "Switch to" (`POST /commai/partners/switch`) and work in
@@ -78,7 +78,7 @@ Optional `.env` facts for the report: `EXA_REGION_LOCATION`,
 
 ## Sandboxes
 
-CommAI > Partners and apps > Sandbox makes a copy of the business. Sandbox keys
+Jibsy > Partners and apps > Sandbox makes a copy of the business. Sandbox keys
 (`exa_sbx_...`) act only on the sandbox id. Every channel there is simulated
 (enforced in the database), and numbers and porting can't be ordered.
 

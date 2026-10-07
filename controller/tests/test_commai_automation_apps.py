@@ -1,6 +1,6 @@
-"""Zapier, Make and n8n app definitions (ADR 0035): every CommAI endpoint they
+"""Zapier, Make and n8n app definitions (ADR 0035): every Jibsy endpoint they
 call exists in the published OpenAPI schema, and the Zapier signature check
-agrees with how CommAI signs webhook deliveries."""
+agrees with how Jibsy signs webhook deliveries."""
 
 import functools
 import json
@@ -98,7 +98,7 @@ def test_declared_endpoints_exist_in_openapi(name, calls):
     found = calls()
     assert CORE <= found, f"{name} is missing {CORE - found}"
     missing = found - _schema()
-    assert not missing, f"{name} calls endpoints CommAI does not publish: {sorted(missing)}"
+    assert not missing, f"{name} calls endpoints Jibsy does not publish: {sorted(missing)}"
     assert (ROOT / name / "README.md").is_file()
 
 

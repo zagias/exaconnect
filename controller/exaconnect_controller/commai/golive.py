@@ -1,6 +1,6 @@
 """Go-live registry (ADR 0028).
 
-CommAI switches on a country, channel, language, carrier or region only after
+Jibsy switches on a country, channel, language, carrier or region only after
 it has been tested there. Each capability has written criteria; an ExaCarib
 admin records each one as met (with evidence) and only then may set the
 capability to ``pilot`` (named customers) or ``on`` (everyone).

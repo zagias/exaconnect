@@ -114,7 +114,7 @@ def seed_lab(conn, sat_type: str = "leo") -> dict:
             )
         tokens[name], _ = inventory.issue_token(conn, sid, ACTOR, ttl_hours=2)
     desired.refresh(conn, cid)
-    # The lab organisation holds both plans (ADR 0022), so the CommAI screens work
+    # The lab organisation holds both plans (ADR 0022), so the Jibsy screens work
     # in the demo too: the standard plans from the day it was added.
     plans.ensure_connect(conn, cid, ACTOR)
     plans.ensure_plan(conn, cid, "commai", ACTOR)

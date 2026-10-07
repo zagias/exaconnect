@@ -1,4 +1,4 @@
-"""Tenant isolation sweep over every CommAI route (acceptance test 7, and the
+"""Tenant isolation sweep over every Jibsy route (acceptance test 7, and the
 "every record carries customer_id" rule of ADR 0016).
 
 The routes come from the FastAPI app's own route table, so a route added later
@@ -60,7 +60,7 @@ SIGNED_IN_OK = (
         ("GET", f"{COMMAI}/regions"),  # hosting regions a business can choose
     }
 )
-# Carrier accounts never reach CommAI (access.py): only the published
+# Carrier accounts never reach Jibsy (access.py): only the published
 # documents and the caller's own (empty) partner and brand view answer them.
 CARRIER_OK = _DOCS | _OWN_VIEW
 # Public endpoints: no sign-in at all, guarded by a token, key, signature or
@@ -95,7 +95,7 @@ PUBLIC_PREFIXES = (
 
 
 def commai_routes(app) -> list[tuple[str, str]]:
-    """(method, path) for every CommAI route in the app's route table."""
+    """(method, path) for every Jibsy route in the app's route table."""
     try:  # FastAPI 0.13x+: included routers are resolved lazily
         from fastapi.routing import iter_route_contexts
 

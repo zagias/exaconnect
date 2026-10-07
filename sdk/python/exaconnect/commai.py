@@ -1,4 +1,4 @@
-"""CommAI: the shared inbox, private notes, webhooks, events and actions
+"""Jibsy: the shared inbox, private notes, webhooks, events and actions
 (ADR 0016 in the ExaConnect repository).
 
     from exaconnect import ExaConnect
@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 
 
 def verify_webhook(secret: str, timestamp: str, body: bytes, signature: str, tolerance_s: int = 300) -> bool:
-    """True if a CommAI webhook is genuine and recent. De-duplicate on the
+    """True if a Jibsy webhook is genuine and recent. De-duplicate on the
     X-ExaCarib-Event-Id header: a retried delivery carries the same id."""
     try:
         ts = int(timestamp)
@@ -92,7 +92,7 @@ class CommAI:
         return self._r("GET", f"{self._base}/teams")
 
     def connectors(self) -> list[dict]:
-        """Every app CommAI connects to, with the exact actions each supports."""
+        """Every app Jibsy connects to, with the exact actions each supports."""
         return self._r("GET", f"{self._base}/connectors")
 
 

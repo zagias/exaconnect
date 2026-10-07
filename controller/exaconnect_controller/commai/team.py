@@ -70,7 +70,7 @@ def mark_read(conn: psycopg.Connection, customer_id: Any, user_id: Any, notifica
 
 
 def people(conn: psycopg.Connection, customer_id: Any) -> list[dict]:
-    """The business's own people: its accounts and its CommAI members."""
+    """The business's own people: its accounts and its Jibsy members."""
     return conn.execute(
         """SELECT DISTINCT u.id, u.email FROM users u
            LEFT JOIN commai_members m ON m.user_id = u.id AND m.customer_id = %s

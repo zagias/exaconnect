@@ -544,7 +544,7 @@ def hook_sample(user: UserDep, event: str = "path.down") -> list[dict]:
 
 ENV_NEEDED = {
     "EXA_INTEGRATIONS_LIVE": "Lets integrations with credentials send for real.",
-    "EXA_SECRETS_KEY": "Encrypts integration secrets (shared with CommAI).",
+    "EXA_SECRETS_KEY": "Encrypts integration secrets (shared with Jibsy).",
     "EXA_PUBLIC_URL": "Links back to the portal in alerts.",
     "EXA_IANA_PEN": "ExaCarib's IANA enterprise number for syslog and SNMP (32473, for documentation, until set).",
 }

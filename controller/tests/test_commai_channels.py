@@ -1,4 +1,4 @@
-"""CommAI channels (ADR 0018): website chat, WhatsApp, SMS and email.
+"""Jibsy channels (ADR 0018): website chat, WhatsApp, SMS and email.
 
 Acceptance tests covered here: 1 (a website or WhatsApp enquiry reaches the
 inbox, is assigned and gets a reply on its original channel), 2 (notes are

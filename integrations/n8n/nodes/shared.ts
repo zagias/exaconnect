@@ -1,4 +1,4 @@
-// Shared helpers. Every CommAI call goes through commAiRequest(), with a path
+// Shared helpers. Every Jibsy call goes through commAiRequest(), with a path
 // relative to /api/v1/commai/customers/{customer_id}. The business is the one
 // the API key belongs to (GET /api/v1/auth/me).
 import { createHmac, timingSafeEqual } from 'crypto';

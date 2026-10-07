@@ -111,7 +111,7 @@ def _event(run: dict, cancelled: set[str], business: str) -> ical.Event | None:
         start=start,
         end=end,
         summary=f"{inp.get('reason') or 'Appointment'}: {name}".strip(": ") if name else "Appointment",
-        description=f"Booked with {business} through ExaCarib Connect." + (f"\nContact: {contact}" if contact else ""),
+        description=f"Booked with {business} through Jibsy by ExaCarib." + (f"\nContact: {contact}" if contact else ""),
         status="CANCELLED" if is_cancelled else "CONFIRMED",
         attendees=[(contact, name)] if "@" in contact else [],
         sequence=1 if is_cancelled else 0,

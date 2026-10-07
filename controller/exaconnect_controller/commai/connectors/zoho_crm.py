@@ -48,7 +48,7 @@ class ZohoCRM(KitConnector):
     description = "Find, create and update contacts, leads and deals in Zoho CRM."
     settings_fields = (Setting("dc", "Zoho data centre", r"com|eu|in|com\.au|jp|ca|sa|com\.cn"),)
     needs_from_exacarib = "A Zoho API console server-based app (one per data centre the businesses use)."
-    webhooks = "Zoho notification channels (watch) send changes; each delivery carries the token CommAI set."
+    webhooks = "Zoho notification channels (watch) send changes; each delivery carries the token Jibsy set."
     docs_url = "https://www.zoho.com/crm/developer/docs/api/v6/"
     actions = {
         "find_contact": ActionSpec(
@@ -196,7 +196,7 @@ class ZohoCRM(KitConnector):
             rec = self._record(connection, obj, inputs)
             if obj == "lead":
                 rec.setdefault("Company", inputs.get("company") or "Not given")
-                rec.setdefault("Lead_Source", "CommAI")
+                rec.setdefault("Lead_Source", "Jibsy")
             body = {"data": [rec], "duplicate_check_fields": ["Email"]}
             if self.dry(connection):
                 return {"dry_run": True, "would_send": {f"{module}/upsert": body}}

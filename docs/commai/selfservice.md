@@ -1,4 +1,4 @@
-# CommAI self-service: operator note
+# Jibsy self-service: operator note
 
 See ADR 0037. Code: `controller/exaconnect_controller/commai/selfservice/`
 (`staff.py`, `helpcentre.py`, `enduser.py`, `branding.py`), API
@@ -8,7 +8,7 @@ and its Settings tab). Tests: `controller/tests/test_commai_selfservice.py`.
 
 ## My settings (staff)
 
-Portal: CommAI → My settings (`/commai/me`). API under
+Portal: Jibsy → My settings (`/commai/me`). API under
 `/api/v1/commai/customers/{id}`:
 
 | Endpoint | What |
@@ -23,7 +23,7 @@ Calls use the existing `/voice/me...` endpoints.
 
 ## Help centre (the business's customers)
 
-Switch on: CommAI → Settings → Help centre. Publish articles there (only
+Switch on: Jibsy → Settings → Help centre. Publish articles there (only
 approved knowledge). Public address: `<portal>/help/<slug>`.
 
 Public API under `/api/v1/commai/help/{slug}` (writes need

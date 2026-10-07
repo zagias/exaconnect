@@ -1,4 +1,4 @@
-// Shared helpers. Every CommAI call goes through api(), with a path relative to
+// Shared helpers. Every Jibsy call goes through api(), with a path relative to
 // /api/v1/commai/customers/{customer_id}. The business is the one the API key
 // belongs to (GET /api/v1/auth/me), so a person never types an id.
 const crypto = require('crypto');
@@ -21,11 +21,11 @@ const api = async (z, bundle, method, path, body, params) => {
     params,
     skipThrowForStatus: true,
   });
-  if (r.status === 429) throw new z.errors.ThrottledError('CommAI asked us to slow down.', 30);
+  if (r.status === 429) throw new z.errors.ThrottledError('Jibsy asked us to slow down.', 30);
   if (r.status >= 400) {
     const detail = (r.data && r.data.detail) || r.content;
     const text = typeof detail === 'string' ? detail : JSON.stringify(detail);
-    throw new z.errors.Error(`CommAI said: ${text}`, 'ApiError', r.status);
+    throw new z.errors.Error(`Jibsy said: ${text}`, 'ApiError', r.status);
   }
   return r.status === 204 ? {} : r.data;
 };

@@ -1,19 +1,18 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { useApi } from "./api";
+import { api, useApi } from "./api";
 import { useAuth } from "./auth";
-import type { User } from "./api";
+import type { OrgApps, User } from "./api";
+import { APP_INFO, APP_ORDER, AppMark, areaFor, myApps, type AppId, type Area } from "./apps";
 import { CustomerPicker, OrganisationSwitcher, StormBanner, StormSwitch } from "./customer";
 import { JumpTo } from "./jump";
-import { icons, matches, navGroups, type Group } from "./nav";
+import { accountGroups, icons, matches, navGroups, type Group } from "./nav";
 import { useBrand } from "./pages/commai/partner/brand";
 import { useCommaiBase } from "./pages/commai/lib";
 import "./shell.css";
 
 /** The current screen's group and name, for the context line in the top bar. */
 function pageContext(groups: Group[], path: string): { group: string | null; label: string } | null {
-  if (path === "/account") return { group: null, label: "Account" };
-  if (path === "/account/people") return { group: "Account", label: "People" };
   if (path.startsWith("/commai/me")) return { group: "Your account", label: "My settings" };
   for (const g of groups) for (const i of g.items) if (matches(i, path)) return { group: g.label, label: i.label };
   return null;
@@ -46,13 +45,26 @@ const MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator
 export function Shell({ children }: { children: ReactNode }) {
   const { user, signOut } = useAuth();
   const carrier = user?.role === "carrier";
-  const connect = !user?.products || user.products.includes("connect");
-  const commai = !user?.products || user.products.includes("commai");
-  const groups = navGroups(user?.role, useModules(!carrier && commai), user?.products ?? null);
+  // The apps this person may open (ADR 0040); the sidebar shows one at a time.
+  const mine = myApps(user);
+  const connect = mine.includes("connect");
+  const jibsy = mine.includes("commai");
+  const all = navGroups(user?.role, useModules(!carrier && jibsy), carrier ? null : mine);
+  const account = accountGroups({ carrier, jibsy });
   // A partner's white-label brand (ADR 0031); null keeps ExaCarib's own look.
   const brand = useBrand();
   const location = useLocation();
-  const ctx = pageContext(groups, location.pathname);
+  const asked = areaFor(location.pathname);
+  // On a screen of an app the person can't open, the menu stays on one they can.
+  const area: Area = carrier ? "connect" : asked === "account" || mine.includes(asked) ? asked : (mine[0] ?? "account");
+  const groups = area === "account" ? account : all.filter((g) => !g.app || g.app === area);
+  const ctx = pageContext([...all, ...account], location.pathname);
+
+  // The tab says which app you are in.
+  useEffect(() => {
+    if (brand) return;
+    document.title = area === "account" ? "Account · ExaCarib" : `${APP_INFO[area].name} · ExaCarib`;
+  }, [area, brand]);
   const [drawer, setDrawer] = useState(false);
   const [jump, setJump] = useState(false);
   const menuButton = useRef<HTMLButtonElement>(null);
@@ -102,7 +114,7 @@ export function Shell({ children }: { children: ReactNode }) {
 
   return (
     <div className="shell">
-      <aside id="shell-nav" className="shell-side" data-open={drawer || undefined} aria-label="Portal">
+      <aside id="shell-nav" className="shell-side" data-open={drawer || undefined} data-app={area} aria-label="Portal">
         <div className="shell-brand">
           <NavLink to="/" className="shell-brand-link" aria-label={`${brand ? brand.product_name : "ExaCarib"}, home`}>
             {brand?.logo_url ? (
@@ -114,15 +126,19 @@ export function Shell({ children }: { children: ReactNode }) {
               <img src="/brand/exacarib-wordmark-reversed.png" alt="" width={141} height={25} />
             </span>
           </NavLink>
-          <span className="shell-product">{brand ? brand.product_name : "Connect"}</span>
+          {brand && <span className="shell-product">{brand.product_name}</span>}
           <button ref={closeButton} className="shell-iconbtn shell-close" aria-label="Close menu" onClick={closeDrawer}>
             {icons.close}
           </button>
         </div>
 
-        <nav aria-label="Main" className="shell-nav">
+        <div className="shell-apps">
+          <AppSwitcher area={area} mine={mine} />
+        </div>
+
+        <nav aria-label={area === "account" ? "Account" : APP_INFO[area].name} className="shell-nav">
           {groups.map((g, gi) => (
-            <NavGroup key={`${g.section ?? ""}${g.label ?? gi}`} g={g} gi={gi} path={location.pathname} />
+            <NavGroup key={`${area}${g.label ?? gi}`} g={g} gi={gi} path={location.pathname} />
           ))}
         </nav>
 
@@ -162,7 +178,7 @@ export function Shell({ children }: { children: ReactNode }) {
                 </NavLink>
               </li>
             )}
-            {!carrier && commai && (
+            {!carrier && jibsy && (
               <li>
                 <NavLink to="/commai/me" className="shell-link">
                   {icons.admin}
@@ -230,8 +246,8 @@ export function Shell({ children }: { children: ReactNode }) {
                 <CustomerPicker />
               </div>
             )}
-            {/* Storm Mode switch: on every screen, never for carriers. */}
-            {!carrier && connect && <StormSwitch />}
+            {/* Storm Mode switch: on every Connect screen, never for carriers. */}
+            {!carrier && connect && area === "connect" && <StormSwitch />}
             <UserMenu />
           </div>
         </header>
@@ -240,7 +256,7 @@ export function Shell({ children }: { children: ReactNode }) {
           {children}
         </main>
       </div>
-      <JumpTo groups={groups} open={jump} setOpen={setJump} />
+      <JumpTo groups={[...all, ...account]} open={jump} setOpen={setJump} />
     </div>
   );
 }
@@ -310,7 +326,7 @@ function UserMenu() {
                 </NavLink>
               </li>
             )}
-            {user?.role !== "carrier" && (!user?.products || user.products.includes("commai")) && (
+            {user?.role !== "carrier" && myApps(user).includes("commai") && (
               <li>
                 <NavLink to="/commai/me" className="shell-menu-item">
                   {icons.admin}
@@ -331,7 +347,148 @@ function UserMenu() {
   );
 }
 
-/** The CommAI modules of the business in view (null until known, or when the plan can't be read). */
+/** The app switcher at the top of the sidebar: the apps this person may open,
+ * apps the organisation could add (owners and admins only), and the shared
+ * account pages. With one app and nothing to offer it is a plain label. */
+function AppSwitcher({ area, mine }: { area: Area; mine: AppId[] }) {
+  const { user } = useAuth();
+  const manager = user?.role === "customer" && (user.org_role === "owner" || user.org_role === "admin");
+  const plan = useApi<OrgApps>(manager && user?.customer_id ? `/orgs/${user.customer_id}/apps` : null, 300_000);
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pos, setPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+  const box = useRef<HTMLDivElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  const location = useLocation();
+  const offers = (plan.data?.apps ?? []).filter((a) => a.status !== "active");
+  const name = area === "account" ? "Account" : APP_INFO[area].name;
+
+  useEffect(() => setOpen(false), [location.pathname]);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (box.current && !box.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setOpen(false);
+        button.current?.focus();
+      }
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  // One app and nothing to offer: a plain label, or a way home from Account.
+  if (mine.length <= 1 && offers.length === 0) {
+    const only = mine[0];
+    if (area !== "account" || !only)
+      return (
+        <span className="app-switch app-switch-static">
+          <AppMark app={area} />
+          <span className="app-switch-name">{name}</span>
+        </span>
+      );
+    return (
+      <NavLink to={APP_INFO[only].home} className="app-switch app-switch-static" title={`Back to ${APP_INFO[only].name}`}>
+        <AppMark app={only} />
+        <span className="app-switch-name">{APP_INFO[only].name}</span>
+        <span className="app-switch-hint">Back</span>
+      </NavLink>
+    );
+  }
+
+  const ask = async (app: AppId) => {
+    setError(null);
+    try {
+      await api(`/orgs/${user?.customer_id}/apps/${app}/request`, { method: "POST" });
+      plan.reload();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  return (
+    <div className="app-switch-box" ref={box}>
+      <button
+        ref={button}
+        className="app-switch"
+        aria-haspopup="true"
+        aria-expanded={open}
+        aria-controls="app-switch-menu"
+        title="Switch app"
+        onClick={() => {
+          // The sidebar scrolls, so the menu is placed on the page: beside the
+          // button on the tablet rail and under it elsewhere.
+          const r = button.current?.getBoundingClientRect();
+          if (r) setPos(r.width < 80 ? { top: r.top, left: r.right + 8 } : { top: r.bottom + 6, left: r.left });
+          setOpen(!open);
+        }}
+      >
+        <AppMark app={area} />
+        <span className="app-switch-name">{name}</span>
+        {icons.chevron}
+      </button>
+      {open && (
+        <div id="app-switch-menu" className="app-switch-menu card" style={{ top: pos.top, left: pos.left }}>
+          <div className="app-switch-head">Your apps</div>
+          <ul>
+            {APP_ORDER.filter((a) => mine.includes(a)).map((a) => (
+              <li key={a}>
+                <NavLink to={APP_INFO[a].home} end className="app-switch-item" aria-current={area === a ? "true" : undefined}>
+                  <AppMark app={a} size={36} />
+                  <span className="app-switch-text">
+                    <span className="app-switch-title">{APP_INFO[a].full}</span>
+                    <span className="app-switch-blurb">{APP_INFO[a].blurb}</span>
+                  </span>
+                  {area === a && (
+                    <span className="app-switch-current">
+                      {icons.check}
+                      <span className="sr-only">Current app</span>
+                    </span>
+                  )}
+                </NavLink>
+              </li>
+            ))}
+          </ul>
+          {offers.length > 0 && (
+            <>
+              <div className="app-switch-head">Add to your plan</div>
+              <ul>
+                {offers.map((o) => (
+                  <li key={o.id} className="app-switch-offer">
+                    <AppMark app={o.id} size={36} />
+                    <span className="app-switch-text">
+                      <span className="app-switch-title">{APP_INFO[o.id].full}</span>
+                      <span className="app-switch-blurb">{APP_INFO[o.id].blurb}</span>
+                      {o.status === "requested" ? (
+                        <span className="app-switch-note">Requested. ExaCarib will be in touch.</span>
+                      ) : (
+                        <button type="button" className="button small" onClick={() => ask(o.id)}>
+                          Ask to add {APP_INFO[o.id].name}
+                        </button>
+                      )}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {error && <p className="app-switch-note error">{error}</p>}
+            </>
+          )}
+          <NavLink to={manager ? "/account/apps" : "/account"} className="app-switch-foot">
+            {manager ? "Account, people and plans" : "Your account"}
+          </NavLink>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The Jibsy modules of the business in view (null until known, or when the plan can't be read). */
 function useModules(on: boolean): Record<string, boolean> | null {
   const base = useCommaiBase();
   const plan = useApi<{ modules: { module: string; enabled: boolean }[] }>(on && base ? `${base}/entitlements` : null, 120_000);
@@ -350,7 +507,6 @@ function NavGroup({ g, gi, path }: { g: Group; gi: number; path: string }) {
   const id = `nav-g-${gi}`;
   return (
     <>
-      {g.section && <div className="shell-section">{g.section}</div>}
       <div className="shell-group" data-collapsed={(g.collapsible && !open) || undefined}>
         {g.label &&
           (g.collapsible ? (

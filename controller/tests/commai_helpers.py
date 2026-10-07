@@ -1,4 +1,4 @@
-"""Helpers shared by the CommAI tests: a business with people in it."""
+"""Helpers shared by the Jibsy tests: a business with people in it."""
 
 from __future__ import annotations
 

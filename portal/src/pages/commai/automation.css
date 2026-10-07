@@ -1,4 +1,4 @@
-/* CommAI automation screens (ADR 0020): integrations, workflows, reports,
+/* Jibsy automation screens (ADR 0020): integrations, workflows, reports,
    set-up and the platform assistant. Brand tokens come from brand.css. */
 
 .auto-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }

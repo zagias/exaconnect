@@ -26,8 +26,8 @@ import Workflows from "./Workflows";
 import MySettings from "../me/MySettings";
 import "./commai.css";
 
-/** CommAI screens (ADR 0016). Each screen owns its own file. */
-export default function CommAI() {
+/** Jibsy screens (ADR 0016). Each screen owns its own file. */
+export default function Jibsy() {
   return (
     <I18nProvider>
     <Routes>

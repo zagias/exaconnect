@@ -1,4 +1,4 @@
--- CommAI channels (ADR 0018): website chat, WhatsApp, SMS and email.
+-- Jibsy channels (ADR 0018): website chat, WhatsApp, SMS and email.
 -- Applied after 00_core.sql, idempotently, at startup.
 
 -- Website chat: one publishable key per website. The secret signs visitor

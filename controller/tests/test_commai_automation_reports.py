@@ -1,5 +1,5 @@
 # ruff: noqa: F811  (pytest fixtures imported from test_commai_automation_helpers)
-"""CommAI outcome reports and cost controls (acceptance test 10: reports
+"""Jibsy outcome reports and cost controls (acceptance test 10: reports
 match the recorded events exactly) and AI onboarding (ADR 0020)."""
 
 import datetime as dt

@@ -1,4 +1,4 @@
-/* CommAI voice screens (ADR 0021). Colours come from the shared tokens. */
+/* Jibsy voice screens (ADR 0021). Colours come from the shared tokens. */
 .voice-sub { font-size: 15px; margin: 20px 0 8px; }
 .voice-subnav { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; margin: 0 0 20px; }
 .voice-subnav a { color: var(--ink-muted); text-decoration: none; padding: 4px 0; border-bottom: 2px solid transparent; }

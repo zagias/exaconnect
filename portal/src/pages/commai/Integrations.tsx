@@ -128,7 +128,7 @@ function Catalogue() {
   return (
     <>
       <PageHead title="Apps">
-        Connect the systems your team already uses. Each app lists exactly what CommAI may do in it, and nothing runs
+        Connect the systems your team already uses. Each app lists exactly what Jibsy may do in it, and nothing runs
         until you test it and switch it on.
       </PageHead>
       <AppsTabs />
@@ -205,7 +205,7 @@ function Setup() {
       <p className="small">
         <Link to="..">All your apps</Link>
       </p>
-      {signin === "ok" && <div className="auto-banner ok">Signed in to {info.label}. Choose what CommAI may do next.</div>}
+      {signin === "ok" && <div className="auto-banner ok">Signed in to {info.label}. Choose what Jibsy may do next.</div>}
       {signin === "failed" && <div className="auto-banner bad">Sign-in did not finish: {params.get("reason")}</div>}
       <ErrorNote error={act.error} />
 
@@ -220,7 +220,7 @@ function Setup() {
         {c && info.auth !== "none" && (
           <>
             <p className="muted small">
-              {c.signed_in ? `Signed in (${c.auth_method === "token" ? "private-app token" : "OAuth sign-in"}).` : "Not signed in yet."} CommAI never
+              {c.signed_in ? `Signed in (${c.auth_method === "token" ? "private-app token" : "OAuth sign-in"}).` : "Not signed in yet."} Jibsy never
               asks for passwords or keys in chat.
             </p>
             {info.sign_in_ready ? (
@@ -405,7 +405,7 @@ function FieldMapping({ base, app, onDone }: { base: string; app: string; onDone
             <caption className="sr-only">{obj} fields</caption>
             <thead>
               <tr>
-                <th scope="col">CommAI field</th>
+                <th scope="col">Jibsy field</th>
                 <th scope="col">{app} field</th>
                 <th scope="col">Suggestion</th>
               </tr>

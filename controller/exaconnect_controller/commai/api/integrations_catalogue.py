@@ -400,7 +400,7 @@ def import_rest_app(customer_id: str, body: RestAppIn, user: UserDep) -> dict:
     except openapi_import.OpenAPIError as e:
         raise HTTPException(422, str(e)) from None
     if not ops:
-        raise HTTPException(422, "The document has no operations CommAI can call.")
+        raise HTTPException(422, "The document has no operations Jibsy can call.")
     servers = openapi_import.servers(doc)
     base_url = body.base_url or next((s for s in servers if s.startswith("http")), "")
     if not base_url:
@@ -521,7 +521,7 @@ def delete_rest_app(customer_id: str, rest_id: str, user: UserDep) -> None:
 
 @public.get("/openapi.json", tags=["commai: descriptions"])
 def commai_openapi(request: Request) -> dict:
-    """OpenAPI 3.1 description of every CommAI endpoint (from the running code)."""
+    """OpenAPI 3.1 description of every Jibsy endpoint (from the running code)."""
     return api_docs.openapi(request.app.openapi(), _base(request) + "/")
 
 

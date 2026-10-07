@@ -439,7 +439,7 @@ function Details({ g, base, onSaved }: { g: Guide; base: string; onSaved: () => 
             Client secret
             <input type="password" autoComplete="off" value={secret} onChange={(e) => setSecret(e.target.value)} />
           </label>
-          <p className="muted small wide">The secret goes to the sign-in gateway only. ExaCarib Connect does not keep it.</p>
+          <p className="muted small wide">The secret goes to the sign-in gateway only. ExaCarib does not keep it.</p>
         </>
       )}
       {(mode === "pull" || mode === "ldap") && (

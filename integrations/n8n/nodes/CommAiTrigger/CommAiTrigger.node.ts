@@ -10,18 +10,18 @@ import type {
 } from 'n8n-workflow';
 import { commAiRequest, verify } from '../shared';
 
-// Activating a workflow adds a CommAI webhook endpoint for the chosen events
+// Activating a workflow adds a Jibsy webhook endpoint for the chosen events
 // and keeps its signing secret in the node's static data; deactivating deletes
 // it. Each delivery is checked against that secret before the workflow runs.
 export class CommAiTrigger implements INodeType {
   description: INodeTypeDescription = {
-    displayName: 'ExaCarib Connect CommAI Trigger',
+    displayName: 'Jibsy by ExaCarib Trigger',
     name: 'commAiTrigger',
     icon: 'file:commai.svg',
     group: ['trigger'],
     version: 1,
-    description: 'Starts a workflow when something happens in CommAI',
-    defaults: { name: 'CommAI Trigger' },
+    description: 'Starts a workflow when something happens in Jibsy',
+    defaults: { name: 'Jibsy Trigger' },
     inputs: [],
     outputs: ['main'],
     credentials: [{ name: 'commAiApi', required: true }],
@@ -87,7 +87,7 @@ export class CommAiTrigger implements INodeType {
     const secret = String(this.getWorkflowStaticData('node').secret || '');
     const raw = req.rawBody ? req.rawBody.toString('utf8') : JSON.stringify(this.getBodyData());
     if (!verify(secret, this.getHeaderData() as IDataObject, raw)) {
-      this.getResponseObject().status(401).send('Not signed by CommAI');
+      this.getResponseObject().status(401).send('Not signed by Jibsy');
       return { noWebhookResponse: true };
     }
     return { workflowData: [this.helpers.returnJsonArray(this.getBodyData())] };

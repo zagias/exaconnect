@@ -1,4 +1,4 @@
-"""Published descriptions of CommAI (ADR 0034).
+"""Published descriptions of Jibsy (ADR 0034).
 
 - OpenAPI 3.1: every /api/v1/commai endpoint, taken from the running app's
   own schema (so it never drifts from the code), with only the components
@@ -6,7 +6,7 @@
 - AsyncAPI 3.0: the event stream a business receives by webhook, in both
   formats (ExaCarib JSON and CloudEvents 1.0), with the signature headers
   (ExaCarib v1 and Standard Webhooks), and the signed inbound webhooks a
-  business can send to CommAI.
+  business can send to Jibsy.
 
 ``check_openapi`` and ``check_asyncapi`` are structural checks used by the
 tests (the full JSON Schema validators are not dependencies here).
@@ -22,7 +22,7 @@ from .. import events
 from . import webhooks_std
 
 PREFIX = "/api/v1/commai"
-TITLE = "ExaCarib Connect: CommAI API"
+TITLE = "Jibsy by ExaCarib API"
 
 
 def _refs(node: Any, out: set[str]) -> None:
@@ -38,7 +38,7 @@ def _refs(node: Any, out: set[str]) -> None:
 
 
 def openapi(full: dict, server: str = "") -> dict:
-    """The CommAI part of the app's OpenAPI document."""
+    """The Jibsy part of the app's OpenAPI document."""
     paths = {p: copy.deepcopy(v) for p, v in full.get("paths", {}).items() if p.startswith(PREFIX)}
     schemas = full.get("components", {}).get("schemas", {})
     wanted: set[str] = set()
@@ -57,7 +57,7 @@ def openapi(full: dict, server: str = "") -> dict:
             "title": TITLE,
             "version": str(full.get("info", {}).get("version", "1")),
             "description": "Conversations, contacts, channels, AI, automation, integrations and voice for "
-            "businesses on ExaCarib Connect. Sign in with a bearer token (a session or an API key "
+            "businesses on Jibsy by ExaCarib. Sign in with a bearer token (a session or an API key "
             "starting exa_). Writes accept an Idempotency-Key header.",
         },
         "servers": [{"url": server.rstrip("/") or "/"}],
@@ -174,9 +174,9 @@ def asyncapi(server: str = "") -> dict:
     return {
         "asyncapi": "3.0.0",
         "info": {
-            "title": "ExaCarib Connect: CommAI events",
+            "title": "Jibsy by ExaCarib events",
             "version": "1.0.0",
-            "description": "Events CommAI delivers to a business's webhook addresses, and the signed "
+            "description": "Events Jibsy delivers to a business's webhook addresses, and the signed "
             "inbound webhooks it accepts. Each endpoint chooses ExaCarib JSON or CloudEvents 1.0; every "
             "delivery is signed with X-ExaCarib-Signature (v1=HMAC-SHA256 hex over 'timestamp.body') and, "
             "when switched on, the Standard Webhooks headers (webhook-id, webhook-timestamp, "
@@ -210,13 +210,13 @@ def asyncapi(server: str = "") -> dict:
             "deliverEvent": {
                 "action": "send",
                 "channel": {"$ref": "#/channels/events"},
-                "summary": "CommAI POSTs each subscribed event to the endpoint's address.",
+                "summary": "Jibsy POSTs each subscribed event to the endpoint's address.",
                 "messages": [{"$ref": f"#/channels/events/messages/{k}"} for k in messages if k != "inbound"],
             },
             "receiveInbound": {
                 "action": "receive",
                 "channel": {"$ref": "#/channels/inboundHook"},
-                "summary": "CommAI accepts a signed event once (by its id) and starts the business's workflows.",
+                "summary": "Jibsy accepts a signed event once (by its id) and starts the business's workflows.",
                 "messages": [{"$ref": "#/channels/inboundHook/messages/inbound"}],
             },
         },

@@ -2,7 +2,7 @@
 
 Operator note for ADR 0030. Code: `controller/exaconnect_controller/commai/enterprise/`,
 API `commai/api/enterprise.py`, SQL `commai/sql/61_enterprise.sql`, portal
-CommAI > Settings > Organisation, Roles, Security and Data.
+Jibsy > Settings > Organisation, Roles, Security and Data.
 
 ## API (under `/api/v1/commai/customers/{id}`)
 

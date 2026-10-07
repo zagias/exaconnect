@@ -1,4 +1,4 @@
--- CommAI core (ADR 0016). Applied after schema.sql, idempotently, at startup.
+-- Jibsy core (ADR 0016). Applied after schema.sql, idempotently, at startup.
 -- Every record carries customer_id: the business that owns it.
 
 -- API keys may be limited to scopes. NULL keeps the old meaning: the key can do
@@ -79,7 +79,7 @@ CREATE TABLE IF NOT EXISTS webhook_deliveries (
 );
 CREATE INDEX IF NOT EXISTS webhook_deliveries_endpoint ON webhook_deliveries (endpoint_id, id DESC);
 
--- Per-business CommAI settings. `config` holds module settings (hours, widget,
+-- Per-business Jibsy settings. `config` holds module settings (hours, widget,
 -- AI profile...) that each module documents where it reads them.
 CREATE TABLE IF NOT EXISTS commai_settings (
   customer_id            uuid PRIMARY KEY REFERENCES customers(id) ON DELETE CASCADE,

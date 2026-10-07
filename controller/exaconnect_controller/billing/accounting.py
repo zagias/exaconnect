@@ -47,7 +47,7 @@ def _check(inv: dict) -> None:
 def _item(inv: dict) -> str:
     """The QuickBooks item a product's lines post to (one per product)."""
     if inv.get("product") == "commai":
-        return _env("EXA_QBO_ITEM_COMMAI", "CommAI")
+        return _env("EXA_QBO_ITEM_COMMAI", "Jibsy")
     return _env("EXA_QBO_ITEM_CONNECT", "Connect")
 
 

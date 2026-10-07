@@ -258,5 +258,5 @@ def test_ai_supplier_costs_reconciled_with_margin(client, admin_headers, monkeyp
     with db.tx() as conn:
         conn.execute("UPDATE ai_supplier_costs SET quantity = quantity + 50 WHERE model = 'm1'")
     r = client.get(f"{base(a)}/ai-supplier/reconcile", params={"period": PERIOD}, headers=admin_headers).json()
-    assert len(r["issues"]) == 1 and "Supplier counted 4050 tokens, CommAI recorded 4000" in r["issues"][0]["issue"]
+    assert len(r["issues"]) == 1 and "Supplier counted 4050 tokens, Jibsy recorded 4000" in r["issues"][0]["issue"]
     assert client.get(f"{base(a)}/ai-supplier/reconcile", headers=a["agent"]["h"]).status_code == 403

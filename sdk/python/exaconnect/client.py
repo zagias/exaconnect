@@ -85,7 +85,7 @@ class ExaConnect:
         self.onramps = Onramps(self)
 
     def commai(self, customer_id: str | None = None) -> CommAI:
-        """CommAI for one business (yours by default): contacts, conversations,
+        """Jibsy for one business (yours by default): contacts, conversations,
         notes, webhooks, events and actions. See commai.py."""
         from .commai import CommAI
 

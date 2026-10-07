@@ -1,4 +1,4 @@
-"""CommAI AI agents (ADR 0019): the customer AI agent, knowledge with sources,
+"""Jibsy AI agents (ADR 0019): the customer AI agent, knowledge with sources,
 safe actions, handover and failure, memory, languages, the copilot and
 browser calls. Acceptance tests 2 (customer AI), 3, 4 and 8."""
 

@@ -164,7 +164,7 @@ def create(conn: psycopg.Connection, cid: Any, body: dict, actor: str) -> dict:
             ),
         ).fetchone()
     except psycopg.errors.UniqueViolation as e:
-        raise VoiceError(f"{e164} is already on ExaCarib Connect or being ported.", 409) from e
+        raise VoiceError(f"{e164} is already on Jibsy or being ported.", 409) from e
     p = conn.execute(
         """INSERT INTO voice_port_orders (customer_id, number_id, e164, losing_carrier, status, country, account_name,
              account_number, service_address, requested_date, created_by, target_type, target_id, site_id)

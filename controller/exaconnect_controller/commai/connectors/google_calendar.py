@@ -190,7 +190,7 @@ class GoogleCalendar(Connector):
             body = {
                 "id": eid,
                 "summary": f"{inputs.get('reason') or 'Appointment'}: {inputs['name']}",
-                "description": f"Contact: {inputs['contact']}\nBooked through ExaCarib CommAI.",
+                "description": f"Contact: {inputs['contact']}\nBooked through Jibsy by ExaCarib.",
                 "start": {"dateTime": start.isoformat()},
                 "end": {"dateTime": finish.isoformat()},
                 "extendedProperties": {"private": {"commai_key": hashlib.sha256(key.encode()).hexdigest()[:32]}},

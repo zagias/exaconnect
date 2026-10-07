@@ -1,5 +1,5 @@
 # ruff: noqa: F811  (pytest fixtures imported from test_commai_automation_helpers)
-"""CommAI automation (ADR 0020): integration setup, the Google Calendar and
+"""Jibsy automation (ADR 0020): integration setup, the Google Calendar and
 HubSpot connectors against a fake HTTP layer, encrypted tokens, health and
 repair (acceptance test 6), the platform assistant and support cases."""
 

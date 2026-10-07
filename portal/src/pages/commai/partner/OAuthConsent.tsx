@@ -49,7 +49,7 @@ export default function OAuthConsent() {
             </p>
           )}
           <p className="small muted">
-            You can revoke access at any time in CommAI, Partners and apps. After you answer you go to <span className="mono">{new URL(info.data.redirect_uri).host}</span>.
+            You can revoke access at any time in Jibsy, Partners and apps. After you answer you go to <span className="mono">{new URL(info.data.redirect_uri).host}</span>.
           </p>
           <div className="actions">
             <button className="button" disabled={act.busy || info.data.granted.length === 0} onClick={() => answer(true)}>

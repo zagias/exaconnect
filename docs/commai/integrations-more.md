@@ -1,4 +1,4 @@
-# CommAI connectors: helpdesks, team chat, commerce, files and automation platforms
+# Jibsy connectors: helpdesks, team chat, commerce, files and automation platforms
 
 ADR 0035. Built on the connector kit (ADR 0034), the same way as HubSpot and
 Google Calendar. Each connector:
@@ -25,8 +25,8 @@ Google Calendar. Each connector:
 | App | Sign-in | Reads | Writes (approval) | Webhooks checked with |
 | --- | --- | --- | --- | --- |
 | Zendesk | OAuth (per subdomain) | find_ticket, list_tickets | create_ticket, update_ticket, add_comment | `X-Zendesk-Webhook-Signature` (HMAC of timestamp + body, 5 min) |
-| Freshdesk | API key entered by the business | find_ticket, list_tickets | create_ticket, update_ticket, add_comment | `X-CommAI-Token` header the business adds to its automation rule |
-| ServiceNow | API key (`x-sn-apikey`) entered by the business | find_ticket, list_tickets | create_ticket, update_ticket, add_comment | `X-CommAI-Signature` (HMAC of body) from the business rule script |
+| Freshdesk | API key entered by the business | find_ticket, list_tickets | create_ticket, update_ticket, add_comment | `X-Jibsy-Token` header the business adds to its automation rule |
+| ServiceNow | API key (`x-sn-apikey`) entered by the business | find_ticket, list_tickets | create_ticket, update_ticket, add_comment | `X-Jibsy-Signature` (HMAC of body) from the business rule script |
 | Slack | OAuth (bot) | list_channels | notify_staff, handover_alert, request_approval | Slack request signing (`X-Slack-Signature`, v0, 5 min) |
 | Microsoft Teams | Incoming webhook address, or ExaCarib's bot | none | notify_staff, handover_alert, request_approval | Bot Framework JWT (RS256, issuer, audience, service URL) |
 | Shopify | OAuth (per shop), GraphQL Admin API | find_order (order number and email must match) | refund_order (sensitive), cancel_order (sensitive) | `X-Shopify-Hmac-Sha256` with the app secret, plus shop domain |
@@ -37,13 +37,13 @@ Google Calendar. Each connector:
 Notes:
 
 - **Helpdesks** link each ticket to its conversation (`commai_ticket_links`).
-  When the provider says a ticket changed, CommAI adds a note to the
+  When the provider says a ticket changed, Jibsy adds a note to the
   conversation and emits `ticket.updated`.
 - **Slack and Teams** never post message text, email addresses, phone numbers
   or card numbers. A business chooses how much to share (`none`, `names`,
   `summary`). Approve and Reject buttons call the action service only after
   the request is verified, the workspace or tenant is the business's own, and
-  the person pressing is a linked CommAI member (not the one who proposed it).
+  the person pressing is a linked Jibsy member (not the one who proposed it).
   Endpoints: `POST /api/v1/commai/slack/interactions` and
   `POST /api/v1/commai/teams/messages`.
 - **Shopify** shows an order only when the order number and the customer's
@@ -63,8 +63,8 @@ Notes:
 ## Automation platforms
 
 `integrations/zapier/` (Zapier Platform app), `integrations/make/` (Make
-custom app) and `integrations/n8n/` (n8n community node) use the public CommAI
-API with a business's API key. They offer a trigger on CommAI events
+custom app) and `integrations/n8n/` (n8n community node) use the public Jibsy
+API with a business's API key. They offer a trigger on Jibsy events
 (subscribed through `/webhooks`), plus actions: create contact, find contact,
 start conversation, send message, add note and propose action. A test checks
 that every endpoint they call is in the OpenAPI schema. Zapier and n8n check

@@ -1,4 +1,4 @@
-"""CommAI AI agents (ADR 0019): one runtime, three role profiles.
+"""Jibsy AI agents (ADR 0019): one runtime, three role profiles.
 
 - model.py      the model interface: an OpenAI-compatible model (DeepInfra) and
                 a deterministic simulated model used when no key is set

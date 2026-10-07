@@ -1,4 +1,4 @@
-"""My settings: a member of staff's own CommAI settings (ADR 0037).
+"""My settings: a member of staff's own Jibsy settings (ADR 0037).
 
 Everything here acts on one person: the user id comes from the signed-in
 session (or key), never from the request, so nobody can change another

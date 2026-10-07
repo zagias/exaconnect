@@ -295,7 +295,7 @@ class KitConnector(Connector):
     health_path = ""
     golive_criteria: dict[str, str] = {}
     needs_from_exacarib = ""  # what Dudley registers, in words
-    webhooks = ""  # how the app tells CommAI about changes, in words ("" if it can't)
+    webhooks = ""  # how the app tells Jibsy about changes, in words ("" if it can't)
     docs_url = ""
 
     # ---- identity ------------------------------------------------------------------

@@ -11,14 +11,14 @@ const conv = { displayName: 'Conversation ID', name: 'conversationId', type: 'st
 
 export class CommAi implements INodeType {
   description: INodeTypeDescription = {
-    displayName: 'ExaCarib Connect CommAI',
+    displayName: 'Jibsy by ExaCarib',
     name: 'commAi',
     icon: 'file:commai.svg',
     group: ['transform'],
     version: 1,
     subtitle: '={{$parameter["operation"]}}',
-    description: 'Contacts, conversations, notes and approved actions in CommAI',
-    defaults: { name: 'CommAI' },
+    description: 'Contacts, conversations, notes and approved actions in Jibsy',
+    defaults: { name: 'Jibsy' },
     inputs: ['main'],
     outputs: ['main'],
     credentials: [{ name: 'commAiApi', required: true }],
@@ -35,7 +35,7 @@ export class CommAi implements INodeType {
           { name: 'Start Conversation', value: 'startConversation' },
           { name: 'Send Message', value: 'sendMessage' },
           { name: 'Add Internal Note', value: 'addNote' },
-          { name: 'Propose Action', value: 'proposeAction', description: 'Sensitive actions wait for approval in CommAI' },
+          { name: 'Propose Action', value: 'proposeAction', description: 'Sensitive actions wait for approval in Jibsy' },
         ],
       },
       { ...conv, displayOptions: { show: { operation: ['sendMessage', 'addNote'] } } },

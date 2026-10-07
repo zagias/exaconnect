@@ -18,10 +18,12 @@ from ..identity import orgs, sessions, sso
 from ..security import hash_password, token_hash
 from .deps import (
     ORG_ROLES,
+    PRODUCT_NAMES,
     PRODUCTS,
     AdminDep,
     User,
     UserDep,
+    apps_of,
     check_customer,
     current_user,
     products_of,
@@ -47,16 +49,21 @@ def _by_role(user: User) -> str | None:
 def list_members(customer_id: str, user: UserDep) -> dict:
     check_customer(user, customer_id)
     with db.tx() as conn:
-        org = conn.execute("SELECT id, name FROM customers WHERE id = %s", (customer_id,)).fetchone()
+        org = conn.execute("SELECT id, name, products FROM customers WHERE id = %s", (customer_id,)).fetchone()
         if org is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Organisation not found.")
         people = orgs.members(conn, customer_id)
     manage = user.role == "admin" or user.org_role in orgs.MANAGER_ROLES
+    held = products_of(org.pop("products"))
     return {
         "organisation": org,
         "your_role": user.org_role if user.role == "customer" else None,
         "can_manage": manage,
-        "members": [{**p, "you": str(p["user_id"]) == str(user.id)} for p in people],
+        # The apps on the plan, and which of them each person may open (ADR 0040).
+        "products": list(held),
+        "members": [
+            {**p, "apps": list(apps_of(held, p["apps"])), "you": str(p["user_id"]) == str(user.id)} for p in people
+        ],
     }
 
 
@@ -144,6 +151,126 @@ def transfer_ownership(customer_id: str, body: TransferIn, user: UserDep) -> dic
     return {"owner": email}
 
 
+# ---- which apps each person may open (ADR 0040) ---------------------------------------
+
+
+class AppsIn(BaseModel):
+    apps: list[str] = Field(max_length=4)
+
+
+@router.put("/orgs/{customer_id}/members/{user_id}/apps")
+def set_member_apps(customer_id: str, user_id: str, body: AppsIn, user: UserDep) -> dict:
+    """Give a member some or all of the apps on the organisation's plan."""
+    require_org_manager(user, customer_id)
+    if str(user_id) == str(user.id):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "You can't change your own access. Ask another owner or admin."
+        )
+    wanted = sorted(set(body.apps))
+    if any(p not in PRODUCTS for p in wanted):
+        raise HTTPException(422, f"Apps are {', '.join(PRODUCTS)}.")
+    with db.tx() as conn:
+        m = orgs.membership(conn, customer_id, user_id, lock=True) if _uuid_ok(user_id) else None
+        if m is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "That person is not a member of this organisation.")
+        if m["role"] == "owner" and user.role != "admin" and user.org_role != "owner":
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Only an owner can change another owner's access.")
+        org = conn.execute("SELECT products FROM customers WHERE id = %s", (customer_id,)).fetchone()
+        held = products_of(org["products"])
+        missing = [p for p in wanted if p not in held]
+        if missing:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f"{PRODUCT_NAMES[missing[0]]} isn't on your organisation's plan, so it can't be given to anyone yet.",
+            )
+        # Everything on the plan is stored as NULL, so a plan added later reaches them too.
+        stored = None if set(wanted) == set(held) else wanted
+        conn.execute(
+            "UPDATE org_memberships SET apps = %s, updated_at = now() WHERE customer_id = %s AND user_id = %s",
+            (stored, customer_id, user_id),
+        )
+        email = conn.execute("SELECT email FROM users WHERE id = %s", (user_id,)).fetchone()["email"]
+        audit.record(
+            conn,
+            user.actor,
+            "org.member.apps",
+            email,
+            customer_id,
+            {"from": list(apps_of(held, m["apps"])), "to": wanted},
+        )
+    return {"user_id": user_id, "email": email, "apps": wanted}
+
+
+def _app_status(conn, customer_id) -> list[dict]:
+    org = conn.execute("SELECT products FROM customers WHERE id = %s", (customer_id,)).fetchone()
+    if org is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Organisation not found.")
+    held = products_of(org["products"])
+    asked = {
+        r["product"]: r
+        for r in conn.execute(
+            "SELECT product, requested_by, created_at FROM customer_app_requests WHERE customer_id = %s",
+            (customer_id,),
+        ).fetchall()
+    }
+    out = []
+    for p in PRODUCTS:
+        state = "active" if p in held else ("requested" if p in asked else "off")
+        row = {"id": p, "name": PRODUCT_NAMES[p], "status": state}
+        if state == "requested":
+            row["requested_by"] = asked[p]["requested_by"]
+            row["requested_at"] = asked[p]["created_at"]
+        out.append(row)
+    return out
+
+
+@router.get("/orgs/{customer_id}/apps")
+def org_apps(customer_id: str, user: UserDep) -> dict:
+    """The apps on the organisation's plan, and any it has asked ExaCarib to add."""
+    check_customer(user, customer_id)
+    if not _uuid_ok(customer_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Organisation not found.")
+    with db.tx() as conn:
+        apps = _app_status(conn, customer_id)
+    return {
+        "customer_id": customer_id,
+        "apps": apps,
+        "can_manage": user.role == "admin" or user.org_role in orgs.MANAGER_ROLES,
+    }
+
+
+@router.post("/orgs/{customer_id}/apps/{product}/request", status_code=201)
+def request_app(customer_id: str, product: str, user: UserDep) -> dict:
+    """An owner or admin asks ExaCarib to add an app to the plan."""
+    require_org_manager(user, customer_id)
+    if product not in PRODUCTS:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such app.")
+    with db.tx() as conn:
+        held = products_of(
+            conn.execute("SELECT products FROM customers WHERE id = %s", (customer_id,)).fetchone()["products"]
+        )
+        if product in held:
+            raise HTTPException(status.HTTP_409_CONFLICT, f"{PRODUCT_NAMES[product]} is already on your plan.")
+        conn.execute(
+            """INSERT INTO customer_app_requests (customer_id, product, requested_by) VALUES (%s, %s, %s)
+               ON CONFLICT (customer_id, product) DO NOTHING""",
+            (customer_id, product, user.email),
+        )
+        audit.record(conn, user.actor, "org.app.request", PRODUCT_NAMES[product], customer_id, {})
+        apps = _app_status(conn, customer_id)
+    return {"customer_id": customer_id, "apps": apps}
+
+
+@router.get("/admin/app-requests")
+def app_requests(user: AdminDep) -> list[dict]:
+    """Organisations waiting for ExaCarib to add an app to their plan."""
+    with db.tx() as conn:
+        return conn.execute(
+            """SELECT r.customer_id, c.name AS organisation, r.product, r.requested_by, r.created_at
+               FROM customer_app_requests r JOIN customers c ON c.id = r.customer_id ORDER BY r.created_at"""
+        ).fetchall()
+
+
 def _uuid_ok(v: str) -> bool:
     import uuid
 
@@ -196,7 +323,7 @@ def create_invite(customer_id: str, body: InviteIn, user: UserDep, request: Requ
 
 
 def _notify(conn, customer_id: str, invite: dict, by: str) -> None:
-    """No invitation email goes out yet. CommAI's simulated email sender records
+    """No invitation email goes out yet. Jibsy's simulated email sender records
     the notice it would send, so the outbox shows it; the link itself is left
     out, because only its hash is ever stored."""
     from email.message import EmailMessage
@@ -392,7 +519,7 @@ class ProductsIn(BaseModel):
 
 @router.put("/customers/{customer_id}/products")
 def set_products(customer_id: str, body: ProductsIn, user: AdminDep) -> dict:
-    """Which plans an organisation holds: Connect, CommAI or both. ExaCarib
+    """Which plans an organisation holds: Connect, Jibsy or both. ExaCarib
     admins only; the billing work's subscriptions will set this too."""
     wanted = sorted(set(body.products))
     if any(p not in PRODUCTS for p in wanted):
@@ -406,6 +533,8 @@ def set_products(customer_id: str, body: ProductsIn, user: AdminDep) -> dict:
         if row is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Organisation not found.")
         conn.execute("UPDATE customers SET products = %s WHERE id = %s", (wanted, customer_id))
+        # A plan change answers any request to add an app.
+        conn.execute("DELETE FROM customer_app_requests WHERE customer_id = %s", (customer_id,))
         audit.record(
             conn,
             user.actor,
