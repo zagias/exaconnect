@@ -39,8 +39,17 @@ def test_webphone_gives_only_your_own_extension(client, monkeypatch):
     assert ana["password"] == pw
     ben = client.get(f"{u}/voice/webphone?sign_in=true", headers=b["ben"]["h"]).json()
     assert ben["login"].startswith("202@") and ben["password"] != pw
-    # The boss has no extension of their own.
-    assert client.get(f"{u}/voice/webphone", headers=b["boss"]["h"]).status_code == 404
+    # The boss has no extension of their own: the screen says so (no error), and
+    # there is nothing to sign in with.
+    boss = client.get(f"{u}/voice/webphone", headers=b["boss"]["h"])
+    assert boss.status_code == 200 and boss.json()["enabled"] is False and boss.json()["extension"] is None
+    assert client.get(f"{u}/voice/webphone?sign_in=true", headers=b["boss"]["h"]).status_code == 404
+    # The same for their own phone settings and the emergency notice.
+    mine = client.get(f"{u}/voice/me", headers=b["boss"]["h"])
+    assert mine.status_code == 200 and mine.json()["extension"] is None and mine.json()["message"]
+    assert client.patch(f"{u}/voice/me", json={"dnd": True}, headers=b["boss"]["h"]).status_code == 404
+    notice = client.get(f"{u}/voice/me/emergency-notice", headers=b["boss"]["h"])
+    assert notice.status_code == 200 and notice.json() is None
     # Without the voice module there is no browser phone.
     with db.tx() as conn:
         conn.execute(

@@ -45,6 +45,13 @@ export default function MySettings({ base, onChange }: { base: string; onChange?
     );
   }
   if (!me.data) return null;
+  if (!me.data.extension) {
+    return (
+      <Card title="My phone">
+        <p className="muted">{me.data.message || "You don't have a phone extension yet."}</p>
+      </Card>
+    );
+  }
   const reload = () => {
     me.reload();
     onChange?.();
