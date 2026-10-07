@@ -14,7 +14,7 @@ from typing import Any
 import psycopg
 
 from .. import db
-from .core import BUCKET_S, Counter, bucket_of, five_minute_samples
+from .core import BUCKET_S, Counter, Sample, bucket_of, five_minute_samples
 
 LOOKBACK = dt.timedelta(minutes=65)
 
@@ -61,3 +61,14 @@ def run_once(now: dt.datetime | None = None) -> int:
         if not conn.execute("SELECT pg_try_advisory_xact_lock(4244) AS ok").fetchone()["ok"]:
             return 0
         return sum(rollup_customer(conn, c["id"], now) for c in conn.execute("SELECT id FROM customers").fetchall())
+
+
+def samples(conn: psycopg.Connection, link_id: Any, start: dt.datetime, end: dt.datetime) -> list[Sample]:
+    """The stored 5-minute samples for one link with buckets in [start, end): the
+    exact numbers settlement, the carrier CSV and invoices are worked out from."""
+    rows = conn.execute(
+        """SELECT bucket, in_mbps, out_mbps, seconds FROM usage_5m
+           WHERE link_id = %s AND bucket >= %s AND bucket < %s ORDER BY bucket""",
+        (link_id, start, end),
+    ).fetchall()
+    return [Sample(r["bucket"], r["in_mbps"], r["out_mbps"], r["seconds"]) for r in rows]

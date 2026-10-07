@@ -114,6 +114,14 @@ const icons = {
       <path d="M17 16v-8" />
     </Icon>
   ),
+  billing: (
+    <Icon>
+      <path d="M6 3h12v18l-3-2-3 2-3-2-3 2z" />
+      <path d="M9 8h6" />
+      <path d="M9 12h6" />
+      <path d="M9 16h3" />
+    </Icon>
+  ),
   carrier: (
     <Icon>
       <path d="M12 10v11" />
@@ -215,6 +223,7 @@ function navGroups(user: User | null): Group[] {
       items: [
         { to: "/order", label: "Order", icon: icons.order },
         { to: "/metering", label: "Metering", icon: icons.metering },
+        { to: "/billing", label: "Billing", icon: icons.billing },
         ...(admin ? [{ to: "/carrier", label: "Carrier view", icon: icons.carrier }] : []),
       ],
     },

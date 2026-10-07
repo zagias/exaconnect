@@ -8,6 +8,7 @@ from . import (
     agent,
     ai,
     auth,
+    billing,
     circuits,
     deps,
     internet,
@@ -45,6 +46,9 @@ router.include_router(views.router, dependencies=_connect)
 router.include_router(settings.shared)
 router.include_router(settings.router, dependencies=_connect)
 router.include_router(metering.router, dependencies=_connect)
+# Billing covers every plan, so it needs none of them.
+router.include_router(billing.router)
+router.include_router(billing.customers_router)
 router.include_router(ai.router, dependencies=_connect)
 router.include_router(traffic.router, dependencies=_connect)
 router.include_router(circuits.router, dependencies=_connect)

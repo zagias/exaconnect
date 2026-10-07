@@ -17,6 +17,7 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
 
 from .. import db
+from ..metering import rollup
 from ..metering.core import Sample, discarded, month_bounds, percentile95, settle
 from .deps import UserDep
 
@@ -62,12 +63,7 @@ WHERE (%(c)s::uuid IS NULL OR l.customer_id = %(c)s) AND (%(k)s::uuid IS NULL OR
 
 
 def _samples(conn, link_id: Any, start: dt.datetime, end: dt.datetime) -> list[Sample]:
-    rows = conn.execute(
-        """SELECT bucket, in_mbps, out_mbps, seconds FROM usage_5m
-           WHERE link_id = %s AND bucket >= %s AND bucket < %s ORDER BY bucket""",
-        (link_id, start, end),
-    ).fetchall()
-    return [Sample(r["bucket"], r["in_mbps"], r["out_mbps"], r["seconds"]) for r in rows]
+    return rollup.samples(conn, link_id, start, end)
 
 
 def _settlement_row(link: dict, samples: list[Sample]) -> dict:

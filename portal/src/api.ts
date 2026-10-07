@@ -1206,3 +1206,304 @@ export const createApiKey = (body: { name: string; days?: number }) =>
   api<ApiKeyCreated>(apiKeysPath, { method: "POST", body: JSON.stringify(body) });
 
 export const revokeApiKey = (id: number) => api<void>(`${apiKeysPath}/${id}`, { method: "DELETE" });
+
+// ---- Billing (ADR 0022) ----
+// Connect and CommAI are separate plans. Money arrives as strings (Postgres numeric), never floats.
+
+export type Product = "connect" | "commai";
+export const PRODUCT_NAMES: Record<Product, string> = { connect: "Connect", commai: "CommAI" };
+
+export interface CreditTier {
+  below_pct: number;
+  credit_pct: number;
+}
+
+export interface PriceList {
+  id: string;
+  plan_id: string;
+  plan?: string;
+  product?: Product;
+  customer_id: string | null;
+  version: number;
+  effective_from: string;
+  label: string;
+  currency: string;
+  tax_rate_pct: string;
+  monthly_fee: string;
+  site_monthly: string;
+  commit_per_mbps: string;
+  burst_per_mbps: string;
+  satellite_per_gb: string;
+  circuit_per_mbps_month: string | null;
+  meter_prices: Record<string, string>;
+  sla_credits: CreditTier[];
+  credit_cap_pct: string;
+  example: boolean;
+  created_by: string;
+  created_at: string;
+}
+
+export interface Plan {
+  id: string;
+  product: Product;
+  name: string;
+  description: string;
+  billing_period: "month";
+  active: boolean;
+  example: boolean;
+  subscribers: number;
+  price_list: PriceList | null;
+}
+
+export type SubscriptionState = "scheduled" | "active" | "ended";
+
+export interface Subscription {
+  id: string;
+  customer_id: string;
+  plan_id: string;
+  plan: string;
+  product: Product;
+  starts_on: string;
+  ends_on: string | null;
+  state: SubscriptionState;
+  created_by: string;
+  ended_by: string | null;
+}
+
+export interface CustomerPlans {
+  customer_id: string;
+  customer: string;
+  products: Product[];
+  subscriptions: Subscription[];
+}
+
+export type BillingLineKind = "plan" | "site" | "commit" | "burst" | "satellite" | "circuit" | "credit" | "usage" | "voice";
+
+export interface BillingLine {
+  id?: number;
+  position: number;
+  product: Product;
+  plan: string;
+  kind: BillingLineKind;
+  description: string;
+  site_id: string | null;
+  link_id: string | null;
+  circuit_id: number | null;
+  class_name: string | null;
+  quantity: string;
+  unit: string;
+  unit_price: string;
+  amount: string;
+  inputs: Record<string, unknown>;
+}
+
+export interface BillingTotals {
+  currency: string;
+  example: boolean;
+  charges: string;
+  credits: string;
+  subtotal: string;
+  tax_rate_pct: string;
+  tax: string;
+  total: string;
+}
+
+export interface PlanCharges extends BillingTotals {
+  customer_id: string;
+  customer: string;
+  subscription_id: string;
+  product: Product;
+  plan_id: string;
+  plan: string;
+  period: string;
+  period_start: string;
+  period_end: string;
+  covered_from: string;
+  covered_to: string;
+  label: string;
+  complete: boolean;
+  price_list: PriceList;
+  lines: BillingLine[];
+}
+
+export interface BillingCharges {
+  customer_id: string;
+  customer: string;
+  period: string;
+  label: string;
+  products: Product[];
+  plans: PlanCharges[];
+  totals: { currency: string; total: string }[];
+  example: boolean;
+}
+
+export type InvoiceStatus = "draft" | "issued" | "void";
+
+export interface Payment {
+  id: string;
+  provider: "stripe" | "hosted";
+  mode: "simulated" | "live";
+  status: "pending" | "paid" | "failed" | "mismatch";
+  amount: string;
+  currency: string;
+  created_at: string;
+  paid_at: string | null;
+}
+
+export interface Invoice extends BillingTotals {
+  id: string;
+  customer_id: string;
+  customer: string;
+  product: Product;
+  plan_id: string;
+  plan: string;
+  subscription_id: string;
+  period: string;
+  period_start: string;
+  period_end: string;
+  covered_from: string;
+  covered_to: string;
+  label: string;
+  status: InvoiceStatus;
+  number: string | null;
+  price_list_id: string;
+  price_list_version: number;
+  price_list_label: string;
+  own_list: boolean;
+  created_at: string;
+  generated_at: string;
+  issued_by: string | null;
+  issued_at: string | null;
+  voided_by: string | null;
+  voided_at: string | null;
+  void_reason: string | null;
+  paid_at: string | null;
+  lines?: BillingLine[];
+  payments?: Payment[];
+}
+
+export interface PaymentStatus {
+  mode: "off" | "simulated" | "live";
+  providers: { key: "stripe" | "hosted"; label: string; mode: "off" | "simulated" | "live"; missing_env: string[] }[];
+}
+
+export interface PaymentStart {
+  payment_id: string;
+  provider: string;
+  mode: "simulated" | "live";
+  url: string;
+  reference: string;
+}
+
+export interface CarrierCostLine {
+  link_id: string;
+  customer: string;
+  carrier: string;
+  site: string;
+  path_label: string;
+  samples: number;
+  billable_mbps: number | null;
+  commit_mbps: string;
+  commit_charge: string;
+  burst_mbps: string;
+  burst_charge: string;
+  total: string;
+}
+
+export interface PartnerCostLine {
+  circuit_id: number;
+  circuit: string;
+  customer: string;
+  partner_id: number;
+  partner: string;
+  mbps_hours: string;
+  cost_per_mbps_month: string | null;
+  total: string | null;
+}
+
+export interface Payables {
+  period: string;
+  label: string;
+  currency: string;
+  total: string;
+  carriers: { carrier: string; carrier_id: string; commit: string; burst: string; total: string; links: CarrierCostLine[] }[];
+  partners: { partner: string; partner_id: number; total: string; unpriced: number; circuits: PartnerCostLine[] }[];
+}
+
+export interface ServiceMargin {
+  service: string;
+  label: string;
+  revenue: string;
+  cost: string;
+  margin: string | null;
+}
+
+export interface CustomerMargin {
+  customer_id: string;
+  customer: string;
+  plans: { plan: string; source: "draft" | "issued" | "estimate" | "unavailable"; number?: string | null; reason?: string }[];
+  currency: string;
+  example: boolean;
+  revenue: string;
+  carrier_cost: string;
+  partner_cost: string;
+  unpriced_circuits: number;
+  cost: string;
+  margin: string | null;
+  margin_pct: string | null;
+  services: ServiceMargin[];
+}
+
+export interface BillingMargin {
+  period: string;
+  label: string;
+  cost_currency: string;
+  all_usd: boolean;
+  customers: CustomerMargin[];
+  services: ServiceMargin[];
+}
+
+export const billingPaths = {
+  plans: "/billing/plans",
+  plan: (id: string) => `/billing/plans/${id}`,
+  customerPlans: (cid: string) => `/customers/${cid}/plans`,
+  subscription: (cid: string, sid: string, action: "change" | "end") => `/customers/${cid}/plans/${sid}/${action}`,
+  priceLists: "/billing/price-lists",
+  charges: (cid: string, period: string) => `/billing/charges?customer_id=${cid}&period=${period}`,
+  invoices: "/billing/invoices",
+  invoice: (id: string) => `/billing/invoices/${id}`,
+};
+
+const post = <T,>(path: string, body: unknown) => api<T>(path, { method: "POST", body: JSON.stringify(body ?? {}) });
+
+export const createPlan = (body: { product: Product; name: string; description?: string }) => post<Plan>(billingPaths.plans, body);
+export const updatePlan = (id: string, body: { name?: string; description?: string; active?: boolean }) =>
+  api<Plan>(billingPaths.plan(id), { method: "PATCH", body: JSON.stringify(body) });
+export const subscribe = (cid: string, body: { plan_id: string; starts_on?: string }) =>
+  post<Subscription>(billingPaths.customerPlans(cid), body);
+export const changePlan = (cid: string, sid: string, body: { plan_id: string; on?: string }) =>
+  post<{ ended: Subscription; started: Subscription }>(billingPaths.subscription(cid, sid, "change"), body);
+export const endPlan = (cid: string, sid: string, body: { on?: string }) =>
+  post<Subscription>(billingPaths.subscription(cid, sid, "end"), body);
+export const createPriceList = (body: Record<string, unknown>) => post<PriceList>(billingPaths.priceLists, body);
+export const generateInvoices = (body: { period: string; customer_id?: string; product?: Product }) =>
+  post<{ drafts: Invoice[]; skipped: { customer: string; plan: string; reason: string }[] }>("/billing/invoices/generate", body);
+export const issueInvoice = (id: string) => post<Invoice>(`/billing/invoices/${id}/issue`, {});
+export const voidInvoice = (id: string, reason: string) => post<Invoice>(`/billing/invoices/${id}/void`, { reason });
+export const payInvoice = (id: string, provider: "stripe" | "hosted") => post<PaymentStart>(`/billing/invoices/${id}/pay`, { provider });
+export const simulatePayment = (paymentId: string, approved: boolean) =>
+  post<{ handled: boolean; status?: string }>(`/billing/payments/${paymentId}/simulate`, { approved });
+export const setPartnerCost = (partnerId: number, cost: string | null) =>
+  api(`/billing/partners/${partnerId}/cost`, { method: "PUT", body: JSON.stringify({ cost_per_mbps_month: cost }) });
+
+/** "4,343.35" from "4343.35". */
+export const amount = (v: string | number | null | undefined) =>
+  v == null || v === ""
+    ? "–"
+    : Number(v).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/** A month as YYYY-MM (UTC, as the controller bills): this one, or `back` months earlier. */
+export const monthKey = (back = 0) => {
+  const d = new Date();
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - back, 1)).toISOString().slice(0, 7);
+};
