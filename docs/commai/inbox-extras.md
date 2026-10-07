@@ -14,6 +14,7 @@ Decision record: ADR 0032. Code: `commai/inbox_jobs.py`, `commai/presence.py`,
 | Email sending limits | email account `settings.email_limits` | 2,000 a day, 300 a day to one domain |
 | Visitor AI calls | widget key `settings.ai_calls` | off |
 | API rate limit | `EXA_API_RATE_PER_MIN`; per key `PUT /api/v1/commai/rate-limits/keys/{id}` (ExaCarib admin) | 600 a minute |
+| Provider webhook rate limit | `EXA_WEBHOOK_RATE_PER_MIN`, per webhook address (not per sending address: providers share a few) | 6,000 a minute |
 | Media links for Twilio and 360dialog | `EXA_PUBLIC_URL` | unset: media to those providers is refused |
 
 ## API

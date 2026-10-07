@@ -273,6 +273,33 @@ def test_whatsapp_cloud_hook(client):
     assert _in_messages(b["id"]) == 1
 
 
+def test_provider_webhooks_have_their_own_budget_not_the_sending_address(client):
+    """Providers send every business's webhooks from a few shared addresses.
+    Found by the inbox load test: with one per-address budget, a busy provider
+    address was refused (429) and Twilio does not retry message webhooks.
+    Each webhook address now has its own budget."""
+    from exaconnect_controller.commai import ratelimit
+
+    b = business(client, people=("agent",))
+    acct = _channel_account(client, b, "sms", "+18685550100")
+    path = _path(acct["webhook_url"])
+    # The test client's own address has used up its budget for this minute.
+    with db.tx() as conn:
+        conn.execute(
+            """INSERT INTO api_rate_counters (bucket, window_start, hits)
+               VALUES ('api:ip:testclient', to_timestamp(floor(extract(epoch FROM now()) / 60) * 60), 100000),
+                      ('api:ip:testclient', to_timestamp(floor(extract(epoch FROM now()) / 60) * 60 + 60), 100000)
+               ON CONFLICT (bucket, window_start) DO UPDATE SET hits = 100000"""
+        )
+    assert client.get("/api/v1/commai/widget/nokey/config").status_code == 429  # unsigned callers: per address
+    raw = json.dumps({"messages": [{"id": "sms-rl-1", "from": "+18685550101", "body": "Hi"}]}).encode()
+    sig = {"Content-Type": "application/json", "X-Exa-Signature": providers.Simulated.sign(acct["secret"], raw)}
+    r = client.post(path, content=raw, headers=sig)
+    assert r.status_code == 200, r.text
+    assert int(r.headers["x-ratelimit-limit"]) == ratelimit.webhook_limit()
+    assert _in_messages(b["id"]) == 1
+
+
 # ==== inbound: generic hooks (ExaCarib v1 and Standard Webhooks) ========================================
 
 
