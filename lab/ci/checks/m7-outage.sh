@@ -35,7 +35,7 @@ cut_off add
 t0=$(date +%s)
 isolated() {
   for n in "${NODES[@]}"; do
-    docker exec "$(node "$n")" ip route get "$CONTROLLER_IP" 2>&1 | grep -q unreachable || return 1
+    docker exec "$(node "$n")" ip route show "$CONTROLLER_IP/32" | grep -q '^unreachable' || return 1
   done
 }
 if isolated; then
