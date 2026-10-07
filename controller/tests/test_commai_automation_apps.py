@@ -2,17 +2,20 @@
 call exists in the published OpenAPI schema, and the Zapier signature check
 agrees with how CommAI signs webhook deliveries."""
 
+import functools
 import json
 import pathlib
 import re
 import shutil
 import subprocess
+import tempfile
 import time
 
 import pytest
 
 from exaconnect_controller.commai import webhooks
-from exaconnect_controller.main import app
+from exaconnect_controller.main import create_app
+from exaconnect_controller.settings import Settings
 
 ROOT = pathlib.Path(__file__).resolve().parents[2] / "integrations"
 PREFIX = "/api/v1/commai/customers/{}"
@@ -26,9 +29,16 @@ def _norm(path: str) -> str:
     return path.split("?")[0]
 
 
+@functools.cache
+def _openapi() -> dict:
+    # Its own data folder: building the app makes the agent CA there.
+    settings = Settings(database_url="", data_dir=tempfile.mkdtemp(prefix="exa-apps-"))
+    return create_app(settings).openapi()
+
+
 def _schema() -> set[tuple[str, str]]:
     out = set()
-    for p, ops in app.openapi()["paths"].items():
+    for p, ops in _openapi()["paths"].items():
         for m in ops:
             out.add((m.upper(), _norm(p)))
     return out
