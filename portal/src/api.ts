@@ -1210,7 +1210,6 @@ export const revokeApiKey = (id: number) => api<void>(`${apiKeysPath}/${id}`, { 
 // ---- Billing (ADR 0022) ----
 // Connect and CommAI are separate plans. Money arrives as strings (Postgres numeric), never floats.
 
-export type Product = "connect" | "commai";
 export const PRODUCT_NAMES: Record<Product, string> = { connect: "Connect", commai: "CommAI" };
 
 export interface CreditTier {
