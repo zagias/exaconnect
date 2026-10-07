@@ -13,6 +13,7 @@ dependencies = [
   "webauthn>=2.0",  # passkeys (ADR 0017)
   "segno>=1.6",  # click-to-WhatsApp QR codes (ADR 0023)
   "ldap3>=2.9",  # directory sync over LDAPS (ADR 0030)
+  "python-multipart>=0.0.9",  # file uploads (port documents, attachments, logos)
 ]
 
 [project.optional-dependencies]
