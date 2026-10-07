@@ -8,3 +8,5 @@ the portal's Integrations catalogue page and the docs read from the registry.
 # ruff: noqa: F401, I001
 from . import google_calendar, hubspot, simulated  # phase 2
 from . import zendesk  # helpdesk (ADR 0029)
+from . import freshdesk  # helpdesk (ADR 0029)
+from . import servicenow  # helpdesk (ADR 0029)
