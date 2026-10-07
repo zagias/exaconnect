@@ -317,3 +317,31 @@ multilingual replies and browser calls; integrations (Google Calendar,
 HubSpot), workflows from plain English, AI onboarding, the platform
 assistant and outcome reports; and voice stages 2 to 4. Paid providers are
 simulated until Dudley chooses them; see docs/commai/README.md.
+
+**Agent gateway for real sites** (ADR 0024, 2026-10-07). The public
+server now accepts agents on port 8443 with mutual TLS, so a box at a real
+site can enrol over the internet. Enrolment tokens show a one-line install
+command; `deploy/agent/install.sh` and a systemd unit install the agent.
+Enrolment is rate limited, the server certificate gains the public name
+when it is missing, and Admin, Agents can revoke a certificate. The lab
+check `m9-gateway.sh` enrols a real agent container through the public
+gateway, pulls desired state, and confirms a revoked certificate is
+refused. Steps for a real site are in `docs/real-site.md`.
+
+**Safer releases** (ADR 0025, 2026-10-07). `make release` tags the running
+images, optionally backs up the database, deploys, then checks the
+controller, sign-in, the public site and portal, the gateway and that
+agents report again. Any failure rolls back to the previous images on its
+own. `make rollback TO=<commit>` goes back by hand, and Admin, Releases
+lists every release and its result. The lab runner deploys this way.
+
+**Gap fixes** (2026-10-07). After an audit against this brief, the
+architecture and the Fabric roadmap: the product is named ExaCarib Connect
+throughout the API and assistants; demo organisations carry an "Example
+data" label on every page; telemetry has retention (90 days for path and
+circuit metrics, 400 days for counters and events); admins can rename an
+organisation, remove a link or delete a site (refused while it has usage
+in the current or previous billing month unless forced) and list or cancel
+open enrolment tokens; the hurricane watch uses the NHC's official
+forecast track and cone when published; CI builds the arm64 agent on an
+arm64 runner; and the portal has unit tests (vitest).
