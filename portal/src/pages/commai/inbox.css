@@ -31,6 +31,12 @@
 .bubble-body { white-space: pre-wrap; overflow-wrap: anywhere; }
 .bubble-original { margin-top: 4px; color: var(--ink-muted); border-top: 1px solid var(--line); padding-top: 4px; }
 .msg-status.failed, .msg-status.blocked { color: var(--danger); }
+.bubble-files { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 2px; }
+.typing { min-height: 1.4em; margin: 0 0 6px; }
+.composer-files { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.file-pick { cursor: pointer; }
+.file-pick:focus-within { outline: 3px solid var(--focus, #8DCFFF); outline-offset: 2px; }
+.file-chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
 
 .composer { display: grid; gap: 8px; border-top: 1px solid var(--line); padding-top: 12px; }
 .composer textarea { width: 100%; box-sizing: border-box; font: inherit; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: var(--radius-btn); background: var(--card); color: var(--ink); resize: vertical; }
