@@ -291,6 +291,9 @@ const EVENT_WORDS: Record<string, string> = {
   class_moved: "Class moved",
   steering_failed: "Steering failed",
   steering_rejected: "Steering map rejected",
+  cert_renewed: "Certificate renewed",
+  cert_installed: "New certificate in use",
+  cert_renew_failed: "Certificate renewal failed, will retry",
 };
 
 function eventWord(kind: string) {

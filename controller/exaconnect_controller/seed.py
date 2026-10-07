@@ -1,19 +1,22 @@
 """Seed the Phase A lab: one customer, two sites, the Miami PoP, three paths
 per site, three application classes with SLAs, and fresh enrolment tokens.
 
-    python -m exaconnect_controller.seed --lab
+    python -m exaconnect_controller.seed --lab [--sat leo|geo]
 
 Prints JSON with the CA fingerprint, the agent URL and one token per node, for
 lab/scripts/agents.sh. Safe to re-run: inventory is upserted and new tokens are
-issued each time."""
+issued each time. The satellite link is LEO unless --sat geo or SAT_PROFILE=geo
+(the same switch lab/netem uses for the satellite router's profile)."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 
 from . import db, desired, inventory, pki
+from .billing import plans
 from .settings import get_settings
 
 ACTOR = "system:seed"
@@ -41,8 +44,14 @@ CLASSES = [
 ]
 
 
-def seed_lab(conn) -> dict:
+SAT_TYPES = ("leo", "geo")
+
+
+def seed_lab(conn, sat_type: str = "leo") -> dict:
+    if sat_type not in SAT_TYPES:
+        raise ValueError(f"satellite type must be one of {', '.join(SAT_TYPES)}, not {sat_type!r}")
     cid = inventory.ensure_customer(conn, CUSTOMER, ACTOR)
+    conn.execute("UPDATE customers SET example = true WHERE id = %s", (cid,))
     for ordinal, (name, desc, dscp, ports, lat, jit, loss, sat, prio) in enumerate(CLASSES, 1):
         conn.execute(
             """INSERT INTO app_classes (customer_id, name, description, dscp, ports, ordinal, priority, builtin)
@@ -84,6 +93,8 @@ def seed_lab(conn) -> dict:
             internet_gateway="100.64.0.1" if kind == "pop" else None,
         )
         for path, carrier, utype, iface, second, commit, cost, burst, speed in LAB_LINKS:
+            if path == "sat":
+                utype = sat_type
             carrier_id = inventory.ensure_carrier(conn, carrier, ACTOR)
             inventory.upsert_link(
                 conn,
@@ -103,20 +114,37 @@ def seed_lab(conn) -> dict:
             )
         tokens[name], _ = inventory.issue_token(conn, sid, ACTOR, ttl_hours=2)
     desired.refresh(conn, cid)
+    # The lab organisation holds both plans (ADR 0022), so the CommAI screens work
+    # in the demo too: the standard plans from the day it was added.
+    plans.ensure_connect(conn, cid, ACTOR)
+    plans.ensure_plan(conn, cid, "commai", ACTOR)
     return {"customer_id": str(cid), "tokens": tokens}
 
 
-def main() -> None:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     ap = argparse.ArgumentParser()
     ap.add_argument("--lab", action="store_true", help="seed the Phase A containerlab topology")
-    args = ap.parse_args()
+    ap.add_argument(
+        "--sat",
+        choices=SAT_TYPES,
+        default=os.environ.get("SAT_PROFILE") or "leo",
+        help="satellite underlay type (default: $SAT_PROFILE, else leo)",
+    )
+    args = ap.parse_args(argv)
     if not args.lab:
         ap.error("only --lab is supported")
+    if args.sat not in SAT_TYPES:
+        ap.error(f"SAT_PROFILE must be one of {', '.join(SAT_TYPES)}")
+    return args
+
+
+def main() -> None:
+    args = parse_args()
     s = get_settings()
     db.init(s.database_url)
-    ca = pki.load_or_create(s.data_dir, [x.strip() for x in s.tls_sans.split(",") if x.strip()])
+    ca = pki.load_or_create(s.data_dir, s.tls_names())
     with db.tx() as conn:
-        out = seed_lab(conn)
+        out = seed_lab(conn, args.sat)
     db.close()
     json.dump({**out, "ca_fingerprint": ca.fingerprint, "agent_url": s.agent_url}, sys.stdout)
     sys.stdout.write("\n")

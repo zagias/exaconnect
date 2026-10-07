@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import { api, type CustomerSettings, type StormSite } from "./api";
+import { api, switchOrganisation, type CustomerSettings, type StormSite } from "./api";
+import { useAuth } from "./auth";
 
 const KEY = "exa.customer";
 
@@ -174,6 +175,35 @@ export function CustomerPicker() {
           </option>
         ))}
       </select>
+    </label>
+  );
+}
+
+/** For people in more than one organisation: which one this session acts for (ADR 0023). */
+export function OrganisationSwitcher() {
+  const { user } = useAuth();
+  const [error, setError] = useState<string | null>(null);
+  const mine = user?.memberships ?? [];
+  if (user?.role !== "customer" || mine.length < 2 || !user.customer_id) return null;
+  const change = (id: string) => {
+    setError(null);
+    switchOrganisation(id).catch((e) => setError((e as Error).message));
+  };
+  return (
+    <label className="picker" title={error ?? undefined}>
+      Organisation{" "}
+      <select value={user.customer_id} onChange={(e) => change(e.target.value)} aria-invalid={error ? true : undefined}>
+        {mine.map((m) => (
+          <option key={m.customer_id} value={m.customer_id}>
+            {m.name}
+          </option>
+        ))}
+      </select>
+      {error && (
+        <span className="sr-only" role="alert">
+          {error}
+        </span>
+      )}
     </label>
   );
 }

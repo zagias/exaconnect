@@ -68,6 +68,11 @@ def _load(conn: psycopg.Connection, customer_id: Any) -> dict[str, Any]:
         "cloud_to_cloud": bool(customer and customer["cloud_to_cloud"]),
         "circuits": circuits,
         "internet": internet.load(conn, customer_id),
+        "ipfix": conn.execute(
+            "SELECT config, site_ids FROM connect_integrations WHERE customer_id = %s AND provider = 'ipfix'"
+            " AND enabled ORDER BY id",
+            (customer_id,),
+        ).fetchall(),
     }
 
 
@@ -243,6 +248,11 @@ def build(inv: dict[str, Any], site: dict[str, Any]) -> dict[str, Any]:
     inet = internet.block(inv, site, [t["name"] for t in tunnels], own_links)
     if inet is not None:
         body["internet"] = inet
+    from .integrations.providers import ipfix
+
+    flows = ipfix.block(inv.get("ipfix") or [], site)
+    if flows is not None:
+        body["ipfix"] = flows
     if site["kind"] == "pop":
         body["reflector"] = {"listen": f":{PROBE_PORT}"}
         circuits = cloud_circuits(inv, site)

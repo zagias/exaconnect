@@ -23,6 +23,7 @@ import (
 	"github.com/zagias/exaconnect/agent/internal/desired"
 	"github.com/zagias/exaconnect/agent/internal/flows"
 	"github.com/zagias/exaconnect/agent/internal/frrstate"
+	"github.com/zagias/exaconnect/agent/internal/ipfix"
 	"github.com/zagias/exaconnect/agent/internal/probe"
 	"github.com/zagias/exaconnect/agent/internal/steer"
 	"github.com/zagias/exaconnect/agent/internal/system"
@@ -39,6 +40,7 @@ type Config struct {
 	ProbeTimeout      time.Duration // default 2 s
 	ResolveInterval   time.Duration // re-resolve match domains, retry failed QoS; default 5 min
 	MaxBuffered       int           // telemetry windows kept while the controller is away
+	RenewCheck        time.Duration // how often to check the client certificate's age, default 1 h
 }
 
 // MaxFlows is how many flow aggregates one conntrack read reports.
@@ -76,6 +78,9 @@ func (c *Config) defaults() {
 	}
 	if c.MaxBuffered == 0 {
 		c.MaxBuffered = 2000
+	}
+	if c.RenewCheck == 0 {
+		c.RenewCheck = time.Hour
 	}
 }
 
@@ -142,7 +147,13 @@ type Agent struct {
 	unreported  *client.Status     // an apply result the controller has not heard yet
 	flows       flows.Tracker
 	flowErr     string
+	ipfix       ipfix.Exporter
+	ipfixErr    string
 	inetErr     string
+	renewErr    string
+	slaWin      map[string]probe.Window // latest probe window, by tunnel
+	sla         map[string]*slaState    // the agent's own SLA view, by class|path
+	slaSig      string                  // the demotions the last steer applied
 	// writeProc writes a /proc/sys file; nil uses os.WriteFile (tests stub it).
 	writeProc func(path string, data []byte) error
 }
@@ -198,6 +209,8 @@ func (a *Agent) Run(ctx context.Context) error {
 	bfd := time.NewTicker(4 * a.Cfg.BFDInterval) // backstop; the watcher wakes the loop sooner
 	str := time.NewTicker(a.Cfg.SteerInterval)
 	qos := time.NewTicker(a.Cfg.ResolveInterval)
+	renew := time.NewTicker(a.Cfg.RenewCheck)
+	defer renew.Stop()
 	defer str.Stop()
 	defer qos.Stop()
 	defer poll.Stop()
@@ -207,6 +220,7 @@ func (a *Agent) Run(ctx context.Context) error {
 
 	a.poll(ctx)
 	a.pollSteering(ctx)
+	a.renewIfDue(ctx)
 	for {
 		// A BFD change goes before anything else that is ready.
 		select {
@@ -226,6 +240,7 @@ func (a *Agent) Run(ctx context.Context) error {
 		case <-tele.C:
 			a.collectProbes()
 			a.flush(ctx)
+			a.slaSteer(ctx)
 		case <-cnt.C:
 			a.collectCounters()
 			a.collectFlows(ctx)
@@ -245,7 +260,45 @@ func (a *Agent) Run(ctx context.Context) error {
 			if a.Steerer != nil && a.Steerer.RetryQoS() {
 				a.steer(ctx, "qos")
 			}
+		case <-renew.C:
+			a.renewIfDue(ctx)
 		}
+	}
+}
+
+// renewIfDue renews the mTLS client certificate once it is two thirds
+// through its lifetime. A failure is retried at the next check; the current
+// certificate keeps working meanwhile.
+func (a *Agent) renewIfDue(ctx context.Context) {
+	due, at, err := a.Client.RenewDue(time.Now())
+	if err != nil {
+		a.renewFailed(err)
+		return
+	}
+	if !due {
+		return
+	}
+	a.Log.Info("client certificate due for renewal", "since", at.Format(time.RFC3339))
+	cctx, done := a.controllerCtx(ctx)
+	cert, err := a.Client.Renew(cctx)
+	done()
+	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return
+		}
+		a.renewFailed(err)
+		return
+	}
+	a.renewErr = ""
+	a.Log.Info("client certificate renewed", "serial", cert.SerialNumber.Text(16), "not_after", cert.NotAfter.Format(time.RFC3339))
+	a.event("cert_installed", map[string]string{"not_after": cert.NotAfter.UTC().Format(time.RFC3339)})
+}
+
+func (a *Agent) renewFailed(err error) {
+	if msg := err.Error(); msg != a.renewErr {
+		a.renewErr = msg
+		a.Log.Warn("client certificate renewal failed; will retry", "err", err)
+		a.event("cert_renew_failed", map[string]string{"error": msg})
 	}
 }
 
@@ -518,11 +571,14 @@ func (a *Agent) collectProbes() {
 	now := time.Now()
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	fresh := map[string]probe.Window{}
 	for _, st := range a.stats {
 		if w, ok := st.Collect(now); ok {
 			a.buf.Probes = append(a.buf.Probes, w)
+			fresh[w.Path] = w
 		}
 	}
+	a.updateSLA(fresh)
 	if n := len(a.buf.Probes); n > a.Cfg.MaxBuffered {
 		a.buf.Probes = a.buf.Probes[n-a.Cfg.MaxBuffered:]
 	}
@@ -790,7 +846,9 @@ func (a *Agent) collectFlows(ctx context.Context) {
 	for _, c := range m.Classes {
 		classOf[uint32(c.Mark)] = c.Name
 	}
-	fl := a.flows.Update(flows.Parse(out), local, classOf, time.Now(), MaxFlows)
+	now := time.Now()
+	fl := a.flows.Update(flows.Parse(out), local, classOf, now, MaxFlows)
+	a.exportIPFIX(cur.IPFIX, fl, now)
 	if len(fl) == 0 {
 		return
 	}
@@ -800,6 +858,28 @@ func (a *Agent) collectFlows(ctx context.Context) {
 		a.buf.Flows = a.buf.Flows[n-a.Cfg.MaxBuffered:]
 	}
 	a.mu.Unlock()
+}
+
+// exportIPFIX sends the flow aggregates to the customer's collector when
+// desired state names one (ADR 0026). Export is best effort: a collector
+// that is down never holds up telemetry, and the error is logged once.
+func (a *Agent) exportIPFIX(cfg *desired.IPFIX, fl []flows.Flow, now time.Time) {
+	if cfg == nil {
+		a.ipfix.Close()
+		return
+	}
+	if len(fl) == 0 {
+		return
+	}
+	if _, err := a.ipfix.Export(cfg.Collector, cfg.ObservationDomain, fl, now); err != nil {
+		if msg := err.Error(); msg != a.ipfixErr {
+			a.ipfixErr = msg
+			a.Log.Warn("cannot export flows over IPFIX", "err", err)
+		}
+		a.ipfix.Close()
+		return
+	}
+	a.ipfixErr = ""
 }
 
 // usable reports whether a path can carry traffic: its tunnel exists and BFD
@@ -840,7 +920,15 @@ func (a *Agent) steer(ctx context.Context, why string) {
 		a.mu.Unlock()
 		return
 	}
-	choices := steer.Choose(m, a.usable(m))
+	var choices []steer.Choice
+	if a.silent {
+		// Without the controller the agent also keeps each class off a path
+		// whose latest probe window breaches that class's SLA.
+		choices = steer.ChooseHealthy(m, a.usable(m), a.slaHealthy, a.slaSeverity(m))
+	} else {
+		choices = steer.Choose(m, a.usable(m))
+	}
+	a.slaSig = a.slaSignature()
 	prev := a.choices
 	a.mu.Unlock()
 

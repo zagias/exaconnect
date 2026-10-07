@@ -19,7 +19,10 @@ services:
       retries: 20
 
   controller:
-    build: ../controller
+    build:
+      context: ../controller
+      args:
+        EXA_BUILD_COMMIT: ${EXA_BUILD_COMMIT:-dev}
     restart: unless-stopped
     environment:
       EXA_ENV: lab
@@ -28,6 +31,8 @@ services:
       EXA_ADMIN_EMAIL: ${EXA_ADMIN_EMAIL:-}
       EXA_ADMIN_PASSWORD: ${EXA_ADMIN_PASSWORD:-}
       EXA_AGENT_URL: https://172.30.0.5:8443
+      # The agent gateway on the internet (ADR 0024), from deploy/public/site.env via make.
+      EXA_AGENT_PUBLIC_HOST: ${EXA_PUBLIC_HOST:-}
       # AI features (ADR 0006). Ask your network stays off until the key is set in .env.
       EXA_LLM_API_KEY: ${EXA_LLM_API_KEY:-}
       EXA_LLM_MODEL: ${EXA_LLM_MODEL:-deepseek-ai/DeepSeek-V4-Flash}
@@ -53,6 +58,21 @@ services:
       EXA_GOOGLE_CLIENT_SECRET: ${EXA_GOOGLE_CLIENT_SECRET:-}
       EXA_HUBSPOT_CLIENT_ID: ${EXA_HUBSPOT_CLIENT_ID:-}
       EXA_HUBSPOT_CLIENT_SECRET: ${EXA_HUBSPOT_CLIENT_SECRET:-}
+      # Connect integrations (ADR 0026): simulated until EXA_INTEGRATIONS_LIVE=1 and credentials exist.
+      EXA_INTEGRATIONS_LIVE: ${EXA_INTEGRATIONS_LIVE:-}
+      EXA_IANA_PEN: ${EXA_IANA_PEN:-}
+      EXA_AWS_DX_ACCESS_KEY_ID: ${EXA_AWS_DX_ACCESS_KEY_ID:-}
+      EXA_AWS_DX_SECRET_ACCESS_KEY: ${EXA_AWS_DX_SECRET_ACCESS_KEY:-}
+      EXA_AWS_DX_INTERCONNECT_ID: ${EXA_AWS_DX_INTERCONNECT_ID:-}
+      EXA_AZURE_TENANT_ID: ${EXA_AZURE_TENANT_ID:-}
+      EXA_AZURE_CLIENT_ID: ${EXA_AZURE_CLIENT_ID:-}
+      EXA_AZURE_CLIENT_SECRET: ${EXA_AZURE_CLIENT_SECRET:-}
+      EXA_GCP_SERVICE_ACCOUNT_JSON: ${EXA_GCP_SERVICE_ACCOUNT_JSON:-}
+      EXA_GCP_PROJECT: ${EXA_GCP_PROJECT:-}
+      EXA_GCP_INTERCONNECT: ${EXA_GCP_INTERCONNECT:-}
+      EXA_MEGAPORT_CLIENT_ID: ${EXA_MEGAPORT_CLIENT_ID:-}
+      EXA_MEGAPORT_CLIENT_SECRET: ${EXA_MEGAPORT_CLIENT_SECRET:-}
+      EXA_MEGAPORT_PORT_UID: ${EXA_MEGAPORT_PORT_UID:-}
     volumes:
       - controller-data:/data
     depends_on:
@@ -67,7 +87,7 @@ services:
       # Loopback only: reach it from your laptop with an SSH tunnel (docs/lab.md).
       - "127.0.0.1:8000:8000"
 
-  # mTLS terminator for agents, on the containerlab management network.
+  # mTLS terminator for agents: the lab's management network and the agent gateway.
   proxy:
     image: nginx:1.27-alpine
     restart: unless-stopped
@@ -84,6 +104,10 @@ services:
       exaconnect-mgmt:
         ipv4_address: 172.30.0.5
         aliases: [controller]
+    ports:
+      # The agent gateway (ADR 0024): real sites enrol and poll here. Enrolment needs a
+      # one-time token; everything else needs a client certificate from the controller CA.
+      - "8443:8443"
 
   # Sign-in gateway (ADR 0017): `docker compose --profile sso up -d`. Its own
   # Postgres, so the gateway's data never mixes with the controller's. Set KEYCLOAK_DB_PASSWORD,

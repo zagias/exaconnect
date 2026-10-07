@@ -248,7 +248,9 @@ def _portal_user(conn, cid, email) -> Any:
     if not email:
         return None
     row = conn.execute(
-        "SELECT id FROM users WHERE lower(email) = lower(%s) AND customer_id = %s", (email, cid)
+        """SELECT u.id FROM users u JOIN org_memberships m ON m.user_id = u.id AND m.customer_id = %s
+           WHERE lower(u.email) = lower(%s)""",
+        (cid, email),
     ).fetchone()
     if row is None:
         raise OpError(f"No portal account {email} in your company.")

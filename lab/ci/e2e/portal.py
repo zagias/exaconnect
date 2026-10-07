@@ -24,7 +24,10 @@ SCREENS = [
     ("/internet", "Internet"),
     ("/order", "Order"),
     ("/encryption", "Encryption"),
+    ("/integrations", "Integrations"),
+    ("/notices", "Carrier notices"),
     ("/metering", "Metering"),
+    ("/billing", "Billing"),
     ("/insights", "Insights"),
     ("/ask", "Ask your network"),
     ("/carrier", "Carrier view"),
@@ -35,7 +38,10 @@ SCREENS = [
     ("/admin/users", "Admin: users"),
     ("/admin/settings", "Admin: settings"),
     ("/admin/partners", "Admin: partners"),
+    ("/admin/billing", "Admin: billing"),
+    ("/admin/integrations", "Admin: integrations"),
     ("/admin/protection", "Admin: protection"),
+    ("/admin/releases", "Admin: releases"),
     ("/admin/audit", "Admin: audit"),
     ("/commai", "CommAI: inbox"),
     ("/commai/contacts", "CommAI: contacts"),
@@ -75,6 +81,26 @@ def main() -> int:
             "response",
             lambda r: "/api/" in r.url and r.status >= 500 and api_fail.append(f"{r.status} {r.url.split(HOST)[-1]}"),
         )
+
+        # Signed out: the forgotten-password screens work and give nothing away.
+        page.goto(BASE + "/forgot", wait_until="networkidle")
+        if page.get_by_role("heading", name="Reset your password").count():
+            page.fill('input[type="email"]', "nobody@example.invalid")
+            page.click('button[type="submit"]')
+            page.wait_for_timeout(1500)
+            if page.locator('[role="status"]').all_inner_texts():
+                ok("forgotten-password page answers")
+            else:
+                bad("forgotten-password page gave no answer")
+        else:
+            bad("forgotten-password page did not open")
+        page.goto(BASE + "/reset/not-a-real-link", wait_until="networkidle")
+        page.wait_for_timeout(1000)
+        if "expired" in page.inner_text("body"):
+            ok("a bad reset link is refused")
+        else:
+            bad("a bad reset link was not refused")
+        errors.clear()
 
         page.goto(BASE + "/", wait_until="networkidle")
         page.fill('input[type="email"]', os.environ["E2E_EMAIL"])

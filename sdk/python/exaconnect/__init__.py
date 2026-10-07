@@ -9,8 +9,11 @@
 See docs/automation-contract.md in the ExaConnect repository.
 """
 
-from .client import ExaConnect, ExaConnectError
+from .client import ExaConnect, ExaConnectError, verify_event
 from .commai import verify_webhook
 
-__all__ = ["ExaConnect", "ExaConnectError", "verify_webhook"]
+# The product is "ExaCarib Connect"; ExaConnect stays as the original name.
+Connect = ExaConnect
+
+__all__ = ["Connect", "ExaConnect", "ExaConnectError", "verify_event", "verify_webhook"]
 __version__ = "0.1.0"

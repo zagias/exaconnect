@@ -10,7 +10,8 @@ permissions:
 
 jobs:
   agent:
-    runs-on: ubuntu-24.04
+    # arm64 first (CLAUDE.md §3): the arm64 leg runs its tests on an Arm runner, not just a cross-compile.
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     strategy:
       matrix:
         arch: [arm64, amd64]
@@ -26,6 +27,17 @@ jobs:
       - name: build linux/${{ matrix.arch }}
         working-directory: agent
         run: CGO_ENABLED=0 GOOS=linux GOARCH=${{ matrix.arch }} go build -trimpath -o exa-agent ./cmd/exa-agent
+      # The site kit (ADR 0024): binary, installer and unit, downloadable from the run.
+      - name: site kit
+        run: cp agent/exa-agent deploy/agent/install.sh deploy/systemd/exa-agent.service "$RUNNER_TEMP/"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exa-agent-linux-${{ matrix.arch }}
+          path: |
+            ${{ runner.temp }}/exa-agent
+            ${{ runner.temp }}/install.sh
+            ${{ runner.temp }}/exa-agent.service
+          retention-days: 30
 
   terraform:
     runs-on: ubuntu-24.04
@@ -86,12 +98,17 @@ jobs:
           cache: npm
           cache-dependency-path: portal/package-lock.json
       - run: make build-portal
+      - name: unit tests
+        run: cd portal && npm test
 
   lab:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: shellcheck
-        run: shellcheck -x lab/netem/*.sh lab/faults/*.sh lab/scripts/*.sh lab/host/*.sh
+        run: >-
+          shellcheck -x lab/netem/*.sh lab/faults/*.sh lab/scripts/*.sh lab/host/*.sh
+          lab/ci/checks/*.sh lab/ci/run.sh lab/demo.sh lab/runner/*.sh
+          deploy/agent/*.sh deploy/release/*.sh
       - name: topology parses
         run: python3 -c "import yaml,sys; t=yaml.safe_load(open('lab/exaconnect.clab.yml')); print(len(t['topology']['nodes']), 'nodes')"

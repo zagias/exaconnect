@@ -75,7 +75,7 @@ def _enrol(body: EnrolIn, request: Request) -> EnrolOut:
             """INSERT INTO nodes (customer_id, site_id, name, wg_public_key, cert_serial)
                VALUES (%s, %s, %s, %s, %s)
                ON CONFLICT (site_id) DO UPDATE SET
-                 wg_public_key = EXCLUDED.wg_public_key, cert_serial = EXCLUDED.cert_serial,
+                 wg_public_key = EXCLUDED.wg_public_key, cert_serial = EXCLUDED.cert_serial, prev_cert_serial = NULL,
                  enrolled_at = now(), applied_version = 0, apply_ok = NULL, apply_error = NULL
                RETURNING id""",
             (tok["customer_id"], tok["site_id"], body.node_name, body.wg_public_key, serial),
@@ -85,6 +85,54 @@ def _enrol(body: EnrolIn, request: Request) -> EnrolOut:
         _event(conn, tok["customer_id"], node["id"], "enrolled", {"node": body.node_name})
         desired.refresh(conn, tok["customer_id"])
     return EnrolOut(node_id=str(node["id"]), cert_pem=cert_pem.decode(), ca_pem=ca.pem.decode())
+
+
+class RenewIn(BaseModel):
+    csr_pem: str = Field(max_length=8192)
+
+
+class RenewOut(BaseModel):
+    cert_pem: str
+    ca_pem: str
+
+
+@router.post("/agent/renew")
+def renew(body: RenewIn, node: NodeDep, request: Request) -> RenewOut:
+    """A new client certificate for the same node, asked for over the current
+    one (mTLS). The new serial becomes current at once. The previous one keeps
+    working only until the new certificate is first used, so an agent whose
+    reply was lost can still ask again with the certificate it holds."""
+    ca: pki.CA = request.app.state.ca
+    try:
+        name = pki.csr_common_name(body.csr_pem.encode())
+        if name != node.name:
+            raise HTTPException(400, f"This certificate request is for {name or 'no name'}, not {node.name}.")
+        cert_pem, serial = ca.sign_client(body.csr_pem.encode(), node.name)
+    except pki.CSRError as e:
+        raise HTTPException(400, str(e)) from None
+    # The serial the request came in with (checked by NodeDep). Swapping only
+    # if it is still current, or the one just replaced, means a revocation wins.
+    old = pki.normalise_serial(request.headers.get("x-ssl-client-serial", ""))
+    with db.tx() as conn:
+        row = conn.execute(
+            """UPDATE nodes SET prev_cert_serial = CASE WHEN cert_serial = %(old)s THEN %(old)s
+                                                        ELSE prev_cert_serial END,
+                                cert_serial = %(new)s
+               WHERE id = %(id)s AND (cert_serial = %(old)s OR prev_cert_serial = %(old)s) RETURNING id""",
+            {"old": old, "new": serial, "id": node.id},
+        ).fetchone()
+        if row is None:
+            raise HTTPException(401, "unknown or replaced client certificate")
+        audit.record(
+            conn,
+            f"node:{node.name}",
+            "node.cert_renewed",
+            node.name,
+            node.customer_id,
+            {"old_serial": old, "serial": serial},
+        )
+        _event(conn, node.customer_id, node.id, "cert_renewed", {"node": node.name, "serial": serial})
+    return RenewOut(cert_pem=cert_pem.decode(), ca_pem=ca.pem.decode())
 
 
 @router.get("/agent/desired-state")
@@ -120,10 +168,24 @@ class StatusIn(BaseModel):
 @router.post("/agent/status", status_code=204)
 def status(body: StatusIn, node: NodeDep) -> None:
     with db.tx() as conn:
+        before = conn.execute(
+            "SELECT applied_version, apply_ok FROM nodes WHERE id = %s FOR UPDATE", (node.id,)
+        ).fetchone()
         conn.execute(
             "UPDATE nodes SET applied_version = %s, apply_ok = %s, apply_error = %s, agent_version = %s WHERE id = %s",
             (body.applied_version, body.ok, body.error, body.agent_version, node.id),
         )
+        if not body.ok and (
+            before is None or before["apply_ok"] is not False or before["applied_version"] != body.applied_version
+        ):
+            # Once per failure, not on every report of the same one (ADR 0026).
+            _event(
+                conn,
+                node.customer_id,
+                node.id,
+                "config_failed",
+                {"node": node.name, "version": body.applied_version, "error": (body.error or "")[:500]},
+            )
         audit.record(
             conn,
             f"node:{node.name}",

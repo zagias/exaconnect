@@ -3,6 +3,7 @@
 //	exa-agent version
 //	exa-agent keygen                       print this node's WireGuard public key
 //	exa-agent enrol --controller URL --token T --ca-fingerprint FP --name site-a
+//	exa-agent renew [--force]              renew the mTLS client certificate now
 //	exa-agent run                          poll, apply, probe, report (long-running)
 //	exa-agent apply -f state.json          apply a desired-state file once (debugging)
 package main
@@ -17,6 +18,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/zagias/exaconnect/agent/internal/agent"
 	"github.com/zagias/exaconnect/agent/internal/apply"
@@ -68,6 +70,10 @@ func main() {
 	case "run":
 		fs.Parse(args)
 		err = run(ctx, ks(), log)
+	case "renew":
+		force := fs.Bool("force", true, "renew even if the certificate is not yet due")
+		fs.Parse(args)
+		err = renew(ctx, ks(), *force, log)
 	case "apply":
 		file := fs.String("f", "", "desired-state JSON file")
 		fs.Parse(args)
@@ -142,6 +148,36 @@ func run(ctx context.Context, ks keys.Store, log *slog.Logger) error {
 	return a.Run(ctx)
 }
 
+func renew(ctx context.Context, ks keys.Store, force bool, log *slog.Logger) error {
+	b, err := os.ReadFile(ks.IdentityPath())
+	if err != nil {
+		return fmt.Errorf("not enrolled (run exa-agent enrol first): %w", err)
+	}
+	var id identity
+	if err := json.Unmarshal(b, &id); err != nil {
+		return err
+	}
+	c, err := client.New(id.Controller, ks)
+	if err != nil {
+		return err
+	}
+	due, at, err := c.RenewDue(time.Now())
+	if err != nil {
+		return err
+	}
+	if !due && !force {
+		log.Info("client certificate not yet due for renewal", "due", at.Format(time.RFC3339))
+		return nil
+	}
+	cert, err := c.Renew(ctx)
+	if err != nil {
+		return err
+	}
+	// A running agent notices the new file before its next request.
+	log.Info("client certificate renewed", "serial", cert.SerialNumber.Text(16), "not_after", cert.NotAfter.Format(time.RFC3339))
+	return nil
+}
+
 func applyFile(ctx context.Context, ks keys.Store, file string, log *slog.Logger) error {
 	s, err := desired.Load(file)
 	if err != nil {
@@ -160,7 +196,7 @@ func applyFile(ctx context.Context, ks keys.Store, file string, log *slog.Logger
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: exa-agent version|keygen|enrol|run|apply [flags]")
+	fmt.Fprintln(os.Stderr, "usage: exa-agent version|keygen|enrol|renew|run|apply [flags]")
 	os.Exit(2)
 }
 

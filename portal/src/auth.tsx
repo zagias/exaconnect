@@ -263,6 +263,11 @@ function SignIn() {
               {busy ? "Signing in…" : "Sign in"}
             </button>
           </form>
+          <p className="signin-foot">
+            <a className="link" href={`/forgot?email=${encodeURIComponent(email)}`}>
+              Forgotten your password?
+            </a>
+          </p>
         </>
       )}
 
@@ -305,7 +310,7 @@ function SignIn() {
           </p>
         </>
       )}
-      <p className="signin-foot">Need an account or a new password? Ask your ExaCarib administrator.</p>
+      <p className="signin-foot">Need an account? Ask your organisation&apos;s administrator.</p>
     </section>
   );
 }

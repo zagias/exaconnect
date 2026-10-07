@@ -415,7 +415,9 @@ def assign(
     conv = get(conn, customer_id, conversation_id, lock=True)
     if assignee_id is not None:
         ok = conn.execute(
-            """SELECT 1 FROM users u WHERE u.id = %s AND (u.customer_id = %s OR u.role = 'admin')
+            """SELECT 1 FROM users u WHERE u.id = %s
+               AND (u.role = 'admin' OR EXISTS (SELECT 1 FROM org_memberships om WHERE om.user_id = u.id
+                                               AND om.customer_id = %s AND om.role <> 'viewer'))
                AND NOT EXISTS (SELECT 1 FROM commai_members m WHERE m.user_id = u.id AND m.customer_id = %s
                                AND m.seat = 'internal')""",
             (assignee_id, customer_id, customer_id),

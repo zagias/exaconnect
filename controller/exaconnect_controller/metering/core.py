@@ -128,6 +128,11 @@ def settle(samples: Sequence[Sample], commit_mbps, cost_per_mbps, burst_price) -
     )
 
 
+def gigabytes(samples: Iterable[Sample]) -> float:
+    """Data carried, in and out together, in GB (10^9 bytes), as the usage view counts it."""
+    return sum((s.in_mbps + s.out_mbps) * s.seconds / 8 / 1000 for s in samples)
+
+
 def month_bounds(t: dt.datetime) -> tuple[dt.datetime, dt.datetime]:
     start = t.astimezone(dt.UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     end = (start + dt.timedelta(days=32)).replace(day=1)

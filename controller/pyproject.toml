@@ -24,7 +24,8 @@ build-backend = "setuptools.build_meta"
 include = ["exaconnect_controller*"]
 
 [tool.setuptools.package-data]
-exaconnect_controller = ["schema.sql", "commai/sql/*.sql", "commai/static/*", "ai/fixtures/*.json", "ai/fixtures/*.xml"]
+exaconnect_controller = ["schema.sql", "commai/sql/*.sql", "commai/static/*", "ai/fixtures/*.json", "ai/fixtures/*.xml",
+                         "integrations/*.sql", "integrations/yang/*.yang", "integrations/static/*"]
 
 [tool.ruff]
 line-length = 120

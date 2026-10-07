@@ -61,6 +61,16 @@ class CA:
         return cert.public_bytes(serialization.Encoding.PEM), serial_hex(serial)
 
 
+def csr_common_name(csr_pem: bytes) -> str:
+    """The common name a CSR asks for; raises CSRError if it is not a valid request."""
+    try:
+        csr = x509.load_pem_x509_csr(csr_pem)
+    except ValueError as e:
+        raise CSRError("not a PEM certificate request") from e
+    names = csr.subject.get_attributes_for_oid(NameOID.COMMON_NAME)
+    return str(names[0].value) if names else ""
+
+
 def serial_hex(serial: int) -> str:
     """Canonical form for comparing with nginx's $ssl_client_serial."""
     return normalise_serial(format(serial, "X"))
@@ -134,10 +144,22 @@ def load_or_create(data_dir: str, sans: list[str]) -> CA:
     return ca
 
 
+def _server_names(path: Path) -> set[str]:
+    try:
+        cert = x509.load_pem_x509_certificate(path.read_bytes())
+        alt = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
+    except (ValueError, x509.ExtensionNotFound):
+        return set()
+    return {str(n.value) for n in alt}
+
+
 def _write_server_cert(ca: CA, tls_dir: Path, sans: list[str]) -> None:
     tls_dir.mkdir(parents=True, exist_ok=True)
     if (tls_dir / "server.crt").exists() and (tls_dir / "server.key").exists():
-        return  # delete data/tls to reissue (for example after changing EXA_TLS_SANS)
+        # Reissue only when a name is missing (a new public gateway name, ADR 0024). Agents
+        # trust the CA, not this certificate, so a reissue needs nothing from them.
+        if set(sans) <= _server_names(tls_dir / "server.crt"):
+            return
     key = ec.generate_private_key(ec.SECP256R1())
     alt: list[x509.GeneralName] = []
     for s in sans:
