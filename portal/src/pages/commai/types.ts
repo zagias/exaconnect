@@ -52,6 +52,7 @@ export interface Note {
   author: string;
   body: string;
   mentions: string[];
+  attachments?: { id: string; name: string; type: string; size: number }[];
   created_at: string;
 }
 

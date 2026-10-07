@@ -5,7 +5,9 @@ import { useAuth } from "../../auth";
 import { ErrorNote } from "../../components";
 import { useAction } from "../../ui";
 import CopilotPanel from "./CopilotPanel";
+import { AttachmentReadings, NoteFiles, SavedViews, uploadNoteFiles, type Filters } from "./InboxExtras";
 import { CHANNEL_LABEL, STATE_LABEL, useCommaiBase, when, type Page } from "./lib";
+import { useT } from "./i18n";
 import { useLive } from "./live";
 import type { Conversation, ConversationDetail, Member, Note, Team } from "./types";
 import "./inbox.css";
@@ -26,10 +28,12 @@ export default function Inbox() {
   const base = useCommaiBase();
   const { id } = useParams();
   const navigate = useNavigate();
+  const { t } = useT();
   const [view, setView] = useState("open");
   const [q, setQ] = useState("");
   const [query, setQuery] = useState("");
-  const params = new URLSearchParams({ view, limit: "100" });
+  const [extra, setExtra] = useState<Filters>({});
+  const params = new URLSearchParams({ ...extra, view, limit: "100" });
   if (query) params.set("q", query);
   const list = useApi<Page<Conversation>>(base ? `${base}/conversations?${params}` : null, 15_000);
   const [tick, setTick] = useState(0);
@@ -55,7 +59,7 @@ export default function Inbox() {
     <div className={`inbox ${id ? "has-open" : ""}`}>
       <section className="inbox-list card" aria-labelledby="inbox-title">
         <div className="inbox-list-head">
-          <h1 id="inbox-title">Inbox</h1>
+          <h1 id="inbox-title">{t("inbox.title")}</h1>
           <form
             role="search"
             onSubmit={(e) => {
@@ -71,10 +75,26 @@ export default function Inbox() {
           <div className="segmented inbox-views" role="group" aria-label="Show">
             {VIEWS.map((v) => (
               <button key={v.id} type="button" aria-pressed={view === v.id} onClick={() => setView(v.id)}>
-                {v.label}
+                {t(`inbox.view.${v.id}`)}
               </button>
             ))}
           </div>
+          <SavedViews
+            base={base}
+            current={{ ...extra, view, ...(query ? { q: query } : {}) }}
+            onApply={(f) => {
+              const { view: v, q: fq, ...rest } = f;
+              setView(v || "all");
+              setQ(fq ?? "");
+              setQuery(fq ?? "");
+              setExtra(rest);
+            }}
+          />
+          {Object.keys(extra).length > 0 && (
+            <button className="button secondary small" type="button" onClick={() => setExtra({})}>
+              {t("inbox.clearFilters", { filters: Object.entries(extra).map(([k, v]) => `${k}: ${v}`).join(", ") })}
+            </button>
+          )}
         </div>
         <ErrorNote error={list.error} />
         {list.data && items.length === 0 && (
@@ -219,6 +239,7 @@ function ConversationPane({
                   <span className="muted"> · {when(t.n.created_at)}</span>
                 </div>
                 <div className="bubble-body">{t.n.body}</div>
+                <NoteFiles base={base} files={t.n.attachments} />
               </li>
             ),
           )}
@@ -239,6 +260,7 @@ function ConversationPane({
 
       <aside className="inbox-side card" aria-label="Conversation details">
         <Details c={c} teams={teams.data ?? []} members={members.data ?? []} base={base} internal={internal} onChanged={refresh} />
+        <AttachmentReadings base={base} conversationId={c.id} />
         <CopilotPanel base={base} conversationId={c.id} onDraft={(text) => setDraft({ text, n: Date.now() })} />
       </aside>
     </>
@@ -329,6 +351,8 @@ function Composer({
   const [mode, setMode] = useState<"reply" | "note">(internal ? "note" : "reply");
   const [text, setText] = useState("");
   const [template, setTemplate] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
+  const { t } = useT();
   const send = useAction();
   const key = useRef(crypto.randomUUID());
   // A draft from the copilot lands in the box; a person still presses Send.
@@ -345,7 +369,9 @@ function Composer({
     if (!body && !template) return;
     send.run(async () => {
       if (mode === "note") {
-        await api(`${base}/conversations/${id}/notes`, { method: "POST", body: JSON.stringify({ body }) });
+        const n = await api<{ id: string }>(`${base}/conversations/${id}/notes`, { method: "POST", body: JSON.stringify({ body }) });
+        if (files.length) await uploadNoteFiles(base, n.id, files);
+        setFiles([]);
       } else {
         await api(`${base}/conversations/${id}/messages`, {
           method: "POST",
@@ -387,6 +413,17 @@ function Composer({
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit(e as unknown as FormEvent, handledByOther);
         }}
       />
+      {mode === "note" && (
+        <label className="small note-attach">
+          {t("inbox.attachToNote")}
+          <input
+            type="file"
+            multiple
+            accept=".txt,.csv,.pdf,image/png,image/jpeg,image/gif,image/webp"
+            onChange={(e) => setFiles(Array.from(e.target.files ?? []).slice(0, 5))}
+          />
+        </label>
+      )}
       {mode === "reply" && (
         <details className="small">
           <summary>Send an approved template instead</summary>
