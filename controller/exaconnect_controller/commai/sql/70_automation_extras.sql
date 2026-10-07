@@ -165,8 +165,8 @@ CREATE TABLE IF NOT EXISTS commai_budgets (
   customer_id    uuid NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
   scope          text NOT NULL CHECK (scope IN ('total', 'channel', 'workflow', 'ai')),
   key            text NOT NULL DEFAULT '',
-  monthly_alert  numeric(14, 2),
-  monthly_hard   numeric(14, 2),
+  monthly_alert  numeric(14, 4),
+  monthly_hard   numeric(14, 4),
   updated_by     text NOT NULL,
   updated_at     timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (customer_id, scope, key)

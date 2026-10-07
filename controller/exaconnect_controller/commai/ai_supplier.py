@@ -177,14 +177,20 @@ def reconcile(conn: psycopg.Connection, customer_id: Any, period: dt.date, suppl
         rec, sup = everyone.get(k, Decimal(0)), costs.get(k)
         unit = "tokens" if kind == "tokens" else "seconds of speech"
         if sup is None:
-            issues.append({"day": day.isoformat(), "model": model, "issue": f"No supplier charge yet for {rec} {unit}"})
+            issues.append(
+                {
+                    "day": day.isoformat(),
+                    "model": model,
+                    "issue": f"No supplier charge yet for {bill.s(rec.normalize())} {unit}",
+                }
+            )
         elif Decimal(sup["quantity"]) != rec:
             issues.append(
                 {
                     "day": day.isoformat(),
                     "model": model,
-                    "issue": f"Supplier counted {Decimal(sup['quantity']).normalize()} {unit}, "
-                    f"CommAI recorded {rec.normalize()}",
+                    "issue": f"Supplier counted {bill.s(Decimal(sup['quantity']).normalize())} {unit}, "
+                    f"CommAI recorded {bill.s(rec.normalize())}",
                 }
             )
     lines, cost = [], Decimal(0)
