@@ -68,3 +68,8 @@ for _m in (
     router.include_router(_m.router, dependencies=dependencies_for(_m.__name__))
     if hasattr(_m, "public"):
         router.include_router(_m.public)
+
+# Deprecated endpoints carry Deprecation and Sunset headers (ADR 0025).
+from .. import apipolicy  # noqa: E402
+
+apipolicy.apply(router)
