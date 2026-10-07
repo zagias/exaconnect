@@ -5,6 +5,17 @@
 # shellcheck disable=SC2329  # helpers are called through wait_for
 # shellcheck source=lab/ci/lib.sh
 source "$(dirname "$0")/../lib.sh"
+
+# On the live server (the public site is on) this check takes sign-in down for
+# about two minutes, so there it runs only from 02:00 to 05:00 Atlantic time.
+# EXA_LAB_OUTAGE=always runs it at any hour.
+if [[ -s $REPO/deploy/public/site.env && ${EXA_LAB_OUTAGE:-} != always ]]; then
+  hour=$(TZ=America/Port_of_Spain date +%H)
+  if ((10#$hour < 2 || 10#$hour >= 5)); then
+    skip "controller outage: live site, outside 02:00-05:00 (EXA_LAB_OUTAGE=always to force)"
+    exit 0
+  fi
+fi
 VOICE=0x101 DST=192.168.20.10
 COMPOSE=(docker compose -f "$REPO/deploy/docker-compose.yml" --env-file "$REPO/.env")
 lab/faults/restore.sh >/dev/null
