@@ -14,6 +14,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
 from .. import audit, db
+from ..billing import plans
 from ..identity import mfa, oidc, passkeys, sessions, sso, totp
 from ..security import hash_password, new_token, token_hash, verify_password
 from .deps import API_KEY_PREFIX, UserDep
@@ -46,6 +47,9 @@ class UserOut(BaseModel):
     two_step: bool = False
     # None: the full account. A list: what a directory-provisioned account may do.
     scopes: list[str] | None = None
+    # The products the account's organisation holds an active plan for (ADR 0024):
+    # "connect", "commai". None for ExaCarib admins and carriers (not plan-bound).
+    products: list[str] | None = None
 
 
 class LoginOut(BaseModel):
@@ -173,8 +177,10 @@ def me(user: UserDep) -> UserOut:
     with db.tx() as conn:
         row = conn.execute("SELECT * FROM users WHERE id = %s", (user.id,)).fetchone()
         on = mfa.two_step_on(conn, row)
+        products = plans.products(conn, row["customer_id"]) if row["customer_id"] else None
     out = _user_out(row)
     out.two_step = on
+    out.products = products
     out.scopes = list(user.scopes) if user.scopes is not None else None
     return out
 

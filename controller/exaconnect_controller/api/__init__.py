@@ -8,6 +8,7 @@ from . import (
     agent,
     ai,
     auth,
+    billing,
     circuits,
     internet,
     metering,
@@ -35,6 +36,7 @@ router.include_router(agent.router)
 router.include_router(views.router)
 router.include_router(settings.router)
 router.include_router(metering.router)
+router.include_router(billing.router)
 router.include_router(ai.router)
 router.include_router(traffic.router)
 router.include_router(circuits.router)

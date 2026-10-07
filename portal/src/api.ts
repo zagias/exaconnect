@@ -1134,3 +1134,142 @@ export const createApiKey = (body: { name: string; days?: number }) =>
   api<ApiKeyCreated>(apiKeysPath, { method: "POST", body: JSON.stringify(body) });
 
 export const revokeApiKey = (id: number) => api<void>(`${apiKeysPath}/${id}`, { method: "DELETE" });
+
+// ---- Billing (ADR 0024) ----
+// Money arrives as strings (Postgres numeric), never floats.
+
+export interface CreditTier {
+  below_pct: number;
+  credit_pct: number;
+}
+
+export interface PriceList {
+  id: string;
+  customer_id: string | null;
+  version: number;
+  effective_from: string;
+  label: string;
+  currency: string;
+  site_monthly: string;
+  commit_per_mbps: string;
+  burst_per_mbps: string;
+  satellite_per_gb: string;
+  circuit_per_mbps_month: string | null;
+  tax_rate_pct: string;
+  sla_credits: CreditTier[];
+  credit_cap_pct: string;
+  example: boolean;
+  created_by: string;
+  created_at: string;
+}
+
+export type BillingLineKind = "site" | "commit" | "burst" | "satellite" | "circuit" | "credit";
+
+export interface BillingLine {
+  id?: number;
+  position: number;
+  kind: BillingLineKind;
+  description: string;
+  site_id: string | null;
+  link_id: string | null;
+  circuit_id: number | null;
+  class_name: string | null;
+  quantity: string;
+  unit: string;
+  unit_price: string;
+  amount: string;
+  inputs: Record<string, unknown>;
+}
+
+interface BillingTotals {
+  currency: string;
+  example: boolean;
+  charges: string;
+  credits: string;
+  subtotal: string;
+  tax_rate_pct: string;
+  tax: string;
+  total: string;
+}
+
+export interface BillingCharges extends BillingTotals {
+  customer_id: string;
+  customer: string;
+  period: string;
+  period_start: string;
+  period_end: string;
+  label: string;
+  complete: boolean;
+  price_list: PriceList;
+  lines: BillingLine[];
+}
+
+export type InvoiceStatus = "draft" | "issued" | "void";
+
+export interface Invoice extends BillingTotals {
+  id: string;
+  customer_id: string;
+  customer: string;
+  period: string;
+  period_start: string;
+  period_end: string;
+  label: string;
+  status: InvoiceStatus;
+  number: string | null;
+  price_list_id: string;
+  price_list_version: number;
+  price_list_label: string;
+  default_list: boolean;
+  created_at: string;
+  generated_at: string;
+  issued_by: string | null;
+  issued_at: string | null;
+  voided_by: string | null;
+  voided_at: string | null;
+  void_reason: string | null;
+  lines?: BillingLine[];
+}
+
+export interface CarrierCostLine {
+  link_id: string;
+  carrier: string;
+  site: string;
+  path_label: string;
+  commit_charge: string;
+  burst_charge: string;
+  total: string;
+}
+
+export interface CustomerMargin {
+  customer_id: string;
+  customer: string;
+  invoice_id: string | null;
+  invoice_number: string | null;
+  revenue_source: "draft" | "issued" | "estimate";
+  currency: string;
+  example: boolean;
+  revenue: string;
+  carrier_cost: string;
+  margin: string | null;
+  margin_pct: string | null;
+  carrier_lines: CarrierCostLine[];
+}
+
+export interface BillingMargin {
+  period: string;
+  label: string;
+  cost_currency: string;
+  customers: CustomerMargin[];
+}
+
+/** "4,343.35" from "4343.35". */
+export const amount = (v: string | number | null | undefined) =>
+  v == null || v === ""
+    ? "–"
+    : Number(v).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/** A month as YYYY-MM (UTC, as the controller bills): this one, or `back` months earlier. */
+export const monthKey = (back = 0) => {
+  const d = new Date();
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - back, 1)).toISOString().slice(0, 7);
+};
