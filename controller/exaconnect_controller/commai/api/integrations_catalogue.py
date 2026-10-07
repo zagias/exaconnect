@@ -30,7 +30,7 @@ from .. import access
 from ..automation import catalogue, integrations, vault
 from ..channels import mailbox
 from ..connectors import kit, rest_generic
-from ..standards import inbound, openapi_import, webhooks_std
+from ..standards import api_docs, inbound, openapi_import, webhooks_std
 from .common import errors
 
 router = APIRouter(prefix="/customers/{customer_id}", tags=["commai: integrations catalogue"])
@@ -514,3 +514,18 @@ def delete_rest_app(customer_id: str, rest_id: str, user: UserDep) -> None:
         conn.execute("DELETE FROM integration_connections WHERE customer_id = %s AND app = %s", (customer_id, app))
         conn.execute("DELETE FROM commai_rest_apps WHERE id = %s", (row["id"],))
         audit.record(conn, user.actor, "commai.rest_app.delete", row["name"], customer_id)
+
+
+# ==== published descriptions ============================================================
+
+
+@public.get("/openapi.json", tags=["commai: descriptions"])
+def commai_openapi(request: Request) -> dict:
+    """OpenAPI 3.1 description of every CommAI endpoint (from the running code)."""
+    return api_docs.openapi(request.app.openapi(), _base(request) + "/")
+
+
+@public.get("/asyncapi.json", tags=["commai: descriptions"])
+def commai_asyncapi(request: Request) -> dict:
+    """AsyncAPI 3.0 description of the webhook event stream and inbound webhooks."""
+    return api_docs.asyncapi(_base(request))
