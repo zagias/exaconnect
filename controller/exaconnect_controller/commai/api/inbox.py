@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from ... import audit, db
 from ...api.deps import UserDep, current_user
-from .. import access, inbox
+from .. import access, attachments, inbox
 from .common import errors, page, page_after
 
 router = APIRouter(prefix="/customers/{customer_id}", tags=["commai: inbox"])
@@ -295,6 +295,9 @@ class ReplyIn(BaseModel):
     body: str = Field(default="", max_length=10000)
     template: str = Field(default="", max_length=200)
     take_over: bool = False
+    attachments: list[str] = Field(
+        default_factory=list, max_length=5, description="Ids of files uploaded to POST .../files"
+    )
 
 
 @router.post("/conversations/{conversation_id}/messages", status_code=201)
@@ -304,6 +307,7 @@ def reply(customer_id: str, conversation_id: str, body: ReplyIn, user: UserDep) 
     access.check(user, customer_id, "commai:write")
     with db.tx() as conn, errors():
         access.require_reply_seat(conn, user, customer_id)
+        files = attachments.claim(conn, inbox.get(conn, customer_id, conversation_id), user.id, body.attachments)
         msg = inbox.send(
             conn,
             customer_id,
@@ -314,7 +318,9 @@ def reply(customer_id: str, conversation_id: str, body: ReplyIn, user: UserDep) 
             user_id=user.id,
             template=body.template,
             take_over=body.take_over,
+            attachments=files,
         )
+        attachments.attach(conn, inbox.get(conn, customer_id, conversation_id), files)
         audit.record(
             conn, user.actor, "commai.message.send", str(msg["id"]), customer_id, {"conversation_id": conversation_id}
         )

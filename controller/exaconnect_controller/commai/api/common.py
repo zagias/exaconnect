@@ -9,6 +9,7 @@ from typing import Any
 from fastapi import HTTPException
 
 from ..actions import ActionRefused
+from ..attachments import AttachmentError
 from ..inbox import InboxError
 
 
@@ -20,6 +21,8 @@ def errors() -> Iterator[None]:
     except InboxError as e:
         raise HTTPException(e.code, str(e)) from e
     except ActionRefused as e:
+        raise HTTPException(e.code, str(e)) from e
+    except AttachmentError as e:
         raise HTTPException(e.code, str(e)) from e
 
 

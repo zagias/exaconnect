@@ -40,5 +40,6 @@ ALTER TABLE ai_calls ADD COLUMN IF NOT EXISTS widget_key_id uuid;
 ALTER TABLE ai_calls ADD COLUMN IF NOT EXISTS visitor text NOT NULL DEFAULT '';
 CREATE INDEX IF NOT EXISTS ai_calls_visitor ON ai_calls (widget_key_id, started_at) WHERE widget_key_id IS NOT NULL;
 
--- Files staff attach to replies use channel_files too (owner 'staff:<email>').
+-- Files staff attach to replies use channel_files too (owner 'staff:<user id>').
 CREATE INDEX IF NOT EXISTS channel_files_owner ON channel_files (customer_id, owner) WHERE conversation_id IS NULL;
+ALTER TABLE sim_channel_outbox ADD COLUMN IF NOT EXISTS attachments jsonb NOT NULL DEFAULT '[]';

@@ -5,13 +5,14 @@ the website visitor's AI browser call."""
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import Response
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field
 
 from ... import audit, db
 from ...api.deps import UserDep
-from .. import access, channels, events, history, inbox, inbox_jobs, ratelimit
-from .common import page_after
+from .. import access, attachments, channels, events, history, inbox, inbox_jobs, ratelimit
+from .common import errors, page_after
 
 router = APIRouter(prefix="/customers/{customer_id}", tags=["commai: inbox"])
 public = APIRouter(tags=["commai: channels (public)"])
@@ -256,3 +257,64 @@ def remove_identity(customer_id: str, contact_id: str, identity_id: str, user: U
             {"contact_id": contact_id, "identity_id": identity_id, "channel": ident["channel"]},
             contact_id,
         )
+
+
+# ---- staff attachments ----------------------------------------------------------------------
+
+
+class StaffFileIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    type: str = Field(max_length=100)
+    data: str = Field(description="base64", max_length=3_000_000)
+
+
+@router.post("/conversations/{conversation_id}/files", status_code=201)
+def upload_file(customer_id: str, conversation_id: str, body: StaffFileIn, user: UserDep) -> dict:
+    """Upload a file to send with a reply on this conversation's channel. Name
+    its id in the reply's `attachments`. The file must suit the channel."""
+    access.check(user, customer_id, "commai:write")
+    with db.tx() as conn, errors():
+        access.require_reply_seat(conn, user, customer_id)
+        conv = inbox.get(conn, customer_id, conversation_id)
+        row = attachments.upload(conn, conv, user.id, body.name, body.type, body.data)
+        audit.record(
+            conn,
+            user.actor,
+            "commai.file.upload",
+            str(row["id"]),
+            customer_id,
+            {"conversation_id": conversation_id, "type": body.type, "size": row["size"]},
+        )
+    return row
+
+
+@router.get("/attachment-rules")
+def attachment_rules(customer_id: str, user: UserDep) -> dict:
+    """Which files each channel can carry, and how big."""
+    access.check(user, customer_id, "commai:read")
+    return {ch: {"types": list(types), "max_bytes": size} for ch, (types, size) in attachments.RULES.items()}
+
+
+@public.get("/channels/media/{hook_token}/{file_id}/{exp}/{sig}", include_in_schema=False)
+def provider_media(hook_token: str, file_id: str, exp: int, sig: str) -> Response:
+    """A sent file, fetched by the messaging provider through a signed link that expires."""
+    with db.tx() as conn:
+        acct = conn.execute("SELECT * FROM channel_accounts WHERE hook_token = %s", (hook_token,)).fetchone()
+        if acct is None or not attachments.check_media_link(acct, file_id, exp, sig):
+            raise HTTPException(404, "File not found.")
+        f = conn.execute(
+            "SELECT * FROM channel_files WHERE id = %s AND customer_id = %s AND conversation_id IS NOT NULL",
+            (file_id, acct["customer_id"]),
+        ).fetchone()
+    if f is None:
+        raise HTTPException(404, "File not found.")
+    safe = "".join(c for c in f["name"] if c.isalnum() or c in "._- ")[:100] or "file"
+    return Response(
+        bytes(f["data"]),
+        media_type=f["content_type"],
+        headers={
+            "Content-Disposition": f'inline; filename="{safe}"',
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "private, max-age=300",
+        },
+    )

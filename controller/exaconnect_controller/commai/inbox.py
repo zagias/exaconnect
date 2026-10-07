@@ -690,8 +690,10 @@ def send(
     - The AI may only reply while it is the handler.
     """
     body = (body or "").strip()
-    if not body and not template:
+    if not body and not template and not attachments:
         raise InboxError("Write a reply first.")
+    if template and attachments:
+        raise InboxError("Templates go without files. Send the file in a reply after the customer writes.")
     conv = get(conn, customer_id, conversation_id, lock=True)
     if author_kind == "ai":
         if conv["handler"] != "ai":

@@ -177,6 +177,7 @@ class ProvidedChannel(channels.Channel):
         ident = identity_of(conn, conversation)
         if ident["opted_out"]:
             raise channels.SendBlocked(f"{ident['address']} has opted out of {self.label} messages.")
+        check_spend(conn, conversation["customer_id"], self.name, self.label)
         self.rules(conn, conversation, ident, body, template)
 
     def rules(self, conn, conversation: dict, identity: dict, body: str, template: str) -> None:
@@ -194,6 +195,9 @@ class ProvidedChannel(channels.Channel):
                 ref = prov.send_template(
                     acct, ident["address"], tpl, template_params(conn, message, tpl), ref=str(message["id"]), conn=conn
                 )
+            elif message.get("attachments"):
+                files = [a for a in message["attachments"] if isinstance(a, dict) and a.get("id")]
+                ref = prov.send_media(acct, ident["address"], message["body"], files, ref=str(message["id"]), conn=conn)
             else:
                 ref = prov.send_text(acct, ident["address"], message["body"], ref=str(message["id"]), conn=conn)
         except Exception as e:
@@ -206,6 +210,12 @@ class ProvidedChannel(channels.Channel):
         remember_thread(conn, conversation["id"], conversation["customer_id"], acct["id"])
         usage.record(conn, conversation["customer_id"], f"message_out:{self.name}", 1, ref=str(message["id"]))
         return {"status": "sent", "provider_ref": ref}
+
+
+def check_spend(conn: psycopg.Connection, customer_id: Any, channel: str, label: str) -> None:
+    """The business's hard monthly limit for this channel's messages (usage.allowed)."""
+    if not usage.allowed(conn, customer_id, f"message_out:{channel}"):
+        raise channels.SendBlocked(f"This month's {label} limit is used up. An administrator can raise it under Usage.")
 
 
 class WhatsApp(ProvidedChannel):

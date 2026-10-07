@@ -34,6 +34,8 @@ import urllib.request
 from dataclasses import dataclass, field
 from typing import Any
 
+from psycopg.types.json import Jsonb
+
 TIMEOUT_S = 10
 
 
@@ -138,6 +140,11 @@ class Provider:
     ) -> str:
         raise NotImplementedError
 
+    def send_media(self, account: dict, to: str, body: str, files: list[dict], *, ref: str, conn: Any = None) -> str:
+        """Send files (each {"id", "name", "type", "size"}) with the text as their
+        caption. The provider fetches each one from attachments.public_media_url."""
+        raise ProviderError(f"{self.label} can't send files yet.")
+
     def verify(self, account: dict, req: InboundRequest) -> bool:
         raise NotImplementedError
 
@@ -186,6 +193,15 @@ class Simulated(Provider):
         return self._record(
             conn, account, to, render(template["body"], params), f"{template['name']}:{template['language']}"
         )
+
+    def send_media(self, account: dict, to: str, body: str, files: list[dict], *, ref: str, conn: Any = None) -> str:
+        from ..attachments import media_path
+
+        sent = self._record(conn, account, to, body, "")
+        if conn is not None:
+            links = [{**f, "link": media_path(account, f["id"])} for f in files]
+            conn.execute("UPDATE sim_channel_outbox SET attachments = %s WHERE provider_ref = %s", (Jsonb(links), sent))
+        return sent
 
     @staticmethod
     def sign(secret: str, body: bytes) -> str:
@@ -304,6 +320,18 @@ class Twilio(Provider):
             },
         )
 
+    def send_media(self, account: dict, to: str, body: str, files: list[dict], *, ref: str, conn: Any = None) -> str:
+        from ..attachments import public_media_url
+
+        first = ""
+        for i, f in enumerate(files):  # one file per message, the text with the first
+            fields = {"From": self._addr(account, account["address"]), "To": self._addr(account, to)}
+            fields["MediaUrl"] = public_media_url(account, f["id"])
+            if i == 0 and body:
+                fields["Body"] = body
+            first = first or self._send(account, fields)
+        return first
+
     @staticmethod
     def signature(token: str, url: str, form: dict[str, str]) -> str:
         data = url + "".join(k + form[k] for k in sorted(form))
@@ -406,6 +434,20 @@ class Dialog360(Provider):
         if params:
             tpl["components"] = [{"type": "body", "parameters": [{"type": "text", "text": p} for p in params]}]
         return self._send(account, {"to": to.lstrip("+"), "type": "template", "template": tpl})
+
+    def send_media(self, account: dict, to: str, body: str, files: list[dict], *, ref: str, conn: Any = None) -> str:
+        from ..attachments import public_media_url
+
+        first = ""
+        for i, f in enumerate(files):
+            kind = "image" if f["type"].startswith("image/") else "document"
+            media: dict[str, Any] = {"link": public_media_url(account, f["id"])}
+            if kind == "document":
+                media["filename"] = f["name"]
+            if i == 0 and body:
+                media["caption"] = body
+            first = first or self._send(account, {"to": to.lstrip("+"), "type": kind, kind: media})
+        return first
 
     def verify(self, account: dict, req: InboundRequest) -> bool:
         _, secret = self._creds(account)
