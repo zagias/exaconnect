@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 from .. import audit, db
 from ..identity import mfa, oidc, orgs, passkeys, sessions, sso, totp
 from ..security import hash_password, new_token, token_hash, verify_password
-from .deps import API_KEY_PREFIX, UserDep
+from .deps import API_KEY_PREFIX, UserDep, products_of
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -52,6 +52,9 @@ class UserOut(BaseModel):
     org_role: str | None = None
     organisation: str | None = None
     memberships: list[MembershipOut] = []
+    # The plans the current organisation holds ('connect', 'commai'); None: not
+    # limited by plan (ExaCarib admins and carrier accounts).
+    products: list[str] | None = None
 
 
 class MembershipOut(BaseModel):
@@ -59,6 +62,8 @@ class MembershipOut(BaseModel):
     name: str
     role: str
     managed_by: str | None = None
+    # The plans this organisation holds.
+    products: list[str] = []
 
 
 UserOut.model_rebuild()
@@ -204,9 +209,16 @@ def me(user: UserDep) -> UserOut:
         out.customer_id = str(user.customer_id) if user.customer_id else None
         out.org_role = user.org_role
         out.memberships = [
-            MembershipOut(customer_id=str(m["customer_id"]), name=m["name"], role=m["role"], managed_by=m["managed_by"])
+            MembershipOut(
+                customer_id=str(m["customer_id"]),
+                name=m["name"],
+                role=m["role"],
+                managed_by=m["managed_by"],
+                products=list(products_of(m["products"])),
+            )
             for m in mine
         ]
+        out.products = list(user.products) if user.products is not None else None
         out.organisation = next((m.name for m in out.memberships if m.customer_id == out.customer_id), None)
     return out
 

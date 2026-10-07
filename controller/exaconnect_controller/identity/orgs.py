@@ -42,7 +42,7 @@ class OrgError(Exception):
 
 def memberships(conn: psycopg.Connection, user_id: Any) -> list[dict]:
     return conn.execute(
-        """SELECT m.customer_id, c.name, m.role, m.managed_by, m.created_at
+        """SELECT m.customer_id, c.name, m.role, m.managed_by, m.created_at, c.products
            FROM org_memberships m JOIN customers c ON c.id = m.customer_id
            WHERE m.user_id = %s ORDER BY c.name""",
         (user_id,),

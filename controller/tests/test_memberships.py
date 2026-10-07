@@ -59,6 +59,11 @@ def two_orgs(client, admin_headers):
     """Org A with an owner and an admin; org B with an owner."""
     a = _org(client, admin_headers, "Org A")
     b = _org(client, admin_headers, "Org B")
+    for cid in (a, b):
+        r = client.put(
+            f"{API}/customers/{cid}/classes/base", json={"sla": {"max_latency_ms": 250}}, headers=admin_headers
+        )
+        assert r.status_code == 200, r.text
     out = {
         "a": a,
         "b": b,
@@ -171,9 +176,10 @@ def test_invite_existing_person_signs_in_and_accepts(client, two_orgs):
     assert me["customer_id"] == o["b"] and me["org_role"] == "viewer"
     assert sorted(m["name"] for m in me["memberships"]) == ["Org A", "Org B"]
     with db.tx() as conn:
-        assert str(conn.execute("SELECT customer_id FROM users WHERE id = %s", (o["admin_a"],)).fetchone()[
-            "customer_id"
-        ]) == o["a"]
+        assert (
+            str(conn.execute("SELECT customer_id FROM users WHERE id = %s", (o["admin_a"],)).fetchone()["customer_id"])
+            == o["a"]
+        )
     # Reused token fails.
     r = client.post(f"{API}/invites/{token}/accept", json={}, headers=o["h_admin_a"])
     assert r.status_code == 410
@@ -207,8 +213,9 @@ def test_expired_and_revoked_invites_fail(client, two_orgs):
 def test_invite_rules(client, two_orgs, admin_headers):
     o = two_orgs
     # Owner role is handed on, not invited.
-    r = client.post(f"{API}/orgs/{o['a']}/invites", json={"email": "x@a.example", "role": "owner"},
-                    headers=o["h_owner_a"])
+    r = client.post(
+        f"{API}/orgs/{o['a']}/invites", json={"email": "x@a.example", "role": "owner"}, headers=o["h_owner_a"]
+    )
     assert r.status_code == 422
     # Existing members can't be invited again.
     r = client.post(f"{API}/orgs/{o['a']}/invites", json={"email": "admin@a.example"}, headers=o["h_owner_a"])
@@ -251,10 +258,14 @@ def test_member_and_viewer_rights(client, two_orgs):
         assert {m["email"] for m in r.json()["members"]} >= {"owner@a.example", "member@a.example"}
         assert r.json()["can_manage"] is False
     # Members and viewers don't manage people.
-    assert client.post(f"{API}/orgs/{o['a']}/invites", json={"email": "z@a.example"}, headers=h_member).status_code == 403
+    assert (
+        client.post(f"{API}/orgs/{o['a']}/invites", json={"email": "z@a.example"}, headers=h_member).status_code == 403
+    )
     assert client.get(f"{API}/orgs/{o['a']}/invites", headers=h_member).status_code == 403
-    assert client.patch(f"{API}/orgs/{o['a']}/members/{viewer}", json={"role": "admin"},
-                        headers=h_member).status_code == 403
+    assert (
+        client.patch(f"{API}/orgs/{o['a']}/members/{viewer}", json={"role": "admin"}, headers=h_member).status_code
+        == 403
+    )
     assert client.delete(f"{API}/orgs/{o['a']}/members/{viewer}", headers=h_member).status_code == 403
     # Members change things; viewers can't write anything, but can still read.
     sla = {"sla": {"max_latency_ms": 200}, "description": "Video"}
@@ -265,9 +276,9 @@ def test_member_and_viewer_rights(client, two_orgs):
     assert client.delete(f"{API}/customers/{o['a']}/classes/video", headers=h_viewer).status_code == 403
     assert client.get(f"{API}/classes", headers=h_viewer).status_code == 200
     # Settings (commai:admin, SSO, SCIM) are for owners and admins.
-    r = client.post(f"{API}/commai/{o['a']}/teams", json={"name": "Desk"}, headers=h_member)
+    r = client.post(f"{API}/commai/customers/{o['a']}/teams", json={"name": "Desk"}, headers=h_member)
     assert r.status_code == 403
-    r = client.post(f"{API}/commai/{o['a']}/teams", json={"name": "Desk"}, headers=o["h_admin_a"])
+    r = client.post(f"{API}/commai/customers/{o['a']}/teams", json={"name": "Desk"}, headers=o["h_admin_a"])
     assert r.status_code == 201, r.text
     # A viewer's API key is read-only too; their own sign-in is still theirs to manage.
     r = client.post(f"{API}/auth/api-keys", json={"name": "read"}, headers=h_viewer)
@@ -275,8 +286,9 @@ def test_member_and_viewer_rights(client, two_orgs):
     hk = {"Authorization": f"Bearer {r.json()['token']}"}
     assert client.get(f"{API}/classes", headers=hk).status_code == 200
     assert client.put(f"{API}/customers/{o['a']}/classes/video3", json=sla, headers=hk).status_code == 403
-    r = client.post(f"{API}/auth/password", json={"current": NEW_PASSWORD, "new": "another long password"},
-                    headers=h_viewer)
+    r = client.post(
+        f"{API}/auth/password", json={"current": NEW_PASSWORD, "new": "another long password"}, headers=h_viewer
+    )
     assert r.status_code == 204
 
 
@@ -303,8 +315,12 @@ def test_change_role_and_last_owner_protection(client, two_orgs):
     assert r.status_code == 200
     r = client.patch(f"{API}/orgs/{o['a']}/members/{o['owner_a']}", json={"role": "member"}, headers=o["h_owner_a"])
     assert r.status_code == 200 and _role(o["a"], o["owner_a"]) == "member"
-    assert client.patch(f"{API}/orgs/{o['a']}/members/{o['admin_a']}", json={"role": "admin"},
-                        headers=o["h_admin_a"]).status_code == 409
+    assert (
+        client.patch(
+            f"{API}/orgs/{o['a']}/members/{o['admin_a']}", json={"role": "admin"}, headers=o["h_admin_a"]
+        ).status_code
+        == 409
+    )
     with db.tx() as conn:
         n = conn.execute(
             "SELECT count(*) AS n FROM audit_log WHERE action = 'org.member.role' AND customer_id = %s", (o["a"],)
@@ -342,9 +358,10 @@ def test_remove_and_leave(client, two_orgs):
     me = client.get(f"{API}/auth/me", headers=o["h_admin_a"]).json()
     assert me["customer_id"] == o["b"] and [m["name"] for m in me["memberships"]] == ["Org B"]
     with db.tx() as conn:
-        assert str(conn.execute("SELECT customer_id FROM users WHERE id = %s", (o["admin_a"],)).fetchone()[
-            "customer_id"
-        ]) == o["b"]
+        assert (
+            str(conn.execute("SELECT customer_id FROM users WHERE id = %s", (o["admin_a"],)).fetchone()["customer_id"])
+            == o["b"]
+        )
     # They leave B too: no organisation left, so nothing but their own sign-in.
     assert client.post(f"{API}/orgs/{o['b']}/leave", headers=o["h_admin_a"]).status_code == 204
     me = client.get(f"{API}/auth/me", headers=o["h_admin_a"])
@@ -394,7 +411,7 @@ def test_member_of_a_cannot_read_b(client, two_orgs):
     assert client.post(f"{API}/auth/organisation", json={"customer_id": "nonsense"}, headers=h).status_code == 403
     assert client.get(f"{API}/orgs/{o['b']}/members", headers=h).status_code == 403
     assert client.get(f"{API}/customers/{o['b']}/settings", headers=h).status_code == 403
-    assert client.get(f"{API}/commai/{o['b']}/members", headers=h).status_code == 403
+    assert client.get(f"{API}/commai/customers/{o['b']}/members", headers=h).status_code == 403
     assert o["b"] not in {c["customer_id"] for c in client.get(f"{API}/classes", headers=h).json()}
     assert client.get(f"{API}/classes", params={"customer_id": o["b"]}, headers=h).json()[0]["customer_id"] == o["a"]
 
@@ -417,7 +434,7 @@ def test_commai_people_follow_memberships(client, two_orgs):
     o = two_orgs
     inv = _invite(client, o["h_owner_b"], o["b"], "admin@a.example", "member")
     assert client.post(f"{API}/invites/{inv['token']}/accept", json={}, headers=o["h_admin_a"]).status_code == 200
-    people = client.get(f"{API}/commai/{o['b']}/members", headers=o["h_owner_b"]).json()
+    people = client.get(f"{API}/commai/customers/{o['b']}/members", headers=o["h_owner_b"]).json()
     assert {p["email"]: p["org_role"] for p in people} == {"owner@b.example": "owner", "admin@a.example": "member"}
 
 

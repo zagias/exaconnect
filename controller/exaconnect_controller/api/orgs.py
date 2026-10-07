@@ -16,7 +16,17 @@ from pydantic import BaseModel, Field
 from .. import audit, db
 from ..identity import orgs, sessions, sso
 from ..security import hash_password, token_hash
-from .deps import ORG_ROLES, User, UserDep, check_customer, current_user, require_org_manager
+from .deps import (
+    ORG_ROLES,
+    PRODUCTS,
+    AdminDep,
+    User,
+    UserDep,
+    check_customer,
+    current_user,
+    products_of,
+    require_org_manager,
+)
 
 router = APIRouter(tags=["organisations"])
 
@@ -172,9 +182,38 @@ def create_invite(customer_id: str, body: InviteIn, user: UserDep, request: Requ
         except orgs.OrgError as e:
             raise _fail(e) from e
         audit.record(conn, user.actor, "org.invite.create", row["email"], customer_id, {"role": row["role"]})
+        _notify(conn, customer_id, row, user.email)
     path = f"/invite/{token}"
     base = request.app.state.settings.public_url
-    return {**row, "token": token, "path": path, "url": f"{base}{path}" if base else path, "emailed": False}
+    return {
+        **row,
+        "token": token,
+        "path": path,
+        "url": f"{base}{path}" if base else path,
+        "emailed": False,
+        "email_sender": "simulated",
+    }
+
+
+def _notify(conn, customer_id: str, invite: dict, by: str) -> None:
+    """No invitation email goes out yet. CommAI's simulated email sender records
+    the notice it would send, so the outbox shows it; the link itself is left
+    out, because only its hash is ever stored."""
+    from email.message import EmailMessage
+    from email.utils import make_msgid
+
+    from ..commai.channels.email import SimulatedSender
+
+    org = conn.execute("SELECT name FROM customers WHERE id = %s", (customer_id,)).fetchone()["name"]
+    msg = EmailMessage()
+    msg["To"] = invite["email"]
+    msg["Subject"] = f"You're invited to {org} on ExaCarib Connect"
+    msg["Message-ID"] = make_msgid(domain="invites.exacarib.invalid")
+    msg.set_content(
+        f"{by} has invited you to join {org} as {invite['role']}.\n"
+        "Your invitation link was given to them to pass on. It works once and expires in 7 days.\n"
+    )
+    SimulatedSender().send(conn, {"customer_id": customer_id, "id": None}, msg)
 
 
 @router.delete("/orgs/{customer_id}/invites/{invite_id}", status_code=204)
@@ -342,3 +381,37 @@ def switch_organisation(body: SwitchIn, user: UserDep, request: Request) -> dict
         name = conn.execute("SELECT name FROM customers WHERE id = %s", (body.customer_id,)).fetchone()["name"]
         audit.record(conn, user.actor, "org.switch", name, body.customer_id, {"from": str(user.customer_id or "")})
     return {"customer_id": body.customer_id, "name": name, "role": m["role"]}
+
+
+# ---- plans ---------------------------------------------------------------------------
+
+
+class ProductsIn(BaseModel):
+    products: list[str] = Field(max_length=4)
+
+
+@router.put("/customers/{customer_id}/products")
+def set_products(customer_id: str, body: ProductsIn, user: AdminDep) -> dict:
+    """Which plans an organisation holds: Connect, CommAI or both. ExaCarib
+    admins only; the billing work's subscriptions will set this too."""
+    wanted = sorted(set(body.products))
+    if any(p not in PRODUCTS for p in wanted):
+        raise HTTPException(422, f"Plans are {', '.join(PRODUCTS)}.")
+    with db.tx() as conn:
+        row = (
+            conn.execute("SELECT products FROM customers WHERE id = %s FOR UPDATE", (customer_id,)).fetchone()
+            if _uuid_ok(customer_id)
+            else None
+        )
+        if row is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Organisation not found.")
+        conn.execute("UPDATE customers SET products = %s WHERE id = %s", (wanted, customer_id))
+        audit.record(
+            conn,
+            user.actor,
+            "customer.products",
+            ",".join(wanted) or "none",
+            customer_id,
+            {"from": list(products_of(row["products"])), "to": wanted},
+        )
+    return {"customer_id": customer_id, "products": wanted}
