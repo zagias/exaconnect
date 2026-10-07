@@ -264,6 +264,74 @@ export interface User {
   two_step?: boolean;
   /** null: the full account. A list: what a directory-provisioned account may do. */
   scopes?: string[] | null;
+  /** Shared accounts (ADR 0023): your role in the organisation this session acts for. */
+  org_role?: OrgRole | null;
+  organisation?: string | null;
+  memberships?: Membership[];
+  /** The plans the current organisation holds; null: not limited by plan. */
+  products?: Product[] | null;
+}
+
+export type OrgRole = "owner" | "admin" | "member" | "viewer";
+export type Product = "connect" | "commai";
+
+export interface Membership {
+  customer_id: string;
+  name: string;
+  role: OrgRole;
+  managed_by: "scim" | "sso" | null;
+  products: Product[];
+}
+
+export interface OrgMember {
+  user_id: string;
+  email: string;
+  name: string;
+  role: OrgRole;
+  managed_by: "scim" | "sso" | null;
+  created_at: string;
+  disabled: boolean;
+  primary_org: boolean;
+  you: boolean;
+}
+
+export interface OrgMembers {
+  organisation: { id: string; name: string };
+  your_role: OrgRole | null;
+  can_manage: boolean;
+  members: OrgMember[];
+}
+
+export interface OrgInvite {
+  id: string;
+  email: string;
+  role: OrgRole;
+  invited_by: string;
+  created_at: string;
+  expires_at: string;
+  expired?: boolean;
+}
+
+export interface OrgInviteCreated extends OrgInvite {
+  token: string;
+  path: string;
+  url: string;
+  emailed: boolean;
+}
+
+export interface InviteInfo {
+  organisation: string;
+  email: string;
+  role: OrgRole;
+  expires_at: string;
+  has_account: boolean;
+  sso_required: boolean;
+}
+
+/** Act for another organisation you belong to, then reload so every screen follows. */
+export async function switchOrganisation(customerId: string): Promise<void> {
+  await api("/auth/organisation", { method: "POST", body: JSON.stringify({ customer_id: customerId }) });
+  window.location.assign("/");
 }
 
 // ---- Sign-in, two-step and single sign-on (ADR 0017) ----

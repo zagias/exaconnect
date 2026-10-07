@@ -1,10 +1,12 @@
-import { lazy, Suspense } from "react";
-import { Route, Routes } from "react-router-dom";
+import { lazy, Suspense, useEffect } from "react";
+import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { AuthGate, useAuth } from "./auth";
 import { CustomerProvider } from "./customer";
 import Account from "./pages/Account";
 import Ask from "./pages/Ask";
 import Insights from "./pages/Insights";
+import InvitePage, { inviteToken, PENDING_INVITE } from "./pages/Invite";
+import People from "./pages/People";
 import Internet from "./pages/Internet";
 import Admin from "./pages/Admin";
 import Decisions from "./pages/Decisions";
@@ -21,6 +23,9 @@ import { Shell } from "./shell";
 const CommAI = lazy(() => import("./pages/commai"));
 
 export default function App() {
+  // An invitation link works signed out, so it sits outside the sign-in gate.
+  const token = inviteToken(useLocation().pathname);
+  if (token) return <InvitePage token={token} />;
   return (
     <AuthGate>
       <CustomerProvider>
@@ -34,6 +39,20 @@ function Layout() {
   const { user } = useAuth();
   const carrier = user?.role === "carrier";
   const admin = user?.role === "admin";
+  const navigate = useNavigate();
+  // Back from signing in to accept an invitation: finish joining.
+  useEffect(() => {
+    let pending: string | null = null;
+    try {
+      pending = sessionStorage.getItem(PENDING_INVITE);
+      sessionStorage.removeItem(PENDING_INVITE);
+    } catch {
+      /* storage unavailable */
+    }
+    if (pending) navigate(`/invite/${encodeURIComponent(pending)}`);
+  }, [navigate]);
+  // An organisation with CommAI but not Connect starts in CommAI.
+  const connect = !user?.products || user.products.includes("connect");
   return (
     <Shell>
       {carrier ? (
@@ -43,7 +62,7 @@ function Layout() {
         </Routes>
       ) : (
         <Routes>
-          <Route path="/" element={<Overview />} />
+          <Route path="/" element={connect ? <Overview /> : <Navigate to="/commai" replace />} />
           <Route path="/sites" element={<SiteList />} />
           <Route path="/sites/:id" element={<SitePage />} />
           <Route path="/traffic/*" element={<Traffic />} />
@@ -57,6 +76,7 @@ function Layout() {
           <Route path="/ask" element={<Ask />} />
           <Route path="/carrier" element={<Metering carrierView />} />
           <Route path="/account" element={<Account />} />
+          <Route path="/account/people" element={<People />} />
           <Route
             path="/commai/*"
             element={

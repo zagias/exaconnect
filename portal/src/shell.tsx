@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "./auth";
-import { CustomerPicker, StormBanner, StormSwitch } from "./customer";
+import type { Product, User } from "./api";
+import { CustomerPicker, OrganisationSwitcher, StormBanner, StormSwitch } from "./customer";
 import "./shell.css";
 
 /* ---- Icons: 24 px grid, drawn at 18 px, stroke only, currentColor ---- */
@@ -183,10 +184,13 @@ interface Group {
   items: Item[];
 }
 
-function navGroups(role: string | undefined): Group[] {
+function navGroups(user: User | null): Group[] {
+  const role = user?.role;
+  // The plans the current organisation holds (ADR 0023); null: not limited by plan.
+  const has = (p: Product) => !user?.products || user.products.includes(p);
   if (role === "carrier") return [{ label: null, items: [{ to: "/", label: "Carrier view", icon: icons.carrier, end: true }] }];
   const admin = role === "admin";
-  const groups: Group[] = [
+  const connect: Group[] = [
     {
       label: "Monitor",
       items: [
@@ -215,8 +219,10 @@ function navGroups(role: string | undefined): Group[] {
       ],
     },
   ];
+  const groups: Group[] = has("connect") ? connect : [];
   // CommAI (ADR 0016): customer service on the same sign-in and customers.
-  groups.push({
+  if (has("commai"))
+    groups.push({
     label: "CommAI",
     items: [
       { to: "/commai", label: "Inbox", icon: icons.ask, end: true },
@@ -239,6 +245,7 @@ function navGroups(role: string | undefined): Group[] {
 /** The current screen's group and name, for the context line in the top bar. */
 function pageContext(groups: Group[], path: string): { group: string | null; label: string } | null {
   if (path === "/account") return { group: null, label: "Account" };
+  if (path === "/account/people") return { group: "Account", label: "People" };
   for (const g of groups)
     for (const i of g.items) {
       const hit = i.end || i.to === "/" ? path === i.to : path === i.to || path.startsWith(i.to + "/");
@@ -256,6 +263,14 @@ function initials(email: string | undefined): string {
 }
 
 const ROLE_NAMES: Record<string, string> = { admin: "ExaCarib admin", customer: "Customer", carrier: "Carrier (read-only)" };
+const ORG_ROLE_NAMES: Record<string, string> = { owner: "Owner", admin: "Admin", member: "Member", viewer: "Viewer (read-only)" };
+
+/** "Admin, Example Bank" for organisation members; the account role otherwise. */
+function roleLine(user: User | null): string {
+  if (user?.role === "customer" && user.org_role)
+    return `${ORG_ROLE_NAMES[user.org_role] ?? user.org_role}${user.organisation ? `, ${user.organisation}` : ""}`;
+  return ROLE_NAMES[user?.role ?? ""] ?? user?.role ?? "";
+}
 
 /* ---- Shell ---- */
 
@@ -265,7 +280,8 @@ const PHONE = "(max-width: 640px)";
 export function Shell({ children }: { children: ReactNode }) {
   const { user, signOut } = useAuth();
   const carrier = user?.role === "carrier";
-  const groups = navGroups(user?.role);
+  const groups = navGroups(user);
+  const connect = !user?.products || user.products.includes("connect");
   const location = useLocation();
   const ctx = pageContext(groups, location.pathname);
   const [drawer, setDrawer] = useState(false);
@@ -350,7 +366,7 @@ export function Shell({ children }: { children: ReactNode }) {
             </span>
             <span className="shell-user-text">
               <span className="shell-user-email">{user?.email}</span>
-              <span className="shell-user-role">{ROLE_NAMES[user?.role ?? ""] ?? user?.role}</span>
+              <span className="shell-user-role">{roleLine(user)}</span>
             </span>
           </div>
           {user?.role === "admin" && (
@@ -358,13 +374,26 @@ export function Shell({ children }: { children: ReactNode }) {
               <CustomerPicker />
             </div>
           )}
+          {(user?.memberships?.length ?? 0) > 1 && (
+            <div className="shell-drawer-picker">
+              <OrganisationSwitcher />
+            </div>
+          )}
           <ul>
             <li>
-              <NavLink to="/account" className="shell-link">
+              <NavLink to="/account" end className="shell-link">
                 {icons.account}
                 <span className="shell-link-text">Account</span>
               </NavLink>
             </li>
+            {!carrier && (
+              <li>
+                <NavLink to="/account/people" className="shell-link">
+                  {icons.sites}
+                  <span className="shell-link-text">People</span>
+                </NavLink>
+              </li>
+            )}
             <li>
               <button className="shell-link" onClick={signOut}>
                 {icons.signout}
@@ -397,17 +426,20 @@ export function Shell({ children }: { children: ReactNode }) {
             {ctx && <span className="shell-context-page">{ctx.label}</span>}
           </div>
           <div className="shell-actions">
+            <div className="shell-top-picker">
+              <OrganisationSwitcher />
+            </div>
             {user?.role === "admin" && (
               <div className="shell-top-picker">
                 <CustomerPicker />
               </div>
             )}
             {/* Storm Mode switch: on every screen, never for carriers. */}
-            {!carrier && <StormSwitch />}
+            {!carrier && connect && <StormSwitch />}
             <UserMenu />
           </div>
         </header>
-        {!carrier && <StormBanner />}
+        {!carrier && connect && <StormBanner />}
         <main className="page" id="main">
           {children}
         </main>
@@ -464,15 +496,23 @@ function UserMenu() {
         <div className="shell-user-menu card">
           <div className="shell-user-menu-head">
             <span className="shell-user-menu-email">{user?.email}</span>
-            <span className="shell-user-role">{ROLE_NAMES[user?.role ?? ""] ?? user?.role}</span>
+            <span className="shell-user-role">{roleLine(user)}</span>
           </div>
           <ul>
             <li>
-              <NavLink to="/account" className="shell-menu-item">
+              <NavLink to="/account" end className="shell-menu-item">
                 {icons.account}
                 Account
               </NavLink>
             </li>
+            {user?.role !== "carrier" && (
+              <li>
+                <NavLink to="/account/people" className="shell-menu-item">
+                  {icons.sites}
+                  People
+                </NavLink>
+              </li>
+            )}
             <li>
               <button className="shell-menu-item" onClick={signOut}>
                 {icons.signout}

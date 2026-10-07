@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 
 from .. import audit, db, inventory
+from ..identity import orgs
 from ..security import hash_password, new_token
 from .deps import AdminDep, UserDep, ViewerDep, check_customer, customer_scope
 
@@ -449,5 +450,13 @@ def delete_user(user_id: str, user: AdminDep) -> None:
             and conn.execute("SELECT count(*) AS n FROM users WHERE role = 'admin'").fetchone()["n"] <= 1
         ):
             raise HTTPException(400, "This is the last admin account.")
+        owned = conn.execute(
+            "SELECT customer_id FROM org_memberships WHERE user_id = %s AND role = 'owner'", (user_id,)
+        ).fetchall()
         conn.execute("DELETE FROM users WHERE id = %s", (user_id,))
         audit.record(conn, user.actor, "user.delete", row["email"])
+        # An organisation always keeps an owner (ADR 0023): its longest-standing admin steps up.
+        for o in owned:
+            promoted = orgs.ensure_owner(conn, o["customer_id"])
+            if promoted:
+                audit.record(conn, user.actor, "org.member.role", promoted, o["customer_id"], {"to": "owner"})

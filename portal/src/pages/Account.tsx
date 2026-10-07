@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { api, createPasskey, passkeysSupported, useApi, type TwoStepStatus } from "../api";
+import { Link } from "react-router-dom";
+import { useAuth } from "../auth";
 import { ErrorNote } from "../components";
 import { PageHead, useAction } from "../ui";
 import ApiKeys from "./ApiKeys";
@@ -7,6 +9,7 @@ import "./identity.css";
 
 /** Your account: password, two-step sign-in, passkeys and your API keys. */
 export default function Account() {
+  const { user } = useAuth();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [again, setAgain] = useState("");
@@ -41,6 +44,27 @@ export default function Account() {
       <PageHead eyebrow="Account" title="Your account">
         Change your password, turn on two-step sign-in and manage the API keys your own code uses.
       </PageHead>
+      {user?.role === "customer" && (
+        <section className="card" style={{ maxWidth: 880, marginBottom: 24 }} aria-labelledby="orgs-title">
+          <div className="card-head">
+            <h2 id="orgs-title">Your organisations</h2>
+            <Link to="/account/people">People</Link>
+          </div>
+          {(user.memberships ?? []).length === 0 ? (
+            <p className="muted small">You are not a member of an organisation. Ask an owner to invite you.</p>
+          ) : (
+            <ul className="small" style={{ margin: 0, paddingLeft: 18 }}>
+              {(user.memberships ?? []).map((m) => (
+                <li key={m.customer_id}>
+                  <strong>{m.name}</strong>: {m.role}
+                  {m.customer_id === user.customer_id && <span className="muted"> (acting for now)</span>}
+                  {m.managed_by && <span className="muted"> · managed by your directory</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
       <section className="card" style={{ maxWidth: 880 }} aria-labelledby="password-title">
         <div className="card-head">
           <h2 id="password-title">Change your password</h2>
