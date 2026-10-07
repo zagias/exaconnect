@@ -148,6 +148,9 @@ type Agent struct {
 	flowErr     string
 	inetErr     string
 	renewErr    string
+	slaWin      map[string]probe.Window // latest probe window, by tunnel
+	sla         map[string]*slaState    // the agent's own SLA view, by class|path
+	slaSig      string                  // the demotions the last steer applied
 	// writeProc writes a /proc/sys file; nil uses os.WriteFile (tests stub it).
 	writeProc func(path string, data []byte) error
 }
@@ -234,6 +237,7 @@ func (a *Agent) Run(ctx context.Context) error {
 		case <-tele.C:
 			a.collectProbes()
 			a.flush(ctx)
+			a.slaSteer(ctx)
 		case <-cnt.C:
 			a.collectCounters()
 			a.collectFlows(ctx)
@@ -564,11 +568,14 @@ func (a *Agent) collectProbes() {
 	now := time.Now()
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	fresh := map[string]probe.Window{}
 	for _, st := range a.stats {
 		if w, ok := st.Collect(now); ok {
 			a.buf.Probes = append(a.buf.Probes, w)
+			fresh[w.Path] = w
 		}
 	}
+	a.updateSLA(fresh)
 	if n := len(a.buf.Probes); n > a.Cfg.MaxBuffered {
 		a.buf.Probes = a.buf.Probes[n-a.Cfg.MaxBuffered:]
 	}
@@ -886,7 +893,15 @@ func (a *Agent) steer(ctx context.Context, why string) {
 		a.mu.Unlock()
 		return
 	}
-	choices := steer.Choose(m, a.usable(m))
+	var choices []steer.Choice
+	if a.silent {
+		// Without the controller the agent also keeps each class off a path
+		// whose latest probe window breaches that class's SLA.
+		choices = steer.ChooseHealthy(m, a.usable(m), a.slaHealthy, a.slaSeverity(m))
+	} else {
+		choices = steer.Choose(m, a.usable(m))
+	}
+	a.slaSig = a.slaSignature()
 	prev := a.choices
 	a.mu.Unlock()
 

@@ -50,6 +50,16 @@ def pause_if_none(cls: dict, customer: dict, site: dict) -> bool:
     return not cls["allow_satellite"] and not (site.get("storm_mode") and customer["storm_allow_bulk_sat"])
 
 
+def class_sla(cls: dict) -> dict[str, float]:
+    """The class's SLA limits, for the agent's own check while the controller
+    is silent. Only the limits that are set; an older agent ignores the key."""
+    out = {}
+    for key in ("max_latency_ms", "max_jitter_ms", "max_loss_pct"):
+        if cls.get(key) is not None:
+            out[key] = float(cls[key])
+    return out
+
+
 def load(conn: psycopg.Connection, customer_id: Any) -> dict[str, Any]:
     customer = conn.execute("SELECT * FROM customers WHERE id = %s", (customer_id,)).fetchone()
     sites = conn.execute(
@@ -134,15 +144,16 @@ def build(inv: dict[str, Any], site: dict) -> dict[str, Any]:
     ]
     classes = []
     for i, c in enumerate(inv["classes"]):
-        classes.append(
-            {
-                "name": c["name"],
-                "mark": MARK_BASE + i + 1,
-                "dscp": sorted(set(c["dscp"] or [])),
-                "ports": parse_ports(c["ports"] or ""),
-                "subnets": [str(s) for s in (c["subnets"] or [])],
-            }
-        )
+        entry: dict[str, Any] = {
+            "name": c["name"],
+            "mark": MARK_BASE + i + 1,
+            "dscp": sorted(set(c["dscp"] or [])),
+            "ports": parse_ports(c["ports"] or ""),
+            "subnets": [str(s) for s in (c["subnets"] or [])],
+        }
+        if sla := class_sla(c):
+            entry["sla"] = sla
+        classes.append(entry)
     storm = bool(site["storm_mode"])
     if site["kind"] == "pop":
         rules = []
