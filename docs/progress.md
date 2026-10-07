@@ -317,3 +317,16 @@ multilingual replies and browser calls; integrations (Google Calendar,
 HubSpot), workflows from plain English, AI onboarding, the platform
 assistant and outcome reports; and voice stages 2 to 4. Paid providers are
 simulated until Dudley chooses them; see docs/commai/README.md.
+
+**Billing phase 1** (ADR 0022, 2026-10-07). Connect and CommAI are sold as
+separate plans; an organisation's subscriptions say which it holds. Each
+plan has versioned price lists (currency, tax, SLA credit table). Charges are
+worked out per subscription and calendar month: Connect site fees, commit,
+burst at the 95th percentile from the metering settlement, satellite data
+and hourly Fabric circuits, less automatic SLA credits from the same probe
+windows as the Overview; CommAI plan fee, metered usage and voice as voice
+billing rated it. Draft, issued (EXA-2026-0001) and void invoices with CSV
+and a printable page; carrier and partner payables and margin; Stripe and
+hosted-page payment adapters and Xero / QuickBooks exports, all off or
+simulated until ExaCarib supplies accounts. Portal: Billing, and Admin >
+Billing.
