@@ -62,7 +62,7 @@ class LocaleError(Exception):
 def _load(locale: str) -> dict[str, str]:
     if locale not in LOCALES:  # only known names ever reach the file system
         raise LocaleError(f"There is no {locale} catalogue.", 404)
-    raw =resources.files(__package__).joinpath(f"{locale}.json").read_text(encoding="utf-8")
+    raw = resources.files(__package__).joinpath(f"{locale}.json").read_text(encoding="utf-8")
     data = json.loads(raw)
     return {str(k): str(v) for k, v in data.items() if not k.startswith("_")}
 
