@@ -87,6 +87,50 @@ def _enrol(body: EnrolIn, request: Request) -> EnrolOut:
     return EnrolOut(node_id=str(node["id"]), cert_pem=cert_pem.decode(), ca_pem=ca.pem.decode())
 
 
+class RenewIn(BaseModel):
+    csr_pem: str = Field(max_length=8192)
+
+
+class RenewOut(BaseModel):
+    cert_pem: str
+    ca_pem: str
+
+
+@router.post("/agent/renew")
+def renew(body: RenewIn, node: NodeDep, request: Request) -> RenewOut:
+    """A new client certificate for the same node, asked for over the current
+    one (mTLS). The node's serial is replaced in the same transaction, so the
+    old certificate stops working as soon as the new one is issued."""
+    ca: pki.CA = request.app.state.ca
+    try:
+        name = pki.csr_common_name(body.csr_pem.encode())
+        if name != node.name:
+            raise HTTPException(400, f"This certificate request is for {name or 'no name'}, not {node.name}.")
+        cert_pem, serial = ca.sign_client(body.csr_pem.encode(), node.name)
+    except pki.CSRError as e:
+        raise HTTPException(400, str(e)) from None
+    # The serial the request came in with (checked by NodeDep). Swapping only
+    # if it is still current means a concurrent renewal or a revocation wins.
+    old = pki.normalise_serial(request.headers.get("x-ssl-client-serial", ""))
+    with db.tx() as conn:
+        row = conn.execute(
+            "UPDATE nodes SET cert_serial = %s WHERE id = %s AND cert_serial = %s RETURNING id",
+            (serial, node.id, old),
+        ).fetchone()
+        if row is None:
+            raise HTTPException(401, "unknown or replaced client certificate")
+        audit.record(
+            conn,
+            f"node:{node.name}",
+            "node.cert_renewed",
+            node.name,
+            node.customer_id,
+            {"old_serial": old, "serial": serial},
+        )
+        _event(conn, node.customer_id, node.id, "cert_renewed", {"node": node.name, "serial": serial})
+    return RenewOut(cert_pem=cert_pem.decode(), ca_pem=ca.pem.decode())
+
+
 @router.get("/agent/desired-state")
 def desired_state(node: NodeDep, have: int = 0) -> Any:
     with db.tx() as conn:

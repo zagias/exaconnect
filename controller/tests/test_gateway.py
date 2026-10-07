@@ -5,11 +5,12 @@ from __future__ import annotations
 from dataclasses import replace
 
 from cryptography import x509
+from cryptography.x509.oid import NameOID
 
 from exaconnect_controller import pki
 from exaconnect_controller.settings import Settings
 
-from .test_flow import _enrol, _seed
+from .test_flow import _csr, _enrol, _seed
 
 
 def _names(data_dir) -> set[str]:
@@ -67,3 +68,54 @@ def test_a_revoked_node_is_refused_and_can_enrol_again(client, admin_headers):
     token = client.post("/api/v1/enrolment-tokens", headers=admin_headers, json={"site_id": site_id}).json()["token"]
     _, again = _enrol(client, {"site-a": token}, "site-a")
     assert client.get("/api/v1/agent/desired-state", headers=again).status_code in (200, 204, 404)
+
+
+def _renew(client, headers, csr):
+    return client.post("/api/v1/agent/renew", headers=headers, json={"csr_pem": csr})
+
+
+def test_renewal_issues_a_new_certificate_and_retires_the_old_one(client, admin_headers):
+    tokens = _seed()["tokens"]
+    first, old = _enrol(client, tokens, "site-a")
+    old_cert = x509.load_pem_x509_certificate(first["cert_pem"].encode())
+
+    # Only over mutual TLS.
+    assert client.post("/api/v1/agent/renew", json={"csr_pem": _csr("site-a")}).status_code == 403
+
+    r = _renew(client, old, _csr("site-a"))
+    assert r.status_code == 200, r.text
+    cert = x509.load_pem_x509_certificate(r.json()["cert_pem"].encode())
+    ca = x509.load_pem_x509_certificate(r.json()["ca_pem"].encode())
+    cert.verify_directly_issued_by(ca)
+    assert cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value == "site-a"
+    assert cert.serial_number != old_cert.serial_number
+    assert cert.not_valid_after_utc >= old_cert.not_valid_after_utc
+
+    # The old certificate stops working at once; the new one works.
+    new = {**old, "X-SSL-Client-Serial": format(cert.serial_number, "X")}
+    assert client.get("/api/v1/agent/desired-state", headers=old).status_code == 401
+    assert _renew(client, old, _csr("site-a")).status_code == 401
+    assert client.get("/api/v1/agent/desired-state", headers=new).status_code in (200, 204, 404)
+
+    audit = [a for a in client.get("/api/v1/audit", headers=admin_headers).json() if a["action"] == "node.cert_renewed"]
+    assert len(audit) == 1 and audit[0]["target"] == "site-a"
+    assert audit[0]["detail"]["serial"] == pki.serial_hex(cert.serial_number)
+    assert audit[0]["detail"]["old_serial"] == pki.serial_hex(old_cert.serial_number)
+
+    # And it can renew again with the new one.
+    assert _renew(client, new, _csr("site-a")).status_code == 200
+
+
+def test_renewal_refuses_another_name_a_bad_csr_and_a_revoked_node(client, admin_headers):
+    tokens = _seed()["tokens"]
+    _, headers = _enrol(client, tokens, "site-a")
+
+    r = _renew(client, headers, _csr("site-b"))
+    assert r.status_code == 400 and "site-b" in r.json()["detail"]
+    assert _renew(client, headers, "not a csr").status_code == 400
+    # Nothing changed: the current certificate still works.
+    assert client.get("/api/v1/agent/desired-state", headers=headers).status_code in (200, 204, 404)
+
+    node = next(n for n in client.get("/api/v1/nodes", headers=admin_headers).json() if n["name"] == "site-a")
+    assert client.post(f"/api/v1/nodes/{node['id']}/revoke", headers=admin_headers).status_code == 200
+    assert _renew(client, headers, _csr("site-a")).status_code == 401
