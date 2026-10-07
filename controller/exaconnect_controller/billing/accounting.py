@@ -1,4 +1,4 @@
-"""Accounting export of issued invoices (ADR 0024): Xero and QuickBooks Online
+"""Accounting export of issued invoices (ADR 0022): Xero and QuickBooks Online
 invoice payloads, and a CSV in Xero's sales-invoice import layout.
 
 Nothing is sent anywhere: these are the request bodies ExaCarib's bookkeeper
@@ -44,6 +44,13 @@ def _check(inv: dict) -> None:
         raise BillingError("Only an issued invoice can be exported to accounting.", 409)
 
 
+def _item(inv: dict) -> str:
+    """The QuickBooks item a product's lines post to (one per product)."""
+    if inv.get("product") == "commai":
+        return _env("EXA_QBO_ITEM_COMMAI", "CommAI")
+    return _env("EXA_QBO_ITEM_CONNECT", "Connect")
+
+
 def lines_for_books(inv: dict) -> list[dict]:
     """Each line as (description, quantity, unit price, amount) that multiply exactly."""
     out = []
@@ -69,7 +76,7 @@ def xero(inv: dict) -> dict:
                 "Type": "ACCREC",
                 "Contact": {"Name": inv["customer"]},
                 "InvoiceNumber": inv["number"],
-                "Reference": f"Connect, {inv['label']}",
+                "Reference": f"{inv['plan']}, {inv['label']}",
                 "Date": _issued(inv).isoformat(),
                 "DueDate": _due(inv).isoformat(),
                 "CurrencyCode": inv["currency"],
@@ -103,7 +110,7 @@ def quickbooks(inv: dict) -> dict:
         "DueDate": _due(inv).isoformat(),
         "CustomerRef": {"name": inv["customer"]},
         "CurrencyRef": {"value": inv["currency"]},
-        "PrivateNote": f"ExaCarib Connect, {inv['label']}",
+        "PrivateNote": f"ExaCarib {inv['plan']}, {inv['label']}",
         "Line": [
             {
                 "LineNum": i,
@@ -111,7 +118,7 @@ def quickbooks(inv: dict) -> dict:
                 "Amount": float(x["amount"]),
                 "DetailType": "SalesItemLineDetail",
                 "SalesItemLineDetail": {
-                    "ItemRef": {"name": _env("EXA_QBO_ITEM_NAME", "Connect")},
+                    "ItemRef": {"name": _item(inv)},
                     "Qty": float(x["quantity"]),
                     "UnitPrice": float(x["unit_price"]),
                     "TaxCodeRef": {"value": "TAX" if taxed else "NON"},

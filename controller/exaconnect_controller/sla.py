@@ -1,7 +1,7 @@
 """SLA met per site and class, from the probe windows already stored.
 
 The Overview's "SLA met in the last 24 hours" and the monthly SLA credits on
-invoices (ADR 0024) both come from here, so they always agree.
+invoices (ADR 0022) both come from here, so they always agree.
 """
 
 from __future__ import annotations

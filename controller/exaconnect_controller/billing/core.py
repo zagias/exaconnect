@@ -1,4 +1,4 @@
-"""Billing arithmetic (ADR 0024). Pure functions, unit-tested by hand.
+"""Billing arithmetic (ADR 0022). Pure functions, unit-tested by hand.
 
 Money is Decimal end to end and every line is rounded to the cent (half up)
 before it is added up, so the invoice total is always the sum of its lines.
@@ -60,11 +60,21 @@ def at_midnight(d: dt.date) -> dt.datetime:
 def active_fraction(created_at: dt.datetime | None, start: dt.date, end: dt.date) -> tuple[int, int]:
     """Days of the month a site was billable, and the days in the month. A site
     added during the month pays from the day it was added (UTC)."""
-    days = (end - start).days
-    if created_at is None:
-        return days, days
-    first = max(created_at.astimezone(dt.UTC).date(), start)
-    return max(0, (end - first).days), days
+    return days_active(created_at, start, end, start, end)
+
+
+def days_active(
+    created_at: dt.datetime | dt.date | None, month: dt.date, month_end: dt.date, frm: dt.date, to: dt.date
+) -> tuple[int, int]:
+    """Days in [frm, to) (the part of the month a subscription covers) from the day
+    something was added (UTC), and the days in the whole month. A monthly fee is
+    charged for that share of the month."""
+    dim = (month_end - month).days
+    first = frm
+    if created_at is not None:
+        c = created_at.astimezone(dt.UTC).date() if isinstance(created_at, dt.datetime) else created_at
+        first = max(first, c)
+    return max(0, (to - first).days), dim
 
 
 # ---- price lists -----------------------------------------------------------------------

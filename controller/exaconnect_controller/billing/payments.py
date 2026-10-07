@@ -1,4 +1,4 @@
-"""Online payment of issued invoices through a gateway (ADR 0024). OFF by default.
+"""Online payment of issued invoices through a gateway (ADR 0022). OFF by default.
 
 Two adapters behind one interface:
 
@@ -26,7 +26,6 @@ paid when a payment recorded against it has status ``paid`` for its total.
 
 from __future__ import annotations
 
-import datetime as dt
 import hashlib
 import hmac
 import json
@@ -398,13 +397,52 @@ def webhook(conn: psycopg.Connection, provider: str, headers: dict[str, str], bo
     return {"handled": True, "status": new if pay["status"] != "paid" else "paid"}
 
 
+def simulated_event(conn: psycopg.Connection, payment_id: Any, approved: bool = True) -> tuple[dict, bytes]:
+    """In simulated mode, the event the provider would send when the customer pays,
+    signed with the simulated secret. It goes through webhook() like a real one, so
+    the signed webhook stays the only way an invoice becomes paid."""
+    try:
+        uuid.UUID(str(payment_id))
+    except ValueError as e:
+        raise BillingError("Payment not found.", 404) from e
+    pay = conn.execute("SELECT * FROM billing_payments WHERE id = %s", (str(payment_id),)).fetchone()
+    if pay is None:
+        raise BillingError("Payment not found.", 404)
+    if provider_mode(pay["provider"]) != "simulated" or pay["mode"] != "simulated":
+        raise BillingError("Only a simulated payment can be completed here.", 409)
+    event_id = f"evt_sim_{uuid.uuid4().hex}"
+    if pay["provider"] == "stripe":
+        body = json.dumps(
+            {
+                "id": event_id,
+                "type": "checkout.session.completed",
+                "data": {
+                    "object": {
+                        "id": pay["reference"],
+                        "client_reference_id": str(pay["id"]),
+                        "amount_total": _cents(pay["amount"]),
+                        "currency": pay["currency"].lower(),
+                        "payment_status": "paid" if approved else "unpaid",
+                    }
+                },
+            }
+        ).encode()
+        return {"Stripe-Signature": stripe_signature(body, webhook_secret("stripe"))}, body
+    body = json.dumps(
+        {
+            "EventId": event_id,
+            "TransactionIdentifier": str(pay["id"]),
+            "TotalAmount": f"{dec(pay['amount']):.2f}",
+            "CurrencyCode": ISO_NUMERIC.get(pay["currency"], pay["currency"]),
+            "Approved": approved,
+        }
+    ).encode()
+    return {"X-Signature": hosted_signature(body, webhook_secret("hosted"))}, body
+
+
 def payments_for(conn: psycopg.Connection, invoice_id: Any) -> list[dict]:
     return conn.execute(
         """SELECT id, provider, mode, status, amount, currency, created_at, paid_at FROM billing_payments
            WHERE invoice_id = %s ORDER BY created_at DESC""",
         (invoice_id,),
     ).fetchall()
-
-
-def now_utc() -> dt.datetime:
-    return dt.datetime.now(dt.UTC)

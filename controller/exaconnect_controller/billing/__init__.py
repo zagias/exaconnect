@@ -1,1 +1,2 @@
-"""Billing phase 1 for Connect (ADR 0024): price lists, monthly charges, SLA credits and invoices."""
+"""Billing phase 1 (ADR 0022): plans per product, price lists, monthly charges, SLA credits, invoices,
+payables and margin, and the payment and accounting interfaces."""
