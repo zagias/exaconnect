@@ -15,13 +15,14 @@ router.include_router(golive.router)
 from ..entitlements import dependencies_for  # noqa: E402
 from . import (  # noqa: E402
     ai,
+    approvals,
     automation,
     channels,
     entitlements,
     voice,
 )
 
-for _m in (channels, ai, automation, voice, entitlements):
+for _m in (channels, ai, automation, voice, entitlements, approvals):
     # Module routes check the business has that module (ADR 0033).
     router.include_router(_m.router, dependencies=dependencies_for(_m.__name__))
     if hasattr(_m, "public"):

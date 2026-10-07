@@ -23,7 +23,7 @@ from typing import Any
 import psycopg
 from psycopg.types.json import Jsonb
 
-from . import channels, connectors, events, inbox, jobs
+from . import channels, connectors, events, impact, inbox, jobs
 
 AI_ROLES = ("customer_agent", "copilot", "platform_assistant", "workflow")
 HOLDING_REPLY = (
@@ -117,10 +117,12 @@ def propose(
         refuse(str(e), 422)
     sensitive = _sensitive(conn, customer_id, spec, app)
     status = "awaiting_approval" if sensitive else "approved"
+    # What the approver sees: the change and its impact, from read-only checks (ADR 0033).
+    preview = impact.preview(conn, customer_id, connector, {**c, "test": test}, spec, clean) if sensitive else {}
     run = conn.execute(
         """INSERT INTO action_runs (customer_id, conversation_id, role, app, action, inputs, idempotency_key,
-                                    sensitive, status, on_success, proposed_by, test)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING *""",
+                                    sensitive, status, on_success, proposed_by, test, preview)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING *""",
         (
             customer_id,
             conversation_id,
@@ -134,6 +136,7 @@ def propose(
             Jsonb(on_success or {}),
             actor,
             test,
+            Jsonb(preview),
         ),
     ).fetchone()
     events.emit(
