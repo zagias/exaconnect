@@ -2,7 +2,7 @@ import { useId, useState, type FormEvent } from "react";
 import { api, useApi } from "../../api";
 import { useAuth } from "../../auth";
 import { ErrorNote } from "../../components";
-import { Card, PageHead, useAction } from "../../ui";
+import { Card, EmptyState, PageHead, useAction } from "../../ui";
 import { when } from "./lib";
 import "./automation.css";
 
@@ -66,7 +66,7 @@ export default function SupportQueue() {
   if (user?.role !== "admin") return <p className="muted">The support queue is for ExaCarib staff.</p>;
   return (
     <>
-      <PageHead eyebrow="CommAI" title="Support queue">
+      <PageHead title="Support queue">
         Cases businesses opened from the assistant, with their configuration, checks and redacted errors attached.
       </PageHead>
       <Card title="Cases">
@@ -90,7 +90,7 @@ export default function SupportQueue() {
           </label>
         </form>
         <ErrorNote error={list.error} />
-        {list.data && list.data.length === 0 && <div className="empty">No cases match.</div>}
+        {list.data && list.data.length === 0 && <EmptyState title="No cases match">Try another status, or clear the search.</EmptyState>}
         {list.data && list.data.length > 0 && (
           <table className="paths dt stack">
             <caption className="sr-only">Support cases</caption>

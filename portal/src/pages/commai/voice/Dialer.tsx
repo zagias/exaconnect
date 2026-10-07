@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { api, useApi } from "../../../api";
 import { ErrorNote } from "../../../components";
-import { Card, useAction } from "../../../ui";
+import { Card, EmptyState, useAction } from "../../../ui";
 import { VertoPhone, type CallState } from "./verto";
 import "./dialer.css";
 
@@ -74,7 +74,18 @@ export default function Dialer({ base }: { base: string }) {
   };
   const onCall = state === "calling" || state === "ringing" || state === "active";
 
-  if (cfg.error) return <Card title="Browser phone"><ErrorNote error={cfg.error} /></Card>;
+  if (cfg.error)
+    return (
+      <Card title="Browser phone">
+        {/extension/i.test(cfg.error) ? (
+          <EmptyState title="No phone extension yet">
+            The browser phone rings on your own extension. A voice admin adds you under Phone, People and numbers.
+          </EmptyState>
+        ) : (
+          <ErrorNote error={cfg.error} />
+        )}
+      </Card>
+    );
   if (!cfg.data) return null;
   if (!cfg.data.enabled) {
     return (

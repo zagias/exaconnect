@@ -37,7 +37,7 @@ export default function Voice() {
   if (v && !v.is_admin) {
     return (
       <>
-        <PageHead eyebrow="CommAI" title="My phone">
+        <PageHead title="My phone">
           Your own forwarding, do not disturb, voicemail and calls.
         </PageHead>
         <VoiceNotices base={base} />
@@ -50,7 +50,7 @@ export default function Voice() {
 
   return (
     <>
-      <PageHead eyebrow="CommAI" title="Voice">
+      <PageHead title="Phone">
         Your phone system: people, numbers, call routing, orders and billing.{" "}
         {v && !v.provider.live && <span className="tag">Simulated SIP provider: no real calls yet</span>}
       </PageHead>
@@ -64,7 +64,7 @@ export default function Voice() {
         <NavLink to="/commai/voice/emergency">Emergency</NavLink>
         <NavLink to="/commai/voice/fraud">Fraud</NavLink>
         <NavLink to="/commai/voice/billing">Billing</NavLink>
-        <NavLink to="/commai/voice/me">My settings</NavLink>
+        <NavLink to="/commai/voice/me">My phone</NavLink>
         {v?.is_exacarib && <NavLink to="/commai/voice/carriers">Carriers</NavLink>}
         <NavLink to="/commai/voice/phone">Browser phone</NavLink>
       </Tabs>

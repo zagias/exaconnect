@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, useApi } from "../../api";
 import { useAuth } from "../../auth";
 import { ErrorNote } from "../../components";
-import { useAction } from "../../ui";
+import { EmptyState, useAction } from "../../ui";
 import CopilotPanel from "./CopilotPanel";
 import { AttachmentReadings, NoteFiles, SavedViews, uploadNoteFiles, type Filters } from "./InboxExtras";
 import { CHANNEL_LABEL, STATE_LABEL, useCommaiBase, when, type Page } from "./lib";
@@ -111,9 +111,15 @@ export default function Inbox() {
         </div>
         <ErrorNote error={list.error} />
         {list.data && items.length === 0 && (
-          <div className="empty">
-            <p>Nothing here. New chats, WhatsApp messages and emails arrive in this list.</p>
-          </div>
+          query || Object.keys(extra).length > 0 ? (
+            <EmptyState title="No conversations match">Try another search, or clear the filters.</EmptyState>
+          ) : view !== "open" && view !== "all" ? (
+            <EmptyState title="Nothing in this view">Conversations that fit it appear here. Choose All to see every conversation.</EmptyState>
+          ) : (
+            <EmptyState title="No conversations yet" action={<Link className="button small" to="/commai/channels">Set up a channel</Link>}>
+              Website chats, WhatsApp messages and emails arrive in this list.
+            </EmptyState>
+          )
         )}
         <ul className="inbox-items">
           {items.map((c) => (

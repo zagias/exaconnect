@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, NavLink, Route, Routes } from "react-router-dom";
 import { api, useApi } from "../../api";
 import { ErrorNote } from "../../components";
-import { Card, PageHead, useAction } from "../../ui";
+import { Card, PageHead, Tabs, useAction } from "../../ui";
 import { DraftLabel, useT } from "./i18n";
 import { useCommaiBase } from "./lib";
 import "./quality.css";
@@ -81,33 +81,35 @@ type Tab = "review" | "flags" | "gaps" | "followups" | "csat";
 export default function Quality() {
   const base = useCommaiBase();
   const { t } = useT();
-  const [tab, setTab] = useState<Tab>("review");
   if (!base) return <p className="muted">{t("common.chooseBusiness")}</p>;
-  const tabs: [Tab, string][] = [
-    ["review", t("q.tab.review")],
-    ["flags", t("q.tab.flags")],
-    ["gaps", t("q.tab.gaps")],
-    ["followups", t("q.tab.followups")],
-    ["csat", t("q.tab.csat")],
+  // Each section has its own address, like every other screen's tabs.
+  const tabs: [Tab, string, string][] = [
+    ["review", "/commai/quality", t("q.tab.review")],
+    ["flags", "/commai/quality/flags", t("q.tab.flags")],
+    ["gaps", "/commai/quality/gaps", t("q.tab.gaps")],
+    ["followups", "/commai/quality/follow-ups", t("q.tab.followups")],
+    ["csat", "/commai/quality/satisfaction", t("q.tab.csat")],
   ];
   return (
     <>
-      <PageHead eyebrow={t("common.eyebrow")} title={t("q.title")}>
+      <PageHead title={t("q.title")}>
         {t("q.intro")}
       </PageHead>
       <DraftLabel />
-      <div className="segmented q-tabs" role="group" aria-label={t("q.title")}>
-        {tabs.map(([id, label]) => (
-          <button key={id} type="button" aria-pressed={tab === id} onClick={() => setTab(id)}>
+      <Tabs label={t("q.title")}>
+        {tabs.map(([id, to, label]) => (
+          <NavLink key={id} to={to} end>
             {label}
-          </button>
+          </NavLink>
         ))}
-      </div>
-      {tab === "review" && <ReviewTab base={base} />}
-      {tab === "flags" && <FlagsTab base={base} />}
-      {tab === "gaps" && <GapsTab base={base} />}
-      {tab === "followups" && <FollowupsTab base={base} />}
-      {tab === "csat" && <CsatTab base={base} />}
+      </Tabs>
+      <Routes>
+        <Route index element={<ReviewTab base={base} />} />
+        <Route path="flags" element={<FlagsTab base={base} />} />
+        <Route path="gaps" element={<GapsTab base={base} />} />
+        <Route path="follow-ups" element={<FollowupsTab base={base} />} />
+        <Route path="satisfaction" element={<CsatTab base={base} />} />
+      </Routes>
     </>
   );
 }

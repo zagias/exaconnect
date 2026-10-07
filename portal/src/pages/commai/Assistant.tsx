@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { api, useApi } from "../../api";
 import { ErrorNote } from "../../components";
-import { Card, PageHead, useAction } from "../../ui";
+import { Card, EmptyState, PageHead, useAction } from "../../ui";
 import { useCommaiBase, when } from "./lib";
 import { CASE_STATUS, ReplyForm, Thread, type CaseFull } from "./SupportQueue";
 import { PriceLines } from "./voice/ChangeBox";
@@ -86,7 +86,7 @@ export default function Assistant() {
   };
   return (
     <>
-      <PageHead eyebrow="CommAI" title="Assistant">
+      <PageHead title="Assistant">
         Ask about your set-up. The assistant checks your real configuration, shows the evidence, and suggests fixes that apply only when you approve them.
       </PageHead>
       <Card title="Ask">
@@ -122,14 +122,16 @@ export default function Assistant() {
             </button>
           ))}
         </div>
-        <p className="auto-secret-note">Never paste passwords or API keys here. Sign-ins and keys go through the Integrations and Channels screens.</p>
+        <p className="auto-secret-note">Never paste passwords or API keys here. Sign-ins and keys go through the Apps and Channels screens.</p>
         <ErrorNote error={act.error} />
       </Card>
       <div aria-live="polite">
         {answer && <AnswerCard key={answer.id ?? answer.question} base={base} answer={answer} onCase={cases.reload} />}
       </div>
       <Card title="Support cases">
-        {cases.data && cases.data.length === 0 && <div className="empty">No support cases.</div>}
+        {cases.data && cases.data.length === 0 && (
+          <EmptyState title="No support cases">When the assistant can't fix something, it offers to open a case with ExaCarib support. Cases and replies appear here.</EmptyState>
+        )}
         <ul className="auto-evidence" aria-label="Your support cases">
           {(cases.data ?? []).map((c) => (
             <li key={c.id}>

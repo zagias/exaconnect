@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { api, useApi } from "../../api";
 import { ErrorNote } from "../../components";
 import { Card, PageHead, useAction } from "../../ui";
+import { AppsTabs } from "./Integrations";
 import { useCommaiBase, when } from "./lib";
 import "./automation.css";
 import "./catalogue.css";
@@ -122,10 +123,11 @@ export default function CatalogueScreen() {
   const { data, error } = useApi<Catalogue>(base && `${base}/integration-catalogue`, 60_000);
   return (
     <>
-      <PageHead eyebrow="Integrations" title="App catalogue">
+      <PageHead title="Apps">
         Every app CommAI can work with, what it may do there, and what ExaCarib still has to set up before it can go
         live. Apps not yet live run on a stand-in with example data, so you can try them safely.
       </PageHead>
+      <AppsTabs />
       {!base && <p className="muted">Choose an organisation first.</p>}
       <ErrorNote error={error} />
       {data && (

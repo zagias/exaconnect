@@ -68,7 +68,7 @@ export default function Governance() {
   if (!base) return <p className="muted">{t("common.chooseBusiness")}</p>;
   return (
     <>
-      <PageHead eyebrow={t("common.eyebrow")} title={t("g.title")}>
+      <PageHead title={t("g.title")}>
         {t("g.intro")}
       </PageHead>
       <DraftLabel />

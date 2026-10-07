@@ -18,7 +18,7 @@ export default function Settings() {
   if (!base) return null;
   return (
     <>
-      <PageHead eyebrow="CommAI" title="Settings">
+      <PageHead title="Settings">
         Who answers, how fast, and what your own systems can reach.
       </PageHead>
       <Tabs label="Settings sections">

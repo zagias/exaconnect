@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { api, useApi } from "../../api";
 import { ErrorNote } from "../../components";
-import { Card, PageHead, useAction } from "../../ui";
+import { Card, EmptyState, PageHead, useAction } from "../../ui";
 import { useCommaiBase, when } from "./lib";
 import "./automation.css";
 
@@ -65,7 +65,7 @@ export default function Approvals() {
   const data = q.data;
   return (
     <>
-      <PageHead eyebrow="CommAI" title="Approvals">
+      <PageHead title="Approvals">
         Sensitive actions and workflow steps wait here for a person. Each shows what it will change, worked out without changing anything.
       </PageHead>
       <ErrorNote error={q.error} />
@@ -73,7 +73,7 @@ export default function Approvals() {
         {data ? `${data.count} waiting for approval` : ""}
       </p>
       <Card title="Actions" note={data && <span className="pill shadow">{data.actions.length} waiting</span>}>
-        {data && data.actions.length === 0 && <div className="empty">Nothing is waiting. Sensitive actions appear here when the AI, a workflow or a colleague proposes one.</div>}
+        {data && data.actions.length === 0 && <EmptyState title="Nothing is waiting">Sensitive actions appear here when the AI, a workflow or a colleague proposes one.</EmptyState>}
         <ul className="auto-steps" aria-label="Actions waiting for approval">
           {(data?.actions ?? []).map((a) => (
             <ActionItem key={a.id} base={base} a={a} done={q.reload} />
@@ -81,7 +81,7 @@ export default function Approvals() {
         </ul>
       </Card>
       <Card title="Workflow steps">
-        {data && data.workflow_steps.length === 0 && <div className="empty">No workflow is waiting for approval.</div>}
+        {data && data.workflow_steps.length === 0 && <EmptyState title="No workflow is waiting">A workflow step that needs a person stops here until someone approves it.</EmptyState>}
         <ul className="auto-steps" aria-label="Workflow steps waiting for approval">
           {(data?.workflow_steps ?? []).map((s) => (
             <StepItem key={s.id} base={base} s={s} done={q.reload} />

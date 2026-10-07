@@ -71,7 +71,7 @@ export default function LanguagesPage() {
 
   return (
     <>
-      <PageHead eyebrow={t("common.eyebrow")} title={t("lang.title")}>
+      <PageHead title={t("lang.title")}>
         {t("lang.intro")}
       </PageHead>
       <DraftLabel />

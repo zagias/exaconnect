@@ -72,7 +72,7 @@ export default function MySettings() {
   if (!base) return <p className="muted">Choose an organisation first.</p>;
   return (
     <div className="me">
-      <PageHead eyebrow="CommAI" title="My settings">
+      <PageHead title="My settings">
         Your own profile, notifications, availability, phone and sign-in. Nobody else's settings change here.
       </PageHead>
       <nav className="me-toc" aria-label="On this page">
