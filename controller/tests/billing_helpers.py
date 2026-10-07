@@ -178,7 +178,9 @@ class FakeGateway(BaseHTTPRequestHandler):
 
     def do_POST(self):  # noqa: N802
         raw = self.rfile.read(int(self.headers["Content-Length"]))
-        FakeGateway.seen.append({"path": self.path, "headers": dict(self.headers), "body": raw.decode()})
+        FakeGateway.seen.append(
+            {"path": self.path, "headers": {k.lower(): v for k, v in self.headers.items()}, "body": raw.decode()}
+        )
         if self.path == "/v1/checkout/sessions":
             data = {"id": "cs_test_123", "url": "https://checkout.stripe.test/cs_test_123"}
         elif self.path == "/hosted-page":
