@@ -194,3 +194,8 @@ CREATE TABLE IF NOT EXISTS ai_supplier_costs (
   cost        numeric(14, 6) NOT NULL,
   UNIQUE (supplier, day, model, kind)
 );
+
+-- ---- onboarding: channel set-up drafts ------------------------------------------------------
+ALTER TABLE commai_onboarding_drafts DROP CONSTRAINT IF EXISTS commai_onboarding_drafts_kind_check;
+ALTER TABLE commai_onboarding_drafts ADD CONSTRAINT commai_onboarding_drafts_kind_check
+  CHECK (kind IN ('profile', 'team', 'knowledge', 'routing', 'workflow', 'channel'));

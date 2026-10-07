@@ -626,6 +626,7 @@ class OnboardingIn(BaseModel):
     website_text: str = Field(default="", max_length=60_000)
     website_url: str = Field(default="", max_length=300)
     hours: str = Field(default="", max_length=500)
+    opening_hours: dict[str, list[str] | None] | None = None  # {"mon": ["09:00", "17:00"], "sun": None}
     locations: list[str] = Field(default_factory=list, max_length=20)
     channels: list[str] = Field(default_factory=list, max_length=10)
     teams: list[TeamIn | str] = Field(default_factory=list, max_length=20)
