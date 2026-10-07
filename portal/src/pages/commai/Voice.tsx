@@ -4,13 +4,14 @@ import { ErrorNote } from "../../components";
 import { PageHead, Tabs } from "../../ui";
 import { useCommaiBase } from "./lib";
 import Billing from "./voice/Billing";
+import Dialer from "./voice/Dialer";
 import MySettings from "./voice/MySettings";
 import Orders from "./voice/Orders";
 import { Access, Changes, PeopleAndNumbers, PendingChange, Routing, usePending } from "./voice/PhoneSystem";
 import type { VoiceOverview } from "./voice/types";
 import "./voice/voice.css";
 
-const OTHER_TABS = ["/commai/voice/orders", "/commai/voice/billing", "/commai/voice/me"];
+const OTHER_TABS = ["/commai/voice/orders", "/commai/voice/billing", "/commai/voice/me", "/commai/voice/phone"];
 
 /** CommAI voice (ADR 0021): phone system, orders, billing and each person's own settings. */
 export default function Voice() {
@@ -29,6 +30,7 @@ export default function Voice() {
           Your own forwarding, do not disturb, voicemail and calls.
         </PageHead>
         <MySettings base={base} />
+        <Dialer base={base} />
       </>
     );
   }
@@ -46,6 +48,7 @@ export default function Voice() {
         <NavLink to="/commai/voice/orders">Orders</NavLink>
         <NavLink to="/commai/voice/billing">Billing</NavLink>
         <NavLink to="/commai/voice/me">My settings</NavLink>
+        <NavLink to="/commai/voice/phone">Browser phone</NavLink>
       </Tabs>
       <ErrorNote error={ov.error} />
       {v && inPhoneSystem && (
@@ -71,6 +74,7 @@ export default function Voice() {
           <Route path="/orders" element={<Orders base={base} v={v} />} />
           <Route path="/billing" element={<Billing base={base} v={v} />} />
           <Route path="/me" element={<MySettings base={base} onChange={ov.reload} />} />
+          <Route path="/phone" element={<Dialer base={base} />} />
         </Routes>
       )}
     </>

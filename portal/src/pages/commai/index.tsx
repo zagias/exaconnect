@@ -1,5 +1,8 @@
 import { Route, Routes } from "react-router-dom";
 import AiAgents from "./AiAgents";
+import Approvals from "./Approvals";
+import Bill from "./Bill";
+import SupportQueue from "./SupportQueue";
 import Assistant from "./Assistant";
 import Onboarding from "./Onboarding";
 import Channels from "./Channels";
@@ -28,6 +31,9 @@ export default function CommAI() {
       <Route path="/settings/*" element={<Settings />} />
       <Route path="/setup/*" element={<Onboarding />} />
       <Route path="/assistant/*" element={<Assistant />} />
+      <Route path="/approvals" element={<Approvals />} />
+      <Route path="/bill" element={<Bill />} />
+      <Route path="/support" element={<SupportQueue />} />
     </Routes>
   );
 }

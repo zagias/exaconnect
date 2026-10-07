@@ -24,7 +24,8 @@ def test_webphone_gives_only_your_own_extension(client, monkeypatch):
     monkeypatch.setenv("EXA_VERTO_URL", "ws://insecure.example:8082")  # plain ws is refused
     assert client.get(f"{u}/voice/webphone", headers=b["ana"]["h"]).json()["enabled"] is False
     monkeypatch.setenv("EXA_VERTO_URL", "wss://voice.example.org:8082")
-    r = client.get(f"{u}/voice/webphone", headers=b["ana"]["h"])
+    assert client.get(f"{u}/voice/webphone", headers=b["ana"]["h"]).json() == {"enabled": True, "extension": "201"}
+    r = client.get(f"{u}/voice/webphone?sign_in=true", headers=b["ana"]["h"])
     assert r.status_code == 200 and r.headers["cache-control"] == "no-store"
     ana = r.json()
     assert ana["enabled"] and ana["login"].startswith("201@") and ana["url"] == "wss://voice.example.org:8082"
@@ -36,7 +37,7 @@ def test_webphone_gives_only_your_own_extension(client, monkeypatch):
             "SELECT 1 FROM audit_log WHERE action = 'commai.voice.webphone_sign_in' AND customer_id = %s", (b["id"],)
         ).fetchone()
     assert ana["password"] == pw
-    ben = client.get(f"{u}/voice/webphone", headers=b["ben"]["h"]).json()
+    ben = client.get(f"{u}/voice/webphone?sign_in=true", headers=b["ben"]["h"]).json()
     assert ben["login"].startswith("202@") and ben["password"] != pw
     # The boss has no extension of their own.
     assert client.get(f"{u}/voice/webphone", headers=b["boss"]["h"]).status_code == 404

@@ -4,6 +4,7 @@ import { ErrorNote } from "../../../components";
 import { Card, useAction } from "../../../ui";
 import { when } from "../lib";
 import { PriceLines } from "./ChangeBox";
+import { SpeechButton } from "./SpeechInput";
 import type { Me, PriceImpact } from "./types";
 
 interface Proposal {
@@ -98,6 +99,7 @@ function Say({ base, onApplied }: { base: string; onApplied: () => void }) {
           required
           minLength={2}
         />
+        <SpeechButton onText={setText} label="Say the change instead of typing it" />
         <button className="button" disabled={act.busy}>
           Show me the change
         </button>

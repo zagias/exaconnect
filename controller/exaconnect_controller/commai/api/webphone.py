@@ -31,7 +31,8 @@ def verto_url() -> str:
 
 
 @router.get("/voice/webphone")
-def webphone(customer_id: str, user: UserDep, response: Response) -> dict:
+def webphone(customer_id: str, user: UserDep, response: Response, sign_in: bool = False) -> dict:
+    """Whether the browser phone is on and the person's extension; with sign_in=true, the sign-in details."""
     access.check(user, customer_id, "commai:read")
     response.headers["Cache-Control"] = "no-store"
     with db.tx() as conn:
@@ -48,6 +49,8 @@ def webphone(customer_id: str, user: UserDep, response: Response) -> dict:
                 "extension": me["extension"],
                 "reason": "The browser phone is not switched on yet: ExaCarib sets its secure address first.",
             }
+        if not sign_in:
+            return {"enabled": True, "extension": me["extension"]}
         pw = conn.execute("SELECT sip_password FROM voice_users WHERE id = %s", (me["id"],)).fetchone()
         audit.record(conn, user.actor, "commai.voice.webphone_sign_in", me["extension"], customer_id)
     dom = domain(customer_id)

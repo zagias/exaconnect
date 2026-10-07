@@ -224,12 +224,15 @@ function navGroups(role: string | undefined): Group[] {
       { to: "/commai/channels", label: "Channels", icon: icons.internet },
       { to: "/commai/ai", label: "AI agents", icon: icons.insights },
       { to: "/commai/workflows", label: "Workflows", icon: icons.traffic },
+      { to: "/commai/approvals", label: "Approvals", icon: icons.decisions },
       { to: "/commai/integrations", label: "Integrations", icon: icons.fabric },
       { to: "/commai/voice", label: "Voice", icon: icons.decisions },
       { to: "/commai/reports", label: "Reports", icon: icons.metering },
+      { to: "/commai/bill", label: "Usage and bill", icon: icons.metering },
       { to: "/commai/assistant", label: "Assistant", icon: icons.ask },
       { to: "/commai/setup", label: "Set up", icon: icons.order },
       { to: "/commai/settings", label: "Settings", icon: icons.admin },
+      ...(admin ? [{ to: "/commai/support", label: "Support queue", icon: icons.admin }] : []),
     ],
   });
   if (admin) groups.push({ label: "Manage", items: [{ to: "/admin", label: "Admin", icon: icons.admin }] });

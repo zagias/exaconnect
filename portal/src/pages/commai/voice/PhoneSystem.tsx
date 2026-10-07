@@ -4,6 +4,7 @@ import { ErrorNote } from "../../../components";
 import { Card, RowActions, useAction } from "../../../ui";
 import { when } from "../lib";
 import { ChangeBox, DiffList, PriceLines } from "./ChangeBox";
+import { QrCode } from "./QrCode";
 import type { ChangeResult, Op, PriceImpact, Version, VoiceOverview } from "./types";
 
 type Propose = (ops: Op[], title: string) => void;
@@ -83,6 +84,7 @@ function Saved({ out, onClose }: { out: ChangeResult & { change?: { run_at: stri
               <li key={i}>
                 {l.setup_url ? "Desk phone provisioning URL" : "Softphone sign-in link (the QR code text)"}:{" "}
                 <code className="voice-secret">{String(l.setup_url ?? l.join_link)}</code>
+                {!l.setup_url && <QrCode text={String(l.join_link)} />}
               </li>
             ))}
           </ul>
@@ -506,6 +508,7 @@ function Devices({ base, v, propose }: { base: string; v: VoiceOverview; propose
           <button className="button secondary small" onClick={() => setLink(null)}>
             Hide
           </button>
+          {link.kind !== "desk" && <QrCode text={link.url} />}
         </p>
       )}
       <div className="table-wrap">

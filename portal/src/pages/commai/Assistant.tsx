@@ -3,6 +3,10 @@ import { api, useApi } from "../../api";
 import { ErrorNote } from "../../components";
 import { Card, PageHead, useAction } from "../../ui";
 import { useCommaiBase, when } from "./lib";
+import { CASE_STATUS, ReplyForm, Thread, type CaseFull } from "./SupportQueue";
+import { PriceLines } from "./voice/ChangeBox";
+import { SpeechButton } from "./voice/SpeechInput";
+import type { PriceImpact } from "./voice/types";
 import "./automation.css";
 
 /* Shapes from controller/exaconnect_controller/commai/automation/assistant.py (ADR 0020). */
@@ -31,6 +35,15 @@ interface Answer {
   findings: Finding[];
   fixes: Fix[];
   source: string;
+  /** A phone change typed to the assistant: the same proposal and confirm step as Voice (ADR 0033). */
+  voice_change?: {
+    understood: boolean;
+    message?: string;
+    id?: string;
+    summary?: string;
+    scope?: "self" | "admin";
+    price_impact?: PriceImpact;
+  };
 }
 interface Case {
   id: string;
@@ -45,12 +58,21 @@ const CONFIDENCE: Record<Answer["confidence"], [string, string]> = {
   likely: ["warn", "Likely cause"],
   unknown: ["shadow", "Cause unknown"],
 };
-const SUGGESTED = ["Why has WhatsApp stopped sending?", "Why are bookings failing?", "Are any workflows failing?", "Have we hit a usage limit?"];
+const SUGGESTED = [
+  "Why has WhatsApp stopped sending?",
+  "Why are bookings failing?",
+  "Are any workflows failing?",
+  "Have we hit a budget?",
+  "Why are calls failing?",
+  "Why does the AI agent hand over so much?",
+  "Why can't people sign in?",
+];
 
 export default function Assistant() {
   const base = useCommaiBase();
   const [q, setQ] = useState("");
   const [answer, setAnswer] = useState<Answer | null>(null);
+  const [openCase, setOpenCase] = useState<string | null>(null);
   const cases = useApi<Case[]>(base && `${base}/support-cases`, 0);
   const act = useAction();
   if (!base) return <p className="muted">Choose an organisation first.</p>;
@@ -68,18 +90,29 @@ export default function Assistant() {
         Ask about your set-up. The assistant checks your real configuration, shows the evidence, and suggests fixes that apply only when you approve them.
       </PageHead>
       <Card title="Ask">
-        <form onSubmit={submit} className="form">
-          <label className="wide">
-            Your question
-            <input value={q} onChange={(e) => setQ(e.target.value)} maxLength={1000} placeholder="Why has WhatsApp stopped sending?" />
+        <form onSubmit={submit} className="form" aria-describedby="assistant-hint">
+          <label className="wide" htmlFor="assistant-question">
+            Your question, or a phone change
           </label>
+          <input
+            id="assistant-question"
+            className="wide"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            maxLength={1000}
+            placeholder="Why has WhatsApp stopped sending?"
+          />
           <div className="actions">
-            <button className="button" disabled={act.busy}>
+            <SpeechButton onText={setQ} label="Say your question instead of typing it" />
+            <button className="button" disabled={act.busy} aria-busy={act.busy}>
               {act.busy ? "Checking…" : "Ask"}
             </button>
           </div>
         </form>
-        <div className="auto-row" style={{ marginTop: 8 }}>
+        <p id="assistant-hint" className="small muted">
+          You can also ask for a phone change, such as “forward my calls to my mobile until 5”. You see the exact change first and nothing changes until you confirm.
+        </p>
+        <div className="auto-row" style={{ marginTop: 8 }} role="group" aria-label="Suggested questions">
           {SUGGESTED.map((s) => (
             <button key={s} className="button small secondary" disabled={act.busy} onClick={() => {
               setQ(s);
@@ -92,18 +125,83 @@ export default function Assistant() {
         <p className="auto-secret-note">Never paste passwords or API keys here. Sign-ins and keys go through the Integrations and Channels screens.</p>
         <ErrorNote error={act.error} />
       </Card>
-      {answer && <AnswerCard base={base} answer={answer} onCase={cases.reload} />}
+      <div aria-live="polite">
+        {answer && <AnswerCard key={answer.id ?? answer.question} base={base} answer={answer} onCase={cases.reload} />}
+      </div>
       <Card title="Support cases">
         {cases.data && cases.data.length === 0 && <div className="empty">No support cases.</div>}
-        <ul className="auto-evidence">
+        <ul className="auto-evidence" aria-label="Your support cases">
           {(cases.data ?? []).map((c) => (
             <li key={c.id}>
-              <span className="mono">{c.reference}</span> · {c.subject} · {c.status} · {when(c.created_at)}
+              <button className="linklike" onClick={() => setOpenCase(openCase === c.id ? null : c.id)} aria-expanded={openCase === c.id}>
+                <span className="mono">{c.reference}</span> · {c.subject}
+              </button>{" "}
+              · <span className={`pill ${CASE_STATUS[c.status]?.[0] ?? "shadow"}`}>{CASE_STATUS[c.status]?.[1] ?? c.status}</span> · {when(c.created_at)}
+              {openCase === c.id && <CaseThread base={base} id={c.id} onChange={cases.reload} />}
             </li>
           ))}
         </ul>
       </Card>
     </>
+  );
+}
+
+function CaseThread({ base, id, onChange }: { base: string; id: string; onChange: () => void }) {
+  const c = useApi<CaseFull>(`${base}/support-cases/${id}/thread`, 30_000);
+  if (!c.data) return <ErrorNote error={c.error} />;
+  return (
+    <div style={{ margin: "8px 0 16px" }}>
+      <Thread replies={c.data.replies} />
+      <ReplyForm
+        path={`${base}/support-cases/${id}/replies`}
+        onSent={() => {
+          c.reload();
+          onChange();
+        }}
+      />
+    </div>
+  );
+}
+
+/** A phone change from the assistant: confirm or cancel at /voice/say, exactly as on the Voice screen. */
+function VoiceChange({ base, vc }: { base: string; vc: NonNullable<Answer["voice_change"]> }) {
+  const [done, setDone] = useState<string | null>(null);
+  const act = useAction();
+  if (!vc.understood || !vc.id) return null;
+  const confirm = () =>
+    act.run(async () => {
+      const p = vc.price_impact;
+      const body = p?.changes_bill ? { accepted_price: { monthly_delta: p.monthly_delta, one_time: p.one_time } } : {};
+      await api(`${base}/voice/say/${vc.id}/confirm`, { method: "POST", body: JSON.stringify(body) });
+      setDone("Done: the change is live.");
+    });
+  const cancel = () =>
+    act.run(async () => {
+      await api(`${base}/voice/say/${vc.id}/cancel`, { method: "POST" });
+      setDone("Cancelled. Nothing changed.");
+    });
+  return (
+    <div className="voice-panel" role="group" aria-label="Proposed phone change">
+      <p>
+        <strong>{vc.summary}</strong>
+      </p>
+      {vc.price_impact && <PriceLines price={vc.price_impact} />}
+      {done ? (
+        <p className="pill ok" role="status">
+          {done}
+        </p>
+      ) : (
+        <div className="auto-row">
+          <button className="button" onClick={confirm} disabled={act.busy}>
+            Confirm the change
+          </button>
+          <button className="button secondary" onClick={cancel} disabled={act.busy}>
+            Cancel
+          </button>
+        </div>
+      )}
+      <ErrorNote error={act.error} />
+    </div>
   );
 }
 
@@ -136,6 +234,7 @@ function AnswerCard({ base, answer, onCase }: { base: string; answer: Answer; on
   return (
     <Card title="Answer" note={<span className={`pill ${cls}`}>{word}</span>}>
       <p className="auto-answer">{answer.answer}</p>
+      {answer.voice_change && <VoiceChange base={base} vc={answer.voice_change} />}
       {problems.length > 0 && (
         <>
           <h3 className="small">Evidence</h3>
@@ -160,10 +259,10 @@ function AnswerCard({ base, answer, onCase }: { base: string; answer: Answer; on
                 {f.label}{" "}
                 {f.status === "proposed" ? (
                   <span className="auto-row" style={{ display: "inline-flex" }}>
-                    <button className="button small" disabled={act.busy} onClick={() => apply(f)}>
+                    <button className="button small" disabled={act.busy} onClick={() => apply(f)} aria-label={`Approve and apply: ${f.label}`}>
                       Approve and apply
                     </button>
-                    <button className="button small secondary" disabled={act.busy} onClick={() => dismiss(f)}>
+                    <button className="button small secondary" disabled={act.busy} onClick={() => dismiss(f)} aria-label={`Dismiss: ${f.label}`}>
                       Dismiss
                     </button>
                   </span>
@@ -177,9 +276,13 @@ function AnswerCard({ base, answer, onCase }: { base: string; answer: Answer; on
           </ul>
         </>
       )}
-      {msg && <p className="small">{msg}</p>}
+      {msg && (
+        <p className="small" role="status">
+          {msg}
+        </p>
+      )}
       <div className="auto-row" style={{ marginTop: 12 }}>
-        <button className="button secondary" disabled={act.busy || !answer.id} onClick={openCase}>
+        <button className="button secondary" disabled={act.busy || !answer.id || answer.source === "voice"} onClick={openCase}>
           Open a support case
         </button>
       </div>
