@@ -242,8 +242,14 @@ def outcomes(conn: psycopg.Connection, customer_id: Any, start: dt.datetime, end
             "failed": _count(conn, cid, start, end, "workflow.run_failed"),
             "source": "workflow.run_started and workflow.run_failed events",
         },
-        "satisfaction": {"value": None, "source": "not recorded yet"},
+        "satisfaction": _csat_summary(conn, cid, start, end),
     }
+
+
+def _csat_summary(conn, cid: Any, start: dt.datetime, end: dt.datetime) -> dict:
+    from .. import csat  # satisfaction surveys (ADR 0026)
+
+    return csat.summary(conn, cid, start, end)
 
 
 def _price(meter: str) -> float | None:

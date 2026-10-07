@@ -19,9 +19,12 @@ from . import (  # noqa: E402
     channels_global,
     developer,
     enterprise,
+    languages,
     partners,
+    quality,
     regions,
     selfservice,
+    team,
     voice,
     voice_global,
 )
@@ -38,6 +41,9 @@ for _m in (
     channels_global,
     voice_global,
     selfservice,
+    languages,
+    quality,
+    team,
 ):
     router.include_router(_m.router)
     if hasattr(_m, "public"):

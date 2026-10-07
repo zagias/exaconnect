@@ -103,6 +103,10 @@ def propose(
         refuse(f"{connector.label} has no action called {action}.", 404)
     if not role_may(conn, customer_id, role, app, action):
         refuse(f"The {role.replace('_', ' ')} is not allowed to {spec.label.lower()}.", 403)
+    from .ai import governance  # daily action limits per role (ADR 0026)
+
+    if over := governance.over_daily_limit(conn, customer_id, role):
+        refuse(over, 429)
     c = connectors.connection(conn, customer_id, app)
     if c is None:
         refuse(f"{connector.label} is not connected.", 409)
