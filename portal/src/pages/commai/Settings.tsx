@@ -5,6 +5,7 @@ import { ErrorNote } from "../../components";
 import { Card, PageHead, RowActions, Tabs, useAction } from "../../ui";
 import { CHANNEL_LABEL, useCommaiBase, when } from "./lib";
 import SignIn from "./settings/SignIn";
+import HelpAdmin from "../help/HelpAdmin";
 import type { Member, Team } from "./types";
 
 /** How the business runs CommAI: service targets, teams, seats, routing and developer access. */
@@ -24,6 +25,7 @@ export default function Settings() {
         <NavLink to="/commai/settings/routing">Routing</NavLink>
         <NavLink to="/commai/settings/developers">Webhooks and keys</NavLink>
         <NavLink to="/commai/settings/sign-in">Sign-in</NavLink>
+        <NavLink to="/commai/settings/help-centre">Help centre</NavLink>
       </Tabs>
       <Routes>
         <Route path="/" element={<Service base={base} />} />
@@ -31,6 +33,7 @@ export default function Settings() {
         <Route path="/routing" element={<Routing base={base} />} />
         <Route path="/developers" element={<Developers base={base} />} />
         <Route path="/sign-in" element={<SignIn />} />
+        <Route path="/help-centre" element={<HelpAdmin />} />
       </Routes>
     </>
   );
