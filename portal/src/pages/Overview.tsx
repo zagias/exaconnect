@@ -20,7 +20,7 @@ import { useCustomer, useStormToggle } from "../customer";
 import { InsightSummary, pressing } from "./Insights";
 import "../overview.css";
 
-/** How many alert rows show before "All insights". */
+/** How many alert rows show before "All alerts". */
 const MAX_ROWS = 3;
 
 const PATH_WORD: Record<Health, string> = { ok: "Within SLA", warn: "At risk", bad: "Down" };
@@ -188,7 +188,7 @@ export default function Overview() {
                 <StatusPill health="ok">Nothing open</StatusPill>
               )}
               <Link className="ov-more" to="/insights">
-                All insights{alerts.length > 0 ? ` (${alerts.length})` : ""}
+                All alerts{alerts.length > 0 ? ` (${alerts.length})` : ""}
               </Link>
             </div>
             {issues.length + alerts.length === 0 ? (
@@ -742,7 +742,7 @@ function RecentMoves({ moves }: { moves: RecentMove[] }) {
       <div className="ov-card-head">
         <h2 id="ov-moves-h">Recent routing moves</h2>
         <Link className="ov-more" to="/decisions">
-          All decisions
+          All routing moves
         </Link>
       </div>
       {moves.length === 0 ? (

@@ -85,7 +85,7 @@ export default function Internet() {
   const data = state.data;
   return (
     <>
-      <PageHead eyebrow="Internet" title="Internet access">
+      <PageHead eyebrow="Internet access" title="Internet access">
         How each site reaches the internet, what may leave, and what outside can reach in. Sites pick up changes within 10
         seconds.
       </PageHead>

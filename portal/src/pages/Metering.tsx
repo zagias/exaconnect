@@ -55,7 +55,7 @@ export default function Metering({ carrierView = false }: { carrierView?: boolea
   return (
     <>
       <div className="page-head">
-        <Eyebrow>{carrierView ? "Carrier view" : "Metering"}</Eyebrow>
+        <Eyebrow>{carrierView ? "Carrier view" : "Usage"}</Eyebrow>
         <h1>{carrierView ? "Your links and the samples behind every charge" : "Usage, 95th percentile and burst"}</h1>
         <p className="muted">
           Bytes are sampled every minute and rolled up to 5-minute averages. For the period, the top 5% of samples are

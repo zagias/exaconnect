@@ -315,6 +315,7 @@ export function navGroups(
   const has = (i: Item) => !i.module || !modules || modules[i.module] !== false;
   // The apps this person may open (ADR 0023, 0041); null: not limited.
   const plan = (p: string) => !apps || apps.includes(p);
+  // Plain names first; the old screen names stay searchable in jump-to.
   const connect: Group[] = [
     {
       app: "connect",
@@ -322,29 +323,29 @@ export function navGroups(
       items: [
         { to: "/", label: "Overview", icon: icons.overview, end: true },
         { to: "/sites", label: "Sites", icon: icons.sites },
-        { to: "/decisions", label: "Decisions", icon: icons.decisions },
-        { to: "/insights", label: "Insights", icon: icons.insights },
-        { to: "/notices", label: "Carrier notices", icon: icons.carrier },
+        { to: "/decisions", label: "Routing moves", icon: icons.decisions, keywords: "decisions why traffic moved" },
+        { to: "/insights", label: "Alerts", icon: icons.insights, keywords: "insights hurricane bill anomaly" },
+        { to: "/notices", label: "Carrier notices", icon: icons.carrier, keywords: "faults maintenance" },
         { to: "/ask", label: "Ask", icon: icons.ask },
       ],
     },
     {
       app: "connect",
-      label: "Network",
+      label: "Set up",
       items: [
-        { to: "/traffic", label: "Traffic", icon: icons.traffic },
-        { to: "/fabric", label: "Fabric", icon: icons.fabric },
-        { to: "/internet", label: "Internet", icon: icons.internet },
+        { to: "/traffic", label: "Traffic rules", icon: icons.traffic, keywords: "traffic applications priorities classes" },
+        { to: "/fabric", label: "Private links", icon: icons.fabric, keywords: "fabric virtual circuits cloud router" },
+        { to: "/internet", label: "Internet access", icon: icons.internet, keywords: "breakout firewall port forwards" },
         { to: "/encryption", label: "Encryption", icon: icons.encryption },
         { to: "/integrations", label: "Integrations", icon: icons.fabric, keywords: "monitoring ticketing snmp syslog" },
       ],
     },
     {
       app: "connect",
-      label: "Commercial",
+      label: "Orders and usage",
       items: [
-        { to: "/order", label: "Order", icon: icons.order },
-        { to: "/metering", label: "Metering", icon: icons.metering },
+        { to: "/order", label: "Orders", icon: icons.order, keywords: "order circuits bandwidth" },
+        { to: "/metering", label: "Usage", icon: icons.metering, keywords: "metering 95th percentile burst" },
         ...(admin ? [{ to: "/carrier", label: "Carrier view", icon: icons.carrier }] : []),
       ],
     },

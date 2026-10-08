@@ -181,7 +181,7 @@ export default function Insights() {
   return (
     <>
       <div className="page-head">
-        <Eyebrow>Insights</Eyebrow>
+        <Eyebrow>Alerts</Eyebrow>
         <h1>What the network is telling you</h1>
         <p className="muted">
           Hurricanes forecast near your sites (from the US National Hurricane
@@ -196,7 +196,7 @@ export default function Insights() {
       </div>
       <section className="card">
         <div className="card-head">
-          <h2>{history ? "All insights" : "Open insights"}</h2>
+          <h2>{history ? "All alerts" : "Open alerts"}</h2>
           <div className="form-actions">
             <label className="small">
               <input
