@@ -1,0 +1,26 @@
+# Nightly encrypted database backup, then a restore test into a scratch database
+# (ADR 0017). Install:
+#   sudo cp deploy/systemd/exaconnect-backup.{service,timer} /etc/systemd/system/
+#   sudo install -m 600 /dev/null /etc/exaconnect/backup.env   # then fill it in (see docs/commai/identity.md)
+#   sudo systemctl daemon-reload && sudo systemctl enable --now exaconnect-backup.timer
+[Unit]
+Description=ExaCarib Connect database backup and restore test
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+# EXA_BACKUP_PASSPHRASE, EXA_BACKUP_COMPOSE_FILE or EXA_BACKUP_DATABASE_URL, optional
+# EXA_BACKUP_RCLONE_REMOTE. Never put these in the repository.
+EnvironmentFile=/etc/exaconnect/backup.env
+Environment=EXA_BACKUP_DIR=/var/backups/exaconnect
+WorkingDirectory=/opt/exaconnect
+ExecStart=/opt/exaconnect/deploy/backup/backup.sh
+ExecStart=/opt/exaconnect/deploy/backup/restore-test.sh
+Nice=10
+IOSchedulingClass=idle
+UMask=0077
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectHome=read-only
+TimeoutStartSec=2h

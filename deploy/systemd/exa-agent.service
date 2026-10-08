@@ -1,0 +1,18 @@
+# ExaCarib Connect edge agent on a real site (ADR 0024). deploy/agent/install.sh
+# installs and enables this; it needs root for WireGuard, nftables and routing.
+[Unit]
+Description=ExaCarib Connect edge agent
+Wants=network-online.target
+After=network-online.target frr.service
+ConditionPathExists=/var/lib/exaconnect/identity.json
+
+[Service]
+ExecStart=/usr/local/bin/exa-agent run
+Environment=EXA_STATE_DIR=/var/lib/exaconnect
+Restart=always
+RestartSec=5
+# Keep forwarding on the last good state when the agent stops: it does not tear down on exit.
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target

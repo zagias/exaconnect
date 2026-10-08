@@ -1,0 +1,123 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  agent:
+    # arm64 first (CLAUDE.md §3): the arm64 leg runs its tests on an Arm runner, not just a cross-compile.
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    strategy:
+      matrix:
+        arch: [arm64, amd64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: agent/go.mod
+      - name: gofmt
+        run: test -z "$(gofmt -l agent)" || (gofmt -l agent && exit 1)
+      - name: vet and test
+        run: make test-agent
+      - name: build linux/${{ matrix.arch }}
+        working-directory: agent
+        run: CGO_ENABLED=0 GOOS=linux GOARCH=${{ matrix.arch }} go build -trimpath -o exa-agent ./cmd/exa-agent
+      # The site kit (ADR 0024): binary, installer and unit, downloadable from the run.
+      - name: site kit
+        run: cp agent/exa-agent deploy/agent/install.sh deploy/systemd/exa-agent.service "$RUNNER_TEMP/"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exa-agent-linux-${{ matrix.arch }}
+          path: |
+            ${{ runner.temp }}/exa-agent
+            ${{ runner.temp }}/install.sh
+            ${{ runner.temp }}/exa-agent.service
+          retention-days: 30
+
+  terraform:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: terraform/go.mod
+      - name: gofmt
+        run: test -z "$(gofmt -l terraform)" || (gofmt -l terraform && exit 1)
+      - name: vet and unit tests
+        working-directory: terraform
+        run: go vet ./... && go test -count=1 ./...
+      - name: build linux/arm64, linux/amd64, darwin/arm64
+        working-directory: terraform
+        run: |
+          for t in linux/arm64 linux/amd64 darwin/arm64; do
+            CGO_ENABLED=0 GOOS=${t%/*} GOARCH=${t#*/} go build -trimpath -o /dev/null .
+          done
+
+  controller:
+    runs-on: ubuntu-24.04
+    services:
+      # Same image as deploy/docker-compose.yml, so the hypertable path is tested too.
+      db:
+        image: timescale/timescaledb:latest-pg16
+        env:
+          POSTGRES_USER: exa
+          POSTGRES_PASSWORD: ci-only
+          POSTGRES_DB: exatest
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U exa" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      EXA_TEST_DATABASE_URL: postgresql://exa:ci-only@127.0.0.1:5432/exatest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e 'controller[dev]'
+      - name: lint
+        working-directory: controller
+        run: ruff check . && ruff format --check .
+      - name: lint the Python SDK
+        working-directory: sdk/python
+        run: ruff check . && ruff format --check .
+      - name: test
+        run: make test-controller
+
+  portal:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: portal/package-lock.json
+      - run: make build-portal
+      - name: unit tests
+        run: cd portal && npm test
+
+  lab:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: >-
+          shellcheck -x lab/netem/*.sh lab/faults/*.sh lab/scripts/*.sh lab/host/*.sh
+          lab/ci/checks/*.sh lab/ci/run.sh lab/demo.sh lab/runner/*.sh
+          deploy/agent/*.sh deploy/release/*.sh
+      - name: topology parses
+        run: python3 -c "import yaml,sys; t=yaml.safe_load(open('lab/exaconnect.clab.yml')); print(len(t['topology']['nodes']), 'nodes')"
+
+  voice-sbc:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: shellcheck -x deploy/voice/*.sh lab/ci/checks/voice-sbc.sh
+      - name: Kamailio and FreeSWITCH start with this config
+        run: make voice-check

@@ -1,0 +1,90 @@
+"""Controller settings, read from the environment (see /.env.example). Never hard-code secrets."""
+
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass, field
+
+
+def _env(name: str, default: str = "") -> str:
+    return os.environ.get(name, default)
+
+
+@dataclass(frozen=True)
+class Settings:
+    database_url: str = field(default_factory=lambda: _env("EXA_DATABASE_URL"))
+    environment: str = field(default_factory=lambda: _env("EXA_ENV", "dev"))
+    data_dir: str = field(default_factory=lambda: _env("EXA_DATA_DIR", "/data"))
+    # Shared with the TLS proxy; agent endpoints only trust requests carrying it.
+    proxy_secret: str = field(default_factory=lambda: _env("EXA_PROXY_SECRET"))
+    # How agents reach the controller (shown with enrolment tokens).
+    agent_url: str = field(default_factory=lambda: _env("EXA_AGENT_URL", "https://172.30.0.5:8443"))
+    # Extra names/IPs for the agent-facing TLS certificate, comma separated.
+    tls_sans: str = field(default_factory=lambda: _env("EXA_TLS_SANS", "controller,localhost,127.0.0.1,172.30.0.5"))
+    # The agent gateway's public name (ADR 0024): real sites enrol at https://<host>:8443.
+    # Empty keeps the gateway on the private lab network only.
+    agent_public_host: str = field(default_factory=lambda: _env("EXA_AGENT_PUBLIC_HOST"))
+    admin_email: str = field(default_factory=lambda: _env("EXA_ADMIN_EMAIL"))
+    admin_password: str = field(default_factory=lambda: _env("EXA_ADMIN_PASSWORD"))
+    session_hours: int = field(default_factory=lambda: int(_env("EXA_SESSION_HOURS", "12")))
+    # Seconds between routing engine passes; 0 turns the background loop off (tests).
+    routing_interval_s: float = field(default_factory=lambda: float(_env("EXA_ROUTING_INTERVAL_S", "10")))
+    # Hurricane watch: NHC's active storms feed, checked every interval; "" turns it off.
+    nhc_url: str = field(default_factory=lambda: _env("EXA_NHC_URL", "https://www.nhc.noaa.gov/CurrentStorms.json"))
+    nhc_interval_s: float = field(default_factory=lambda: float(_env("EXA_NHC_INTERVAL_S", "900")))
+    # Disaster watch (ADR 0009): earthquakes, GDACS multi-hazard alerts and tsunami
+    # messages, checked every interval. Any URL set to "" turns that feed off.
+    usgs_url: str = field(
+        default_factory=lambda: _env(
+            "EXA_USGS_URL", "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_day.geojson"
+        )
+    )
+    gdacs_url: str = field(
+        default_factory=lambda: _env("EXA_GDACS_URL", "https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH")
+    )
+    tsunami_urls: str = field(
+        default_factory=lambda: _env(
+            "EXA_TSUNAMI_URLS",
+            "https://www.tsunami.gov/events/xml/PHEBAtom.xml,https://www.tsunami.gov/events/xml/PAAQAtom.xml",
+        )
+    )
+    hazard_interval_s: float = field(default_factory=lambda: float(_env("EXA_HAZARD_INTERVAL_S", "600")))
+    # "Ask your network": any OpenAI-compatible endpoint. Off until a key is set.
+    llm_api_key: str = field(default_factory=lambda: _env("EXA_LLM_API_KEY"), repr=False)
+    llm_base_url: str = field(
+        default_factory=lambda: _env("EXA_LLM_BASE_URL", "https://api.deepinfra.com/v1/openai").rstrip("/")
+    )
+    llm_model: str = field(default_factory=lambda: _env("EXA_LLM_MODEL", "deepseek-ai/DeepSeek-V4-Flash"))
+    llm_questions_per_hour: int = field(default_factory=lambda: int(_env("EXA_LLM_QUESTIONS_PER_HOUR", "30")))
+    # Sign-in (ADR 0017). The session cookie is Secure unless this is "0" (plain-HTTP tests only).
+    cookie_secure: bool = field(default_factory=lambda: _env("EXA_COOKIE_SECURE", "1") not in ("0", "false", "no"))
+    # The sign-in gateway (Keycloak) over OpenID Connect. Off until the issuer and client are set.
+    oidc_issuer: str = field(default_factory=lambda: _env("EXA_OIDC_ISSUER").rstrip("/"))
+    oidc_client_id: str = field(default_factory=lambda: _env("EXA_OIDC_CLIENT_ID"))
+    oidc_client_secret: str = field(default_factory=lambda: _env("EXA_OIDC_CLIENT_SECRET"), repr=False)
+    # Which social sign-in buttons the gateway offers (Keycloak identity provider aliases).
+    # Microsoft is off by default until its email trust is settled (ADR 0017).
+    oidc_idps: str = field(default_factory=lambda: _env("EXA_OIDC_IDPS", "google"))
+    # Where people reach the portal, e.g. https://connect.example.org (for the OIDC redirect).
+    public_url: str = field(default_factory=lambda: _env("EXA_PUBLIC_URL").rstrip("/"))
+    # Keycloak admin REST API (enterprise SSO set-up) through a service-account client.
+    # Without these, SSO connections are kept by a simulated gateway (tests, demos).
+    keycloak_admin_client_id: str = field(default_factory=lambda: _env("EXA_KEYCLOAK_ADMIN_CLIENT_ID"))
+    keycloak_admin_client_secret: str = field(
+        default_factory=lambda: _env("EXA_KEYCLOAK_ADMIN_CLIENT_SECRET"), repr=False
+    )
+
+    @property
+    def agent_public_url(self) -> str:
+        return f"https://{self.agent_public_host}:8443" if self.agent_public_host else ""
+
+    def tls_names(self) -> list[str]:
+        """Names on the agent-facing certificate: the lab names plus the public gateway name."""
+        names = [s.strip() for s in self.tls_sans.split(",") if s.strip()]
+        if self.agent_public_host and self.agent_public_host not in names:
+            names.append(self.agent_public_host)
+        return names
+
+
+def get_settings() -> Settings:
+    return Settings()

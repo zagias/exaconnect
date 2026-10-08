@@ -1,0 +1,30 @@
+{
+  "activeStorms": [
+    {
+      "id": "al992026",
+      "name": "Example",
+      "classification": "HU",
+      "intensity": "90",
+      "pressure": "970",
+      "latitude": "15.9N",
+      "longitude": "71.8W",
+      "latitudeNumeric": 15.9,
+      "longitudeNumeric": -71.8,
+      "movementDir": 285,
+      "movementSpeed": 14,
+      "lastUpdate": "2026-10-01T09:00:00.000Z",
+      "publicAdvisory": {"advNum": "12", "issuance": "2026-10-01T09:00:00.000Z", "url": "https://www.nhc.noaa.gov/"}
+    },
+    {
+      "id": "ep992026",
+      "name": "Far Away",
+      "classification": "TS",
+      "intensity": "45",
+      "latitude": "14.0N",
+      "longitude": "120.0W",
+      "movementDir": 270,
+      "movementSpeed": 10,
+      "lastUpdate": "2026-10-01T09:00:00.000Z"
+    }
+  ]
+}

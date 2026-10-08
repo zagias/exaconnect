@@ -1,0 +1,124 @@
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useLocation } from "react-router-dom";
+import { Eyebrow, ExampleTag } from "./components";
+import { useCustomer } from "./customer";
+import { groupOf } from "./nav";
+import "./tables.css";
+
+export { RowActions, type RowAction } from "./menu";
+
+/** Runs a form action with a busy flag and an error message. */
+export function useAction() {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const run = async (fn: () => Promise<void>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await fn();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return { busy, error, run, setError };
+}
+
+export function Card({ title, children, note }: { title: string; children: ReactNode; note?: ReactNode }) {
+  return (
+    <section className="card" style={{ marginBottom: 24 }}>
+      <div className="card-head">
+        <h2>{title}</h2>
+        {note}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/**
+ * Eyebrow, title and one short muted line. Without an eyebrow, the screen's
+ * menu group is used ("Conversations", "Set up"...), so headers match the menu.
+ */
+export function PageHead({ eyebrow, title, children }: { eyebrow?: string; title: string; children?: ReactNode }) {
+  const { pathname } = useLocation();
+  const label = eyebrow ?? groupOf(pathname);
+  // Lab and demo organisations: every screen of theirs says it shows example data (CLAUDE.md 4.6).
+  const example = useCustomer().current?.example;
+  return (
+    <div className="page-head">
+      {label && <Eyebrow>{label}</Eyebrow>}
+      <h1>
+        {title}
+        {example && (
+          <>
+            {" "}
+            <ExampleTag />
+          </>
+        )}
+      </h1>
+      {children && <p className="muted">{children}</p>}
+    </div>
+  );
+}
+
+/**
+ * A row of section tabs (NavLinks). On phones it stays one row and scrolls
+ * sideways, with a fade on whichever edge has more tabs behind it, and keeps
+ * the current tab in view.
+ */
+export function Tabs({ label, children }: { label: string; children: ReactNode }) {
+  const box = useRef<HTMLDivElement>(null);
+  const nav = useRef<HTMLElement>(null);
+  const [more, setMore] = useState({ left: false, right: false });
+  const { pathname } = useLocation();
+
+  const measure = useCallback(() => {
+    const n = nav.current;
+    if (!n) return;
+    const left = n.scrollLeft > 2;
+    const right = n.scrollLeft + n.clientWidth < n.scrollWidth - 2;
+    setMore((m) => (m.left === left && m.right === right ? m : { left, right }));
+  }, []);
+
+  useEffect(() => {
+    const n = nav.current;
+    if (!n) return;
+    const active = n.querySelector<HTMLElement>("a.active");
+    if (active && n.scrollWidth > n.clientWidth) {
+      const target = active.offsetLeft - (n.clientWidth - active.offsetWidth) / 2;
+      n.scrollTo({ left: Math.max(0, target) });
+    }
+    measure();
+  }, [pathname, measure]);
+
+  useEffect(() => {
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [measure]);
+
+  return (
+    <div ref={box} className="tabs-scroll" data-more-left={more.left || undefined} data-more-right={more.right || undefined}>
+      <nav ref={nav} className="tabs" aria-label={label} onScroll={measure}>
+        {children}
+      </nav>
+    </div>
+  );
+}
+
+/**
+ * What to show instead of an empty list: what belongs here, in a sentence,
+ * and the one thing to do next (a button or link), if there is one.
+ */
+export function EmptyState({ title, children, action }: { title: string; children?: ReactNode; action?: ReactNode }) {
+  return (
+    <div className="empty empty-state">
+      <div className="empty-text">
+        <strong>{title}</strong>
+        {children && <p>{children}</p>}
+      </div>
+      {action}
+    </div>
+  );
+}

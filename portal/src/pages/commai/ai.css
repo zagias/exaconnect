@@ -1,0 +1,44 @@
+/* AI agents screen and the copilot panel (ADR 0019). */
+.ai-intro { margin-top: 0; max-width: 72ch; }
+.ai-status { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-bottom: 12px; }
+.ai-status p { flex-basis: 100%; margin: 0; max-width: 72ch; }
+.ai-modes { border: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.ai-mode { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+.ai-mode input { margin-top: 5px; }
+.ai-langs { display: flex; flex-wrap: wrap; gap: 8px 16px; border: none; padding: 0; margin: 0; }
+.ai-langs legend { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+.ai-langs p { flex-basis: 100%; margin: 0; }
+.form fieldset.wide { border: none; padding: 0; margin: 0; min-width: 0; }
+.form fieldset.wide > legend { font-weight: 600; font-size: 14px; margin-bottom: 6px; }
+.form textarea { box-sizing: border-box; width: 100%; min-width: 0; resize: vertical; }
+.ai-role { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 0 0 16px; font-size: 14px; }
+.ai-role dt { font-weight: 600; }
+.ai-role dd { margin: 0; color: var(--ink-muted); }
+.ai-tools { border: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.ai-tool { display: flex; gap: 10px; align-items: flex-start; }
+.ai-tool input { margin-top: 5px; }
+.ai-tool .tag, .ai-tool .pill { margin-left: 8px; }
+.ai-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 12px 0; }
+.ai-hits { padding-left: 20px; }
+.ai-hits p { margin: 4px 0 12px; }
+.ai-transcript { list-style: none; padding: 0; margin: 16px 0; display: grid; gap: 8px; }
+.ai-line { display: grid; gap: 2px; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--line); max-width: 80%; }
+.ai-line.caller { justify-self: end; background: var(--blue-tint); }
+.ai-line.ai, .ai-line.business { justify-self: start; background: var(--card); }
+
+.copilot { display: grid; gap: 8px; align-content: start; }
+.copilot-title { font-size: 18px; margin: 0; }
+.copilot p { margin: 0; }
+.copilot-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+.copilot-result { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--page); }
+.copilot-draft { white-space: pre-wrap; }
+.copilot-items { margin: 0; padding-left: 20px; }
+.copilot-sources a { color: var(--blue-strong); }
+.copilot-runs summary { cursor: pointer; font-weight: 600; font-size: 14px; }
+.copilot-runs ol { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 10px; }
+.pill.small { font-size: 13px; line-height: 18px; }
+
+@media (max-width: 640px) {
+  .ai-role { grid-template-columns: 1fr; }
+  .ai-line { max-width: 100%; }
+}

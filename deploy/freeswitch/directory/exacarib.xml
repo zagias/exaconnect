@@ -1,0 +1,4 @@
+<!-- Jibsy voice (ADR 0021): one SIP domain per business, rendered by the controller. -->
+<include>
+  <X-PRE-PROCESS cmd="include" data="/exacarib/freeswitch/*/directory.xml"/>
+</include>

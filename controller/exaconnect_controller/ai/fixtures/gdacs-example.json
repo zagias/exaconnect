@@ -1,0 +1,40 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {"type": "Point", "coordinates": [-61.18, 10.93]},
+      "properties": {
+        "eventtype": "EQ", "eventid": 1000001, "name": "Earthquake in Trinidad and Tobago",
+        "description": "Earthquake of magnitude 6.3 near Trinidad and Tobago", "alertlevel": "Orange",
+        "iscurrent": "true", "fromdate": "2026-09-21T14:17:20",
+        "severitydata": {"severity": 6.3, "severitytext": "Magnitude 6.3M, Depth:45km", "severityunit": "M"},
+        "url": {"report": "https://www.gdacs.org/"}
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Polygon", "coordinates": [[[-62.0, 10.3], [-60.4, 10.3], [-60.4, 11.6], [-62.0, 11.6], [-62.0, 10.3]]]},
+      "properties": {
+        "eventtype": "EQ", "eventid": 1000001, "name": "Earthquake in Trinidad and Tobago", "alertlevel": "Orange",
+        "iscurrent": "true", "fromdate": "2026-09-21T14:17:20", "url": {"report": "https://www.gdacs.org/"}
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Point", "coordinates": [-71.8, 15.9]},
+      "properties": {
+        "eventtype": "TC", "eventid": 1000002, "name": "EXAMPLE-26", "description": "Tropical cyclone EXAMPLE-26",
+        "alertlevel": "Red", "iscurrent": "true", "fromdate": "2026-09-20T09:00:00", "url": {"report": "https://www.gdacs.org/"}
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Point", "coordinates": [90.4, 23.8]},
+      "properties": {
+        "eventtype": "FL", "eventid": 1000003, "name": "Flood in Bangladesh", "description": "Flood in Bangladesh",
+        "alertlevel": "Green", "iscurrent": "true", "fromdate": "2026-09-20T00:00:00", "url": {"report": "https://www.gdacs.org/"}
+      }
+    }
+  ]
+}

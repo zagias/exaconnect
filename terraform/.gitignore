@@ -1,0 +1,5 @@
+/terraform-provider-exaconnect
+/examples/.terraform/
+/examples/.terraform.lock.hcl
+/examples/terraform.tfstate*
+*.tfvars

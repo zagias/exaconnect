@@ -1,0 +1,24 @@
+{
+  "type": "FeatureCollection",
+  "metadata": {"title": "Example data: USGS Magnitude 4.5+ Earthquakes, Past Day"},
+  "features": [
+    {
+      "type": "Feature",
+      "id": "us7000exmp",
+      "properties": {
+        "mag": 6.4, "place": "38 km NE of Port of Spain, Trinidad and Tobago", "time": 1790000000000,
+        "url": "https://earthquake.usgs.gov/earthquakes/map/", "alert": "yellow", "tsunami": 1, "type": "earthquake"
+      },
+      "geometry": {"type": "Point", "coordinates": [-61.20, 10.95, 48.0]}
+    },
+    {
+      "type": "Feature",
+      "id": "ak0000exmp",
+      "properties": {
+        "mag": 4.8, "place": "Example, far away", "time": 1789990000000,
+        "url": "https://earthquake.usgs.gov/earthquakes/map/", "alert": null, "tsunami": 0, "type": "earthquake"
+      },
+      "geometry": {"type": "Point", "coordinates": [-150.1, 61.2, 30.0]}
+    }
+  ]
+}

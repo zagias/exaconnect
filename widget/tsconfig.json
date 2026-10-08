@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2018",
+    "lib": ["ES2018", "DOM", "DOM.Iterable"],
+    "module": "esnext",
+    "moduleDetection": "legacy",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "rootDir": "src",
+    "outDir": "../controller/exaconnect_controller/commai/static",
+    "skipLibCheck": true,
+    "types": []
+  },
+  "files": ["src/widget.ts"]
+}

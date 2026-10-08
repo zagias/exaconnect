@@ -1,0 +1,32 @@
+/* My settings (ADR 0037). Phone first: one column, everything reachable by keyboard. */
+.me { max-width: 880px; }
+.me-section { margin-bottom: 24px; scroll-margin-top: 72px; }
+.me-section h2 { margin-bottom: 12px; }
+.me-sub { font-size: 16px; margin: 20px 0 8px; }
+.me-toc ul { list-style: none; padding: 0; margin: 0 0 20px; display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.me-toc a { font-weight: 600; font-size: 14px; }
+.me-table { border-collapse: collapse; width: 100%; }
+.me-table th, .me-table td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.me-table td { text-align: center; width: 96px; }
+.me-table th[scope="row"] { font-weight: 400; }
+.me-table input[type="checkbox"], .me-avail input[type="radio"] { width: 20px; height: 20px; accent-color: var(--blue); }
+.me-quiet { border: 1.5px solid var(--line); border-radius: var(--radius-md); padding: 8px 12px 12px; margin: 16px 0 0;
+  display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+.me-quiet legend { font-weight: 600; font-size: 14px; padding: 0 4px; }
+.me-quiet label { display: grid; gap: 4px; font-weight: 600; font-size: 14px; }
+.me-quiet input { font: 400 15px/22px var(--font-body); padding: 6px 10px; color: var(--ink); background: var(--card);
+  border: 1.5px solid var(--line); border-radius: var(--radius-md); min-height: 40px; }
+.me-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 16px; }
+.me-avail { border: 0; padding: 0; margin: 0; display: grid; gap: 8px; }
+.me-avail label { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1.5px solid var(--line);
+  border-radius: var(--radius-md); cursor: pointer; min-height: 44px; box-sizing: border-box; }
+.me-avail label.chosen { border-color: var(--blue); background: var(--blue-tint); }
+.me-list { list-style: none; padding: 0; margin: 8px 0 0; }
+.me-list li { padding: 8px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.me-softphone { margin-top: 16px; }
+.me-softphone h3 { font-size: 16px; }
+.me .button { min-height: 40px; }
+@media (max-width: 480px) {
+  .me-table td { width: 64px; }
+  .me .form { grid-template-columns: 1fr; }
+}

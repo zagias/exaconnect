@@ -1,0 +1,143 @@
+"""Customer settings: shadow mode and Storm Mode."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+
+from .. import audit, db, desired
+from ..routing import maps
+from ..storm.service import set_storm
+from .deps import UserDep, check_customer, customer_scope, require_org_manager
+
+router = APIRouter(tags=["settings"])
+# Shared by both plans (ADR 0023): which organisations this account acts for.
+shared = APIRouter(tags=["settings"])
+
+
+_check = check_customer
+
+
+SITES_SQL = """SELECT id, name, location, storm_mode, storm_since, storm_by FROM sites
+               WHERE customer_id = %s AND kind = 'site' ORDER BY name"""
+
+
+def _with_sites(conn, rows: list[dict]) -> list[dict]:
+    for r in rows:
+        r["sites"] = conn.execute(SITES_SQL, (r["id"],)).fetchall()
+    return rows
+
+
+@router.get("/customers/{customer_id}/settings")
+def get_settings(customer_id: str, user: UserDep) -> dict:
+    """Settings, with each site's Storm Mode state. storm_mode is true while any site is on."""
+    _check(user, customer_id)
+    with db.tx() as conn:
+        row = conn.execute(
+            """SELECT id, name, shadow_mode, storm_mode, storm_since, storm_by, storm_allow_bulk_sat,
+                      auto_prioritise, cloud_to_cloud
+               FROM customers WHERE id = %s""",
+            (customer_id,),
+        ).fetchone()
+        if row is None:
+            raise HTTPException(404, "Customer not found.")
+        return _with_sites(conn, [row])[0]
+
+
+class SettingsIn(BaseModel):
+    shadow_mode: bool | None = None
+    storm_allow_bulk_sat: bool | None = None
+    # Apply confident application detections as traffic rules without asking (ADR 0007).
+    auto_prioritise: bool | None = None
+    # The cloud router: clouds on this customer's circuits reach each other through the PoP (ADR 0009).
+    cloud_to_cloud: bool | None = None
+
+
+@router.patch("/customers/{customer_id}/settings")
+def update_settings(customer_id: str, body: SettingsIn, user: UserDep) -> dict:
+    """Shadow mode logs routing decisions without acting on them. Switching
+    it either way starts every class from its default path. Settings are for
+    the organisation's owners and admins (ADR 0023)."""
+    require_org_manager(user, customer_id)
+    if body.storm_allow_bulk_sat is not None and user.role != "admin":
+        raise HTTPException(403, "Only an admin can allow bulk traffic on satellite.")
+    with db.tx() as conn:
+        row = conn.execute(
+            "SELECT shadow_mode, storm_allow_bulk_sat FROM customers WHERE id = %s FOR UPDATE", (customer_id,)
+        ).fetchone()
+        if row is None:
+            raise HTTPException(404, "Customer not found.")
+        if body.storm_allow_bulk_sat is not None and body.storm_allow_bulk_sat != row["storm_allow_bulk_sat"]:
+            conn.execute(
+                "UPDATE customers SET storm_allow_bulk_sat = %s WHERE id = %s", (body.storm_allow_bulk_sat, customer_id)
+            )
+            audit.record(conn, user.actor, "settings.storm_allow_bulk_sat", str(body.storm_allow_bulk_sat), customer_id)
+            maps.refresh(conn, customer_id)
+        if body.auto_prioritise is not None:
+            conn.execute("UPDATE customers SET auto_prioritise = %s WHERE id = %s", (body.auto_prioritise, customer_id))
+            audit.record(conn, user.actor, "settings.auto_prioritise", str(body.auto_prioritise), customer_id)
+        if body.cloud_to_cloud is not None:
+            conn.execute("UPDATE customers SET cloud_to_cloud = %s WHERE id = %s", (body.cloud_to_cloud, customer_id))
+            audit.record(conn, user.actor, "settings.cloud_to_cloud", str(body.cloud_to_cloud), customer_id)
+            desired.refresh(conn, customer_id)
+        if body.shadow_mode is not None and body.shadow_mode != row["shadow_mode"]:
+            conn.execute("UPDATE customers SET shadow_mode = %s WHERE id = %s", (body.shadow_mode, customer_id))
+            conn.execute("DELETE FROM steering WHERE customer_id = %s", (customer_id,))
+            audit.record(conn, user.actor, "settings.shadow_mode", str(body.shadow_mode), customer_id)
+            maps.refresh(conn, customer_id)
+    return get_settings(customer_id, user)
+
+
+class StormIn(BaseModel):
+    on: bool
+    allow_bulk_satellite: bool | None = None
+    site_ids: list[str] | None = None
+
+
+@router.post("/customers/{customer_id}/storm")
+def storm(customer_id: str, body: StormIn, user: UserDep) -> dict:
+    """Switch Storm Mode on or off for some sites (site_ids) or all of the
+    customer's sites. Who switched it and when is recorded per site."""
+    _check(user, customer_id)
+    if body.allow_bulk_satellite is not None and user.role != "admin":
+        raise HTTPException(403, "Only an admin can allow bulk traffic on satellite.")
+    with db.tx() as conn:
+        try:
+            set_storm(conn, customer_id, body.on, user.actor, body.allow_bulk_satellite, body.site_ids)
+        except LookupError:
+            raise HTTPException(404, "Customer or site not found.") from None
+    return get_settings(customer_id, user)
+
+
+class SiteStormIn(BaseModel):
+    on: bool
+
+
+@router.post("/sites/{site_id}/storm")
+def site_storm(site_id: str, body: SiteStormIn, user: UserDep) -> dict:
+    """Switch Storm Mode on or off for one site."""
+    with db.tx() as conn:
+        row = conn.execute("SELECT customer_id FROM sites WHERE id = %s AND kind = 'site'", (site_id,)).fetchone()
+    if row is None:
+        raise HTTPException(404, "Site not found.")
+    customer_id = str(row["customer_id"])
+    _check(user, customer_id)
+    with db.tx() as conn:
+        set_storm(conn, customer_id, body.on, user.actor, site_ids=[site_id])
+    return get_settings(customer_id, user)
+
+
+@shared.get("/customers/mine")
+def my_customers(user: UserDep) -> list[dict]:
+    """The customers this account can act for: all for admins, its own for
+    customer users, none for carrier users."""
+    if user.role == "carrier":
+        return []
+    with db.tx() as conn:
+        rows = conn.execute(
+            """SELECT id, name, shadow_mode, storm_mode, storm_since, storm_by, storm_allow_bulk_sat,
+                      auto_prioritise, example
+               FROM customers WHERE %(c)s::uuid IS NULL OR id = %(c)s ORDER BY name""",
+            {"c": customer_scope(user)},
+        ).fetchall()
+        return _with_sites(conn, rows)

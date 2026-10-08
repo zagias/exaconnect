@@ -1,0 +1,28 @@
+# Public portal at $EXA_PUBLIC_HOST (connect.exacarib.com), added to the
+# controller stack:
+#   make public-up
+# Opens only 80 and 443 on the host. The controller API (127.0.0.1:8000) and
+# the database stay private.
+services:
+  web:
+    build:
+      # Relative paths resolve from the first compose file's directory (deploy/).
+      context: ..
+      dockerfile: deploy/public/Dockerfile
+    environment:
+      EXA_PUBLIC_HOST: ${EXA_PUBLIC_HOST:?set EXA_PUBLIC_HOST}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      controller:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  caddy-data:
+  caddy-config:

@@ -1,0 +1,456 @@
+"""Inbox, contact and widget extras (ADR 0038): service-target settings,
+contact identities and history, typing and presence, staff attachments, and
+the website visitor's AI browser call."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import Response
+from psycopg.types.json import Jsonb
+from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
+
+from ... import audit, db
+from ...api.deps import UserDep
+from .. import access, attachments, channels, events, history, inbox, inbox_jobs, presence, ratelimit, visitor_calls
+from ..channels import widget
+from . import channels as ch_api
+from .common import errors, page_after
+
+router = APIRouter(prefix="/customers/{customer_id}", tags=["commai: inbox"])
+public = APIRouter(tags=["commai: channels (public)"])
+
+
+def _no_internal(conn, user, customer_id) -> None:
+    if access.seat(conn, user, customer_id) == "internal":
+        raise HTTPException(403, "Your seat can't change settings.")
+
+
+# ---- service targets ---------------------------------------------------------------
+
+
+class TargetsIn(BaseModel):
+    reminders: bool = True
+    remind_percent: int = Field(default=80, ge=10, le=99, description="Remind when this share of the time has gone")
+    escalate: bool = True
+    escalate_team_id: str | None = None
+
+
+@router.get("/service-targets")
+def get_service_targets(customer_id: str, user: UserDep) -> dict:
+    """How reminders and escalations work for missed first-reply and resolution targets."""
+    access.check(user, customer_id, "commai:read")
+    with db.tx() as conn:
+        return inbox_jobs.target_settings(conn, customer_id)
+
+
+@router.put("/service-targets")
+def set_service_targets(customer_id: str, body: TargetsIn, user: UserDep) -> dict:
+    access.check(user, customer_id, "commai:admin")
+    with db.tx() as conn:
+        _no_internal(conn, user, customer_id)
+        if (
+            body.escalate_team_id
+            and not conn.execute(
+                "SELECT 1 FROM commai_teams WHERE id = %s AND customer_id = %s", (body.escalate_team_id, customer_id)
+            ).fetchone()
+        ):
+            raise HTTPException(404, "Team not found.")
+        inbox.settings(conn, customer_id)
+        conn.execute(
+            """UPDATE commai_settings SET config = jsonb_set(config, '{service_targets}', %s), updated_at = now()
+               WHERE customer_id = %s""",
+            (Jsonb(body.model_dump()), customer_id),
+        )
+        audit.record(conn, user.actor, "commai.service_targets.update", "", customer_id, body.model_dump())
+        return inbox_jobs.target_settings(conn, customer_id)
+
+
+# ---- API key rate limits ---------------------------------------------------------------------
+
+
+class KeyRateIn(BaseModel):
+    rate_per_min: int | None = Field(default=None, ge=1, le=100_000, description="None: the default budget")
+
+
+@public.put("/rate-limits/keys/{key_id}")
+def set_key_rate(key_id: int, body: KeyRateIn, user: UserDep) -> dict:
+    """ExaCarib admins only: a key's own budget of requests a minute."""
+    if user.role != "admin":
+        raise HTTPException(403, "Admins only.")
+    with db.tx() as conn:
+        row = conn.execute(
+            "UPDATE api_keys SET rate_per_min = %s WHERE id = %s RETURNING id, name, prefix, rate_per_min",
+            (body.rate_per_min, key_id),
+        ).fetchone()
+        if row is None:
+            raise HTTPException(404, "API key not found.")
+        audit.record(conn, user.actor, "commai.api_key.rate", str(key_id), detail=body.model_dump())
+    return {**row, "default_per_min": ratelimit.default_limit()}
+
+
+# ---- contacts: history and channel identities --------------------------------------------
+
+events.register("contact.identity_added", "contact.identity_verified", "contact.identity_removed")
+
+
+def _contact(conn, customer_id: str, contact_id: str) -> dict:
+    row = conn.execute(
+        "SELECT * FROM contacts WHERE id = %s AND customer_id = %s", (contact_id, customer_id)
+    ).fetchone()
+    if row is None:
+        raise HTTPException(404, "Contact not found.")
+    return row
+
+
+def _identity(conn, customer_id: str, contact_id: str, identity_id: str) -> dict:
+    row = conn.execute(
+        "SELECT * FROM contact_identities WHERE id = %s AND contact_id = %s AND customer_id = %s",
+        (identity_id, contact_id, customer_id),
+    ).fetchone()
+    if row is None:
+        raise HTTPException(404, "Identity not found.")
+    return row
+
+
+IDENTITY_COLUMNS = "id, contact_id, channel, address, verified, opted_out, created_at"
+
+
+@router.get("/contacts/{contact_id}/history")
+def get_contact_history(customer_id: str, contact_id: str, user: UserDep, limit: int = 50) -> dict:
+    """Past conversations, calls, open requests, linked records and bookings for one contact."""
+    access.check(user, customer_id, "commai:read")
+    with db.tx() as conn:
+        contact = _contact(conn, customer_id, contact_id)
+        return history.contact_history(conn, customer_id, contact, max(1, min(limit, 200)))
+
+
+@router.get("/contacts/{contact_id}/identities")
+def list_identities(
+    customer_id: str, contact_id: str, user: UserDep, cursor: str | None = None, limit: int = 100
+) -> list[dict] | dict:
+    access.check(user, customer_id, "commai:read")
+    with db.tx() as conn:
+        _contact(conn, customer_id, contact_id)
+        rows = conn.execute(
+            f"SELECT {IDENTITY_COLUMNS} FROM contact_identities WHERE contact_id = %s ORDER BY created_at, id",
+            (contact_id,),
+        ).fetchall()
+    return rows if cursor is None else page_after(rows, cursor, max(1, min(limit, 500)))
+
+
+class IdentityIn(BaseModel):
+    channel: str = Field(min_length=2, max_length=20, description="email, sms, whatsapp, web, voice...")
+    address: str = Field(min_length=1, max_length=255)
+    verified: bool = Field(default=False, description="Your own system has verified this person owns the address")
+    evidence: str = Field(default="", max_length=300, description="How it was verified (required with verified)")
+
+
+def _normalise(channel: str, address: str) -> str:
+    from ..channels import providers
+
+    address = address.strip()
+    if channel == "email":
+        address = address.lower()
+        if "@" not in address or " " in address:
+            raise HTTPException(422, "That email address doesn't look right.")
+    elif channel in ("sms", "whatsapp", "voice", "phone"):
+        address = providers.e164(address)
+        if len(address) < 8:
+            raise HTTPException(422, "Give the number with its country code, like +1 868 555 0100.")
+    return address
+
+
+@router.post("/contacts/{contact_id}/identities", status_code=201)
+def add_identity(customer_id: str, contact_id: str, body: IdentityIn, user: UserDep) -> dict:
+    """Add a channel identity to a contact. Marking it verified says your own
+    system checked the person owns it; the customer AI then treats it as theirs
+    (their history and memory), so say how in `evidence`."""
+    access.check(user, customer_id, "commai:write")
+    if body.verified and not body.evidence.strip():
+        raise HTTPException(422, "Say how the address was verified.")
+    if not channels.any_channel(body.channel) and body.channel != "phone":
+        raise HTTPException(422, f"Unknown channel {body.channel}.")
+    with db.tx() as conn:
+        _contact(conn, customer_id, contact_id)
+        address = _normalise(body.channel, body.address)
+        existing = conn.execute(
+            "SELECT * FROM contact_identities WHERE customer_id = %s AND channel = %s AND address = %s",
+            (customer_id, body.channel, address),
+        ).fetchone()
+        if existing and str(existing["contact_id"]) != contact_id:
+            raise HTTPException(409, "That address belongs to another contact. Merge or remove it there first.")
+        if existing:
+            raise HTTPException(409, "The contact already has that address.")
+        row = conn.execute(
+            f"""INSERT INTO contact_identities (customer_id, contact_id, channel, address, verified)
+                VALUES (%s, %s, %s, %s, %s) RETURNING {IDENTITY_COLUMNS}""",
+            (customer_id, contact_id, body.channel, address, body.verified),
+        ).fetchone()
+        detail = {"channel": body.channel, "verified": body.verified, "evidence": body.evidence.strip()}
+        audit.record(conn, user.actor, "commai.contact.identity.add", str(row["id"]), customer_id, detail)
+        events.emit(
+            conn,
+            customer_id,
+            "contact.identity_added",
+            {
+                "contact_id": contact_id,
+                "identity_id": str(row["id"]),
+                "channel": body.channel,
+                "verified": body.verified,
+            },
+            contact_id,
+        )
+    return row
+
+
+class VerifyIn(BaseModel):
+    verified: bool = True
+    evidence: str = Field(default="", max_length=300)
+
+
+@router.post("/contacts/{contact_id}/identities/{identity_id}/verify")
+def verify_identity(customer_id: str, contact_id: str, identity_id: str, body: VerifyIn, user: UserDep) -> dict:
+    """Mark an identity verified (or not). Verifying needs `evidence`; it is audited."""
+    access.check(user, customer_id, "commai:write")
+    if body.verified and not body.evidence.strip():
+        raise HTTPException(422, "Say how the address was verified.")
+    with db.tx() as conn:
+        access.require_reply_seat(conn, user, customer_id)
+        ident = _identity(conn, customer_id, contact_id, identity_id)
+        row = conn.execute(
+            f"UPDATE contact_identities SET verified = %s WHERE id = %s RETURNING {IDENTITY_COLUMNS}",
+            (body.verified, ident["id"]),
+        ).fetchone()
+        audit.record(
+            conn,
+            user.actor,
+            "commai.contact.identity.verify" if body.verified else "commai.contact.identity.unverify",
+            identity_id,
+            customer_id,
+            {"evidence": body.evidence.strip(), "channel": ident["channel"]},
+        )
+        if body.verified and not ident["verified"]:
+            events.emit(
+                conn,
+                customer_id,
+                "contact.identity_verified",
+                {"contact_id": contact_id, "identity_id": identity_id, "channel": ident["channel"]},
+                contact_id,
+            )
+    return row
+
+
+@router.delete("/contacts/{contact_id}/identities/{identity_id}", status_code=204)
+def remove_identity(customer_id: str, contact_id: str, identity_id: str, user: UserDep) -> None:
+    """Remove an address from a contact. Past conversations stay; a new message
+    from that address starts a new contact."""
+    access.check(user, customer_id, "commai:write")
+    with db.tx() as conn:
+        access.require_reply_seat(conn, user, customer_id)
+        ident = _identity(conn, customer_id, contact_id, identity_id)
+        conn.execute("DELETE FROM contact_identities WHERE id = %s", (ident["id"],))
+        audit.record(
+            conn, user.actor, "commai.contact.identity.remove", identity_id, customer_id, {"channel": ident["channel"]}
+        )
+        events.emit(
+            conn,
+            customer_id,
+            "contact.identity_removed",
+            {"contact_id": contact_id, "identity_id": identity_id, "channel": ident["channel"]},
+            contact_id,
+        )
+
+
+# ---- staff attachments ----------------------------------------------------------------------
+
+
+class StaffFileIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    type: str = Field(max_length=100)
+    data: str = Field(description="base64", max_length=3_000_000)
+
+
+@router.post("/conversations/{conversation_id}/files", status_code=201)
+def upload_file(customer_id: str, conversation_id: str, body: StaffFileIn, user: UserDep) -> dict:
+    """Upload a file to send with a reply on this conversation's channel. Name
+    its id in the reply's `attachments`. The file must suit the channel."""
+    access.check(user, customer_id, "commai:write")
+    with db.tx() as conn, errors():
+        access.require_reply_seat(conn, user, customer_id)
+        conv = inbox.get(conn, customer_id, conversation_id)
+        row = attachments.upload(conn, conv, user.id, body.name, body.type, body.data)
+        audit.record(
+            conn,
+            user.actor,
+            "commai.file.upload",
+            str(row["id"]),
+            customer_id,
+            {"conversation_id": conversation_id, "type": body.type, "size": row["size"]},
+        )
+    return row
+
+
+@router.get("/attachment-rules")
+def attachment_rules(customer_id: str, user: UserDep) -> dict:
+    """Which files each channel can carry, and how big."""
+    access.check(user, customer_id, "commai:read")
+    return {ch: {"types": list(types), "max_bytes": size} for ch, (types, size) in attachments.RULES.items()}
+
+
+@public.get("/channels/media/{hook_token}/{file_id}/{exp}/{sig}", include_in_schema=False)
+def provider_media(hook_token: str, file_id: str, exp: int, sig: str) -> Response:
+    """A sent file, fetched by the messaging provider through a signed link that expires."""
+    with db.tx() as conn:
+        acct = conn.execute("SELECT * FROM channel_accounts WHERE hook_token = %s", (hook_token,)).fetchone()
+        if acct is None or not attachments.check_media_link(acct, file_id, exp, sig):
+            raise HTTPException(404, "File not found.")
+        f = conn.execute(
+            "SELECT * FROM channel_files WHERE id = %s AND customer_id = %s AND conversation_id IS NOT NULL",
+            (file_id, acct["customer_id"]),
+        ).fetchone()
+    if f is None:
+        raise HTTPException(404, "File not found.")
+    safe = "".join(c for c in f["name"] if c.isalnum() or c in "._- ")[:100] or "file"
+    return Response(
+        bytes(f["data"]),
+        media_type=f["content_type"],
+        headers={
+            "Content-Disposition": f'inline; filename="{safe}"',
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "private, max-age=300",
+        },
+    )
+
+
+# ---- typing and presence --------------------------------------------------------------------
+
+
+class TypingIn(BaseModel):
+    typing: bool = True
+
+
+@router.post("/conversations/{conversation_id}/typing")
+def staff_typing(customer_id: str, conversation_id: str, body: TypingIn, user: UserDep) -> dict:
+    """Say you are typing (send every few seconds while you type; it lapses on
+    its own) or stopped. Also marks you as viewing. Not audited: nothing changes."""
+    access.check(user, customer_id, "commai:read")
+    with db.tx() as conn, errors():
+        inbox.get(conn, customer_id, conversation_id)
+        presence.touch(conn, customer_id, conversation_id, "user", str(user.id), name=user.email, typing=body.typing)
+        return presence.state(conn, customer_id, conversation_id)
+
+
+@router.get("/conversations/{conversation_id}/presence")
+def get_presence(customer_id: str, conversation_id: str, user: UserDep) -> dict:
+    """Who is typing or viewing now, and whether the AI is preparing a reply."""
+    access.check(user, customer_id, "commai:read")
+    with db.tx() as conn, errors():
+        inbox.get(conn, customer_id, conversation_id)
+        return presence.state(conn, customer_id, conversation_id)
+
+
+# ---- website visitors: typing and AI calls ----------------------------------------------------
+
+
+class VisitorTypingIn(BaseModel):
+    conversation_id: str
+    typing: bool = True
+
+
+def _team_typing(c, conversation_id: str) -> dict:
+    conv = widget.own_conversation(c.conn, c.key, c.address, conversation_id)
+    return {"team_typing": presence.team_typing(c.conn, c.key["customer_id"], conv["id"])}
+
+
+@public.post("/widget/{public_key}/typing")
+async def widget_typing(public_key: str, request: Request):
+    """The visitor is typing (or stopped). Answers whether the team is typing."""
+    raw = await ch_api._json(request)
+
+    def run(c) -> dict:
+        body = ch_api._body(VisitorTypingIn, raw)
+        conv = widget.own_conversation(c.conn, c.key, c.address, body.conversation_id)
+        presence.touch(
+            c.conn,
+            c.key["customer_id"],
+            conv["id"],
+            "contact",
+            c.address,
+            name=c.session.get("n", ""),
+            typing=body.typing,
+        )
+        return _team_typing(c, body.conversation_id)
+
+    return await run_in_threadpool(ch_api._widget_call, request, public_key, run)
+
+
+@public.get("/widget/{public_key}/typing")
+def widget_team_typing(public_key: str, request: Request, conversation_id: str):
+    """Whether someone on the team (or the AI) is writing a reply to the visitor."""
+    return ch_api._widget_call(request, public_key, lambda c: _team_typing(c, conversation_id))
+
+
+class VisitorTurnIn(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+
+
+@public.post("/widget/{public_key}/calls")
+async def widget_start_call(public_key: str, request: Request):
+    """Start a call with the AI agent from the website. Speech is recognised and
+    spoken in the visitor's browser; this carries text only."""
+
+    def run(c) -> dict:
+        return visitor_calls.start(c.conn, c.key, c.address, c.session.get("n", ""))
+
+    return await run_in_threadpool(ch_api._widget_call, request, public_key, run, status_code=201)
+
+
+@public.post("/widget/{public_key}/calls/{conversation_id}/turns")
+async def widget_call_turn(public_key: str, conversation_id: str, request: Request):
+    """What the visitor said; answers what the AI says back."""
+    from ..ai import agent, voice
+
+    raw = await ch_api._json(request)
+    state: dict = {}
+
+    def store(c) -> dict:
+        body = ch_api._body(VisitorTurnIn, raw)
+        call = visitor_calls.own_call(c.conn, c.key, c.address, conversation_id)
+        visitor_calls.turn_allowed(c.conn, c.key, call)
+        state["msg"] = voice.caller_turn(c.conn, c.key["customer_id"], conversation_id, body.text)
+        state["customer_id"] = c.key["customer_id"]
+        return {}
+
+    first = await run_in_threadpool(ch_api._widget_call, request, public_key, store)
+    if first.status_code != 200:
+        return first
+
+    def answer(c) -> dict:
+        # The reply in its own transaction, after the visitor's words are stored.
+        agent.respond(c.conn, state["customer_id"], conversation_id, state["msg"]["id"])
+        return {}
+
+    await run_in_threadpool(ch_api._widget_call, request, public_key, answer)
+
+    def read(c) -> dict:
+        replies = voice.replies_after(c.conn, state["customer_id"], conversation_id, state["msg"])
+        conv = inbox.get(c.conn, state["customer_id"], conversation_id)
+        return {
+            "reply": " ".join(r["body"] for r in replies),
+            "handed_over": conv["handler"] != "ai",
+        }
+
+    return await run_in_threadpool(ch_api._widget_call, request, public_key, read)
+
+
+@public.post("/widget/{public_key}/calls/{conversation_id}/end")
+async def widget_end_call(public_key: str, conversation_id: str, request: Request):
+    from ..ai import voice
+
+    def run(c) -> dict:
+        visitor_calls.own_call(c.conn, c.key, c.address, conversation_id)
+        call = voice.end_call(c.conn, c.key["customer_id"], conversation_id, f"visitor:{c.address}")
+        return {"ended": True, "turns": call["turns"]}
+
+    return await run_in_threadpool(ch_api._widget_call, request, public_key, run)

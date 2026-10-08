@@ -1,0 +1,285 @@
+# Controller stack for Phase A (runs on the lab host next to containerlab).
+#   make controller-up      (after make lab-up, which creates the exaconnect-mgmt network)
+# Secrets come from ../.env (git-ignored); see ../.env.example and lab/scripts/init-env.sh.
+name: exaconnect
+
+services:
+  db:
+    image: timescale/timescaledb:latest-pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: exaconnect
+      POSTGRES_USER: exaconnect
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U exaconnect -d exaconnect"]
+      interval: 5s
+      retries: 20
+
+  controller:
+    build:
+      context: ../controller
+      args:
+        EXA_BUILD_COMMIT: ${EXA_BUILD_COMMIT:-dev}
+    restart: unless-stopped
+    environment:
+      EXA_ENV: lab
+      EXA_DATABASE_URL: postgresql://exaconnect:${POSTGRES_PASSWORD}@db:5432/exaconnect
+      EXA_PROXY_SECRET: ${EXA_PROXY_SECRET:?set EXA_PROXY_SECRET in .env}
+      EXA_ADMIN_EMAIL: ${EXA_ADMIN_EMAIL:-}
+      EXA_ADMIN_PASSWORD: ${EXA_ADMIN_PASSWORD:-}
+      EXA_AGENT_URL: https://172.30.0.5:8443
+      # The agent gateway on the internet (ADR 0024), from deploy/public/site.env via make.
+      EXA_AGENT_PUBLIC_HOST: ${EXA_PUBLIC_HOST:-}
+      # AI features (ADR 0006). Ask your network stays off until the key is set in .env.
+      EXA_LLM_API_KEY: ${EXA_LLM_API_KEY:-}
+      EXA_LLM_MODEL: ${EXA_LLM_MODEL:-deepseek-ai/DeepSeek-V4-Flash}
+      EXA_NHC_URL: ${EXA_NHC_URL-https://www.nhc.noaa.gov/CurrentStorms.json}
+      EXA_USGS_URL: ${EXA_USGS_URL-https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_day.geojson}
+      EXA_GDACS_URL: ${EXA_GDACS_URL-https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH}
+      EXA_TSUNAMI_URLS: ${EXA_TSUNAMI_URLS-https://www.tsunami.gov/events/xml/PHEBAtom.xml,https://www.tsunami.gov/events/xml/PAAQAtom.xml}
+      # Jibsy voice (ADR 0021): rendered FreeSWITCH config, read by the freeswitch service.
+      EXA_FREESWITCH_DIR: /data/freeswitch
+      EXA_SIP_PROVIDER: ${EXA_SIP_PROVIDER:-simulated}
+      # Voice stage 5 (ADR 0033): the real provider's API, Kamailio's carrier lists, LiveKit.
+      EXA_SIP_PROVIDER_URL: ${EXA_SIP_PROVIDER_URL:-}
+      EXA_SIP_PROVIDER_KEY: ${EXA_SIP_PROVIDER_KEY:-}
+      EXA_SIP_PROVIDER_ACCOUNT: ${EXA_SIP_PROVIDER_ACCOUNT:-}
+      EXA_KAMAILIO_DIR: /data/kamailio
+      # FreeSWITCH's address range in Kamailio's allow-list (group 2); written by make voice-up.
+      EXA_KAMAILIO_PBX_NETS: ${EXA_KAMAILIO_PBX_NETS:-}
+      # FreeSWITCH signs its check before each outside call with this (voice/pbx.py).
+      EXA_PBX_SECRET: ${EXA_PBX_SECRET:-}
+      EXA_LIVEKIT_URL: ${EXA_LIVEKIT_URL:-}
+      EXA_LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
+      EXA_LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
+      EXA_LIVEKIT_AGENT_SECRET: ${EXA_LIVEKIT_AGENT_SECRET:-}
+      # Sign-in (ADR 0017). Google/Microsoft/enterprise SSO stay off until the gateway is set.
+      EXA_COOKIE_SECURE: ${EXA_COOKIE_SECURE:-1}
+      EXA_PUBLIC_URL: ${EXA_PUBLIC_URL:-}
+      EXA_OIDC_ISSUER: ${EXA_OIDC_ISSUER:-}
+      EXA_OIDC_CLIENT_ID: ${EXA_OIDC_CLIENT_ID:-}
+      EXA_OIDC_CLIENT_SECRET: ${EXA_OIDC_CLIENT_SECRET:-}
+      EXA_KEYCLOAK_ADMIN_CLIENT_ID: ${EXA_KEYCLOAK_ADMIN_CLIENT_ID:-}
+      EXA_KEYCLOAK_ADMIN_CLIENT_SECRET: ${EXA_KEYCLOAK_ADMIN_CLIENT_SECRET:-}
+      # Jibsy automation (ADR 0020): encrypted integration tokens; Google/HubSpot stay off until set.
+      EXA_SECRETS_KEY: ${EXA_SECRETS_KEY:-}
+      EXA_PORTAL_URL: ${EXA_PORTAL_URL:-}
+      EXA_GOOGLE_CLIENT_ID: ${EXA_GOOGLE_CLIENT_ID:-}
+      EXA_GOOGLE_CLIENT_SECRET: ${EXA_GOOGLE_CLIENT_SECRET:-}
+      EXA_HUBSPOT_CLIENT_ID: ${EXA_HUBSPOT_CLIENT_ID:-}
+      EXA_HUBSPOT_CLIENT_SECRET: ${EXA_HUBSPOT_CLIENT_SECRET:-}
+      # Connect integrations (ADR 0026): simulated until EXA_INTEGRATIONS_LIVE=1 and credentials exist.
+      EXA_INTEGRATIONS_LIVE: ${EXA_INTEGRATIONS_LIVE:-}
+      EXA_IANA_PEN: ${EXA_IANA_PEN:-}
+      EXA_AWS_DX_ACCESS_KEY_ID: ${EXA_AWS_DX_ACCESS_KEY_ID:-}
+      EXA_AWS_DX_SECRET_ACCESS_KEY: ${EXA_AWS_DX_SECRET_ACCESS_KEY:-}
+      EXA_AWS_DX_INTERCONNECT_ID: ${EXA_AWS_DX_INTERCONNECT_ID:-}
+      EXA_AZURE_TENANT_ID: ${EXA_AZURE_TENANT_ID:-}
+      EXA_AZURE_CLIENT_ID: ${EXA_AZURE_CLIENT_ID:-}
+      EXA_AZURE_CLIENT_SECRET: ${EXA_AZURE_CLIENT_SECRET:-}
+      EXA_GCP_SERVICE_ACCOUNT_JSON: ${EXA_GCP_SERVICE_ACCOUNT_JSON:-}
+      EXA_GCP_PROJECT: ${EXA_GCP_PROJECT:-}
+      EXA_GCP_INTERCONNECT: ${EXA_GCP_INTERCONNECT:-}
+      EXA_MEGAPORT_CLIENT_ID: ${EXA_MEGAPORT_CLIENT_ID:-}
+      EXA_MEGAPORT_CLIENT_SECRET: ${EXA_MEGAPORT_CLIENT_SECRET:-}
+      EXA_MEGAPORT_PORT_UID: ${EXA_MEGAPORT_PORT_UID:-}
+    volumes:
+      - controller-data:/data
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      default:
+        # The proxy answers to "controller" on the lab's management network (the
+        # name agents use), so it reaches the API by this name instead.
+        aliases: [controller-api]
+    ports:
+      # Loopback only: reach it from your laptop with an SSH tunnel (docs/lab.md).
+      - "127.0.0.1:8000:8000"
+
+  # mTLS terminator for agents: the lab's management network and the agent gateway.
+  proxy:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    environment:
+      EXA_PROXY_SECRET: ${EXA_PROXY_SECRET}
+    volumes:
+      - ./nginx/templates:/etc/nginx/templates:ro
+      - controller-data:/data:ro
+    depends_on:
+      controller:
+        condition: service_healthy
+    networks:
+      default: {}
+      exaconnect-mgmt:
+        ipv4_address: 172.30.0.5
+        aliases: [controller]
+    ports:
+      # The agent gateway (ADR 0024): real sites enrol and poll here. Enrolment needs a
+      # one-time token; everything else needs a client certificate from the controller CA.
+      - "8443:8443"
+
+  # Sign-in gateway (ADR 0017): `docker compose --profile sso up -d`. Its own
+  # Postgres, so the gateway's data never mixes with the controller's. Set KEYCLOAK_DB_PASSWORD,
+  # KEYCLOAK_ADMIN_PASSWORD, EXA_OIDC_CLIENT_SECRET and EXA_KEYCLOAK_ADMIN_CLIENT_SECRET first.
+  keycloak-db:
+    profiles: [sso]
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-}
+    volumes:
+      - keycloak-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 5s
+      retries: 20
+
+  keycloak:
+    profiles: [sso]
+    image: quay.io/keycloak/keycloak:26.0
+    restart: unless-stopped
+    command: ["start", "--import-realm"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-}
+      KC_HOSTNAME: ${EXA_SSO_HOSTNAME:-http://localhost:8081}
+      KC_HTTP_ENABLED: "true"
+      KC_PROXY_HEADERS: xforwarded
+      KC_HEALTH_ENABLED: "true"
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USER:-exa-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-}
+      # Read by the realm import (deploy/keycloak/exacarib-realm.json).
+      EXA_PUBLIC_URL: ${EXA_PUBLIC_URL:-http://localhost:8000}
+      EXA_OIDC_CLIENT_ID: ${EXA_OIDC_CLIENT_ID:-exacarib-connect}
+      EXA_OIDC_CLIENT_SECRET: ${EXA_OIDC_CLIENT_SECRET:-}
+      EXA_KEYCLOAK_ADMIN_CLIENT_ID: ${EXA_KEYCLOAK_ADMIN_CLIENT_ID:-exacarib-controller-admin}
+      EXA_KEYCLOAK_ADMIN_CLIENT_SECRET: ${EXA_KEYCLOAK_ADMIN_CLIENT_SECRET:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-not-configured}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-not-configured}
+      MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-not-configured}
+      MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-not-configured}
+    volumes:
+      - ./keycloak/exacarib-realm.json:/opt/keycloak/data/import/exacarib-realm.json:ro
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    ports:
+      # Loopback only; publish it through the public proxy (deploy/public) for real use.
+      - "127.0.0.1:8081:8080"
+
+  # Jibsy voice PBX (ADR 0021): `docker compose --profile voice up -d`. It reads the
+  # configuration the controller renders from the database (/data/freeswitch on the
+  # shared volume). Not live: there is no SIP provider account yet (phase 3), so outside
+  # calls go nowhere; calls between extensions, menus and queues work. SIP and RTP ports
+  # are not published until then. Check the image has an arm64 build before first use.
+  freeswitch:
+    profiles: [voice]
+    image: safarov/freeswitch:1.10.12
+    restart: unless-stopped
+    volumes:
+      - controller-data:/exacarib:ro
+      - ./freeswitch/directory/exacarib.xml:/etc/freeswitch/directory/exacarib.xml:ro
+      - ./freeswitch/dialplan/exacarib.xml:/etc/freeswitch/dialplan/exacarib.xml:ro
+      - ./freeswitch/dialplan/public/exacarib.xml:/etc/freeswitch/dialplan/public/exacarib.xml:ro
+      - ./freeswitch/ivr_menus/exacarib.xml:/etc/freeswitch/ivr_menus/exacarib.xml:ro
+      - ./freeswitch/autoload_configs/callcenter.conf.xml:/etc/freeswitch/autoload_configs/callcenter.conf.xml:ro
+      # Hardened stock files: no STUN or SignalWire calls out, event socket on loopback only.
+      - ./freeswitch/vars.xml:/etc/freeswitch/vars.xml:ro
+      - ./freeswitch/autoload_configs/event_socket.conf.xml:/etc/freeswitch/autoload_configs/event_socket.conf.xml:ro
+      - ./freeswitch/autoload_configs/modules.conf.xml:/etc/freeswitch/autoload_configs/modules.conf.xml:ro
+      # The outside-call gateway, installed by make voice-up for EXA_VOICE_EDGE (provider or kamailio).
+      - ./freeswitch/sip_profiles/external:/etc/freeswitch/sip_profiles/external:ro
+    # Hide the image's demo users (1000-1019 with a shared password).
+    tmpfs:
+      - /etc/freeswitch/directory/default
+    environment:
+      EXA_VOICE_PUBLIC_IP: ${EXA_VOICE_PUBLIC_IP:-}
+      # The dial plan asks the controller before each outside call; no secret means every one is refused.
+      EXA_PBX_SECRET: ${EXA_PBX_SECRET:-}
+      # Only for EXA_VOICE_EDGE=provider (exacarib_sip.xml.example).
+      EXA_SIP_USERNAME: ${EXA_SIP_USERNAME:-}
+      EXA_SIP_PASSWORD: ${EXA_SIP_PASSWORD:-}
+      EXA_SIP_REALM: ${EXA_SIP_REALM:-}
+    depends_on:
+      - controller
+
+  # Voice stage 5 (ADR 0033), profile "voice" only. Kamailio is the edge proxy in
+  # front of FreeSWITCH; its carrier lists are rendered by the controller
+  # (EXA_KAMAILIO_DIR=/data/kamailio on the shared volume). Ports are published
+  # only once a carrier account and a public IP exist: see deploy/kamailio/README.md.
+  kamailio:
+    profiles: [voice]
+    image: ghcr.io/kamailio/kamailio:5.8.4-bookworm
+    restart: unless-stopped
+    # The image's entrypoint is a shell line that ignores `command`, so replace it.
+    entrypoint: ["kamailio", "-DD", "-E", "-f", "/etc/kamailio/kamailio.cfg"]
+    volumes:
+      - ./kamailio/kamailio.cfg:/etc/kamailio/kamailio.cfg:ro
+      - ./kamailio/tls.cfg:/etc/kamailio/tls.cfg:ro
+      - ./kamailio/kamailio-local.cfg:/etc/kamailio/kamailio-local.cfg:ro
+      - ./kamailio/tls:/etc/kamailio/tls:ro
+      - controller-data:/exacarib:ro
+    depends_on:
+      - freeswitch
+
+  # LiveKit (self-hosted) for AI on phone calls; see deploy/livekit/README.md.
+  livekit-redis:
+    profiles: [voice]
+    image: redis:7.4-alpine
+    restart: unless-stopped
+
+  livekit:
+    profiles: [voice]
+    image: livekit/livekit-server:v1.8
+    restart: unless-stopped
+    command: ["--config", "/etc/livekit.yaml"]
+    environment:
+      LIVEKIT_KEYS: ${LIVEKIT_KEYS:-}
+    volumes:
+      - ./livekit/livekit.yaml:/etc/livekit.yaml:ro
+    depends_on:
+      - livekit-redis
+
+  livekit-sip:
+    profiles: [voice]
+    image: livekit/sip:v1.0
+    restart: unless-stopped
+    environment:
+      SIP_CONFIG_FILE: /etc/sip.yaml
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
+    volumes:
+      - ./livekit/sip.yaml:/etc/sip.yaml:ro
+    depends_on:
+      - livekit
+
+  livekit-agent:
+    profiles: [voice]
+    build: ./livekit/agent
+    restart: unless-stopped
+    environment:
+      LIVEKIT_URL: ws://livekit:7880
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
+      EXA_CONTROLLER_URL: http://controller:8000
+      EXA_LIVEKIT_AGENT_SECRET: ${EXA_LIVEKIT_AGENT_SECRET:-}
+    depends_on:
+      - livekit
+      - controller
+
+networks:
+  exaconnect-mgmt:
+    external: true
+
+volumes:
+  db-data:
+  controller-data:
+  keycloak-db-data:
