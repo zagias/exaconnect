@@ -46,10 +46,13 @@ api GET "/insights?include_resolved=true&limit=20" |
   jq -r '.[] | "      \(.kind) \(.severity): \(.title)"' | head -10
 
 echo "-- ask your network"
+# Why the controller answered an error: its message names the AI service's own
+# status (for example 429 or 503) and never carries the key.
+ask_why() { note "$(api_detail POST /ai/ask "$(jq -n --arg c "$(customer_id)" '{question: "ping", customer_id: $c}')")"; }
 if [[ $(api GET /ai/status | jq -r .ask_enabled) == true ]]; then
   cid=$(customer_id)
   ans=$(api POST /ai/ask "$(jq -n --arg c "$cid" '{question: "In one sentence: which path is voice on at site-a now, and why did it last move?", customer_id: $c}')" | jq -r .answer)
-  if [[ -n $ans && $ans != null ]]; then ok "answered: ${ans:0:300}"; else bad "no answer from the AI service"; fi
+  if [[ -n $ans && $ans != null ]]; then ok "answered: ${ans:0:300}"; else bad "no answer from the AI service"; ask_why; fi
   # Asked for a change, it proposes one; applying and undoing leave the network as it was.
   req="Add a traffic rule called lab assistant check that puts udp:7777 in bulk at site-b."
   out=$(api POST /ai/ask "$(jq -n --arg c "$cid" --arg q "$req" '{question: $q, customer_id: $c}')")

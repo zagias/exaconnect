@@ -54,4 +54,18 @@ api() {
     ${3:+-d "$3"} "http://127.0.0.1:8000/api/v1$2"
 }
 
+# api_detail <method> <path> [json]: like api, but prints the status and the
+# error message instead of failing quietly.
+api_detail() {
+  local email pass token
+  email=$(grep '^EXA_ADMIN_EMAIL=' "$REPO/.env" | cut -d= -f2-)
+  pass=$(grep '^EXA_ADMIN_PASSWORD=' "$REPO/.env" | cut -d= -f2-)
+  token=$(jq -n --arg e "$email" --arg p "$pass" '{email:$e, password:$p}' |
+    curl -fsS -H 'Content-Type: application/json' -d @- http://127.0.0.1:8000/api/v1/auth/login | jq -r .token)
+  local out
+  out=$(curl -sS -w '\n%{http_code}' -X "$1" -H "Authorization: Bearer $token" \
+    -H 'Content-Type: application/json' ${3:+-d "$3"} "http://127.0.0.1:8000/api/v1$2")
+  echo "${out##*$'\n'}: $(jq -r '.detail // .' <<<"${out%$'\n'*}" 2>/dev/null | cut -c1-300)"
+}
+
 customer_id() { sql "SELECT id FROM customers ORDER BY name LIMIT 1"; }
