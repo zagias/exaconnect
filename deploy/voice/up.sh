@@ -70,5 +70,8 @@ with db.tx() as conn:
 db.close()
 PY
 
-"${COMPOSE[@]}" --profile voice up -d freeswitch kamailio
+# --no-deps: never recreate the controller here. This script runs without
+# deploy/public/site.env, so a recreated controller would lose the public agent
+# gateway (EXA_PUBLIC_HOST) and enrolment tokens would carry no install address.
+"${COMPOSE[@]}" --profile voice up -d --no-deps freeswitch kamailio
 echo "SBC started: Kamailio and FreeSWITCH, no public SIP ports"
