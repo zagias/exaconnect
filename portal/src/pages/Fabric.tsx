@@ -91,7 +91,7 @@ export default function Fabric() {
   };
   return (
     <>
-      <PageHead eyebrow="Connect Fabric" title="Virtual circuits">
+      <PageHead eyebrow="Private links" title="Virtual circuits">
         Private circuits to your clouds and between your sites, through ExaCarib's PoP. Change the bandwidth at any time;
         you pay by the hour.
       </PageHead>

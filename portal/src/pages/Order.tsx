@@ -112,7 +112,7 @@ function OrderScreen({ customerId, customerName, sites }: { customerId: string; 
   };
   return (
     <>
-      <PageHead eyebrow="Order" title="Order connections">
+      <PageHead eyebrow="Orders" title="Order connections">
         Ask for circuits, bandwidth and internet access in plain English, or pick a partner from the directory. Nothing
         changes until you confirm the draft.
       </PageHead>
@@ -398,7 +398,7 @@ function Results({ order }: { order: Order }) {
           {r.circuit_id != null && (
             <>
               {" "}
-              <Link to="/fabric">See it in Fabric</Link>
+              <Link to="/fabric">See it in Private links</Link>
             </>
           )}
         </li>

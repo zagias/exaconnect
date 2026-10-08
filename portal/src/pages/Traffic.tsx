@@ -11,7 +11,7 @@ import { Classes, PRIORITY_LABEL, type Priority } from "./Classes";
 export default function Traffic() {
   return (
     <>
-      <PageHead eyebrow="Traffic" title="Applications and priorities">
+      <PageHead eyebrow="Traffic rules" title="Applications and priorities">
         Decide which traffic matters most. Rules put applications into classes, and each class has a priority, an SLA and a
         preferred path.
       </PageHead>

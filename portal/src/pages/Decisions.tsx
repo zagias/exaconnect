@@ -27,7 +27,7 @@ export default function Decisions() {
   return (
     <>
       <div className="page-head">
-        <Eyebrow>Decisions</Eyebrow>
+        <Eyebrow>Routing moves</Eyebrow>
         <h1>Why traffic moved</h1>
         <p className="muted">
           The controller forecasts every path against each class's SLA every 10 seconds. It moves a class before a

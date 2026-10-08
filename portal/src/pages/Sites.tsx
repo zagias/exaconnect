@@ -175,7 +175,7 @@ export function SitePage() {
                 <Eyebrow>Steering</Eyebrow>
                 <h2>Where each class runs</h2>
               </div>
-              <Link to="/decisions">All decisions</Link>
+              <Link to="/decisions">All routing moves</Link>
             </div>
             <table className="paths">
               <thead>
