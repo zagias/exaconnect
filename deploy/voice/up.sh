@@ -59,12 +59,15 @@ grep -q '^EXA_PBX_SECRET=.' .env || echo "Note: EXA_PBX_SECRET is not set (lab/s
 "${COMPOSE[@]}" exec -T controller python - <<'PY' >/dev/null
 from exaconnect_controller import db
 from exaconnect_controller.commai.voice import carriers, freeswitch
+from exaconnect_controller.settings import get_settings
 
+db.init(get_settings().database_url)
 with db.tx() as conn:
     carriers.render_kamailio(conn)
     # Each business's dial plan again, so it has the current check before outside calls.
     for row in conn.execute("SELECT DISTINCT customer_id FROM voice_users").fetchall():
         freeswitch.render_business(conn, row["customer_id"])
+db.close()
 PY
 
 "${COMPOSE[@]}" --profile voice up -d freeswitch kamailio
