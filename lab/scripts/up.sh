@@ -35,6 +35,12 @@ if ! EXA_RELEASE_SKIP_AGENTS=$fresh deploy/release/release.sh; then
   exit 1
 fi
 
+step "Voice SBC (locked down)"
+# Kamailio and FreeSWITCH next to the controller, with no SIP or media port published
+# (Dudley approved starting it on 2026-10-08). Calls stay on the simulated provider until
+# a carrier account exists (deploy/kamailio/README.md). A failure here leaves the site up.
+make -s voice-up || echo "FAIL voice SBC did not start (the site is unaffected)"
+
 step "Agents"
 if [[ $fresh == 1 || ! -s lab/.state/seed.json ]]; then
   make -s demo-seed || { echo "FAIL demo-seed"; exit 1; }
