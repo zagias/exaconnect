@@ -49,6 +49,7 @@ docker run -d --name exa-sbc-fs --tmpfs /etc/freeswitch/directory/default \
   -v "$PWD/freeswitch/vars.xml:/etc/freeswitch/vars.xml:ro" \
   -v "$PWD/freeswitch/autoload_configs/event_socket.conf.xml:/etc/freeswitch/autoload_configs/event_socket.conf.xml:ro" \
   -v "$PWD/freeswitch/autoload_configs/modules.conf.xml:/etc/freeswitch/autoload_configs/modules.conf.xml:ro" \
+  -v "$PWD/freeswitch/autoload_configs/switch.conf.xml:/etc/freeswitch/autoload_configs/switch.conf.xml:ro" \
   -v "$tmp/external:/etc/freeswitch/sip_profiles/external:ro" -e EXA_PBX_SECRET=check-only \
   "$FS_IMAGE" >/dev/null
 for _ in $(seq 60); do

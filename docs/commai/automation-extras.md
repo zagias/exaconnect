@@ -55,12 +55,10 @@ port 8081 on the compose network only. `make voice-up` mounts the profile and
 gives ExaCarib's admin a test extension in the demo business
 (deploy/voice/test_phone.py).
 
-Still needed before a call has sound, each only with Dudley's yes:
-
-1. Publish a small UDP range for call audio on the freeswitch service and
-   limit FreeSWITCH's RTP ports to it.
-2. Set `EXA_VOICE_PUBLIC_IP` (the address the audio goes to) and
-   `EXA_VERTO_URL=wss://<public host>/verto` in the server's `.env`.
+On the public host (Dudley approved the ports on 2026-10-09), `deploy/voice/env.sh`
+sets `EXA_VOICE_PUBLIC_IP` and `EXA_VERTO_URL=wss://<public host>/verto` in `.env`
+before each release, and `make voice-up` publishes the call audio range
+(UDP 16384-16483) with `deploy/voice/ports.yml`.
 
 Calls outside the business also need the SIP provider.
 

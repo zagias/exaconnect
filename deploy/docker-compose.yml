@@ -180,8 +180,8 @@ services:
   # Jibsy voice PBX (ADR 0021): `docker compose --profile voice up -d`. It reads the
   # configuration the controller renders from the database (/data/freeswitch on the
   # shared volume). Not live: there is no SIP provider account yet (phase 3), so outside
-  # calls go nowhere; calls between extensions, menus and queues work. SIP and RTP ports
-  # are not published until then. Check the image has an arm64 build before first use.
+  # calls go nowhere; calls between extensions, menus and queues work. Its call audio range
+  # is published only by deploy/voice/ports.yml (make voice-up on a public host). Check the image has an arm64 build before first use.
   freeswitch:
     profiles: [voice]
     image: safarov/freeswitch:1.10.12
@@ -199,6 +199,8 @@ services:
       - ./freeswitch/vars.xml:/etc/freeswitch/vars.xml:ro
       - ./freeswitch/autoload_configs/event_socket.conf.xml:/etc/freeswitch/autoload_configs/event_socket.conf.xml:ro
       - ./freeswitch/autoload_configs/modules.conf.xml:/etc/freeswitch/autoload_configs/modules.conf.xml:ro
+      # Stock file with the call audio ports limited to the published range (deploy/voice/ports.yml).
+      - ./freeswitch/autoload_configs/switch.conf.xml:/etc/freeswitch/autoload_configs/switch.conf.xml:ro
       # The outside-call gateway, installed by make voice-up for EXA_VOICE_EDGE (provider or kamailio).
       - ./freeswitch/sip_profiles/external:/etc/freeswitch/sip_profiles/external:ro
     # Hide the image's demo users (1000-1019 with a shared password).
@@ -217,8 +219,8 @@ services:
 
   # Voice stage 5 (ADR 0033), profile "voice" only. Kamailio is the edge proxy in
   # front of FreeSWITCH; its carrier lists are rendered by the controller
-  # (EXA_KAMAILIO_DIR=/data/kamailio on the shared volume). Ports are published
-  # only once a carrier account and a public IP exist: see deploy/kamailio/README.md.
+  # (EXA_KAMAILIO_DIR=/data/kamailio on the shared volume). SIP ports are published
+  # only by deploy/voice/ports.yml, on a host with a public IP: see deploy/kamailio/README.md.
   kamailio:
     profiles: [voice]
     image: ghcr.io/kamailio/kamailio:5.8.4-bookworm
