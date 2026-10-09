@@ -8,7 +8,8 @@ from exaconnect_controller import db
 from .commai_helpers import base
 from .test_commai_voice import setup_voice
 
-VERTO = pathlib.Path(__file__).resolve().parents[2] / "deploy/freeswitch/autoload_configs/verto.conf.xml"
+DEPLOY = pathlib.Path(__file__).resolve().parents[2] / "deploy"
+VERTO = DEPLOY / "freeswitch/autoload_configs/verto.conf.xml"
 
 
 def test_webphone_gives_only_your_own_extension(client, monkeypatch):
@@ -60,9 +61,17 @@ def test_webphone_gives_only_your_own_extension(client, monkeypatch):
     assert client.get(f"{u}/voice/webphone", headers=b["ana"]["h"]).status_code == 403
 
 
-def test_verto_profile_is_secure_websocket_with_directory_sign_in():
+def test_verto_signs_in_through_the_public_proxy_only():
     root = ET.parse(VERTO).getroot()
     params = {p.get("name"): p.get("value") for p in root.iter("param")}
-    assert params["secure-bind-local"].endswith(":8082") and "bind-local" not in params  # no plain ws listener
+    # Plain WebSocket on the compose network; TLS ends at the public proxy, which serves it as /verto.
+    assert params["bind-local"].endswith(":8081") and "secure-bind-local" not in params
     assert params["userauth"] == "true" and params["blind-reg"] == "false"
     assert "BEGIN" not in VERTO.read_text()  # no key or certificate in the repo
+    caddy = (DEPLOY / "public/Caddyfile").read_text()
+    assert "handle /verto {\n\t\treverse_proxy freeswitch:8081" in caddy
+    assert "microphone=(self)" in caddy
+    compose = (DEPLOY / "docker-compose.yml").read_text()
+    fs = compose[compose.index("\n  freeswitch:") : compose.index("\n  kamailio:")]
+    assert "verto.conf.xml:/etc/freeswitch/autoload_configs/verto.conf.xml:ro" in fs
+    assert "ports:" not in fs and "8081" not in fs.replace("port 8081", "")  # never published on the host

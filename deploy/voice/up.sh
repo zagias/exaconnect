@@ -70,8 +70,16 @@ with db.tx() as conn:
 db.close()
 PY
 
+# A test extension for ExaCarib's admin in the demo business (deploy/voice/test_phone.py).
+"${COMPOSE[@]}" exec -T controller python - <deploy/voice/test_phone.py
+
 # --no-deps: never recreate the controller here. This script runs without
 # deploy/public/site.env, so a recreated controller would lose the public agent
 # gateway (EXA_PUBLIC_HOST) and enrolment tokens would carry no install address.
 "${COMPOSE[@]}" --profile voice up -d --no-deps freeswitch kamailio
+# A FreeSWITCH that was already running reads the files rendered above.
+for _ in $(seq 30); do
+  "${COMPOSE[@]}" exec -T freeswitch fs_cli -x reloadxml >/dev/null 2>&1 && break
+  sleep 2
+done
 echo "SBC started: Kamailio and FreeSWITCH, no public SIP ports"
