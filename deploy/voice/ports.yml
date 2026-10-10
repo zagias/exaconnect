@@ -1,0 +1,19 @@
+# The voice host's public ports (Dudley approved opening them on 2026-10-09).
+# make voice-up adds this file only once EXA_VOICE_PUBLIC_IP is set.
+#   - Kamailio, SIP for carrier trunks: 5060 UDP and TCP, 5061 TLS. Kamailio
+#     answers only carriers on its allow-list (403 to anyone else) and limits
+#     new calls per address.
+#   - FreeSWITCH, call audio: UDP 16384-16483, the range in
+#     freeswitch/autoload_configs/switch.conf.xml. Browser phone audio is
+#     always encrypted (DTLS-SRTP); its sign-in stays on 443 (/verto).
+# FreeSWITCH's own SIP ports, its event socket and the Verto listener stay on
+# the compose network.
+services:
+  kamailio:
+    ports:
+      - "5060:5060/udp"
+      - "5060:5060/tcp"
+      - "5061:5061/tcp"
+  freeswitch:
+    ports:
+      - "16384-16483:16384-16483/udp"

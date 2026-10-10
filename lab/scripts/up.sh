@@ -30,15 +30,18 @@ fi
 step "Release (controller, agent gateway, public portal)"
 # Health-checked, with automatic rollback to the previous release (ADR 0025). A fresh
 # lab has no agents running yet, so the agents check waits for the next release.
+# The public voice address and browser phone URL in .env, before the controller starts.
+deploy/voice/env.sh
 if ! EXA_RELEASE_SKIP_AGENTS=$fresh deploy/release/release.sh; then
   echo "FAIL release: this commit was not healthy and the previous release is back (see above)"
   exit 1
 fi
 
-step "Voice SBC (locked down)"
-# Kamailio and FreeSWITCH next to the controller, with no SIP or media port published
-# (Dudley approved starting it on 2026-10-08). Calls stay on the simulated provider until
-# a carrier account exists (deploy/kamailio/README.md). A failure here leaves the site up.
+step "Voice SBC"
+# Kamailio and FreeSWITCH next to the controller (Dudley approved starting it on 2026-10-08
+# and opening the voice ports on 2026-10-09): SIP for carrier trunks behind Kamailio's
+# allow-list and the call audio range (deploy/voice/ports.yml). Outside calls stay on the
+# simulated provider until a carrier account exists. A failure here leaves the site up.
 make -s voice-up || echo "FAIL voice SBC did not start (the site is unaffected)"
 
 step "Agents"

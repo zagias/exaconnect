@@ -67,8 +67,11 @@ FreeSWITCH in (group 2). Switching back to `provider` removes the Kamailio gatew
 Start it with `make voice-up` (`deploy/voice/up.sh`). That writes `kamailio-local.cfg` from the
 example if it is missing (advertising `EXA_VOICE_PUBLIC_IP` from `.env`, or 127.0.0.1), makes a
 stand-in certificate in `tls/` until the real one is put there, renders the carrier lists and
-starts Kamailio and FreeSWITCH. No SIP or media port is published, so nothing outside the host can
-reach them. It is not started by the lab runner; it is started by hand once agreed.
+starts Kamailio and FreeSWITCH; the lab runner runs it on every deploy. On a host with
+`EXA_VOICE_PUBLIC_IP` (set by `deploy/voice/env.sh` from the public site's address) it also
+publishes `deploy/voice/ports.yml`: 5060 UDP/TCP and 5061 TLS on Kamailio, and the call
+audio range UDP 16384-16483 on FreeSWITCH (Dudley approved opening them on 2026-10-09).
+Kamailio still answers only listed carriers. Without a public address nothing is published.
 
 `make voice-check` (`deploy/voice/check.sh`, run in CI) parses this config with the pinned image,
 starts Kamailio with empty carrier lists, checks that it answers 403 to a caller that is not on the
@@ -96,8 +99,8 @@ the Kamailio gateway loads.
    addresses only:
    - 5060/udp and 5060/tcp: SIP, if a carrier has no TLS.
    - 5061/tcp: SIP over TLS.
-   - 16384–32768/udp: RTP media to FreeSWITCH. The other builder's FreeSWITCH
-     profile sets the range; open the range it uses.
+   - 16384–16483/udp: RTP media to FreeSWITCH (`switch.conf.xml` sets the range;
+     widen it and `deploy/voice/ports.yml` together).
    - LiveKit, if AI calls are on: 7880/tcp (API, behind the proxy), 7881/tcp and
      50000–60000/udp (WebRTC media), 5062/udp and 5062/tcp (LiveKit SIP, from
      FreeSWITCH only, not public).

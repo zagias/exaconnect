@@ -47,15 +47,20 @@ Lists accept `cursor` (empty for the first page) and return
   import. Unset: only the simulated source runs.
 - `EXA_VERTO_URL` (`wss://...`): switches the browser phone on.
 
-## Turning the browser phone on (not done yet)
+## Turning the browser phone on
 
-1. Mount `deploy/freeswitch/autoload_configs/verto.conf.xml` in the
-   `freeswitch` service and load `mod_verto`.
-2. Put the TLS certificate and key at `/etc/freeswitch/tls/wss.pem` on the
-   host, never in the repo.
-3. Publish port 8082 behind the proxy and set `EXA_VERTO_URL`.
-4. On the lab, check that a staff extension signs in (directory a1-hash) and
-   that an internal call connects.
+Sign-in needs no new port: the public proxy serves Verto as
+`wss://<public host>/verto` (deploy/public/Caddyfile) and FreeSWITCH listens on
+port 8081 on the compose network only. `make voice-up` mounts the profile and
+gives ExaCarib's admin a test extension in the demo business
+(deploy/voice/test_phone.py).
+
+On the public host (Dudley approved the ports on 2026-10-09), `deploy/voice/env.sh`
+sets `EXA_VOICE_PUBLIC_IP` and `EXA_VERTO_URL=wss://<public host>/verto` in `.env`
+before each release, and `make voice-up` publishes the call audio range
+(UDP 16384-16483) with `deploy/voice/ports.yml`.
+
+Calls outside the business also need the SIP provider.
 
 ## Still simulated
 

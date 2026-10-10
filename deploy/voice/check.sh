@@ -45,9 +45,11 @@ docker run -d --name exa-sbc-fs --tmpfs /etc/freeswitch/directory/default \
   -v "$PWD/freeswitch/dialplan/public/exacarib.xml:/etc/freeswitch/dialplan/public/exacarib.xml:ro" \
   -v "$PWD/freeswitch/ivr_menus/exacarib.xml:/etc/freeswitch/ivr_menus/exacarib.xml:ro" \
   -v "$PWD/freeswitch/autoload_configs/callcenter.conf.xml:/etc/freeswitch/autoload_configs/callcenter.conf.xml:ro" \
+  -v "$PWD/freeswitch/autoload_configs/verto.conf.xml:/etc/freeswitch/autoload_configs/verto.conf.xml:ro" \
   -v "$PWD/freeswitch/vars.xml:/etc/freeswitch/vars.xml:ro" \
   -v "$PWD/freeswitch/autoload_configs/event_socket.conf.xml:/etc/freeswitch/autoload_configs/event_socket.conf.xml:ro" \
   -v "$PWD/freeswitch/autoload_configs/modules.conf.xml:/etc/freeswitch/autoload_configs/modules.conf.xml:ro" \
+  -v "$PWD/freeswitch/autoload_configs/switch.conf.xml:/etc/freeswitch/autoload_configs/switch.conf.xml:ro" \
   -v "$tmp/external:/etc/freeswitch/sip_profiles/external:ro" -e EXA_PBX_SECRET=check-only \
   "$FS_IMAGE" >/dev/null
 for _ in $(seq 60); do
@@ -67,4 +69,12 @@ echo "-- freeswitch can ask the controller before outside calls"
 docker exec exa-sbc-fs fs_cli -x "module_exists mod_curl" | grep -qx true
 docker exec exa-sbc-fs fs_cli -x "global_getvar exa_pbx_secret" | grep -qx check-only
 docker exec exa-sbc-fs fs_cli -x "sofia status gateway exacarib_sip" | grep -E "^(Name|Proxy|Status)"
+echo "-- the browser phone's sign-in listens on the compose network"
+for _ in $(seq 15); do
+  docker exec exa-sbc-fs fs_cli -x "verto status" >"$tmp/verto" 2>&1 || true
+  grep -q "8081" "$tmp/verto" && break
+  sleep 2
+done
+grep -E "exacarib-wss|8081" "$tmp/verto"
+grep -q "8081" "$tmp/verto"
 echo "SBC check passed"

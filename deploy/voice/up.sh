@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # make voice-up: start the SBC (Kamailio in front of FreeSWITCH) next to the
-# controller. No SIP or media port is published: carriers can't reach it until
-# a carrier account, EXA_VOICE_PUBLIC_IP and a firewall rule for that carrier
-# exist (deploy/kamailio/README.md). Safe to run again; existing files are kept.
+# controller. With EXA_VOICE_PUBLIC_IP in .env (deploy/voice/env.sh sets it on
+# the public host) it publishes the voice ports in deploy/voice/ports.yml:
+# SIP for carrier trunks (Kamailio's allow-list answers only listed carriers)
+# and the call audio range. Without it nothing is published.
+# Safe to run again; existing files are kept.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 COMPOSE=(docker compose -f deploy/docker-compose.yml --env-file .env)
@@ -11,6 +13,11 @@ public_ip=$(grep -m1 '^EXA_VOICE_PUBLIC_IP=' .env 2>/dev/null | cut -d= -f2 || t
 # Kamailio's host settings: the address it advertises (loopback until the voice
 # host is public). Kept once written, so a hand edit survives.
 local_cfg=deploy/kamailio/kamailio-local.cfg
+restart_kamailio=""
+if [[ -n $public_ip ]] && grep -qs '!PUBLIC_IP!127\.0\.0\.1!' "$local_cfg"; then
+  restart_kamailio=1
+  sed -i "s/!PUBLIC_IP!127\.0\.0\.1!/!PUBLIC_IP!${public_ip}!/" "$local_cfg"  # written before the host was public
+fi
 if [[ ! -s $local_cfg ]]; then
   sed "s/203\.0\.113\.10/${public_ip:-127.0.0.1}/" deploy/kamailio/kamailio-local.cfg.example >"$local_cfg"
 fi
@@ -70,8 +77,31 @@ with db.tx() as conn:
 db.close()
 PY
 
+# A test extension for ExaCarib's admin in the demo business (deploy/voice/test_phone.py).
+"${COMPOSE[@]}" exec -T controller python - <deploy/voice/test_phone.py
+
+# The public voice ports (deploy/voice/ports.yml), only once the host has a public address.
+VOICE=("${COMPOSE[@]}")
+if [[ -n $public_ip ]]; then
+  VOICE=(docker compose -f deploy/docker-compose.yml -f deploy/voice/ports.yml --env-file .env)
+  if command -v ufw >/dev/null && ufw status 2>/dev/null | grep -q "Status: active"; then
+    ufw allow 5060 >/dev/null && ufw allow 5061/tcp >/dev/null && ufw allow 16384:16483/udp >/dev/null
+  fi
+fi
+
 # --no-deps: never recreate the controller here. This script runs without
 # deploy/public/site.env, so a recreated controller would lose the public agent
 # gateway (EXA_PUBLIC_HOST) and enrolment tokens would carry no install address.
-"${COMPOSE[@]}" --profile voice up -d --no-deps freeswitch kamailio
-echo "SBC started: Kamailio and FreeSWITCH, no public SIP ports"
+"${VOICE[@]}" --profile voice up -d --no-deps freeswitch kamailio
+# Kamailio reads its host settings only at start.
+if [[ -n $restart_kamailio ]]; then "${VOICE[@]}" --profile voice restart kamailio; fi
+# A FreeSWITCH that was already running reads the files rendered above.
+for _ in $(seq 30); do
+  "${COMPOSE[@]}" exec -T freeswitch fs_cli -x reloadxml >/dev/null 2>&1 && break
+  sleep 2
+done
+if [[ -n $public_ip ]]; then
+  echo "SBC started: Kamailio on 5060/5061 (allow-listed carriers only), call audio on UDP 16384-16483"
+else
+  echo "SBC started: Kamailio and FreeSWITCH, no public SIP ports"
+fi
