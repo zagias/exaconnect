@@ -4,7 +4,7 @@
 # No global options: an empty "email" option is a parse error, and Let's
 # Encrypt issues certificates without an account email.
 
-{$EXA_PUBLIC_HOST} {
+(site) {
 	encode zstd gzip
 
 	header {
@@ -13,7 +13,7 @@
 		X-Frame-Options DENY
 		Referrer-Policy strict-origin-when-cross-origin
 		Permissions-Policy "camera=(), microphone=(self), geolocation=()"
-		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' wss://{$EXA_PUBLIC_HOST}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' wss://{host}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
 		-Server
 	}
 
@@ -39,6 +39,14 @@
 	handle /verto {
 		reverse_proxy freeswitch:8081
 	}
+	# Jibsy Phone, the installable phone app (portal/phone.html), on every host at /phone.
+	handle /phone {
+		root * /srv/portal
+		rewrite * /phone.html
+		file_server
+	}
+	@manifest path *.webmanifest
+	header @manifest Content-Type application/manifest+json
 	handle /api/* {
 		reverse_proxy controller-api:8000
 	}
@@ -55,4 +63,15 @@
 		output stdout
 		format console
 	}
+}
+
+{$EXA_PUBLIC_HOST} {
+	import site
+}
+
+# The phone app's own address (deploy/public/site.env): the same portal and API, opening
+# straight into Jibsy Phone, so people never need the portal to make calls.
+{$EXA_PHONE_HOST:jibsyapp.exacarib.com} {
+	redir / /phone
+	import site
 }

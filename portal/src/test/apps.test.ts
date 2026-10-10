@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { User } from "../api";
 import { areaFor, myApps } from "../apps";
 import { accountGroups, destinations, navGroups } from "../nav";
-import { plainReason } from "../pages/commai/voice/verto";
+import { micProblem, plainReason } from "../pages/commai/voice/verto";
 
 const person = (extra: Partial<User>): User => ({ email: "p@example.com", role: "customer", customer_id: "c", ...extra });
 
@@ -49,5 +49,14 @@ describe("browser phone call reasons", () => {
     expect(plainReason("NORMAL_CLEARING")).toBe("");
     expect(plainReason("SOMETHING_ODD")).toBe("The call couldn't be connected.");
     expect(plainReason("Hang up the current call first.")).toBe("Hang up the current call first.");
+  });
+});
+
+describe("microphone problems", () => {
+  it("says what to do instead of a browser error name", () => {
+    expect(micProblem({ name: "NotAllowedError" })).toMatch(/Allow it for this site/);
+    expect(micProblem({ name: "NotFoundError" })).toMatch(/No microphone found/);
+    expect(micProblem({ name: "NotReadableError" })).toMatch(/Another app/);
+    expect(plainReason(micProblem({ name: "NotAllowedError" }))).toMatch(/microphone/);
   });
 });

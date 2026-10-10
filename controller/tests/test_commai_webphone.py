@@ -61,6 +61,22 @@ def test_webphone_gives_only_your_own_extension(client, monkeypatch):
     assert client.get(f"{u}/voice/webphone", headers=b["ana"]["h"]).status_code == 403
 
 
+def test_phone_app_contacts_are_names_and_extensions_only(client):
+    b = setup_voice(client)
+    u = base(b)
+    r = client.get(f"{u}/voice/webphone/contacts", headers=b["ana"]["h"])
+    assert r.status_code == 200 and r.headers["cache-control"] == "no-store"
+    out = r.json()
+    assert out["me"]["extension"] == "201"
+    exts = [p["extension"] for p in out["people"]]
+    assert "202" in exts and "201" not in exts
+    assert all(set(p) == {"name", "extension"} for p in out["people"])
+    assert all(set(x) == {"name", "extension", "kind"} for x in out["lines"])
+    assert "sip_password" not in r.text and "@" not in r.text
+    # No extension of your own: nothing to call from.
+    assert client.get(f"{u}/voice/webphone/contacts", headers=b["boss"]["h"]).status_code == 404
+
+
 def test_verto_signs_in_through_the_public_proxy_only():
     root = ET.parse(VERTO).getroot()
     params = {p.get("name"): p.get("value") for p in root.iter("param")}

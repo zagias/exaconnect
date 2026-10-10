@@ -66,3 +66,35 @@ def webphone(customer_id: str, user: UserDep, response: Response, sign_in: bool 
         "name": me["name"],
         "domain": dom,
     }
+
+
+@router.get("/voice/webphone/contacts")
+def contacts(customer_id: str, user: UserDep, response: Response) -> dict:
+    """Who a person can call inside the business: colleagues' extensions and the shared
+    lines (ring groups, queues, menus). Names and extensions only, for the phone app."""
+    access.check(user, customer_id, "commai:read")
+    response.headers["Cache-Control"] = "no-store"
+    with db.tx() as conn:
+        if not entitlements.enabled(conn, customer_id, "voice"):
+            raise HTTPException(403, "Voice is not part of this business's plan.")
+        try:
+            me = selfservice.mine(conn, customer_id, user.id)
+        except VoiceError as e:
+            raise HTTPException(e.code, str(e)) from e
+        people = conn.execute(
+            """SELECT name, extension FROM voice_users
+               WHERE customer_id = %s AND status = 'active' AND id <> %s ORDER BY name, extension""",
+            (customer_id, me["id"]),
+        ).fetchall()
+        lines = conn.execute(
+            """SELECT name, extension, 'ring_group' AS kind FROM voice_ring_groups WHERE customer_id = %s
+               UNION ALL SELECT name, extension, 'queue' FROM voice_queues WHERE customer_id = %s
+               UNION ALL SELECT name, extension, 'menu' FROM voice_menus WHERE customer_id = %s
+               ORDER BY name""",
+            (customer_id, customer_id, customer_id),
+        ).fetchall()
+    return {
+        "me": {"name": me["name"], "extension": me["extension"]},
+        "people": [dict(r) for r in people],
+        "lines": [dict(r) for r in lines],
+    }
