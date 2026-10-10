@@ -52,3 +52,12 @@ showed why:
   the site has to go first.
 - Customers still cannot choose ASNs or interface names. Staff can change them
   under Operations › Sites and links.
+
+## Testing on the live portal
+
+`lab/ci/checks/org-setup.sh` runs `deploy/uat/org-setup.mjs` against the live
+portal after every deploy: a staff test account (`setup-test-staff@exacarib.local`,
+given a fresh random password each run that is never stored or printed) creates
+an organisation named "Set-up check …", and its owner sets it up end to end. The
+next run removes the earlier test organisation and its `@setup-check.example`
+people first, so at most one test organisation is on the live list at a time.
