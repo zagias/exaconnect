@@ -167,14 +167,29 @@ if (micOK) {
   check("B sees the incoming call with A's name", inc.includes("Incoming call") && inc.includes(E.A_NAME), inc.replace(/\n/g, " | "));
   await shot(b, "app-04-incoming-desktop");
   await shot(a, "app-05-calling-phone");
+  const a0 = (await audio(a))?.rx || 0; // ringback before the answer doesn't count
+  const t0 = Date.now();
   await b.getByRole("button", { name: "Answer" }).click();
   const onA = await waitText(overlay(a), /On a call/, 15000);
   check("both sides show On a call", onA.includes("On a call") && (await overlay(b).innerText()).includes("On a call"));
+  // How long after Answer the audio starts both ways (25 packets, half a second of sound).
+  let started = null;
+  while (Date.now() - t0 < 10000) {
+    const [x, y] = [await audio(a), await audio(b)];
+    if ((x?.rx || 0) - a0 >= 25 && (y?.rx || 0) >= 25) {
+      started = (Date.now() - t0) / 1000;
+      break;
+    }
+    await a.waitForTimeout(250);
+  }
+  check("audio starts both ways within 3 s of answering", started !== null && started <= 3, started === null ? "not within 10 s" : `${started.toFixed(1)} s`);
+  // Then 5 s of steady sound: 50 packets a second each way, so at least 200 (under 20% lost).
+  const [pa, pb] = [(await audio(a))?.rx || 0, (await audio(b))?.rx || 0];
   await a.waitForTimeout(5000);
   const sa = await audio(a);
   const sb = await audio(b);
-  check("audio reaches A", sa?.rx > 100 && sa?.energy > 0, JSON.stringify(sa));
-  check("audio reaches B", sb?.rx > 100 && sb?.energy > 0, JSON.stringify(sb));
+  check("audio reaches A steadily", sa?.rx - pa >= 200 && sa?.energy > 0, JSON.stringify({ ...sa, in5s: sa?.rx - pa }));
+  check("audio reaches B steadily", sb?.rx - pb >= 200 && sb?.energy > 0, JSON.stringify({ ...sb, in5s: sb?.rx - pb }));
   const timer = await a.locator(".ph-timer").innerText().catch(() => "");
   check("the call timer runs", /^0:0[3-9]|^0:[1-5]\d/.test(timer), timer);
   await a.getByRole("button", { name: "Mute" }).click();
