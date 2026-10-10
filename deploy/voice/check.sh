@@ -39,6 +39,7 @@ mkdir -p "$tmp/external"
 cp freeswitch/sip_profiles/external/*.example "$tmp/external/"
 cp freeswitch/sip_profiles/external/exacarib_sip.kamailio.xml.example "$tmp/external/exacarib_sip.xml"
 docker run -d --name exa-sbc-fs --tmpfs /etc/freeswitch/directory/default \
+  --entrypoint /bin/sh -v "$PWD/freeswitch/start.sh:/exacarib-start.sh:ro" \
   -v "$tmp/exacarib:/exacarib:ro" \
   -v "$PWD/freeswitch/directory/exacarib.xml:/etc/freeswitch/directory/exacarib.xml:ro" \
   -v "$PWD/freeswitch/dialplan/exacarib.xml:/etc/freeswitch/dialplan/exacarib.xml:ro" \
@@ -51,7 +52,7 @@ docker run -d --name exa-sbc-fs --tmpfs /etc/freeswitch/directory/default \
   -v "$PWD/freeswitch/autoload_configs/modules.conf.xml:/etc/freeswitch/autoload_configs/modules.conf.xml:ro" \
   -v "$PWD/freeswitch/autoload_configs/switch.conf.xml:/etc/freeswitch/autoload_configs/switch.conf.xml:ro" \
   -v "$tmp/external:/etc/freeswitch/sip_profiles/external:ro" -e EXA_PBX_SECRET=check-only \
-  "$FS_IMAGE" >/dev/null
+  "$FS_IMAGE" /exacarib-start.sh >/dev/null
 for _ in $(seq 60); do
   docker exec exa-sbc-fs fs_cli -x status 2>/dev/null | grep -q '^UP' && break
   sleep 2
@@ -69,6 +70,26 @@ echo "-- freeswitch can ask the controller before outside calls"
 docker exec exa-sbc-fs fs_cli -x "module_exists mod_curl" | grep -qx true
 docker exec exa-sbc-fs fs_cli -x "global_getvar exa_pbx_secret" | grep -qx check-only
 docker exec exa-sbc-fs fs_cli -x "sofia status gateway exacarib_sip" | grep -E "^(Name|Proxy|Status)"
+echo "-- call queues and spoken menu greetings are switched on"
+docker exec exa-sbc-fs fs_cli -x "module_exists mod_callcenter" | grep -qx true
+docker exec exa-sbc-fs fs_cli -x "module_exists mod_flite" | grep -qx true
+echo "-- the watcher reloads newly rendered config"
+docker exec exa-sbc-fs fs_cli -x "user_exists id 201 check.voice.exacarib.internal" | grep -qx false
+mkdir -p "$tmp/exacarib/freeswitch/ccheck"
+cat >"$tmp/exacarib/freeswitch/ccheck/directory.xml" <<'XML'
+<include>
+  <domain name="check.voice.exacarib.internal">
+    <groups><group name="default"><users>
+      <user id="201"><params><param name="password" value="check-only"/></params></user>
+    </users></group></groups>
+  </domain>
+</include>
+XML
+for _ in $(seq 15); do
+  docker exec exa-sbc-fs fs_cli -x "user_exists id 201 check.voice.exacarib.internal" | grep -qx true && break
+  sleep 2
+done
+docker exec exa-sbc-fs fs_cli -x "user_exists id 201 check.voice.exacarib.internal" | grep -qx true
 echo "-- the browser phone's sign-in listens on the compose network"
 for _ in $(seq 15); do
   docker exec exa-sbc-fs fs_cli -x "verto status" >"$tmp/verto" 2>&1 || true

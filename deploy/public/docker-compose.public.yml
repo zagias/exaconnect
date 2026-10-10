@@ -11,6 +11,7 @@ services:
       dockerfile: deploy/public/Dockerfile
     environment:
       EXA_PUBLIC_HOST: ${EXA_PUBLIC_HOST:?set EXA_PUBLIC_HOST}
+      EXA_PHONE_HOST: ${EXA_PHONE_HOST:-jibsyapp.exacarib.com}
     ports:
       - "80:80"
       - "443:443"

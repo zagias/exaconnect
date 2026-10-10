@@ -477,6 +477,8 @@ def test_freeswitch_render_is_deterministic_and_complete(client, tmp_path):
     ]
     d = files[f"{tenant}/directory.xml"]
     assert '<user id="201">' in d and 'name="a1-hash"' in d and "sip_password" not in d
+    # The browser phone may place calls (mod_verto refuses verto.invite otherwise) and rings with desk phones.
+    assert '<param name="jsonrpc-allowed-methods" value="verto"/>' in d and "${verto_contact(" in d
     with db.tx() as conn:
         pw = conn.execute(
             "SELECT sip_password FROM voice_users WHERE extension = '201' AND customer_id = %s", (b["id"],)

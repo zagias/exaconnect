@@ -4,6 +4,7 @@
 # FreeSWITCH's call audio range) and nothing else, FreeSWITCH is up with its two SIP
 # profiles and the browser phone's sign-in, and Kamailio refuses a caller that is not a
 # listed carrier (the controller's address is not on the allow-list), also on the public address.
+# A browser phone calls another one and hangs up (deploy/voice/call_check.py).
 # shellcheck source=lab/ci/lib.sh
 source "$(dirname "$0")/../lib.sh"
 COMPOSE=(docker compose -f "$REPO/deploy/docker-compose.yml" --env-file "$REPO/.env" --profile voice)
@@ -42,6 +43,15 @@ if "${COMPOSE[@]}" exec -T freeswitch fs_cli -x "verto status" 2>/dev/null | gre
 else
   bad "browser phone sign-in not listening"
 fi
+# A real call between two browser phones (deploy/voice/call_check.py): sign-in, ringing,
+# answer and hang-up, and that a new extension reaches FreeSWITCH without a restart.
+while IFS= read -r line; do
+  case $line in
+    "ok   "*) ok "call: ${line#ok   }" ;;
+    "FAIL "*) bad "call: ${line#FAIL }" ;;
+    *) ;;
+  esac
+done < <("${COMPOSE[@]}" exec -T controller python - <"$REPO/deploy/voice/call_check.py" 2>&1 || echo "FAIL call check stopped")
 public_ip=$(grep -m1 '^EXA_VOICE_PUBLIC_IP=' "$REPO/.env" 2>/dev/null | cut -d= -f2 || true)
 if [[ -n $public_ip ]]; then
   answer=$(python3 "$REPO/deploy/voice/sip_probe.py" "$public_ip" 5060 2>&1)

@@ -52,12 +52,15 @@ export default function Voice() {
     <>
       <PageHead title="Phone">
         Your phone system: people, numbers, call routing, orders and billing.{" "}
-        {v && !v.provider.live && <span className="tag">Simulated SIP provider: no real calls yet</span>}
+        {v && !v.provider.live && (
+          <span className="tag">No phone carrier yet: calls between extensions work, outside numbers don't</span>
+        )}
       </PageHead>
       <Tabs label="Voice sections">
         <NavLink to="/commai/voice" className={() => (inPhoneSystem ? "active" : "")} end>
           Phone system
         </NavLink>
+        <NavLink to="/commai/voice/phone">Browser phone</NavLink>
         <NavLink to="/commai/voice/orders">Orders</NavLink>
         <NavLink to="/commai/voice/numbers">Numbers</NavLink>
         <NavLink to="/commai/voice/ports">Ports</NavLink>
@@ -66,7 +69,6 @@ export default function Voice() {
         <NavLink to="/commai/voice/billing">Billing</NavLink>
         <NavLink to="/commai/voice/me">My phone</NavLink>
         {v?.is_exacarib && <NavLink to="/commai/voice/carriers">Carriers</NavLink>}
-        <NavLink to="/commai/voice/phone">Browser phone</NavLink>
       </Tabs>
       <ErrorNote error={ov.error} />
       <VoiceNotices base={base} />

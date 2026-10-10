@@ -186,8 +186,13 @@ services:
     profiles: [voice]
     image: safarov/freeswitch:1.10.12
     restart: unless-stopped
+    # The image's start plus a watcher that reloads the controller's rendered config.
+    entrypoint: ["/bin/sh", "/exacarib-start.sh"]
     volumes:
       - controller-data:/exacarib:ro
+      - ./freeswitch/start.sh:/exacarib-start.sh:ro
+      # Recorded prompts and hold music, downloaded and checked by deploy/voice/sounds.sh.
+      - ./freeswitch/sounds:/usr/share/freeswitch/sounds:ro
       - ./freeswitch/directory/exacarib.xml:/etc/freeswitch/directory/exacarib.xml:ro
       - ./freeswitch/dialplan/exacarib.xml:/etc/freeswitch/dialplan/exacarib.xml:ro
       - ./freeswitch/dialplan/public/exacarib.xml:/etc/freeswitch/dialplan/public/exacarib.xml:ro

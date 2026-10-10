@@ -131,12 +131,22 @@ export default function Dialer({ base }: { base: string }) {
                 placeholder="Extension or number"
                 disabled={onCall}
               />
+              {/* Separate keys: React must not reuse the Hang up button as the Call (submit)
+                  button mid-click, or hanging up would dial the number again. */}
               {!onCall ? (
-                <button className="button" disabled={act.busy || !number.trim()}>
+                <button key="call" className="button" disabled={act.busy || !number.trim()}>
                   Call
                 </button>
               ) : (
-                <button type="button" className="button danger" onClick={() => phone.current?.hangup()}>
+                <button
+                  key="hangup"
+                  type="button"
+                  className="button danger"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    phone.current?.hangup();
+                  }}
+                >
                   Hang up
                 </button>
               )}
