@@ -15,6 +15,11 @@ echo "-- organisation set-up"
 # shellcheck disable=SC1091
 host=$(. deploy/public/site.env && echo "${EXA_PUBLIC_HOST:-}")
 [[ -n $host ]] || { skip "no public address (EXA_PUBLIC_HOST)"; exit 0; }
+# The phone app's own address, for the new person's test call (step 12); skipped without it.
+# shellcheck disable=SC1091
+phone=$(. deploy/public/site.env && echo "${EXA_PHONE_HOST:-}")
+phone_args=()
+[[ -n $phone ]] && phone_args=(--add-host "$phone:127.0.0.1" -e PHONE_BASE="https://$phone")
 
 # The same test image as the phone app check: Playwright's browsers plus its package.
 base=mcr.microsoft.com/playwright:v1.48.0-noble
@@ -38,7 +43,7 @@ chmod 700 "$secrets"
 jq -r 'to_entries[] | "\(.key)=\(.value)"' <<<"$users" >"$secrets/env"
 unset users
 out=$(timeout 600 docker run --rm --network host --add-host "$host:127.0.0.1" --ipc host \
-  --env-file "$secrets/env" -e UAT_BASE="https://$host" \
+  --env-file "$secrets/env" -e UAT_BASE="https://$host" "${phone_args[@]}" \
   -v "$REPO/deploy/uat/org-setup.mjs:/uat/org-setup.mjs:ro" -w /uat "$image" \
   node org-setup.mjs 2>&1)
 rm -rf "$secrets"

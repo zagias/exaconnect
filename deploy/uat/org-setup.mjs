@@ -20,7 +20,9 @@ const PW = randomBytes(18).toString("base64url");
 let fails = 0, passes = 0;
 const ok = (m) => { passes++; console.log("PASS", m); };
 const bad = (m) => { fails++; console.log("FAIL", m); };
-const br = await chromium.launch(E.CHROMIUM_PATH ? { executablePath: E.CHROMIUM_PATH } : {});
+// Stand-in microphone and speakers for the phone call in step 12.
+const MEDIA = ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--autoplay-policy=no-user-gesture-required"];
+const br = await chromium.launch({ args: MEDIA, ...(E.CHROMIUM_PATH ? { executablePath: E.CHROMIUM_PATH } : {}) });
 async function session() {
   const ctx = await br.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1440, height: 900 } });
   const p = await ctx.newPage();
@@ -190,6 +192,54 @@ try {
     const txt = (await others.count()) ? await others.innerText() : "";
     /\b200\b/.test(txt) ? ok("People and access lists the extensions no member holds (200)") : bad("extension 200 not on People and access");
     await shot(staff, "09_demo_people");
+
+    // 12. A new person with no email sender: invited by a copied link, joins, is given a phone
+    // extension, signs in to the Jibsy Phone app and places a call. It calls the lab's phone-only
+    // extension 203, not 200, so nobody's real phone rings on every deploy.
+    const caller = `caller-${tag}@setup-check.example`;
+    await staff.getByLabel("Email").fill(caller);
+    await staff.getByRole("button", { name: "Create invitation" }).click();
+    const inv3 = (await staff.locator('[aria-label="Invitation link"] code').innerText()).trim();
+    const newbie = await session();
+    await newbie.goto(inv3.startsWith("http") ? inv3 : B + inv3);
+    await newbie.getByLabel("Your name").fill("Set-up check caller");
+    await newbie.getByLabel("Choose a password, at least 12 characters").fill(PW);
+    await newbie.getByLabel("Password again").fill(PW);
+    await newbie.getByRole("button", { name: /Create account and join/ }).click();
+    await newbie.getByRole("button", { name: "Open ExaCarib" }).waitFor({ timeout: 15000 });
+    ok("a person invited by copied link joins with their own password (no email needed)");
+    await staff.goto(B + "/commai/voice");
+    await staff.getByRole("heading", { name: "Add a person" }).waitFor({ timeout: 15000 });
+    const addForm = staff.locator("form", { has: staff.getByRole("button", { name: "Check new person" }) });
+    await addForm.getByLabel("Name").fill("Set-up check caller");
+    await addForm.getByLabel("Portal account email (for self-service)").fill(caller);
+    await addForm.getByRole("button", { name: "Check new person" }).click();
+    await staff.getByRole("button", { name: "Save change" }).click({ timeout: 15000 });
+    await staff.waitForTimeout(2500);
+    const ext = (await staff.locator("tr", { hasText: "Set-up check caller" }).first().innerText().catch(() => "")).match(/\b\d{3,6}\b/)?.[0];
+    ext ? ok(`the new person is given phone extension ${ext}`) : bad("no extension for the new person");
+    if (ext && E.PHONE_BASE) {
+      const ph = await session();
+      await ph.goto(E.PHONE_BASE.replace(/\/$/, "") + "/", { waitUntil: "networkidle" });
+      await ph.getByLabel("Work email").fill(caller);
+      await ph.getByRole("button", { name: "Continue" }).click();
+      await ph.getByLabel("Password").fill(PW);
+      await ph.getByRole("button", { name: /Sign in/ }).click();
+      const st = ph.locator(".ph-status");
+      let ready = "";
+      for (let i = 0; i < 80 && !ready.includes(`Ext ${ext}`); i++) { ready = await st.innerText().catch(() => ""); await ph.waitForTimeout(250); }
+      ready.includes(`Ext ${ext}`) ? ok("the new person signs in to Jibsy Phone and is connected") : bad("phone app not connected: " + ready);
+      await ph.getByRole("navigation", { name: "Phone" }).getByRole("button", { name: "Keypad" }).click();
+      await ph.getByLabel("Extension or number").fill("203");
+      await ph.getByRole("button", { name: "Call", exact: true }).click();
+      await ph.locator(".ph-overlay").waitFor({ timeout: 15000 }).catch(() => {});
+      const toast = await ph.locator(".ph-toast").innerText().catch(() => "");
+      (await ph.locator(".ph-overlay").count()) && !/exist|not allowed|couldn't/i.test(toast)
+        ? ok("the new person's call goes through to another extension")
+        : bad("call did not go through: " + toast);
+      if (await ph.getByRole("button", { name: "Hang up" }).count()) await ph.getByRole("button", { name: "Hang up" }).click();
+      await shot(ph, "10_new_person_call");
+    }
   }
 } catch (e) {
   bad("walk-through stopped: " + String(e).split("\n")[0].slice(0, 200));
