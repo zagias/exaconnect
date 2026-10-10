@@ -1,0 +1,38 @@
+/* Organisation set-up (ADR 0043): checklist, locations, install code. */
+.setup-progress { height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; max-width: 720px; }
+.setup-progress i { display: block; height: 100%; background: var(--blue); transition: width .3s; }
+@media (prefers-reduced-motion: reduce) { .setup-progress i { transition: none; } }
+.setup-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; max-width: 880px; }
+.setup-step {
+  display: grid; grid-template-columns: 32px 1fr auto; gap: 4px 16px; align-items: center;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 16px 20px;
+}
+.setup-step h2 { font-size: 17px; margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.setup-step p { margin: 2px 0 0; color: var(--ink-muted); }
+.setup-text { min-width: 0; }
+.setup-dot {
+  width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--line-strong, var(--line));
+  display: grid; place-items: center; font: 600 13px/1 var(--font-mono, monospace); color: var(--ink-muted);
+}
+.setup-step.done .setup-dot { background: var(--success); border-color: var(--success); color: #fff; }
+.setup-app { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 500; color: var(--ink-muted); }
+@media (max-width: 640px) {
+  .setup-step { grid-template-columns: 32px 1fr; }
+  .setup-step > .button { grid-column: 2; justify-self: start; }
+}
+
+.loc-list { display: grid; gap: 16px; }
+.loc { margin: 0; }
+.loc-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; align-items: flex-start; }
+.loc-head h2 { margin: 0; font-size: 18px; }
+.loc-head p { margin: 2px 0 0; }
+.loc-uses { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 0; }
+.loc-uses li { display: grid; grid-template-columns: 140px 1fr; gap: 12px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
+.loc-app { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-muted); font-weight: 600; }
+@media (max-width: 640px) { .loc-uses li { grid-template-columns: 1fr; gap: 4px; } }
+.connect-link { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); align-items: end; }
+.install { border-color: var(--blue); margin-bottom: 24px; }
+.install-steps { margin: 0 0 10px; padding-left: 20px; }
+pre.install-command { white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-all; max-width: 100%; background: var(--page); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; }
+.empty-note { border: 1px dashed var(--line); border-radius: 8px; padding: 14px 16px; color: var(--ink-muted); margin-bottom: 16px; }
+.org-table td .sub { display: block; }

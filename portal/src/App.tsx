@@ -24,6 +24,11 @@ import OrderPage from "./pages/Order";
 import Overview from "./pages/Overview";
 import { SiteList, SitePage } from "./pages/Sites";
 import Traffic from "./pages/Traffic";
+import CompanyPage from "./pages/org/Company";
+import LocationsPage from "./pages/org/Locations";
+import SecurityPage from "./pages/org/Security";
+import SetupPage from "./pages/org/Setup";
+import Organisations from "./pages/ops/Organisations";
 import { Shell } from "./shell";
 import { PageHead } from "./ui";
 
@@ -69,7 +74,8 @@ function Layout() {
   const connect = mine.includes("connect");
   const area = areaFor(path);
   // A screen of an app the person can't open says why, instead of failing call by call.
-  const blocked = !carrier && !admin && area !== "account" && !mine.includes(area) && !(path === "/" && mine.length > 0);
+  const blocked =
+    !carrier && !admin && area !== "account" && area !== "ops" && !mine.includes(area) && !(path === "/" && mine.length > 0);
   return (
     <Shell>
       {blocked ? (
@@ -102,6 +108,11 @@ function Layout() {
           <Route path="/account" element={<Account />} />
           <Route path="/account/people" element={<People />} />
           <Route path="/account/apps" element={<AppsAndPlans />} />
+          <Route path="/org" element={<Navigate to="/org/setup" replace />} />
+          <Route path="/org/setup" element={<SetupPage />} />
+          <Route path="/org/company" element={<CompanyPage />} />
+          <Route path="/org/locations" element={<LocationsPage />} />
+          <Route path="/org/security" element={<SecurityPage />} />
           <Route
             path="/commai/*"
             element={
@@ -111,6 +122,8 @@ function Layout() {
             }
           />
           {admin && <Route path="/admin/*" element={<Admin />} />}
+          {admin && <Route path="/ops" element={<Navigate to="/ops/organisations" replace />} />}
+          {admin && <Route path="/ops/organisations" element={<Organisations />} />}
           <Route path="*" element={<NotFound />} />
         </Routes>
       )}

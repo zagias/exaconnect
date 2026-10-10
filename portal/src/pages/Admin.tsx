@@ -1,10 +1,10 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { NavLink, Navigate, Route, Routes } from "react-router-dom";
+import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { api, useApi, type NodeRow } from "../api";
 import { useAuth } from "../auth";
 import { ErrorNote, StatusPill, ago } from "../components";
 import { useCustomer, who } from "../customer";
-import { Card, PageHead, RowActions, Tabs, useAction } from "../ui";
+import { Card, PageHead, RowActions, useAction } from "../ui";
 import { BillingAdmin } from "./BillingAdmin";
 import { Classes } from "./Classes";
 import { IntegrationsAdmin } from "./IntegrationsAdmin";
@@ -31,25 +31,28 @@ interface EnrolToken {
 
 // Admin screens (CLAUDE.md §4.6, screen 6): agents, customers, sites and links,
 // enrolment tokens, classes and SLA policies, partners, DDoS protection, users, settings, releases and the audit log.
+const SECTIONS: Record<string, [string, string]> = {
+  agents: ["Agents", "Every box that has enrolled, what it runs and when it last checked in."],
+  sites: ["Sites and links", "Each organisation's Connect sites, their carrier links and install codes, with every network setting."],
+  classes: ["Classes and SLA", "Application classes and the SLA each one is held to."],
+  partners: ["Partners", "White-label partners and the apps they offer."],
+  billing: ["Billing", "Plans, price lists and invoices."],
+  protection: ["Protection", "DDoS protection on the PoPs."],
+  integrations: ["Integrations", "Monitoring and ticketing connections."],
+  users: ["Accounts", "ExaCarib staff and carrier logins. Customers invite their own people under Organisation › People and access."],
+  settings: ["Settings", "Shadow mode, Storm Mode and satellite rules for the organisation you are working on."],
+  releases: ["Releases", "What is running, and going back to an earlier release."],
+  audit: ["Audit log", "Every change, who made it and when."],
+};
+
+// ExaCarib operations (CLAUDE.md §4.6 screen 6, ADR 0043): each section is its own
+// entry in the operations menu, so the screen has no tabs of its own.
 export default function Admin() {
+  const section = useLocation().pathname.split("/")[2] || "agents";
+  const [title, line] = SECTIONS[section] ?? ["Administration", ""];
   return (
     <>
-      <PageHead eyebrow="Admin" title="Administration">
-        Agents, customers and sites, classes, partners, protection, integrations, users, releases and the audit log.
-      </PageHead>
-      <Tabs label="Admin sections">
-        <NavLink to="/admin/agents">Agents</NavLink>
-        <NavLink to="/admin/sites">Sites and links</NavLink>
-        <NavLink to="/admin/classes">Classes and SLA</NavLink>
-        <NavLink to="/admin/partners">Partners</NavLink>
-        <NavLink to="/admin/billing">Billing</NavLink>
-        <NavLink to="/admin/protection">Protection</NavLink>
-        <NavLink to="/admin/integrations">Integrations</NavLink>
-        <NavLink to="/admin/users">Users</NavLink>
-        <NavLink to="/admin/settings">Settings</NavLink>
-        <NavLink to="/admin/releases">Releases</NavLink>
-        <NavLink to="/admin/audit">Audit log</NavLink>
-      </Tabs>
+      <PageHead title={title}>{line}</PageHead>
       <Routes>
         <Route index element={<Navigate to="agents" replace />} />
         <Route path="agents" element={<Agents />} />
@@ -249,7 +252,10 @@ function SitesAdmin() {
 
   return (
     <>
-      <NewCustomer onDone={reloadCustomers} />
+      <p className="small muted">
+        New organisations are created under <Link to="/ops/organisations">Organisations</Link>. Customers can add
+        and connect their own locations; this screen keeps every network setting for ExaCarib.
+      </p>
       {current && (
         <Card
           title={`Sites for ${current.name}`}
@@ -405,35 +411,6 @@ function SitesAdmin() {
         </Card>
       )}
     </>
-  );
-}
-
-function NewCustomer({ onDone }: { onDone: () => void }) {
-  const [name, setName] = useState("");
-  const act = useAction();
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    act.run(async () => {
-      await api("/customers", { method: "POST", body: JSON.stringify({ name }) });
-      setName("");
-      onDone();
-    });
-  };
-  return (
-    <Card title="Customers" note={<span className="muted small">With more than one customer, choose which to work on in the top bar (in the menu on phones).</span>}>
-      <form className="form" onSubmit={submit}>
-        <label>
-          New customer organisation
-          <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={120} />
-        </label>
-        <div className="actions">
-          <button className="button" disabled={act.busy}>
-            Add customer
-          </button>
-        </div>
-      </form>
-      <ErrorNote error={act.error} />
-    </Card>
   );
 }
 

@@ -3,17 +3,17 @@ import { NavLink, useLocation } from "react-router-dom";
 import { api, useApi } from "./api";
 import { useAuth } from "./auth";
 import type { OrgApps, User } from "./api";
-import { APP_INFO, APP_ORDER, AppMark, areaFor, myApps, type AppId, type Area } from "./apps";
-import { CustomerPicker, OrganisationSwitcher, StormBanner, StormSwitch } from "./customer";
+import { APP_INFO, APP_ORDER, AREA_NAME, AppMark, areaFor, myApps, type AppId, type Area } from "./apps";
+import { CustomerPicker, OrganisationSwitcher, StormBanner, StormSwitch, useCustomer } from "./customer";
 import { JumpTo } from "./jump";
-import { accountGroups, icons, matches, navGroups, type Group } from "./nav";
+import { accountGroups, icons, matches, navGroups, opsGroups, type Group } from "./nav";
 import { useBrand } from "./pages/commai/partner/brand";
 import { useCommaiBase } from "./pages/commai/lib";
 import "./shell.css";
 
 /** The current screen's group and name, for the context line in the top bar. */
 function pageContext(groups: Group[], path: string): { group: string | null; label: string } | null {
-  if (path.startsWith("/commai/me")) return { group: "Your account", label: "My settings" };
+  if (path.startsWith("/commai/me")) return { group: "You", label: "My settings" };
   for (const g of groups) for (const i of g.items) if (matches(i, path)) return { group: g.label, label: i.label };
   return null;
 }
@@ -50,20 +50,28 @@ export function Shell({ children }: { children: ReactNode }) {
   const connect = mine.includes("connect");
   const jibsy = mine.includes("commai");
   const all = navGroups(user?.role, useModules(!carrier && jibsy), carrier ? null : mine);
-  const account = accountGroups({ carrier, jibsy });
+  const staff = user?.role === "admin";
+  const manager = staff || (user?.role === "customer" && (user.org_role === "owner" || user.org_role === "admin"));
+  const account = accountGroups({ carrier, jibsy, manager });
+  const ops = staff ? opsGroups() : [];
   // A partner's white-label brand (ADR 0031); null keeps ExaCarib's own look.
   const brand = useBrand();
   const location = useLocation();
   const asked = areaFor(location.pathname);
   // On a screen of an app the person can't open, the menu stays on one they can.
-  const area: Area = carrier ? "connect" : asked === "account" || mine.includes(asked) ? asked : (mine[0] ?? "account");
-  const groups = area === "account" ? account : all.filter((g) => !g.app || g.app === area);
-  const ctx = pageContext([...all, ...account], location.pathname);
+  const area: Area = carrier
+    ? "connect"
+    : asked === "account" || (asked === "ops" && staff) || (asked !== "ops" && mine.includes(asked))
+      ? asked
+      : (mine[0] ?? "account");
+  const groups =
+    area === "account" ? account : area === "ops" ? ops : all.filter((g) => !g.app || g.app === area);
+  const ctx = pageContext([...ops, ...all, ...account], location.pathname);
 
   // The tab says which app you are in.
   useEffect(() => {
     if (brand) return;
-    document.title = area === "account" ? "Account · ExaCarib" : `${APP_INFO[area].name} · ExaCarib`;
+    document.title = `${area === "account" || area === "ops" ? AREA_NAME[area] : APP_INFO[area].name} · ExaCarib`;
   }, [area, brand]);
   const [drawer, setDrawer] = useState(false);
   const [jump, setJump] = useState(false);
@@ -133,10 +141,10 @@ export function Shell({ children }: { children: ReactNode }) {
         </div>
 
         <div className="shell-apps">
-          <AppSwitcher area={area} mine={mine} />
+          <AppSwitcher area={area} mine={mine} staff={staff} carrier={carrier} />
         </div>
 
-        <nav aria-label={area === "account" ? "Account" : APP_INFO[area].name} className="shell-nav">
+        <nav aria-label={area === "account" || area === "ops" ? AREA_NAME[area] : APP_INFO[area].name} className="shell-nav">
           {groups.map((g, gi) => (
             <NavGroup key={`${area}${g.label ?? gi}`} g={g} gi={gi} path={location.pathname} />
           ))}
@@ -167,14 +175,14 @@ export function Shell({ children }: { children: ReactNode }) {
             <li>
               <NavLink to="/account" end className="shell-link">
                 {icons.account}
-                <span className="shell-link-text">Account</span>
+                <span className="shell-link-text">Profile and sign-in</span>
               </NavLink>
             </li>
             {!carrier && (
               <li>
-                <NavLink to="/account/people" className="shell-link">
-                  {icons.people}
-                  <span className="shell-link-text">People</span>
+                <NavLink to="/org/company" className="shell-link">
+                  {icons.building}
+                  <span className="shell-link-text">Organisation</span>
                 </NavLink>
               </li>
             )}
@@ -252,11 +260,12 @@ export function Shell({ children }: { children: ReactNode }) {
           </div>
         </header>
         {!carrier && connect && <StormBanner />}
+        {manager && area !== "ops" && <SetupBanner path={location.pathname} />}
         <main className="page" id="main" tabIndex={-1}>
           {children}
         </main>
       </div>
-      <JumpTo groups={[...all, ...account]} open={jump} setOpen={setJump} />
+      <JumpTo groups={[...ops, ...all, ...account]} open={jump} setOpen={setJump} />
     </div>
   );
 }
@@ -315,14 +324,14 @@ function UserMenu() {
             <li>
               <NavLink to="/account" end className="shell-menu-item">
                 {icons.account}
-                Account
+                Profile and sign-in
               </NavLink>
             </li>
             {user?.role !== "carrier" && (
               <li>
-                <NavLink to="/account/people" className="shell-menu-item">
-                  {icons.people}
-                  People
+                <NavLink to="/org/company" className="shell-menu-item">
+                  {icons.building}
+                  Organisation
                 </NavLink>
               </li>
             )}
@@ -347,10 +356,10 @@ function UserMenu() {
   );
 }
 
-/** The app switcher at the top of the sidebar: the apps this person may open,
- * apps the organisation could add (owners and admins only), and the shared
- * account pages. With one app and nothing to offer it is a plain label. */
-function AppSwitcher({ area, mine }: { area: Area; mine: AppId[] }) {
+/** The switcher at the top of the sidebar: the apps this person may open,
+ * apps the organisation could add (owners and admins only), the organisation's
+ * own pages and, for ExaCarib staff, the operations screens (ADR 0041, 0043). */
+function AppSwitcher({ area, mine, staff, carrier }: { area: Area; mine: AppId[]; staff: boolean; carrier: boolean }) {
   const { user } = useAuth();
   const manager = user?.role === "customer" && (user.org_role === "owner" || user.org_role === "admin");
   const plan = useApi<OrgApps>(manager && user?.customer_id ? `/orgs/${user.customer_id}/apps` : null, 300_000);
@@ -361,7 +370,7 @@ function AppSwitcher({ area, mine }: { area: Area; mine: AppId[] }) {
   const button = useRef<HTMLButtonElement>(null);
   const location = useLocation();
   const offers = (plan.data?.apps ?? []).filter((a) => a.status !== "active");
-  const name = area === "account" ? "Account" : APP_INFO[area].name;
+  const name = area === "account" || area === "ops" ? AREA_NAME[area] : APP_INFO[area].name;
 
   useEffect(() => setOpen(false), [location.pathname]);
   useEffect(() => {
@@ -383,24 +392,14 @@ function AppSwitcher({ area, mine }: { area: Area; mine: AppId[] }) {
     };
   }, [open]);
 
-  // One app and nothing to offer: a plain label, or a way home from Account.
-  if (mine.length <= 1 && offers.length === 0) {
-    const only = mine[0];
-    if (area !== "account" || !only)
-      return (
-        <span className="app-switch app-switch-static">
-          <AppMark app={area} />
-          <span className="app-switch-name">{name}</span>
-        </span>
-      );
+  // Carrier accounts have one screen set: a plain label.
+  if (carrier)
     return (
-      <NavLink to={APP_INFO[only].home} className="app-switch app-switch-static" title={`Back to ${APP_INFO[only].name}`}>
-        <AppMark app={only} />
-        <span className="app-switch-name">{APP_INFO[only].name}</span>
-        <span className="app-switch-hint">Back</span>
-      </NavLink>
+      <span className="app-switch app-switch-static">
+        <AppMark app="connect" />
+        <span className="app-switch-name">{APP_INFO.connect.name}</span>
+      </span>
     );
-  }
 
   const ask = async (app: AppId) => {
     setError(null);
@@ -411,6 +410,24 @@ function AppSwitcher({ area, mine }: { area: Area; mine: AppId[] }) {
       setError((e as Error).message);
     }
   };
+
+  const item = (to: string, mark: Area, title: string, blurb: string, here: boolean) => (
+    <li key={to}>
+      <NavLink to={to} end className="app-switch-item" aria-current={here ? "true" : undefined}>
+        <AppMark app={mark} size={36} />
+        <span className="app-switch-text">
+          <span className="app-switch-title">{title}</span>
+          <span className="app-switch-blurb">{blurb}</span>
+        </span>
+        {here && (
+          <span className="app-switch-current">
+            {icons.check}
+            <span className="sr-only">Current</span>
+          </span>
+        )}
+      </NavLink>
+    </li>
+  );
 
   return (
     <div className="app-switch-box" ref={box}>
@@ -435,26 +452,16 @@ function AppSwitcher({ area, mine }: { area: Area; mine: AppId[] }) {
       </button>
       {open && (
         <div id="app-switch-menu" className="app-switch-menu card" style={{ top: pos.top, left: pos.left }}>
-          <div className="app-switch-head">Your apps</div>
-          <ul>
-            {APP_ORDER.filter((a) => mine.includes(a)).map((a) => (
-              <li key={a}>
-                <NavLink to={APP_INFO[a].home} end className="app-switch-item" aria-current={area === a ? "true" : undefined}>
-                  <AppMark app={a} size={36} />
-                  <span className="app-switch-text">
-                    <span className="app-switch-title">{APP_INFO[a].full}</span>
-                    <span className="app-switch-blurb">{APP_INFO[a].blurb}</span>
-                  </span>
-                  {area === a && (
-                    <span className="app-switch-current">
-                      {icons.check}
-                      <span className="sr-only">Current app</span>
-                    </span>
-                  )}
-                </NavLink>
-              </li>
-            ))}
-          </ul>
+          {mine.length > 0 && (
+            <>
+              <div className="app-switch-head">Your apps</div>
+              <ul>
+                {APP_ORDER.filter((a) => mine.includes(a)).map((a) =>
+                  item(APP_INFO[a].home, a, APP_INFO[a].full, APP_INFO[a].blurb, area === a),
+                )}
+              </ul>
+            </>
+          )}
           {offers.length > 0 && (
             <>
               <div className="app-switch-head">Add to your plan</div>
@@ -479,11 +486,40 @@ function AppSwitcher({ area, mine }: { area: Area; mine: AppId[] }) {
               {error && <p className="app-switch-note error">{error}</p>}
             </>
           )}
-          <NavLink to={manager ? "/account/apps" : "/account"} className="app-switch-foot">
-            {manager ? "Account, people and plans" : "Your account"}
-          </NavLink>
+          <div className="app-switch-head">Set-up and people</div>
+          <ul>
+            {item(
+              manager || staff ? "/org/setup" : "/org/company",
+              "account",
+              AREA_NAME.account,
+              "Company, locations, people, plans and billing",
+              area === "account",
+            )}
+            {staff && item("/ops/organisations", "ops", "ExaCarib operations", "Every customer, platform and service screens (staff only)", area === "ops")}
+          </ul>
         </div>
       )}
+    </div>
+  );
+}
+
+/** For owners and admins: a slim band on every screen until set-up is finished (ADR 0043). */
+function SetupBanner({ path }: { path: string }) {
+  const { current } = useCustomer();
+  const setup = useApi<{ done: number; total: number; complete: boolean }>(
+    current ? `/orgs/${current.id}/setup` : null,
+    60_000,
+  );
+  if (!setup.data || setup.data.complete || path.startsWith("/org/setup")) return null;
+  return (
+    <div className="setup-band" role="status">
+      <span>
+        <strong>Finish setting up {current?.name || "your organisation"}</strong>: {setup.data.done} of {setup.data.total} steps
+        done.
+      </span>
+      <NavLink to="/org/setup" className="button small">
+        Continue set-up
+      </NavLink>
     </div>
   );
 }

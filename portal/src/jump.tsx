@@ -5,8 +5,8 @@ import { destinations, type Destination, type Group } from "./nav";
 import "./jump.css";
 
 const ACCOUNT: Destination[] = [
-  { to: "/account", label: "Account", where: "Your account", keywords: "password passkeys two-step api keys" },
-  { to: "/commai/me", label: "My settings", where: "Your account", keywords: "language notifications preferences" },
+  { to: "/account", label: "Profile and sign-in", where: "You", keywords: "account password passkeys two-step api keys" },
+  { to: "/commai/me", label: "My settings", where: "You", keywords: "language notifications preferences" },
 ];
 
 /** Typing in a field: "/" is a character there, not a shortcut. */

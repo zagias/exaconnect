@@ -5,7 +5,7 @@ import "./identity.css";
 
 export const PENDING_INVITE = "exa.invite";
 
-const ROLE_LABEL: Record<string, string> = { admin: "an admin", member: "a member", viewer: "a viewer" };
+const ROLE_LABEL: Record<string, string> = { owner: "its owner", admin: "an admin", member: "a member", viewer: "a viewer" };
 
 /** The token in /invite/:token. */
 export function inviteToken(path: string): string | null {
@@ -26,6 +26,8 @@ export default function InvitePage({ token }: { token: string }) {
   const [password, setPassword] = useState("");
   const [again, setAgain] = useState("");
   const [joined, setJoined] = useState<string | null>(null);
+  // Owners and admins start at the set-up checklist (ADR 0043); everyone else at their first app.
+  const [start, setStart] = useState("/");
 
   useEffect(() => {
     api<InviteInfo>(`/invites/${encodeURIComponent(token)}`)
@@ -40,7 +42,7 @@ export default function InvitePage({ token }: { token: string }) {
     setBusy(true);
     setError(null);
     try {
-      const out = await api<{ organisation: string }>(`/invites/${encodeURIComponent(token)}/accept`, {
+      const out = await api<{ organisation: string; role?: string }>(`/invites/${encodeURIComponent(token)}/accept`, {
         method: "POST",
         body: JSON.stringify(body),
       });
@@ -49,6 +51,7 @@ export default function InvitePage({ token }: { token: string }) {
       } catch {
         /* storage unavailable */
       }
+      setStart(out.role === "owner" || out.role === "admin" ? "/org/setup" : "/");
       setJoined(out.organisation);
     } catch (e) {
       setError((e as Error).message);
@@ -99,8 +102,8 @@ export default function InvitePage({ token }: { token: string }) {
               <p className="signin-intro">
                 You are now a member of <strong>{joined}</strong>.
               </p>
-              <button className="button" type="button" onClick={() => window.location.assign("/")}>
-                Open Connect
+              <button className="button" type="button" onClick={() => window.location.assign(start)}>
+                {start === "/" ? "Open ExaCarib" : "Start setting up"}
               </button>
             </>
           )}

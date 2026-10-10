@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { api, download, useApi } from "../../../api";
 import { ErrorNote } from "../../../components";
@@ -132,6 +133,10 @@ function Sites({ v, propose }: { v: VoiceOverview; propose: Propose }) {
       <p className="muted small">
         Emergency calls give the site's address. Each person's address follows their site, and moves with them. Registering
         addresses with the provider, island by island, starts with real numbers (phase 3).
+      </p>
+      <p className="small">
+        Each location in <Link to="/org/locations">Organisation › Locations</Link> with a street address has its phone
+        site here already; add and edit addresses there so every app uses the same one.
       </p>
       <div className="table-wrap">
         <table className="paths dt stack">

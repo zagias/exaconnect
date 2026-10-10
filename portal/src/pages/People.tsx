@@ -55,13 +55,18 @@ export default function People() {
     cid && manage ? `/orgs/${cid}/invites` : null,
     30_000,
   );
+  // Each person's phone extension and Jibsy seat, shown on their row (ADR 0043).
+  const extras = useApi<Record<string, { extension?: string; seat?: string }>>(
+    cid ? `/orgs/${cid}/people-extras` : null,
+    60_000,
+  );
   const act = useAction();
   const [changed, setChanged] = useState<Record<string, Product[]>>({});
 
   if (!cid)
     return (
       <>
-        <PageHead eyebrow="Organisation" title="People" />
+        <PageHead eyebrow="Your organisation" title="People and access" />
         <div className="empty">
           <p>
             You are not a member of an organisation. Ask an owner to invite you.
@@ -179,9 +184,10 @@ export default function People() {
 
   return (
     <>
-      <PageHead eyebrow="Organisation" title="People">
-        Everyone in {members.data?.organisation.name ?? "your organisation"},
-        their roles, the apps they may open and pending invitations.
+      <PageHead eyebrow="Your organisation" title="People and access">
+        Everyone in {members.data?.organisation.name ?? "your organisation"}, their
+        roles and the apps they may open. Invite someone once here; phone
+        extensions and Jibsy seats are set in those apps and shown on each row.
       </PageHead>
 
       <section
@@ -223,6 +229,17 @@ export default function People() {
                         {m.name && <span className="sub">{m.email}</span>}
                         {m.disabled && (
                           <span className="sub">Switched off</span>
+                        )}
+                        {(extras.data?.[m.user_id]?.extension || extras.data?.[m.user_id]?.seat) && (
+                          <span className="sub">
+                            {[
+                              extras.data?.[m.user_id]?.extension && `Phone extension ${extras.data[m.user_id].extension}`,
+                              extras.data?.[m.user_id]?.seat &&
+                                (extras.data[m.user_id].seat === "internal" ? "Jibsy: internal seat" : "Jibsy: answers customers"),
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </span>
                         )}
                       </td>
                       <td data-label="Role">
