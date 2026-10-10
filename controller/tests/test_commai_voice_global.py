@@ -415,8 +415,8 @@ def test_routing_least_cost_quality_failover_and_trunk_health(client, admin_head
     providers.FAULTS["call:sim-carrier-2"] = 1
     call = sim_call(client, b, "+1 876 555 0100")
     assert call["allowed"] and call["route"] == [
-        {"carrier": "sim-carrier-2", "ok": False},
-        {"carrier": "sim-carrier-1", "ok": True},
+        {"carrier": "sim-carrier-2", "name": "Simulated carrier B", "ok": False},
+        {"carrier": "sim-carrier-1", "name": "Simulated carrier A", "ok": True},
     ]
     with db.tx() as conn:
         cdr = conn.execute(

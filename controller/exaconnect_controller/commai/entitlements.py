@@ -33,6 +33,7 @@ ROUTER_MODULES = {
     "channels_global": "messaging",
     "voice": "voice",
     "voice_global": "voice",
+    "voice_trunks": "voice",
     "ai": "ai_agents",
     "automation": "automation",
     "connectors_more": "automation",

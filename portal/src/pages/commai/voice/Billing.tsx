@@ -20,6 +20,12 @@ function thisMonth(): string {
 }
 
 /** Rate card, usage and spend, bundles, fraud limits, calls, invoices and (ExaCarib only) the supplier side. */
+interface SimResult {
+  allowed: boolean;
+  reason: string;
+  route: { carrier: string; name?: string; ok: boolean }[];
+}
+
 export default function Billing({ base, v }: { base: string; v: VoiceOverview }) {
   const [period, setPeriod] = useState(thisMonth());
   return (
@@ -379,7 +385,7 @@ function CallsCard({ base, v }: { base: string; v: VoiceOverview }) {
   const calls = useApi<CallRow[]>(`${base}/voice/calls`, 15_000);
   const [f, setF] = useState({ extension: v.users?.[0]?.extension ?? "", to: "", seconds: 60, ai_seconds: 0 });
   const act = useAction();
-  const [last, setLast] = useState<{ allowed: boolean; reason: string } | null>(null);
+  const [last, setLast] = useState<SimResult | null>(null);
   return (
     <Card title="Calls" note={!v.provider.live && <span className="tag">Simulated calls</span>}>
       <p className="muted small">
@@ -391,7 +397,7 @@ function CallsCard({ base, v }: { base: string; v: VoiceOverview }) {
         onSubmit={(e) => {
           e.preventDefault();
           act.run(async () => {
-            const r = await api<{ allowed: boolean; reason: string }>(`${base}/voice/calls/simulate`, { method: "POST", body: JSON.stringify(f) });
+            const r = await api<SimResult>(`${base}/voice/calls/simulate`, { method: "POST", body: JSON.stringify(f) });
             setLast(r);
             calls.reload();
           });
@@ -424,6 +430,12 @@ function CallsCard({ base, v }: { base: string; v: VoiceOverview }) {
             Place simulated call
           </button>
           {last && <span className={`pill small ${last.allowed ? "ok" : "bad"}`}>{last.allowed ? "Connected and priced" : `Stopped: ${last.reason}`}</span>}
+          {last && last.route.length > 0 && (
+            <span className="small" aria-label="Carriers tried">
+              {" "}
+              {last.route.map((a) => `${a.name ?? a.carrier}: ${a.ok ? "carried it" : "refused"}`).join(", then ")}
+            </span>
+          )}
         </div>
       </form>
       <ErrorNote error={calls.error ?? act.error} />

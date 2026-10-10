@@ -43,6 +43,7 @@ from . import (  # noqa: E402
     voice,
     voice_global,
     voice_pbx,
+    voice_trunks,
     webphone,
 )
 
@@ -58,6 +59,7 @@ for _m in (
     channels_global,
     voice_global,
     voice_pbx,
+    voice_trunks,
     selfservice,
     languages,
     quality,

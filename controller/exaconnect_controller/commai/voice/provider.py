@@ -413,13 +413,14 @@ class SimulatedProvider(SipProvider):
     # ---- carriers ----
     def options_ping(self, conn, carrier):
         key = carrier["key"]
-        if _faulted(f"options:{key}"):
+        # An organisation's simulated trunk can be set to fail, to try failover (trunks.py).
+        if _faulted(f"options:{key}") or (carrier.get("outbound") or {}).get("sim_fail") == "down":
             return {"ok": False, "rtt_ms": None, "code": 408}
         rtt = 15 + int(hashlib.sha256(key.encode()).hexdigest()[:4], 16) % 60
         return {"ok": True, "rtt_ms": rtt, "code": 200}
 
     def place_call(self, conn, carrier, to):
-        if _faulted(f"call:{carrier['key']}"):
+        if _faulted(f"call:{carrier['key']}") or (carrier.get("outbound") or {}).get("sim_fail") in ("refuse", "down"):
             return {"ok": False, "detail": f"{carrier['name']} answered 503 Service Unavailable."}
         return {"ok": True, "detail": f"Connected through {carrier['name']} (simulated)."}
 
