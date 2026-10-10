@@ -42,7 +42,12 @@ def _inbound(b, body="Hello", address="+18685550101"):
 def test_service_targets_count_business_time_only(client):
     b = business(client)
     u, h = base(b), b["agent"]["h"]
-    monday_1630 = "2026-10-05T16:30:00+00:00"  # a Monday
+    # A Monday ahead of today: the calendar drops closures that ended more than a day ago,
+    # so fixed dates in the past would stop counting the closure below.
+    today = dt.date.today()
+    mon = today + dt.timedelta(days=7 - today.weekday())
+    tue, wed = (mon + dt.timedelta(days=n) for n in (1, 2))
+    monday_1630 = f"{mon}T16:30:00+00:00"
     # No locations: targets run on the clock, as before.
     r = client.get(f"{u}/organisation/due", params={"minutes": 60, "start": monday_1630}, headers=h)
     assert r.json()["due"] == r.json()["clock_due"]
@@ -57,23 +62,23 @@ def test_service_targets_count_business_time_only(client):
     assert client.put(f"{u}/organisation/locations/{lid}/hours", json=hours, headers=h).status_code == 200
     due = lambda: client.get(f"{u}/organisation/due", params={"minutes": 60, "start": monday_1630}, headers=h).json()  # noqa: E731
     # 30 minutes on Monday, the other 30 when Tuesday opens.
-    assert due()["due"].startswith("2026-10-06T09:30")
+    assert due()["due"].startswith(f"{tue}T09:30")
     # A public holiday in that location's country moves it to Wednesday...
     r = client.post(
-        f"{u}/organisation/holidays", json={"country": "TT", "day": "2026-10-06", "name": "Example holiday"}, headers=h
+        f"{u}/organisation/holidays", json={"country": "TT", "day": str(tue), "name": "Example holiday"}, headers=h
     )
     assert r.status_code == 201, r.text
     # ...a holiday in another country does not.
-    client.post(f"{u}/organisation/holidays", json={"country": "JM", "day": "2026-10-07"}, headers=h)
-    assert due()["due"].startswith("2026-10-07T09:30")
+    client.post(f"{u}/organisation/holidays", json={"country": "JM", "day": str(wed)}, headers=h)
+    assert due()["due"].startswith(f"{wed}T09:30")
     # A closure on Wednesday morning pushes it past the closure.
     r = client.post(
         f"{u}/organisation/closures",
-        json={"starts_at": "2026-10-07T09:00:00Z", "ends_at": "2026-10-07T12:00:00Z", "reason": "Storm"},
+        json={"starts_at": f"{wed}T09:00:00Z", "ends_at": f"{wed}T12:00:00Z", "reason": "Storm"},
         headers=h,
     )
     assert r.status_code == 201, r.text
-    assert due()["due"].startswith("2026-10-07T12:30")
+    assert due()["due"].startswith(f"{wed}T12:30")
     # Bad time zones are refused; carriers of data are audited.
     r = client.post(f"{u}/organisation/locations", json={"name": "X", "timezone": "Mars/Base"}, headers=h)
     assert r.status_code == 422
