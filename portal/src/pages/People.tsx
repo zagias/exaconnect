@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { useState, type FormEvent } from "react";
 import {
   api,
@@ -56,7 +57,7 @@ export default function People() {
     30_000,
   );
   // Each person's phone extension and Jibsy seat, shown on their row (ADR 0043).
-  const extras = useApi<Record<string, { extension?: string; seat?: string }>>(
+  const extras = useApi<PeopleExtras>(
     cid ? `/orgs/${cid}/people-extras` : null,
     60_000,
   );
@@ -188,6 +189,7 @@ export default function People() {
         Everyone in {members.data?.organisation.name ?? "your organisation"}, their
         roles and the apps they may open. Invite someone once here; phone
         extensions and Jibsy seats are set in those apps and shown on each row.
+        Extensions and seats held by anyone who is not a member are listed below the members.
       </PageHead>
 
       <section
@@ -230,12 +232,12 @@ export default function People() {
                         {m.disabled && (
                           <span className="sub">Switched off</span>
                         )}
-                        {(extras.data?.[m.user_id]?.extension || extras.data?.[m.user_id]?.seat) && (
+                        {(extras.data?.by_user[m.user_id]?.extension || extras.data?.by_user[m.user_id]?.seat) && (
                           <span className="sub">
                             {[
-                              extras.data?.[m.user_id]?.extension && `Phone extension ${extras.data[m.user_id].extension}`,
-                              extras.data?.[m.user_id]?.seat &&
-                                (extras.data[m.user_id].seat === "internal" ? "Jibsy: internal seat" : "Jibsy: answers customers"),
+                              extras.data?.by_user[m.user_id]?.extension && `Phone extension ${extras.data.by_user[m.user_id].extension}`,
+                              extras.data?.by_user[m.user_id]?.seat &&
+                                (extras.data.by_user[m.user_id].seat === "internal" ? "Jibsy: internal seat" : "Jibsy: answers customers"),
                             ]
                               .filter(Boolean)
                               .join(" · ")}
@@ -320,6 +322,8 @@ export default function People() {
           </div>
         )}
       </section>
+
+      {(extras.data?.others.length ?? 0) > 0 && <NotMembers others={extras.data!.others} />}
 
       {manage && (
         <Invitations
@@ -503,6 +507,59 @@ function Invitations({
           </div>
         </div>
       )}
+    </section>
+  );
+}
+
+type Extra = { extension?: string; seat?: string };
+type Other = Extra & { name: string; email: string; kind: "staff" | "phone_only" | "not_member" };
+type PeopleExtras = { by_user: Record<string, Extra>; others: Other[] };
+
+const OTHER_KIND: Record<Other["kind"], string> = {
+  staff: "ExaCarib staff, signs in with an ExaCarib account",
+  phone_only: "Phone only, no sign-in to the portal",
+  not_member: "Has a sign-in but is not a member here",
+};
+
+/** Phone extensions and Jibsy seats that belong to no member (ADR 0043), so every extension
+ *  in the organisation is accounted for on this page. */
+function NotMembers({ others }: { others: Other[] }) {
+  return (
+    <section className="card" style={{ maxWidth: 960 }} aria-labelledby="others-title">
+      <div className="card-head">
+        <h2 id="others-title">Extensions and seats not held by a member</h2>
+      </div>
+      <p className="muted small" style={{ marginTop: 0 }}>
+        These count towards your phone system and Jibsy seats but are not people in your organisation. Change or remove
+        them in <Link to="/commai/voice">Phone</Link>.
+      </p>
+      <div className="table-wrap">
+        <table className="paths dt stack">
+          <thead>
+            <tr>
+              <th scope="col">Name</th>
+              <th scope="col">Phone extension</th>
+              <th scope="col">Jibsy seat</th>
+              <th scope="col">Why not a member</th>
+            </tr>
+          </thead>
+          <tbody>
+            {others.map((o) => (
+              <tr key={`${o.name}-${o.extension ?? ""}-${o.email}`}>
+                <td data-label="Name">
+                  <strong>{o.name}</strong>
+                  {o.email && <div className="muted small">{o.email}</div>}
+                </td>
+                <td data-label="Phone extension" className="mono">{o.extension ?? "None"}</td>
+                <td data-label="Jibsy seat">
+                  {o.seat ? (o.seat === "internal" ? "Internal" : "Answers customers") : "None"}
+                </td>
+                <td data-label="Why not a member">{OTHER_KIND[o.kind]}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }

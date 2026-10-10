@@ -203,22 +203,49 @@ def finish_setup(customer_id: str, body: FinishIn, user: UserDep) -> dict:
 
 @router.get("/orgs/{customer_id}/people-extras")
 def people_extras(customer_id: str, user: UserDep) -> dict:
-    """Each member's phone extension and Jibsy seat, keyed by user id."""
+    """Each member's phone extension and Jibsy seat, keyed by user id, and the phone
+    extensions and Jibsy seats held by anyone who is not a member: ExaCarib staff, or an
+    extension with no sign-in. Without the second list those were on no page at all."""
     check_customer(user, customer_id)
     cid = _uuid(customer_id)
-    out: dict[str, dict] = {}
+    by_user: dict[str, dict] = {}
+    others: dict[str, dict] = {}
     with db.tx() as conn:
+        members = {
+            str(r["user_id"])
+            for r in conn.execute("SELECT user_id FROM org_memberships WHERE customer_id = %s", (cid,)).fetchall()
+        }
+
+        def other(r: dict) -> dict:
+            key = str(r["user_id"]) if r["user_id"] else f"x:{r['name']}:{r.get('extension', '')}"
+            if key not in others:
+                kind = "phone_only" if r["user_id"] is None else ("staff" if r["role"] == "admin" else "not_member")
+                others[key] = {"name": r["name"], "email": r["email"] or "", "kind": kind}
+            return others[key]
+
         if organisation._has_table(conn, "voice_users"):
             for r in conn.execute(
-                """SELECT user_id, extension FROM voice_users
-                   WHERE customer_id = %s AND user_id IS NOT NULL AND status = 'active'""",
+                """SELECT v.user_id, v.extension, coalesce(nullif(u.display_name, ''), v.name) AS name,
+                          coalesce(u.email, v.email) AS email, u.role
+                   FROM voice_users v LEFT JOIN users u ON u.id = v.user_id
+                   WHERE v.customer_id = %s AND v.status = 'active' ORDER BY v.extension""",
                 (cid,),
             ).fetchall():
-                out.setdefault(str(r["user_id"]), {})["extension"] = r["extension"]
+                if r["user_id"] and str(r["user_id"]) in members:
+                    by_user.setdefault(str(r["user_id"]), {})["extension"] = r["extension"]
+                else:
+                    other(r)["extension"] = r["extension"]
         if organisation._has_table(conn, "commai_members"):
-            for r in conn.execute("SELECT user_id, seat FROM commai_members WHERE customer_id = %s", (cid,)).fetchall():
-                out.setdefault(str(r["user_id"]), {})["seat"] = r["seat"]
-    return out
+            for r in conn.execute(
+                """SELECT m.user_id, m.seat, coalesce(nullif(u.display_name, ''), u.email) AS name, u.email, u.role
+                   FROM commai_members m JOIN users u ON u.id = m.user_id WHERE m.customer_id = %s""",
+                (cid,),
+            ).fetchall():
+                if str(r["user_id"]) in members:
+                    by_user.setdefault(str(r["user_id"]), {})["seat"] = r["seat"]
+                else:
+                    other(r)["seat"] = r["seat"]
+    return {"by_user": by_user, "others": sorted(others.values(), key=lambda o: (o.get("extension") or "~", o["name"]))}
 
 
 # ---- ExaCarib: every organisation, and a new one in one step ------------------------------
