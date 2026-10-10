@@ -1,5 +1,6 @@
-import { createContext, useContext, useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
+  ApiError,
   api,
   getPasskey,
   passkeysSupported,
@@ -23,24 +24,48 @@ export const useAuth = () => useContext(AuthContext);
 
 /** Shows the sign-in card until there is a valid session, then the app.
  * The session is an HttpOnly cookie; who is signed in comes from /auth/me. */
-export function AuthGate({ children }: { children: ReactNode }) {
+export function AuthGate({
+  children,
+  product = "Connect",
+  intro = "Your sites, paths and routing decisions in one place.",
+}: {
+  children: ReactNode;
+  /** The app named beside the logo on the sign-in card. */
+  product?: string;
+  intro?: string;
+}) {
   const [user, setUser] = useState<User | null>(null);
   const [checking, setChecking] = useState(true);
+  // The session couldn't be checked because there is no network: say so instead of asking to sign in.
+  const [offline, setOffline] = useState(false);
+  const offlineRef = useRef(offline);
+  offlineRef.current = offline;
 
   useEffect(() => {
     let cancelled = false;
     const check = () => {
       api<User>("/auth/me")
-        .then((u) => !cancelled && setUser(u))
-        .catch(() => !cancelled && setUser(null))
+        .then((u) => {
+          if (cancelled) return;
+          setUser(u);
+          setOffline(false);
+        })
+        .catch((e) => {
+          if (cancelled) return;
+          setUser(null);
+          setOffline(!(e instanceof ApiError));
+        })
         .finally(() => !cancelled && setChecking(false));
     };
     const out = () => setUser(null);
+    const back = () => offlineRef.current && check();
     check();
     window.addEventListener("exa-auth", check);
     window.addEventListener("exa-signed-out", out);
+    window.addEventListener("online", back);
     return () => {
       cancelled = true;
+      window.removeEventListener("online", back);
       window.removeEventListener("exa-auth", check);
       window.removeEventListener("exa-signed-out", out);
     };
@@ -84,14 +109,21 @@ export function AuthGate({ children }: { children: ReactNode }) {
           <div className="signin-brand">
             <img className="wm-light" src="/brand/exacarib-wordmark.png" alt="ExaCarib" width={168} height={29} />
             <img className="wm-dark" src="/brand/exacarib-wordmark-reversed.png" alt="ExaCarib" width={168} height={29} />
-            <span className="signin-product">Connect</span>
+            <span className="signin-product">{product}</span>
           </div>
           {checking ? (
             <p className="signin-checking" role="status">
               Checking your session…
             </p>
+          ) : offline ? (
+            <p className="signin-checking" role="status">
+              You're offline. {product} will carry on when you're back online.{" "}
+              <button className="link" onClick={() => window.dispatchEvent(new Event("exa-auth"))}>
+                Try again
+              </button>
+            </p>
           ) : (
-            <SignIn />
+            <SignIn intro={intro} />
           )}
         </div>
       </main>
@@ -117,7 +149,7 @@ function errorFromAddress(): string | null {
 
 type Step = "email" | "password" | "code";
 
-function SignIn() {
+function SignIn({ intro }: { intro: string }) {
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -220,7 +252,7 @@ function SignIn() {
       <h1 id="signin-title">{step === "code" ? "Two-step sign-in" : "Sign in"}</h1>
       {step === "email" && (
         <>
-          <p className="signin-intro">Your sites, paths and routing decisions in one place.</p>
+          <p className="signin-intro">{intro}</p>
           <form onSubmit={discover} aria-describedby={describedBy}>
             <label>
               Work email

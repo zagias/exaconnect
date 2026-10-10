@@ -45,6 +45,8 @@ export class VertoPhone {
   private callID: string | null = null;
   private incomingSdp: string | null = null;
   private incomingParams: Record<string, unknown> = {};
+  /** The microphone to use (a deviceId from enumerateDevices); the default when unset. */
+  micId = "";
 
   constructor(
     private url: string,
@@ -130,7 +132,7 @@ export class VertoPhone {
         break;
       }
       case "verto.bye":
-        this.cleanup("ended", String(params.cause || "Call ended"));
+        this.cleanup("ended", plainReason(String(params.cause || "")));
         break;
       default:
         break;
@@ -138,7 +140,14 @@ export class VertoPhone {
   }
 
   private async media(): Promise<RTCPeerConnection> {
-    this.local = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    try {
+      this.local = await navigator.mediaDevices.getUserMedia({
+        audio: this.micId ? { deviceId: { exact: this.micId } } : true,
+        video: false,
+      });
+    } catch (e) {
+      throw new Error(micProblem(e as DOMException));
+    }
     const pc = new RTCPeerConnection({ iceServers: [] });
     this.local.getTracks().forEach((t) => pc.addTrack(t, this.local!));
     pc.ontrack = (e) => this.ev.onRemoteStream(e.streams[0]);
@@ -174,25 +183,35 @@ export class VertoPhone {
         sessid: this.sessid,
       });
     } catch (e) {
-      this.cleanup("ended", (e as Error).message);
-      throw e;
+      const reason = plainReason((e as Error).message);
+      this.cleanup("ended", reason);
+      throw new Error(reason || "The call couldn't be connected.");
     }
   }
 
   async answer(): Promise<void> {
     if (!this.callID || !this.incomingSdp) return;
-    const pc = await this.media();
-    await pc.setRemoteDescription({ type: "offer", sdp: this.incomingSdp });
-    await pc.setLocalDescription(await pc.createAnswer());
-    await waitForIce(pc);
-    await this.rpc("verto.answer", {
-      sdp: pc.localDescription?.sdp,
-      dialogParams: this.dialog({
-        destination_number: this.incomingParams.callee_id_number ?? this.me.extension,
-        remote_caller_id_number: this.incomingParams.caller_id_number,
-      }),
-      sessid: this.sessid,
-    });
+    try {
+      const pc = await this.media();
+      await pc.setRemoteDescription({ type: "offer", sdp: this.incomingSdp });
+      await pc.setLocalDescription(await pc.createAnswer());
+      await waitForIce(pc);
+      await this.rpc("verto.answer", {
+        sdp: pc.localDescription?.sdp,
+        dialogParams: this.dialog({
+          destination_number: this.incomingParams.callee_id_number ?? this.me.extension,
+          remote_caller_id_number: this.incomingParams.caller_id_number,
+        }),
+        sessid: this.sessid,
+      });
+    } catch (e) {
+      // Couldn't answer (no microphone, say): let the caller go on to voicemail, and say why.
+      const reason = plainReason((e as Error).message) || "The call couldn't be answered.";
+      if (this.ws?.readyState === WebSocket.OPEN)
+        void this.rpc("verto.bye", { dialogParams: this.dialog(), sessid: this.sessid }).catch(() => undefined);
+      this.cleanup("ended", reason);
+      throw new Error(reason);
+    }
     this.ev.onCall("active", {});
   }
 
@@ -222,4 +241,32 @@ export class VertoPhone {
     this.incomingSdp = null;
     if (had) this.ev.onCall(state, { reason });
   }
+}
+
+/* FreeSWITCH hangup causes and Verto refusals, in words a caller understands ("" for a normal end). */
+const REASONS: [RegExp, string][] = [
+  [/UNALLOCATED_NUMBER|NO_ROUTE_DESTINATION|INVALID_NUMBER_FORMAT/, "That extension or number doesn't exist."],
+  [/USER_NOT_REGISTERED|SUBSCRIBER_ABSENT/, "That person isn't signed in to a phone right now."],
+  [/USER_BUSY/, "That line is busy."],
+  [/NO_ANSWER|NO_USER_RESPONSE|ALLOTTED_TIMEOUT/, "No answer."],
+  [/CALL_REJECTED|OUTGOING_CALL_BARRED/, "Your company's call rules don't allow that call."],
+  [/NORMAL_CLEARING|ORIGINATOR_CANCEL/, ""],
+  [/Invalid Method|Permission Denied/i, "The phone system refused the call. Sign out and back in; if it keeps happening, tell your voice admin."],
+  [/NETWORK_OUT_OF_ORDER|DESTINATION_OUT_OF_ORDER|GATEWAY_DOWN|NORMAL_TEMPORARY_FAILURE/, "Outside calls aren't connected yet."],
+];
+
+/** What to tell someone whose microphone the browser wouldn't give us. */
+export function micProblem(e: { name?: string }): string {
+  if (e?.name === "NotAllowedError" || e?.name === "SecurityError")
+    return "Calls need your microphone. Allow it for this site in your browser or device settings, then try again.";
+  if (e?.name === "NotFoundError" || e?.name === "OverconstrainedError")
+    return "No microphone found. Plug one in or choose another under Settings, then try again.";
+  if (e?.name === "NotReadableError") return "Another app is using your microphone. Close it, then try again.";
+  return "Your microphone couldn't be started.";
+}
+
+export function plainReason(raw: string): string {
+  if (!raw) return "";
+  for (const [re, words] of REASONS) if (re.test(raw)) return words;
+  return /^[A-Z_]+$/.test(raw) ? "The call couldn't be connected." : raw;
 }

@@ -33,6 +33,21 @@ ports=$(ss -Htln | awk '{print $4}' | grep -vE '^(127\.|\[::1\]|172\.)' | grep -
 note "listening on public addresses: $ports"
 if grep -qE '(^| )(8000|5432|5173)( |$)' <<<"$ports"; then bad "controller, database or dev portal exposed"; else ok "controller, database and dev portal stay private"; fi
 
+# The phone app on its own address (ADR 0042): / opens the app, which installs from its manifest.
+# shellcheck disable=SC1091
+phone=$(. deploy/public/site.env && echo "${EXA_PHONE_HOST:-}")
+if [[ -n $phone ]]; then
+  ploc=(--resolve "$phone:443:127.0.0.1" --max-time 15)
+  where=$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' "${ploc[@]}" -k "https://$phone/")
+  if [[ $where == "30"*"/phone" ]]; then ok "$phone opens the phone app"; else bad "$phone/ answered '$where'"; fi
+  if curl -fsS "${ploc[@]}" -k "https://$phone/phone" | grep -q 'phone.webmanifest'; then ok "phone app served"; else bad "phone app not served on $phone"; fi
+  man=$(curl -fsS "${ploc[@]}" -k -D - -o /dev/null "https://$phone/phone.webmanifest" | tr -d '\r')
+  if grep -qi '^content-type: application/manifest+json' <<<"$man"; then ok "app manifest served as a manifest"; else bad "app manifest content type"; fi
+  if curl -fsS "${ploc[@]}" -k "https://$phone/phone-sw.js" | grep -q 'jibsy-phone'; then ok "app service worker served"; else bad "app service worker missing"; fi
+  pissuer=$(echo | openssl s_client -connect 127.0.0.1:443 -servername "$phone" 2>/dev/null | openssl x509 -noout -issuer 2>/dev/null)
+  if [[ $pissuer == *"Let's Encrypt"* ]]; then ok "$phone has a Let's Encrypt certificate"; else bad "no certificate for $phone yet (issuer: ${pissuer:-none}); its DNS must point here"; fi
+fi
+
 # An API key (ADR 0013) through the public proxy, as the SDK and Terraform use it. Never printed.
 made=$(api POST /auth/api-keys '{"name": "lab public check", "days": 1}')
 key=$(jq -r '.token // empty' <<<"$made")

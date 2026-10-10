@@ -80,6 +80,9 @@ PY
 # A test extension for ExaCarib's admin in the demo business (deploy/voice/test_phone.py).
 "${COMPOSE[@]}" exec -T controller python - <deploy/voice/test_phone.py
 
+# Recorded prompts and hold music (voicemail, queues), once; checked against pinned sums.
+deploy/voice/sounds.sh
+
 # The public voice ports (deploy/voice/ports.yml), only once the host has a public address.
 VOICE=("${COMPOSE[@]}")
 if [[ -n $public_ip ]]; then
