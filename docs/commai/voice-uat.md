@@ -82,6 +82,10 @@ A_EMAIL=... A_PW=... A_EXT=200 A_NAME=... B_EMAIL=... B_PW=... B_EXT=201 B_NAME=
 C_EMAIL=... C_PW=... MENU_EXT=500 node phone-app.mjs
 ```
 
+On the live server the lab runs it after every deploy (`lab/ci/checks/voice-phone-app.sh`), in
+Microsoft's Playwright image, with three test accounts in the demo business (Phone app test A, B
+and C) that `deploy/voice/uat/live_users.py` sets up and gives fresh random passwords each run.
+
 `UAT_ENGINE=firefox` or `UAT_ENGINE=webkit` runs A in Firefox or in Safari's engine (B stays
 in Chromium). Playwright's WebKit has no stand-in microphone, so in that run A instead checks
 what someone sees who hasn't allowed the microphone.
