@@ -43,6 +43,8 @@ def apply_schema(conn: psycopg.Connection) -> None:
         conn.execute(resources.files(__package__).joinpath("integrations", "schema.sql").read_text())
         # One organisation set up in one place (ADR 0043): company details and shared locations.
         conn.execute(resources.files(__package__).joinpath("organisation.sql").read_text())
+        # The organisation's own SIP trunks, per location (ADR 0044): uses org_locations.
+        conn.execute(resources.files(__package__).joinpath("voice_trunks.sql").read_text())
         # Go-live registry (ADR 0028): declared capabilities start off.
         from .commai import golive
 

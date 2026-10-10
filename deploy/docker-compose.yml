@@ -230,9 +230,11 @@ services:
     profiles: [voice]
     image: ghcr.io/kamailio/kamailio:5.8.4-bookworm
     restart: unless-stopped
-    # The image's entrypoint is a shell line that ignores `command`, so replace it.
-    entrypoint: ["kamailio", "-DD", "-E", "-f", "/etc/kamailio/kamailio.cfg"]
+    # Kamailio plus a watcher that reloads the controller's rendered carrier lists
+    # (the image's entrypoint is a shell line that ignores `command`, so replace it).
+    entrypoint: ["/bin/sh", "/exacarib-start.sh"]
     volumes:
+      - ./kamailio/start.sh:/exacarib-start.sh:ro
       - ./kamailio/kamailio.cfg:/etc/kamailio/kamailio.cfg:ro
       - ./kamailio/tls.cfg:/etc/kamailio/tls.cfg:ro
       - ./kamailio/kamailio-local.cfg:/etc/kamailio/kamailio-local.cfg:ro

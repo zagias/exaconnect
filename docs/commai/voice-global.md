@@ -91,3 +91,20 @@ fault keys:
 An account number ending `0000` is rejected by the simulated losing carrier. A
 port without a letter of authorisation and a recent bill comes back as
 "documents needed".
+
+## The organisation's own SIP trunks (ADR 0044)
+
+Phone > SIP trunks. An organisation adds its own trunks, gives each location a
+primary and a secondary trunk, and picks a default. Calls from a location try
+its primary, then its secondary, then the default, then ExaCarib's carriers
+(unless switched off); trunks that are off or down are skipped, and a trunk that
+refuses a call passes it on. Calls on the organisation's trunks carry no ExaCarib
+call charge. Numbers that arrive on a trunk are added there and belong to a
+location. Endpoints under `/api/v1/commai/customers/{id}/voice/`:
+
+- `GET trunks` (trunks, default, locations, numbers); `POST trunks`;
+  `PATCH|DELETE trunks/{id}`
+- `PUT trunk-settings` (`default_trunk_id`, `exacarib_fallback`)
+- `PUT locations/{location_id}/trunks` (`primary_trunk_id`, `secondary_trunk_id`)
+- `POST trunks/{id}/numbers`; `PUT numbers/{id}/location`
+- `GET route?extension=&to=`: the trunks and carriers a call would try, in order

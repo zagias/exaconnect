@@ -739,19 +739,31 @@ def simulate_call(customer_id: str, body: SimCallIn, user: UserDep) -> dict:
         call["provider_ref"] = call["call_id"]
         if routed is not None and not routed["ok"]:
             call["status"] = "failed"
+        if routed and routed["ok"]:
+            call["carrier"] = routed["carrier"]
         cdr = billing.record_call(conn, customer_id, call)
         if routed and routed["ok"]:
             carriers.attach(conn, cdr, routed["carrier"])
             cdr = {**cdr, "carrier": routed["carrier"]}
         audit.record(conn, user.actor, "commai.voice.simulated_call", cdr["call_id"], customer_id)
         charges = conn.execute("SELECT * FROM voice_charges WHERE cdr_id = %s ORDER BY kind", (cdr["id"],)).fetchall()
+        names = {
+            r["key"]: r["name"]
+            for r in conn.execute(
+                "SELECT key, name FROM voice_carriers WHERE key = ANY(%s)",
+                ([a["carrier"] for a in (routed or {}).get("attempts", [])],),
+            ).fetchall()
+        }
     return clean(
         {
             **cdr,
             "allowed": verdict["allowed"],
             "reason": verdict["reason"],
             "charges": charges,
-            "route": [{"carrier": a["carrier"], "ok": a["ok"]} for a in (routed or {}).get("attempts", [])],
+            "route": [
+                {"carrier": a["carrier"], "name": names.get(a["carrier"], a["carrier"]), "ok": a["ok"]}
+                for a in (routed or {}).get("attempts", [])
+            ],
         }
     )
 

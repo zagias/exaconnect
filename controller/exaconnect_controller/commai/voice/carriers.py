@@ -115,7 +115,10 @@ def _out(conn, c: dict) -> dict:
 def list_carriers(conn: psycopg.Connection) -> list[dict]:
     ensure_simulated(conn)
     ensure_health_loop(conn)
-    return [_out(conn, c) for c in conn.execute("SELECT * FROM voice_carriers ORDER BY name").fetchall()]
+    return [
+        _out(conn, c)
+        for c in conn.execute("SELECT * FROM voice_carriers WHERE customer_id IS NULL ORDER BY name").fetchall()
+    ]
 
 
 def get(conn, key: str) -> dict:
@@ -140,6 +143,8 @@ def save(conn: psycopg.Connection, body: dict, actor: str) -> dict:
     key = str(body.get("key", "")).strip().lower()
     if not key or not all(ch.isalnum() or ch == "-" for ch in key) or len(key) > 40:
         raise VoiceError("A carrier key is up to 40 letters, digits and hyphens.", 422)
+    if key.startswith("org-"):  # organisations' own trunks (trunks.py)
+        raise VoiceError("Carrier keys starting org- belong to organisations' own trunks.", 422)
     name = str(body.get("name", "")).strip()[:120] or key
     outbound = dict(body.get("outbound") or {})
     if outbound:
@@ -331,11 +336,11 @@ def mode_for(conn, number: str) -> str:
 
 
 def any_enabled(conn, cid: Any) -> bool:
-    if not conn.execute("SELECT 1 FROM voice_carriers LIMIT 1").fetchone():
+    if not conn.execute("SELECT 1 FROM voice_carriers WHERE customer_id IS NULL LIMIT 1").fetchone():
         ensure_simulated(conn)
     return any(
         golive.enabled(conn, "carrier", r["key"], cid)
-        for r in conn.execute("SELECT key FROM voice_carriers WHERE enabled").fetchall()
+        for r in conn.execute("SELECT key FROM voice_carriers WHERE enabled AND customer_id IS NULL").fetchall()
     )
 
 
@@ -343,7 +348,7 @@ def plan(conn: psycopg.Connection, cid: Any, number: str) -> dict:
     """Every carrier with whether it can take this call and why, in try order."""
     mode = mode_for(conn, number)
     rows = []
-    for c in conn.execute("SELECT * FROM voice_carriers ORDER BY key").fetchall():
+    for c in conn.execute("SELECT * FROM voice_carriers WHERE customer_id IS NULL ORDER BY key").fetchall():
         rate = rate_for(conn, c, number)
         q = quality(conn, c)
         reason = ""
@@ -379,9 +384,16 @@ def plan(conn: psycopg.Connection, cid: Any, number: str) -> dict:
     return {"mode": mode, "carriers": order, "route": [r["key"] for r in usable]}
 
 
-def route_keys(conn, cid: Any, number: str) -> list[str] | None:
+def route_keys(conn, cid: Any, number: str, voice_user_id: Any = None) -> list[str] | None:
     """The carriers to try, in order. None: no carrier is switched on for this
-    business, so the single provider takes the call (stage 4 behaviour)."""
+    business, so the single provider takes the call (stage 4 behaviour).
+    An organisation with its own trunks tries them first, by the caller's
+    location (trunks.py, ADR 0044)."""
+    from . import trunks
+
+    own = trunks.route(conn, cid, number, voice_user_id)
+    if own is not None and not own["single_provider"]:
+        return own["route"]
     if not any_enabled(conn, cid):
         return None
     return plan(conn, cid, number)["route"]
@@ -489,18 +501,19 @@ def reconcile(conn: psycopg.Connection, key: str, period: dt.date) -> dict:
 
 
 def dispatcher_list(conn: psycopg.Connection) -> str:
-    """Kamailio dispatcher.list: one set per carrier (set id = position + 1).
-    FreeSWITCH puts the carrier order from the controller in X-Exa-Route."""
+    """Kamailio dispatcher.list: one set per carrier, by its own set id (kept for
+    good, ADR 0044). FreeSWITCH puts the carrier order from the controller in
+    X-Exa-Route; Kamailio's watcher reloads the list when it changes."""
     lines = [
         "# Rendered by the ExaCarib controller (voice carriers). Do not edit by hand.",
         "# setid destination flags priority attrs",
     ]
-    for i, c in enumerate(conn.execute("SELECT * FROM voice_carriers WHERE enabled ORDER BY key").fetchall(), start=1):
+    for c in conn.execute("SELECT * FROM voice_carriers WHERE enabled ORDER BY set_id").fetchall():
         o = c["outbound"] or {}
         if not o.get("host"):
             continue
         lines.append(
-            f"{i} sip:{o['host']}:{o.get('port', 5061)};transport={o.get('transport', 'tls')} 0 0 "
+            f"{c['set_id']} sip:{o['host']}:{o.get('port', 5061)};transport={o.get('transport', 'tls')} 0 0 "
             f"carrier={c['key']};maxload={o.get('max_channels', 30)}"
         )
     return "\n".join(lines) + "\n"
@@ -524,10 +537,8 @@ def address_list(conn: psycopg.Connection) -> str:
 
 def carrier_sets(conn: psycopg.Connection) -> dict[str, int]:
     return {
-        c["key"]: i
-        for i, c in enumerate(
-            conn.execute("SELECT key FROM voice_carriers WHERE enabled ORDER BY key").fetchall(), start=1
-        )
+        c["key"]: c["set_id"]
+        for c in conn.execute("SELECT key, set_id FROM voice_carriers WHERE enabled ORDER BY set_id").fetchall()
     }
 
 

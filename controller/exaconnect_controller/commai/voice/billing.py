@@ -311,7 +311,7 @@ def authorise(
     stop = fraud.check(conn, customer_id, d, voice_user_id=voice_user_id, from_number=from_number)
     if stop:
         return {**stop, "route": None}
-    route = carriers.route_keys(conn, customer_id, d)
+    route = carriers.route_keys(conn, customer_id, d, voice_user_id)
     if route == []:
         return {**refused("no_carrier", "No carrier can take calls to this destination right now."), "route": []}
     return {"allowed": True, "reason": "", "route": route}
@@ -385,8 +385,8 @@ def record_call(conn: psycopg.Connection, customer_id: Any, call: dict) -> dict:
     row = conn.execute(
         """INSERT INTO voice_cdrs (customer_id, call_id, direction, from_number, to_number, voice_user_id, site_id,
              team_id, started_at, ended_at, seconds, ai_seconds, status, block_reason, recording_ref, provider_ref,
-             international)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+             international, carrier)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
            ON CONFLICT (customer_id, call_id) DO NOTHING RETURNING *""",
         (
             customer_id,
@@ -406,6 +406,7 @@ def record_call(conn: psycopg.Connection, customer_id: Any, call: dict) -> dict:
             call.get("recording_ref", ""),
             call.get("provider_ref", ""),
             intl,
+            call.get("carrier", ""),
         ),
     ).fetchone()
     if row is None:
@@ -432,7 +433,19 @@ def rate_call(conn: psycopg.Connection, customer_id: Any, cdr: dict) -> list[dic
     out = []
     period = month_start(cdr["ended_at"])
     common = (cdr["site_id"], cdr["team_id"], cdr["voice_user_id"], cdr["ended_at"])
-    if cdr["direction"] == "outbound" and cdr["seconds"] > 0 and digits(cdr["to_number"]) not in EMERGENCY:
+    # A call on the organisation's own trunk is billed by its carrier, not by the minute here (ADR 0044).
+    own_trunk = (
+        bool(cdr.get("carrier"))
+        and conn.execute(
+            "SELECT 1 FROM voice_carriers WHERE key = %s AND customer_id = %s", (cdr["carrier"], customer_id)
+        ).fetchone()
+    )
+    if (
+        cdr["direction"] == "outbound"
+        and cdr["seconds"] > 0
+        and digits(cdr["to_number"]) not in EMERGENCY
+        and not own_trunk
+    ):
         dest = destination_rate(card, cdr["to_number"])
         minutes = Decimal(cdr["seconds"]) / 60
         bundle_id, from_bundle = None, Decimal(0)
