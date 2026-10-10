@@ -141,8 +141,10 @@ def _directory(data: dict) -> str:
         "<include>",
         f"  <domain name={a(dom)}>",
         "    <params>",
+        # A desk phone or app (SIP) and the browser phone (Verto) ring together.
         '      <param name="dial-string" value="{^^:sip_invite_domain=${dialed_domain}:'
-        'presence_id=${dialed_user}@${dialed_domain}}${sofia_contact(*/${dialed_user}@${dialed_domain})}"/>',
+        "presence_id=${dialed_user}@${dialed_domain}}${sofia_contact(*/${dialed_user}@${dialed_domain})},"
+        '${verto_contact(${dialed_user}@${dialed_domain})}"/>',
         "    </params>",
         "    <variables>",
         f'      <variable name="exa_customer" value={a(data["customer_id"])}/>',
@@ -157,6 +159,9 @@ def _directory(data: dict) -> str:
             f"          <user id={a(u['extension'])}>",
             "            <params>",
             f'              <param name="a1-hash" value={a(u["a1"])}/>',
+            # The browser phone may place and answer calls (Verto's own methods) and nothing
+            # else: without this mod_verto refuses verto.invite after sign-in.
+            '              <param name="jsonrpc-allowed-methods" value="verto"/>',
         ]
         if u["voicemail_to_email"] and u["email"]:
             out += [
