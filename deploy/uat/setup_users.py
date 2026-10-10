@@ -11,12 +11,14 @@ import secrets
 
 import psycopg
 from exaconnect_controller import db
+from exaconnect_controller.commai.voice import config, freeswitch
 from exaconnect_controller.security import hash_password
 from exaconnect_controller.settings import get_settings
 
 STAFF = "setup-test-staff@exacarib.local"
 ORG_PREFIX = "Set-up check "
 PEOPLE = "%@setup-check.example"
+ACTOR = "system:set-up-check"
 
 
 def _tables(conn, column: str) -> list[str]:
@@ -39,7 +41,9 @@ def _remove(conn, where: list[tuple[str, str, object]]) -> None:
         for table, column, value in where:
             try:
                 with conn.transaction():
-                    conn.execute(f'DELETE FROM "{table}" WHERE "{column}" = ANY(%s)', (value,))
+                    conn.execute(
+                        f'DELETE FROM "{table}" WHERE "{column}" = ANY(%s)', (value,)
+                    )
             except psycopg.errors.ForeignKeyViolation:  # still referred to; next pass
                 left = True
         if not left:
@@ -50,23 +54,66 @@ def _remove(conn, where: list[tuple[str, str, object]]) -> None:
 settings = get_settings()
 db.init(settings.database_url)
 with db.tx() as conn:
-    orgs = [r["id"] for r in conn.execute("SELECT id FROM customers WHERE name LIKE %s", (ORG_PREFIX + "%",))]
-    users = [r["id"] for r in conn.execute("SELECT id FROM users WHERE email LIKE %s", (PEOPLE,))]
+    orgs = [
+        r["id"]
+        for r in conn.execute(
+            "SELECT id FROM customers WHERE name LIKE %s", (ORG_PREFIX + "%",)
+        )
+    ]
+    users = [
+        r["id"]
+        for r in conn.execute("SELECT id FROM users WHERE email LIKE %s", (PEOPLE,))
+    ]
+    # Phone extensions the last run gave its test people go through the phone system, so it stops
+    # offering them, before the rows are removed below.
+    for v in conn.execute(
+        "SELECT id, customer_id FROM voice_users WHERE user_id = ANY(%s) AND status = 'active'",
+        (users,),
+    ).fetchall():
+        config.apply(
+            conn,
+            v["customer_id"],
+            [{"op": "remove_user", "user": str(v["id"])}],
+            actor=ACTOR,
+            summary="set-up check",
+            check_price=False,
+        )
+        freeswitch.render_business(conn, v["customer_id"])
     if orgs or users:
-        sites = [r["id"] for r in conn.execute("SELECT id FROM sites WHERE customer_id = ANY(%s)", (orgs,))]
+        sites = [
+            r["id"]
+            for r in conn.execute(
+                "SELECT id FROM sites WHERE customer_id = ANY(%s)", (orgs,)
+            )
+        ]
         where = [(t, "site_id", sites) for t in _tables(conn, "site_id")]
         where += [(t, "user_id", users) for t in _tables(conn, "user_id")]
-        where += [(t, "customer_id", orgs) for t in _tables(conn, "customer_id") if t != "users"]
-        where += [("users", "id", users), ("users", "customer_id", orgs), ("customers", "id", orgs)]
+        where += [
+            (t, "customer_id", orgs)
+            for t in _tables(conn, "customer_id")
+            if t != "users"
+        ]
+        where += [
+            ("users", "id", users),
+            ("users", "customer_id", orgs),
+            ("customers", "id", orgs),
+        ]
         _remove(conn, where)
     password = secrets.token_urlsafe(18)
-    user = conn.execute("SELECT id FROM users WHERE lower(email) = %s", (STAFF,)).fetchone()
+    user = conn.execute(
+        "SELECT id FROM users WHERE lower(email) = %s", (STAFF,)
+    ).fetchone()
     if user is None:
         conn.execute(
             "INSERT INTO users (email, password_hash, role, display_name) VALUES (%s, %s, 'admin', %s)",
             (STAFF, hash_password(password), "Set-up test (ExaCarib)"),
         )
     else:
-        conn.execute("UPDATE users SET password_hash = %s WHERE id = %s", (hash_password(password), user["id"]))
+        conn.execute(
+            "UPDATE users SET password_hash = %s WHERE id = %s",
+            (hash_password(password), user["id"]),
+        )
         conn.execute("DELETE FROM sessions WHERE user_id = %s", (user["id"],))
-print(json.dumps({"STAFF_EMAIL": STAFF, "STAFF_PW": password, "ORG_PREFIX": ORG_PREFIX}))
+print(
+    json.dumps({"STAFF_EMAIL": STAFF, "STAFF_PW": password, "ORG_PREFIX": ORG_PREFIX})
+)

@@ -186,3 +186,32 @@ def test_existing_records_join_the_shared_list(client, admin_headers):
     j = _new_org(client, admin_headers, "Jibsy Only", products=("commai",))
     ids = [s["id"] for s in client.get(f"{API}/orgs/{j['id']}/setup", headers=admin_headers).json()["steps"]]
     assert "connect" not in ids and "jibsy" in ids
+
+
+def test_people_extras_accounts_for_every_extension(client, admin_headers):
+    """Extensions held by members show on their row; ExaCarib staff and phone-only
+    extensions are listed separately rather than left off the page."""
+    org = _new_org(client, admin_headers, "Phone Co")
+    cid = org["id"]
+    joined, owner = _join(client, org["invite"]["url"])
+    with db.tx() as conn:
+        owner_id = conn.execute("SELECT user_id FROM org_memberships WHERE customer_id = %s", (cid,)).fetchone()[
+            "user_id"
+        ]
+        staff_id = conn.execute("SELECT id FROM users WHERE role = 'admin' ORDER BY created_at LIMIT 1").fetchone()[
+            "id"
+        ]
+        for uid, name, ext in (
+            (owner_id, "Marlene", "210"),
+            (staff_id, "ExaCarib admin", "200"),
+            (None, "Lobby", "203"),
+        ):
+            conn.execute(
+                """INSERT INTO voice_users (customer_id, user_id, name, extension, sip_password)
+                   VALUES (%s, %s, %s, %s, 'x')""",
+                (cid, uid, name, ext),
+            )
+    out = client.get(f"{API}/orgs/{cid}/people-extras", headers=owner).json()
+    assert out["by_user"] == {str(owner_id): {"extension": "210"}}
+    assert [(o["extension"], o["kind"]) for o in out["others"]] == [("200", "staff"), ("203", "phone_only")]
+    assert out["others"][1]["name"] == "Lobby"
