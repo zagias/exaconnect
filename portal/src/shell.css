@@ -280,6 +280,7 @@
 }
 .app-mark-commai { background: #efecff; color: #6652d6; }
 .app-mark-account { background: var(--page); color: var(--ink); }
+.app-mark-ops { background: var(--navy); color: var(--light-blue, #8DCFFF); box-shadow: inset 0 0 0 1px #2c4366; }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .app-mark-commai { background: #2b2366; color: #c2b8ff; }
 }
@@ -340,4 +341,11 @@ a.app-switch-static:hover { background: var(--shell-side-hover); }
   .app-switch-name, .app-switch-hint, .app-switch > .shell-icon {
     position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
   }
+}
+
+/* The set-up band (ADR 0043): under the top bar until the checklist is done. */
+.setup-band {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px;
+  padding: 10px 24px; background: var(--blue-tint); color: var(--ink); border-bottom: 1px solid var(--line);
+  font-size: 14px;
 }

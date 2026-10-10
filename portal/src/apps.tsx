@@ -6,8 +6,13 @@ import type { Product, User } from "./api";
    portal only follows it. Internal names stay "commai"; people see "Jibsy". */
 
 export type AppId = Product;
-/** Which part of the portal a screen belongs to: an app, or the shared account pages. */
-export type Area = AppId | "account";
+/** Which part of the portal a screen belongs to: an app, the organisation's
+ * own set-up ("account": company, locations, people, plans, your profile), or
+ * ExaCarib's operations screens (staff only). ADR 0043. */
+export type Area = AppId | "account" | "ops";
+
+/** What each non-app area is called in the switcher. */
+export const AREA_NAME: Record<"account" | "ops", string> = { account: "Organisation", ops: "Operations" };
 
 /** The conversations app's name, shown as "Jibsy by ExaCarib" where it stands alone. */
 export const JIBSY = "Jibsy";
@@ -20,12 +25,17 @@ export const APP_INFO: Record<AppId, { name: string; full: string; blurb: string
 export const APP_ORDER: AppId[] = ["connect", "commai"];
 
 /** Shared pages that belong to no single app. */
-const ACCOUNT_PATHS = ["/account", "/billing"];
+const ACCOUNT_PATHS = ["/org", "/account", "/billing"];
+/** ExaCarib staff screens. */
+const OPS_PATHS = ["/ops", "/admin", "/commai/golive", "/commai/support"];
+
+const under = (path: string, p: string) => path === p || path.startsWith(p + "/");
 
 /** Which part of the portal a path belongs to. */
 export function areaFor(path: string): Area {
+  if (OPS_PATHS.some((p) => under(path, p))) return "ops";
   if (path === "/commai" || path.startsWith("/commai/")) return "commai";
-  if (ACCOUNT_PATHS.some((p) => path === p || path.startsWith(p + "/"))) return "account";
+  if (ACCOUNT_PATHS.some((p) => under(path, p))) return "account";
   return "connect";
 }
 
@@ -53,10 +63,15 @@ export function AppMark({ app, size = 28 }: { app: Area; size?: number }) {
         <path d="M4 5h16v11H9l-5 4z" />
         <path d="M8 9h8M8 12h5" />
       </>
+    ) : app === "ops" ? (
+      <>
+        <path d="M12 3l7 3v5.5c0 4.4-3 8-7 9.5-4-1.5-7-5.1-7-9.5V6z" />
+        <path d="M9 12l2 2 4-4" />
+      </>
     ) : (
       <>
-        <circle cx="12" cy="8" r="3.5" />
-        <path d="M5 20c1-4 4-5.5 7-5.5s6 1.5 7 5.5" />
+        <path d="M4 20V9l8-5 8 5v11" />
+        <path d="M9 20v-6h6v6" />
       </>
     );
   return (

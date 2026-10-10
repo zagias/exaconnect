@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { NavLink, Route, Routes } from "react-router-dom";
+import { Navigate, NavLink, Route, Routes } from "react-router-dom";
 import { api, useApi } from "../../api";
 import { ErrorNote } from "../../components";
 import { Card, PageHead, RowActions, Tabs, useAction } from "../../ui";
@@ -8,7 +8,6 @@ import Data from "./settings/Data";
 import Organisation from "./settings/Organisation";
 import Roles from "./settings/Roles";
 import Security from "./settings/Security";
-import SignIn from "./settings/SignIn";
 import HelpAdmin from "../help/HelpAdmin";
 import type { Member, Team } from "./types";
 
@@ -28,7 +27,6 @@ export default function Settings() {
         <NavLink to="/commai/settings/teams">Teams and people</NavLink>
         <NavLink to="/commai/settings/routing">Routing</NavLink>
         <NavLink to="/commai/settings/developers">Webhooks and keys</NavLink>
-        <NavLink to="/commai/settings/sign-in">Sign-in</NavLink>
         <NavLink to="/commai/settings/organisation">Organisation</NavLink>
         <NavLink to="/commai/settings/roles">Roles</NavLink>
         <NavLink to="/commai/settings/security">Security</NavLink>
@@ -40,7 +38,7 @@ export default function Settings() {
         <Route path="/teams" element={<TeamsAndPeople base={base} />} />
         <Route path="/routing" element={<Routing base={base} />} />
         <Route path="/developers" element={<Developers base={base} />} />
-        <Route path="/sign-in" element={<SignIn />} />
+        <Route path="/sign-in" element={<Navigate to="/org/security" replace />} />
         <Route path="/organisation" element={<Organisation base={base} />} />
         <Route path="/roles" element={<Roles base={base} />} />
         <Route path="/security" element={<Security base={base} />} />

@@ -385,3 +385,13 @@ Owners and admins choose which apps each person may open on People and can ask
 ExaCarib to add an app on Apps and plans. Checked in a browser as an ExaCarib
 admin, an owner with both apps, a Connect-only person, a Jibsy-only person, and
 the owner and a member of a Connect-only organisation: 184 checks pass.
+
+**Organisation set-up** (ADR 0043, 2026-10-10). A new owner now starts on a
+set-up checklist (company, locations, people, then each app). Company details,
+locations and people sit under one Organisation area; each location is entered
+once and feeds the Connect site, phone site and Jibsy opening hours. Owners can
+connect a location themselves and get an install code without knowing ASNs.
+ExaCarib staff tools move to an Operations area, where a new organisation and
+its owner's invitation are made in one step. Checked in a browser from staff
+creating the organisation to the owner, a member and staff each seeing the
+right screens: 22 checks pass.

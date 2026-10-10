@@ -251,6 +251,14 @@ export const icons = {
       <path d="M9.2 12l2 2 3.6-3.8" />
     </Icon>
   ),
+  building: (
+    <Icon>
+      <path d="M4 21V5.5A1.5 1.5 0 0 1 5.5 4h7A1.5 1.5 0 0 1 14 5.5V21" />
+      <path d="M14 10h4.5a1.5 1.5 0 0 1 1.5 1.5V21" />
+      <path d="M3 21h18" />
+      <path d="M7.5 8h3M7.5 12h3M7.5 16h3" />
+    </Icon>
+  ),
   search: (
     <Icon>
       <circle cx="11" cy="11" r="6.5" />
@@ -398,36 +406,74 @@ export function navGroups(
     groups.push(
       ...commai.map((g) => ({ ...g, app: "commai" as const, items: g.items.filter(has) })).filter((g) => g.items.length > 0),
     );
-  if (admin)
-    groups.push({
-      label: "Manage",
-      items: [
-        { to: "/admin", label: "Admin", icon: icons.admin },
-        { to: "/commai/golive", label: "Go-live", icon: icons.order, keywords: "criteria switch on" },
-        { to: "/commai/support", label: "Support queue", icon: icons.chat, keywords: "support cases" },
-      ],
-    });
   return groups;
 }
 
-/** The shared account pages: one sidebar for both apps (ADR 0041). */
-export function accountGroups(opts: { carrier: boolean; jibsy: boolean }): Group[] {
-  if (opts.carrier)
-    return [{ label: "Your account", items: [{ to: "/account", label: "Profile and sign-in", icon: icons.account, end: true }] }];
+/** ExaCarib's own screens (ADR 0043): kept apart from every customer's menus. */
+export function opsGroups(): Group[] {
   return [
     {
-      label: "Your account",
+      label: "Customers",
       items: [
-        { to: "/account", label: "Profile and sign-in", icon: icons.account, end: true, keywords: "password two-step api keys" },
-        ...(opts.jibsy ? [{ to: "/commai/me", label: "My settings", icon: icons.admin, keywords: "notifications phone" }] : []),
+        { to: "/ops/organisations", label: "Organisations", icon: icons.building, keywords: "customers new organisation onboard" },
+        { to: "/admin/sites", label: "Sites and links", icon: icons.sites, keywords: "enrolment tokens customers" },
+        { to: "/admin/classes", label: "Classes and SLA", icon: icons.traffic },
+        { to: "/admin/users", label: "Accounts", icon: icons.people, keywords: "users staff carrier logins" },
+        { to: "/admin/billing", label: "Billing", icon: icons.billing, keywords: "plans prices invoices" },
       ],
     },
     {
-      label: "Organisation",
+      label: "Platform",
       items: [
-        { to: "/account/people", label: "People", icon: icons.people, keywords: "members invite roles access" },
+        { to: "/admin/agents", label: "Agents", icon: icons.carrier, keywords: "nodes boxes" },
+        { to: "/admin/partners", label: "Partners", icon: icons.fabric },
+        { to: "/admin/protection", label: "Protection", icon: icons.shield, keywords: "ddos" },
+        { to: "/admin/integrations", label: "Integrations", icon: icons.apps },
+        { to: "/admin/settings", label: "Settings", icon: icons.admin, keywords: "shadow mode storm" },
+        { to: "/admin/releases", label: "Releases", icon: icons.order, keywords: "deploy rollback" },
+      ],
+    },
+    {
+      label: "Service",
+      items: [
+        { to: "/commai/golive", label: "Go-live", icon: icons.flag, keywords: "criteria switch on" },
+        { to: "/commai/support", label: "Support queue", icon: icons.chat, keywords: "support cases" },
+        { to: "/admin/audit", label: "Audit log", icon: icons.receipt },
+      ],
+    },
+  ];
+}
+
+/** The organisation's own pages (ADR 0041, 0043): set-up, company, locations,
+ * people, plans, and your own profile, in one place for both apps. */
+export function accountGroups(opts: { carrier: boolean; jibsy: boolean; manager?: boolean }): Group[] {
+  if (opts.carrier)
+    return [{ label: "You", items: [{ to: "/account", label: "Profile and sign-in", icon: icons.account, end: true }] }];
+  return [
+    ...(opts.manager !== false
+      ? [{ label: "Set up", items: [{ to: "/org/setup", label: "Set-up checklist", icon: icons.flag, keywords: "getting started onboarding steps" }] }]
+      : []),
+    {
+      label: "Your organisation",
+      items: [
+        { to: "/org/company", label: "Company details", icon: icons.building, keywords: "name country address organisation" },
+        { to: "/org/locations", label: "Locations", icon: icons.sites, keywords: "sites branches offices addresses emergency connect a location" },
+        { to: "/account/people", label: "People and access", icon: icons.people, keywords: "members invite roles users apps" },
+        { to: "/org/security", label: "Sign-in and security", icon: icons.shield, keywords: "single sign-on sso saml scim directory" },
+      ],
+    },
+    {
+      label: "Plans",
+      items: [
         { to: "/account/apps", label: "Apps and plans", icon: icons.apps, keywords: "plan subscription add jibsy connect" },
         { to: "/billing", label: "Billing", icon: icons.billing, keywords: "invoices payments" },
+      ],
+    },
+    {
+      label: "You",
+      items: [
+        { to: "/account", label: "Profile and sign-in", icon: icons.account, end: true, keywords: "password two-step api keys" },
+        ...(opts.jibsy ? [{ to: "/commai/me", label: "My settings", icon: icons.admin, keywords: "notifications phone" }] : []),
       ],
     },
   ];
@@ -435,8 +481,8 @@ export function accountGroups(opts: { carrier: boolean; jibsy: boolean }): Group
 
 /** The menu group a path belongs to ("Conversations", "Set up"...), for page eyebrows. */
 export function groupOf(path: string): string | null {
-  if (path === "/commai/me" || path.startsWith("/commai/me/")) return "Your account";
-  for (const g of [...navGroups("admin"), ...accountGroups({ carrier: false, jibsy: true })])
+  if (path === "/commai/me" || path.startsWith("/commai/me/")) return "You";
+  for (const g of [...opsGroups(), ...navGroups("admin"), ...accountGroups({ carrier: false, jibsy: true })])
     for (const i of g.items) if (matches(i, path)) return g.label;
   return null;
 }
@@ -450,16 +496,6 @@ export const TABS: Record<string, [string, string, string?][]> = {
     ["/traffic/applications", "Seen on your network"],
     ["/traffic/rules", "Rules"],
     ["/traffic/classes", "Classes"],
-  ],
-  "/admin": [
-    ["/admin/agents", "Agents"],
-    ["/admin/sites", "Sites"],
-    ["/admin/classes", "Classes"],
-    ["/admin/users", "Users"],
-    ["/admin/settings", "Settings"],
-    ["/admin/partners", "Partners"],
-    ["/admin/protection", "Protection"],
-    ["/admin/audit", "Audit"],
   ],
   "/commai/voice": [
     ["/commai/voice", "People and numbers", "phone system extensions sites"],
@@ -507,7 +543,6 @@ export const TABS: Record<string, [string, string, string?][]> = {
     ["/commai/settings/teams", "Teams and people", "seats members"],
     ["/commai/settings/routing", "Routing", "assignment rules"],
     ["/commai/settings/developers", "Webhooks and keys", "api developers"],
-    ["/commai/settings/sign-in", "Sign-in", "saml sso scim directory passkeys"],
     ["/commai/settings/organisation", "Organisation", "business units"],
     ["/commai/settings/roles", "Roles", "permissions"],
     ["/commai/settings/security", "Security", "audit"],

@@ -1,4 +1,5 @@
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
+import { Link } from "react-router-dom";
 import { api, useApi } from "../../../api";
 import { ErrorNote } from "../../../components";
 import "../../identity.css";
@@ -60,11 +61,14 @@ export default function Organisation({ base }: { base: string }) {
       </p>
       <ErrorNote error={act.error} />
       <Card title="Locations and opening hours">
+        <p className="small muted">
+          Locations are added and renamed once for your whole organisation, under{" "}
+          <Link to="/org/locations">Organisation › Locations</Link>. Set each one&apos;s opening hours here.
+        </p>
         {d.locations.length === 0 && <p className="muted">No locations yet.</p>}
         {d.locations.map((l) => (
           <LocationRow key={l.id} loc={l} teams={d.teams} busy={act.busy} call={call} />
         ))}
-        <NewLocation call={call} busy={act.busy} />
       </Card>
       <Card title="Teams">
         <div className="table-wrap">
@@ -291,40 +295,6 @@ function LocationRow({ loc, teams, busy, call }: { loc: Location; teams: Org["te
         </button>
       </div>
     </div>
-  );
-}
-
-function NewLocation({ call, busy }: { call: Call; busy: boolean }) {
-  const [f, setF] = useState({ name: "", country: "TT", timezone: "America/Port_of_Spain", address: "" });
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    call("locations", { method: "POST", body: JSON.stringify(f) });
-    setF({ ...f, name: "", address: "" });
-  };
-  return (
-    <form className="form" onSubmit={submit}>
-      <label>
-        Location name
-        <input value={f.name} required maxLength={120} onChange={(e) => setF({ ...f, name: e.target.value })} />
-      </label>
-      <label>
-        Country (two letters)
-        <input value={f.country} maxLength={2} onChange={(e) => setF({ ...f, country: e.target.value.toUpperCase() })} />
-      </label>
-      <label>
-        Time zone
-        <input value={f.timezone} maxLength={64} onChange={(e) => setF({ ...f, timezone: e.target.value })} />
-      </label>
-      <label>
-        Address
-        <input value={f.address} maxLength={500} onChange={(e) => setF({ ...f, address: e.target.value })} />
-      </label>
-      <div className="actions wide">
-        <button className="button" disabled={busy || !f.name}>
-          Add location
-        </button>
-      </div>
-    </form>
   );
 }
 

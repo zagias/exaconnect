@@ -363,10 +363,19 @@ def show_invite(token: str) -> dict:
         except orgs.OrgError as e:
             raise _fail(e) from e
         needs_sso = bool(sso.requires_sso(conn, row["email"]))
+        # An admin invited to an organisation with no owner yet becomes its owner (ADR 0043).
+        role = row["role"]
+        if (
+            role == "admin"
+            and not conn.execute(
+                "SELECT 1 FROM org_memberships WHERE customer_id = %s AND role = 'owner'", (row["customer_id"],)
+            ).fetchone()
+        ):
+            role = "owner"
     return {
         "organisation": row["organisation"],
         "email": row["email"],
-        "role": row["role"],
+        "role": role,
         "expires_at": row["expires_at"],
         "has_account": row["has_account"],
         "sso_required": needs_sso,
@@ -422,14 +431,17 @@ def _accept_existing(token: str, user: User, request: Request) -> dict:
         except orgs.OrgError as e:
             raise _fail(e) from e
         orgs.add(conn, inv["customer_id"], user.id, inv["role"], inv["invited_by"])
+        # The first admin of an organisation ExaCarib has just set up becomes its owner (ADR 0043).
+        orgs.ensure_owner(conn, inv["customer_id"])
+        role = orgs.membership(conn, inv["customer_id"], user.id)["role"]
         # A person who had lost every organisation gets this one as their primary.
         conn.execute(
             "UPDATE users SET customer_id = %s, updated_at = now() WHERE id = %s AND customer_id IS NULL",
             (inv["customer_id"], user.id),
         )
         _switch_session(conn, request, user, inv["customer_id"])
-        audit.record(conn, user.actor, "org.invite.accept", user.email, inv["customer_id"], {"role": inv["role"]})
-    return {"organisation": inv["organisation"], "customer_id": str(inv["customer_id"]), "role": inv["role"]}
+        audit.record(conn, user.actor, "org.invite.accept", user.email, inv["customer_id"], {"role": role})
+    return {"organisation": inv["organisation"], "customer_id": str(inv["customer_id"]), "role": role}
 
 
 def _accept_new(token: str, body: AcceptIn, request: Request, response: Response) -> dict:
@@ -460,9 +472,11 @@ def _accept_new(token: str, body: AcceptIn, request: Request, response: Response
         ).fetchone()
         conn.execute("UPDATE org_invites SET accepted_by = %s WHERE id = %s", (row["id"], inv["id"]))
         orgs.add(conn, inv["customer_id"], row["id"], inv["role"], inv["invited_by"])
+        orgs.ensure_owner(conn, inv["customer_id"])
+        role = orgs.membership(conn, inv["customer_id"], row["id"])["role"]
         actor = f"user:{row['email']}"
         audit.record(conn, actor, "user.create", row["email"], inv["customer_id"], {"via": "invite"})
-        audit.record(conn, actor, "org.invite.accept", row["email"], inv["customer_id"], {"role": inv["role"]})
+        audit.record(conn, actor, "org.invite.accept", row["email"], inv["customer_id"], {"role": role})
         tok, expires = sessions.start(conn, row["id"], request.app.state.settings.session_hours, "invite")
         conn.execute(
             "UPDATE sessions SET customer_id = %s WHERE token_hash = %s", (inv["customer_id"], token_hash(tok))
@@ -472,7 +486,7 @@ def _accept_new(token: str, body: AcceptIn, request: Request, response: Response
     return {
         "organisation": inv["organisation"],
         "customer_id": str(inv["customer_id"]),
-        "role": inv["role"],
+        "role": role,
         "token": tok,
         "expires_at": expires,
     }

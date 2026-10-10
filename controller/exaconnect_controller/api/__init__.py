@@ -16,6 +16,7 @@ from . import (
     inventory_admin,
     metering,
     ordering,
+    organisation,
     orgs,
     password_reset,
     protection,
@@ -62,6 +63,7 @@ router.include_router(releases.router)
 router.include_router(security.router, dependencies=_connect)
 router.include_router(sso.router)
 router.include_router(orgs.router)
+router.include_router(organisation.router)
 router.include_router(scim.router)
 router.include_router(directory.router)
 

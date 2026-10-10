@@ -41,7 +41,7 @@ export default function Account() {
 
   return (
     <>
-      <PageHead eyebrow="Account" title="Your account">
+      <PageHead eyebrow="You" title="Profile and sign-in">
         Change your password, turn on two-step sign-in and manage the API keys your own code uses.
       </PageHead>
       {user?.role === "customer" && (

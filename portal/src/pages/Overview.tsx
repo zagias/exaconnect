@@ -92,6 +92,34 @@ function hhmm(iso: string): string {
   return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 }
 
+/** Before any box has checked in: what to do next, instead of a dashboard of zeros (ADR 0043). */
+function FirstRun({ waiting }: { waiting: number }) {
+  const { user } = useAuth();
+  const manager = user?.role === "admin" || user?.org_role === "owner" || user?.org_role === "admin";
+  return (
+    <section className="card ov-first" aria-labelledby="ov-first-h">
+      <h2 id="ov-first-h">{waiting > 0 ? `Waiting for ${plural(waiting, "box", "boxes")} to check in` : "Connect your first location"}</h2>
+      <p className="muted">
+        {waiting > 0
+          ? "Your locations are set up in Connect. Once the ExaCarib box at each one is installed and checks in, its links, SLA and routing moves show here."
+          : "Connect starts working once a location has its ExaCarib box. Add your locations, list each one's internet links, and install the box with the code you are given."}
+      </p>
+      {manager ? (
+        <p className="form-actions">
+          <Link className="button" to="/org/locations">
+            {waiting > 0 ? "See locations and install codes" : "Add and connect locations"}
+          </Link>
+          <Link className="button secondary" to="/org/setup">
+            Set-up checklist
+          </Link>
+        </p>
+      ) : (
+        <p className="small muted">Ask your organisation&apos;s owner or an admin to connect a location.</p>
+      )}
+    </section>
+  );
+}
+
 export default function Overview() {
   const { user } = useAuth();
   const { current } = useCustomer();
@@ -129,7 +157,7 @@ export default function Overview() {
   const headline = !data
     ? "Loading the network"
     : enrolled.length === 0
-      ? "No sites enrolled yet"
+      ? "Your network isn't connected yet"
       : needs > 0
         ? `${plural(needs, "thing needs", "things need")} attention`
         : criticalOpen
@@ -169,7 +197,8 @@ export default function Overview() {
         <ErrorNote error={error} />
       </header>
 
-      {data && (
+      {data && enrolled.length === 0 && <FirstRun waiting={edge.length} />}
+      {data && enrolled.length > 0 && (
         <>
           <KpiStrip
             data={data}

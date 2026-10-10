@@ -169,13 +169,13 @@ export function StormBanner() {
   );
 }
 
-/** Lets an admin choose which customer the switch and admin screens act for. */
+/** Lets an ExaCarib admin choose which organisation every screen acts for; always shown, so it is clear (ADR 0043). */
 export function CustomerPicker() {
   const { customers, current, select } = useCustomer();
-  if (customers.length < 2 || !current) return null;
+  if (!current) return null;
   return (
     <label className="picker">
-      Customer{" "}
+      Working on{" "}
       <select value={current.id} onChange={(e) => select(e.target.value)}>
         {customers.map((c) => (
           <option key={c.id} value={c.id}>
