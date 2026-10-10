@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { User } from "../api";
 import { areaFor, myApps } from "../apps";
 import { accountGroups, destinations, navGroups } from "../nav";
+import { plainReason } from "../pages/commai/voice/verto";
 
 const person = (extra: Partial<User>): User => ({ email: "p@example.com", role: "customer", customer_id: "c", ...extra });
 
@@ -37,5 +38,16 @@ describe("apps (ADR 0041)", () => {
     expect(flat(true)).toContain("/commai/me");
     expect(flat(false)).not.toContain("/commai/me");
     expect(flat(false)).toContain("/account/apps");
+  });
+});
+
+describe("browser phone call reasons", () => {
+  it("turns FreeSWITCH causes and Verto refusals into plain words", () => {
+    expect(plainReason("NO_ROUTE_DESTINATION")).toBe("That extension or number doesn't exist.");
+    expect(plainReason("USER_NOT_REGISTERED")).toBe("That person isn't signed in to a phone right now.");
+    expect(plainReason("Invalid Method, Missing Method or Permission Denied")).toMatch(/refused the call/);
+    expect(plainReason("NORMAL_CLEARING")).toBe("");
+    expect(plainReason("SOMETHING_ODD")).toBe("The call couldn't be connected.");
+    expect(plainReason("Hang up the current call first.")).toBe("Hang up the current call first.");
   });
 });

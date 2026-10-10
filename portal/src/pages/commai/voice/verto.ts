@@ -130,7 +130,7 @@ export class VertoPhone {
         break;
       }
       case "verto.bye":
-        this.cleanup("ended", String(params.cause || "Call ended"));
+        this.cleanup("ended", plainReason(String(params.cause || "")));
         break;
       default:
         break;
@@ -174,8 +174,9 @@ export class VertoPhone {
         sessid: this.sessid,
       });
     } catch (e) {
-      this.cleanup("ended", (e as Error).message);
-      throw e;
+      const reason = plainReason((e as Error).message);
+      this.cleanup("ended", reason);
+      throw new Error(reason || "The call couldn't be connected.");
     }
   }
 
@@ -222,4 +223,22 @@ export class VertoPhone {
     this.incomingSdp = null;
     if (had) this.ev.onCall(state, { reason });
   }
+}
+
+/* FreeSWITCH hangup causes and Verto refusals, in words a caller understands ("" for a normal end). */
+const REASONS: [RegExp, string][] = [
+  [/UNALLOCATED_NUMBER|NO_ROUTE_DESTINATION|INVALID_NUMBER_FORMAT/, "That extension or number doesn't exist."],
+  [/USER_NOT_REGISTERED|SUBSCRIBER_ABSENT/, "That person isn't signed in to a phone right now."],
+  [/USER_BUSY/, "That line is busy."],
+  [/NO_ANSWER|NO_USER_RESPONSE|ALLOTTED_TIMEOUT/, "No answer."],
+  [/CALL_REJECTED|OUTGOING_CALL_BARRED/, "Your company's call rules don't allow that call."],
+  [/NORMAL_CLEARING|ORIGINATOR_CANCEL/, ""],
+  [/Invalid Method|Permission Denied/i, "The phone system refused the call. Sign out and back in; if it keeps happening, tell your voice admin."],
+  [/NETWORK_OUT_OF_ORDER|DESTINATION_OUT_OF_ORDER|GATEWAY_DOWN|NORMAL_TEMPORARY_FAILURE/, "Outside calls aren't connected yet."],
+];
+
+export function plainReason(raw: string): string {
+  if (!raw) return "";
+  for (const [re, words] of REASONS) if (re.test(raw)) return words;
+  return /^[A-Z_]+$/.test(raw) ? "The call couldn't be connected." : raw;
 }
