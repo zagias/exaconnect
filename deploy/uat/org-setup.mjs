@@ -176,6 +176,21 @@ try {
   const row = await staff.locator('tr', { hasText: ORG }).innerText();
   row.includes(OWNER) && /3 of 5/.test(row) ? ok('staff see owner and set-up progress') : bad('staff row: ' + row.replace(/\s+/g, ' '));
   await shot(staff, '08_staff_list');
+
+  // 11. Every phone extension is accounted for on People and access: in the demo business,
+  // ExaCarib's admin (ext 200) and the phone-only lab extension are not members.
+  const demo = staff.locator("tr", { hasText: "Demo Organisation" });
+  if (await demo.count()) {
+    await demo.getByRole("button", { name: "Open" }).click();
+    await staff.waitForURL(/\/org\/setup/);
+    await staff.goto(B + "/account/people");
+    await staff.getByRole("heading", { name: "Members" }).waitFor({ timeout: 10000 });
+    await staff.waitForTimeout(1500);
+    const others = staff.locator("section", { has: staff.getByRole("heading", { name: /not held by a member/ }) });
+    const txt = (await others.count()) ? await others.innerText() : "";
+    /\b200\b/.test(txt) ? ok("People and access lists the extensions no member holds (200)") : bad("extension 200 not on People and access");
+    await shot(staff, "09_demo_people");
+  }
 } catch (e) {
   bad("walk-through stopped: " + String(e).split("\n")[0].slice(0, 200));
 }
