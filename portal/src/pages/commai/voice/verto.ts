@@ -22,16 +22,28 @@ function uuid(): string {
   return crypto.randomUUID();
 }
 
-function waitForIce(pc: RTCPeerConnection, ms = 3000): Promise<void> {
+/** Waits for the local candidates before sending the offer or answer. Gathering often never
+ * reports "complete" (an interface that never answers), so we send shortly after the first
+ * candidate arrives instead of waiting out the cap: that wait was dead air after answering. */
+function waitForIce(pc: RTCPeerConnection, ms = 3000, settle = 250): Promise<void> {
   if (pc.iceGatheringState === "complete") return Promise.resolve();
   return new Promise((resolve) => {
+    let settling: ReturnType<typeof setTimeout> | null = null;
     const done = () => {
       pc.removeEventListener("icegatheringstatechange", check);
+      pc.removeEventListener("icecandidate", seen);
+      if (settling) clearTimeout(settling);
+      clearTimeout(cap);
       resolve();
     };
     const check = () => pc.iceGatheringState === "complete" && done();
+    const seen = (e: RTCPeerConnectionIceEvent) => {
+      if (!e.candidate) return done();
+      settling ??= setTimeout(done, settle);
+    };
     pc.addEventListener("icegatheringstatechange", check);
-    setTimeout(done, ms); // send what we have: host candidates are enough on most networks
+    pc.addEventListener("icecandidate", seen);
+    const cap = setTimeout(done, ms); // send what we have
   });
 }
 
