@@ -128,7 +128,8 @@
     <load module="mod_lua"/>
 
     <!-- ASR /TTS -->
-    <!-- <load module="mod_flite"/> -->
+    <!-- ExaCarib: speaks the voice menus' greetings (tts-engine="flite" in the rendered menus). -->
+    <load module="mod_flite"/>
     <!-- <load module="mod_pocketsphinx"/> -->
     <!-- <load module="mod_cepstral"/> -->
     <!-- <load module="mod_tts_commandline"/> -->
@@ -142,7 +143,8 @@
 
     <!-- Third party modules -->
     <!--<load module="mod_nibblebill"/>-->
-    <!--<load module="mod_callcenter"/>-->
+    <!-- ExaCarib: call queues (the rendered queues, agents and tiers in callcenter.conf.xml). -->
+    <load module="mod_callcenter"/>
 
   </modules>
 </configuration>
