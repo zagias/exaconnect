@@ -1,0 +1,8 @@
+{
+  "name": "exacarib-voice-uat",
+  "private": true,
+  "type": "module",
+  "description": "Browser test of the phone system (docs/commai/voice-uat.md)",
+  "scripts": { "test": "node browser-call.mjs" },
+  "dependencies": { "playwright": "1.63.0" }
+}
