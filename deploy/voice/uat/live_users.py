@@ -68,7 +68,8 @@ with db.tx() as conn:
             )
             have = {"extension": ext}
         conn.execute(
-            "UPDATE voice_users SET dnd = false, dnd_until = NULL, forward_to = '' WHERE customer_id = %s AND user_id = %s",
+            """UPDATE voice_users SET dnd = false, dnd_until = NULL, forward_to = ''
+               WHERE customer_id = %s AND user_id = %s""",
             (cid, user["id"]),
         )
         env[f"{tag}_EXT"], env[f"{tag}_NAME"] = have["extension"], name
