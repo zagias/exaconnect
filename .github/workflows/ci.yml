@@ -118,6 +118,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: shellcheck
-        run: shellcheck -x deploy/voice/*.sh deploy/kamailio/start.sh lab/ci/checks/voice-sbc.sh lab/ci/checks/voice-phone-app.sh lab/ci/checks/org-setup.sh lab/ci/checks/voice-trunks.sh
+        run: shellcheck -x deploy/voice/*.sh deploy/kamailio/start.sh lab/ci/checks/voice-sbc.sh lab/ci/checks/voice-phone-app.sh lab/ci/checks/org-setup.sh lab/ci/checks/voice-trunks.sh lab/ci/checks/voice-push.sh
       - name: Kamailio and FreeSWITCH start with this config
         run: make voice-check

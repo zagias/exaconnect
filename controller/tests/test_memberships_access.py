@@ -136,12 +136,13 @@ def test_every_organisation_scoped_read_refuses_another_organisation(client, wor
 def test_lists_never_include_another_organisation(client, world):
     """Lists scoped by the caller, even when asked for org B by query."""
     paths = [p for p, ops in _openapi_paths(client).items() if "get" in ops and "{" not in p]
-    # The PBX's own call check signs with a shared secret, not a person (ADR 0033).
+    # The PBX's own call check and ring request sign with a shared secret, not a person (ADR 0033).
     skip = {
         "/api/v1/auth/oidc/start",
         "/api/v1/auth/oidc/callback",
         "/api/v1/ca.pem",
         "/api/v1/commai/internal/voice/authorise",
+        "/api/v1/commai/internal/voice/ring",
     }
     checked = 0
     for p in paths:

@@ -55,6 +55,8 @@ services:
       EXA_LIVEKIT_URL: ${EXA_LIVEKIT_URL:-}
       # The browser phone (ADR 0039): off until set, e.g. wss://connect.exacarib.com/verto.
       EXA_VERTO_URL: ${EXA_VERTO_URL:-}
+      # Jibsy Phone rings when closed (ADR 0045): the VAPID key made by lab/scripts/init-env.sh.
+      EXA_PUSH_VAPID_KEY: ${EXA_PUSH_VAPID_KEY:-}
       EXA_LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
       EXA_LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
       EXA_LIVEKIT_AGENT_SECRET: ${EXA_LIVEKIT_AGENT_SECRET:-}
@@ -191,6 +193,8 @@ services:
     volumes:
       - controller-data:/exacarib:ro
       - ./freeswitch/start.sh:/exacarib-start.sh:ro
+      # Wakes a closed Jibsy Phone with a push message before its extension rings (ADR 0045).
+      - ./freeswitch/scripts:/usr/share/freeswitch/scripts:ro
       # Recorded prompts and hold music, downloaded and checked by deploy/voice/sounds.sh.
       - ./freeswitch/sounds:/usr/share/freeswitch/sounds:ro
       - ./freeswitch/directory/exacarib.xml:/etc/freeswitch/directory/exacarib.xml:ro
