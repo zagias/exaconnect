@@ -62,6 +62,13 @@ if [[ -n $("${COMPOSE[@]}" ps -q --status running kamailio 2>/dev/null) ]]; then
     ok "edge proxy reloaded the carrier lists by itself"
   else
     bad "edge proxy did not reload the carrier lists"
+    # What to look at: the watcher's process, the list each side sees, and the proxy's own words.
+    note "proxy start: $("${COMPOSE[@]}" exec -T kamailio sh -c 'tr "\0" " " </proc/1/cmdline' 2>&1 | cut -c1-120)"
+    note "list in proxy: $("${COMPOSE[@]}" exec -T kamailio md5sum /exacarib/kamailio/dispatcher.list 2>&1 | cut -c1-80)"
+    note "list written: $("${COMPOSE[@]}" exec -T controller md5sum /data/kamailio/dispatcher.list 2>&1 | cut -c1-80)"
+    note "sets loaded: $("${COMPOSE[@]}" exec -T kamailio kamcmd dispatcher.list 2>&1 | grep -c 'ID:')"
+    note "reload by hand: $("${COMPOSE[@]}" exec -T kamailio kamcmd dispatcher.reload 2>&1 | tr '\n' ' ' | cut -c1-200)"
+    note "proxy says: $("${COMPOSE[@]}" logs --since 15m kamailio 2>/dev/null | grep -iE 'exacarib|ERROR' | tail -4 | tr '\n' ' ' | cut -c1-400)"
   fi
 else
   skip "edge proxy not running on this host"
