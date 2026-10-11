@@ -49,5 +49,5 @@ rm -f /etc/systemd/system/exacarib-build.service /root/exacarib-build.sh /etc/sy
 rm -rf /var/lib/exaconnect/* /etc/ssh/ssh_host_* /var/lib/dbus/machine-id
 truncate -s 0 /etc/machine-id
 apt-get clean
-rm -f /etc/apt/apt.conf.d/10exacarib-build
+rm -f /etc/apt/apt.conf.d/10exacarib-build /etc/issue.d/50-exacarib.issue
 rm -rf /var/lib/apt/lists/* /var/log/journal/* /var/log/exacarib-build.log

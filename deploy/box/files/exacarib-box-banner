@@ -4,8 +4,9 @@
 # the setup code. Someone with the box in front of them may see the code; the
 # console only answers on the office side.
 set -u
-out=/run/issue.d/50-exacarib.issue
-mkdir -p /run/issue.d
+# agetty reads /run/issue.d only on systems without /etc/issue, so /etc/issue.d.
+out=/etc/issue.d/50-exacarib.issue
+mkdir -p /etc/issue.d
 code=$(EXA_STATE_DIR=/var/lib/exaconnect /usr/bin/exa-agent console-code 2>/dev/null | sed -n 's/^Box console setup code: //p')
 ver=$(/usr/bin/exa-agent version 2>/dev/null | awk '{print $2}')
 {
@@ -24,6 +25,11 @@ ver=$(/usr/bin/exa-agent version 2>/dev/null | awk '{print $2}')
   fi
   echo
 } >"$out.tmp"
+chmod 644 "$out.tmp"
+if cmp -s "$out.tmp" "$out"; then
+  rm -f "$out.tmp"
+  exit 0
+fi
 mv "$out.tmp" "$out"
-# agetty reads /run/issue.d (util-linux 2.36 and later); --reload redraws the prompt.
+# --reload redraws the login prompts with the new text.
 agetty --reload 2>/dev/null || true
