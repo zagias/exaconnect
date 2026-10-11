@@ -11,8 +11,11 @@ systemctl start systemd-networkd
 for _ in $(seq 1 60); do ip -4 route show default | grep -q . && break; sleep 1; done
 rm -f /etc/resolv.conf
 echo "nameserver 10.0.2.3" >/etc/resolv.conf
+# Plain http until ca-certificates is in (apt checks every package's signature anyway).
+sed -i 's#https://#http://#' /etc/apt/mirrors/*.list
 apt-get update -q
 apt-get install -y -qq curl gnupg ca-certificates >/dev/null
+sed -i 's#http://#https://#' /etc/apt/mirrors/*.list
 curl -fsSL https://deb.frrouting.org/frr/keys.gpg -o /usr/share/keyrings/frrouting.gpg
 echo "deb [signed-by=/usr/share/keyrings/frrouting.gpg] https://deb.frrouting.org/frr bookworm frr-10" >/etc/apt/sources.list.d/frr.list
 apt-get update -qq
@@ -42,4 +45,4 @@ rm -f /etc/systemd/system/exacarib-build.service /root/exacarib-build.sh
 rm -rf /var/lib/exaconnect/* /etc/ssh/ssh_host_* /var/lib/dbus/machine-id
 truncate -s 0 /etc/machine-id
 apt-get clean
-rm -rf /var/lib/apt/lists/* /var/log/journal/*
+rm -rf /var/lib/apt/lists/* /var/log/journal/* /var/log/exacarib-build.log

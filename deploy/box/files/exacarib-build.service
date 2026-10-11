@@ -8,7 +8,7 @@ Type=oneshot
 StandardOutput=tty
 StandardError=tty
 TTYPath=/dev/ttyS0
-ExecStart=/bin/sh -c '/root/exacarib-build.sh && echo EXACARIB-BUILD-OK; systemctl poweroff'
+ExecStart=/bin/sh -c '/root/exacarib-build.sh >/var/log/exacarib-build.log 2>&1 && echo EXACARIB-BUILD-OK; systemctl poweroff'
 
 [Install]
 WantedBy=multi-user.target
