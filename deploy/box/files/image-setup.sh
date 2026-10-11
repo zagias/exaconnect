@@ -6,6 +6,9 @@
 # makes its own identity at first boot.
 set -eux
 export DEBIAN_FRONTEND=noninteractive
+# The image's own daily apt runs must not hold the package lock while this runs.
+systemctl stop apt-daily.timer apt-daily-upgrade.timer apt-daily.service apt-daily-upgrade.service unattended-upgrades.service 2>/dev/null || true
+echo 'DPkg::Lock::Timeout "600";' >/etc/apt/apt.conf.d/10exacarib-build
 # The build VM's network (99-exacarib-build.network, put there by build-image.sh).
 systemctl start systemd-networkd
 for _ in $(seq 1 60); do ip -4 route show default | grep -q . && break; sleep 1; done
@@ -45,4 +48,5 @@ rm -f /etc/systemd/system/exacarib-build.service /root/exacarib-build.sh
 rm -rf /var/lib/exaconnect/* /etc/ssh/ssh_host_* /var/lib/dbus/machine-id
 truncate -s 0 /etc/machine-id
 apt-get clean
+rm -f /etc/apt/apt.conf.d/10exacarib-build
 rm -rf /var/lib/apt/lists/* /var/log/journal/* /var/log/exacarib-build.log
