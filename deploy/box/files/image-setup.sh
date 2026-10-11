@@ -14,7 +14,7 @@ echo "nameserver 10.0.2.3" >/etc/resolv.conf
 # Plain http until ca-certificates is in (apt checks every package's signature anyway).
 sed -i 's#https://#http://#' /etc/apt/mirrors/*.list
 apt-get update -q
-apt-get install -y -qq curl gnupg ca-certificates >/dev/null
+apt-get install -y curl gnupg ca-certificates
 sed -i 's#http://#https://#' /etc/apt/mirrors/*.list
 curl -fsSL https://deb.frrouting.org/frr/keys.gpg -o /usr/share/keyrings/frrouting.gpg
 echo "deb [signed-by=/usr/share/keyrings/frrouting.gpg] https://deb.frrouting.org/frr bookworm frr-10" >/etc/apt/sources.list.d/frr.list

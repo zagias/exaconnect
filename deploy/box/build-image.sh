@@ -50,7 +50,7 @@ timeout 3600 qemu-system-x86_64 -machine "q35,accel=$accel" -cpu max -m 2048 -sm
   -drive "file=$work/$base,if=virtio" -netdev user,id=n -device virtio-net-pci,netdev=n || true
 if ! tr -d '\r' <"$work/build.log" | grep -q '^EXACARIB-BUILD-OK'; then
   echo "the build boot did not finish; the end of its set-up log:"
-  virt-cat -a "$work/$base" /var/log/exacarib-build.log 2>&1 | tail -n 60
+  tr -d '\r' <"$work/build.log" | grep -av '^\[' | tail -n 80
   exit 1
 fi
 
