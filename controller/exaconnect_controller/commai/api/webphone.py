@@ -14,12 +14,12 @@ from __future__ import annotations
 
 import os
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, Body, HTTPException, Request, Response
 
 from ... import audit, db
 from ...api.deps import UserDep
 from .. import access, entitlements
-from ..voice import selfservice
+from ..voice import push, selfservice
 from ..voice.common import VoiceError, domain
 
 router = APIRouter(prefix="/customers/{customer_id}", tags=["commai: voice"])
@@ -98,3 +98,74 @@ def contacts(customer_id: str, user: UserDep, response: Response) -> dict:
         "people": [dict(r) for r in people],
         "lines": [dict(r) for r in lines],
     }
+
+
+# Ringing a closed app (ADR 0045): each device the person turns it on for.
+
+
+def _mine(conn, customer_id: str, user) -> dict:
+    if not entitlements.enabled(conn, customer_id, "voice"):
+        raise HTTPException(403, "Voice is not part of this business's plan.")
+    try:
+        return selfservice.mine(conn, customer_id, user.id)
+    except VoiceError as e:
+        raise HTTPException(e.code, str(e)) from e
+
+
+@router.get("/voice/webphone/push")
+def push_status(customer_id: str, user: UserDep, response: Response, endpoint: str = "") -> dict:
+    """Whether ringing a closed app is available, its public key, and whether this device is on."""
+    access.check(user, customer_id, "commai:read")
+    response.headers["Cache-Control"] = "no-store"
+    with db.tx() as conn:
+        me = _mine(conn, customer_id, user)
+        on = bool(endpoint) and bool(
+            conn.execute(
+                "SELECT 1 FROM voice_push_subscriptions WHERE voice_user_id = %s AND endpoint = %s",
+                (me["id"], endpoint),
+            ).fetchone()
+        )
+        devices = conn.execute(
+            "SELECT count(*) AS n FROM voice_push_subscriptions WHERE voice_user_id = %s", (me["id"],)
+        ).fetchone()["n"]
+    key = push.public_key()
+    return {"available": bool(key), "public_key": key, "this_device": on, "devices": devices}
+
+
+@router.post("/voice/webphone/push")
+def push_subscribe(customer_id: str, user: UserDep, request: Request, body: dict = Body(...)) -> dict:
+    """Ring this device when a call comes in and the app is closed."""
+    access.check(user, customer_id, "commai:read")
+    if not push.public_key():
+        raise HTTPException(503, "Ringing a closed app isn't switched on yet.")
+    with db.tx() as conn:
+        me = _mine(conn, customer_id, user)
+        try:
+            out = push.subscribe(conn, customer_id, me, user.id, body, request.headers.get("user-agent", ""))
+        except VoiceError as e:
+            raise HTTPException(e.code, str(e)) from e
+        audit.record(conn, user.actor, "commai.voice.push_on", me["extension"], customer_id)
+    return out
+
+
+@router.delete("/voice/webphone/push")
+def push_unsubscribe(customer_id: str, user: UserDep, body: dict = Body(...)) -> dict:
+    access.check(user, customer_id, "commai:read")
+    with db.tx() as conn:
+        me = _mine(conn, customer_id, user)
+        push.unsubscribe(conn, user.id, str(body.get("endpoint") or ""))
+        audit.record(conn, user.actor, "commai.voice.push_off", me["extension"], customer_id)
+    return {"subscribed": False}
+
+
+@router.post("/voice/webphone/push/test")
+def push_test(customer_id: str, user: UserDep) -> dict:
+    """Send a test notification to each of the person's devices."""
+    access.check(user, customer_id, "commai:read")
+    with db.tx() as conn:
+        me = _mine(conn, customer_id, user)
+        subs = push.subscriptions(conn, me["id"])
+        reached = push.send_all(conn, subs, {"type": "test"}, ttl=60)
+    if not subs:
+        raise HTTPException(404, "No device has ringing turned on yet.")
+    return {"devices": len(subs), "reached": reached}

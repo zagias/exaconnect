@@ -49,6 +49,11 @@ with db.tx() as conn:
             conn.execute("UPDATE users SET password_hash = %s WHERE id = %s", (hash_password(password), user["id"]))
             conn.execute("DELETE FROM sessions WHERE user_id = %s", (user["id"],))
         orgs.add(conn, cid, user["id"], "member", ACTOR)
+        # A stand-in push device left by an interrupted closed-app test (voice-push.sh).
+        conn.execute(
+            "DELETE FROM voice_push_subscriptions WHERE user_id = %s AND endpoint LIKE 'http://push-check:%%'",
+            (user["id"],),
+        )
         env[f"{tag}_EMAIL"], env[f"{tag}_PW"] = email, password
         if not phone:
             continue
