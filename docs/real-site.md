@@ -22,6 +22,24 @@ inbound.
 4. **Check.** The node appears under Admin > Agents with its applied version, and the
    site turns green once its tunnels to the PoP are up.
 
+## Whitebox appliances: the box console
+
+For a box set up by someone at the branch rather than over a root shell (ADR 0046),
+install it once with `sudo bash install.sh --box`. It prints a setup code (keep it
+with the box, or on its label). At the branch:
+
+1. Plug the internet links and the office network into the box.
+2. From a computer on the office network, open `https://<the box's address>/`, accept
+   the box's own certificate, enter the setup code and choose the console password.
+3. Mark each port (Internet link 1, Internet link 2, Satellite, Office network).
+4. In the portal, Organisation › Locations › Connect this location, copy the **box
+   setup code** and paste it into the console's Connect step.
+
+The location turns green in the portal and shows a "Box console" tag. The console
+keeps showing the box's links, tunnels and routes, and runs ping and traceroute, even
+when ExaCarib cannot be reached. `exa-agent console-reset` on the box sets a new
+password if it is lost.
+
 ## Tunnels need a reachable PoP
 
 Sites build one WireGuard tunnel per link to the PoP's address for that path. The

@@ -295,6 +295,31 @@ class InternetIn(BaseModel):
     auto_blocked: list[AutoBlocked] = Field(default=[], max_length=100)
 
 
+class BoxPortIn(BaseModel):
+    iface: str = Field(pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,14}$")
+    path: str = Field(default="", max_length=16)
+    mode: Literal["dhcp", "static", "pppoe", "keep"]
+    address: str = Field(default="", max_length=64)
+
+
+class BoxChangeIn(BaseModel):
+    at: dt.datetime
+    by: str = Field(max_length=120)
+    what: str = Field(max_length=500)
+
+
+class BoxIn(BaseModel):
+    """What the box console set up on the box itself (ADR 0046)."""
+
+    console: bool = False
+    url: str = Field(default="", max_length=200)
+    admin_set: bool = False
+    wan: list[BoxPortIn] = Field(default=[], max_length=3)
+    lan: BoxPortIn | None = None
+    lan_dhcp: bool = False
+    last_change: BoxChangeIn | None = None
+
+
 class TelemetryIn(BaseModel):
     at: dt.datetime
     probes: list[ProbeWindow] | None = Field(default=None, max_length=5000)
@@ -306,6 +331,7 @@ class TelemetryIn(BaseModel):
     flows: list[FlowIn] | None = Field(default=None, max_length=2000)
     circuits: list[CircuitIn] | None = Field(default=None, max_length=200)
     internet: InternetIn | None = None
+    box: BoxIn | None = None
 
 
 @router.post("/agent/telemetry", status_code=204)
@@ -379,6 +405,8 @@ def telemetry(body: TelemetryIn, node: NodeDep) -> None:
             _circuits(conn, node, body)
         if body.internet is not None:
             internet.record(conn, {"id": node.id, "customer_id": node.customer_id}, body.internet.model_dump())
+        if body.box is not None:
+            _box(conn, node, body.box, body.at)
         if body.steering is not None:
             conn.execute("DELETE FROM steering_actual WHERE node_id = %s", (node.id,))
             cur.executemany(
@@ -389,6 +417,32 @@ def telemetry(body: TelemetryIn, node: NodeDep) -> None:
                     for c in body.steering
                 ],
             )
+
+
+def _box(conn, node, box: BoxIn, at: dt.datetime) -> None:
+    """Keeps what the box console reports, and follows its choice of internet
+    ports: each link's underlay interface becomes the port the box set for that
+    path, so metering counts the right port (ADR 0046)."""
+    conn.execute(
+        "UPDATE nodes SET box = %s, box_at = %s WHERE id = %s",
+        (Jsonb(box.model_dump(mode="json")), at, node.id),
+    )
+    moved = []
+    for p in box.wan:
+        if not p.path:
+            continue
+        row = conn.execute(
+            """UPDATE links l SET underlay_interface = %(iface)s
+               FROM nodes n WHERE n.id = %(node)s AND l.site_id = n.site_id AND l.path = %(path)s
+                 AND l.underlay_interface <> %(iface)s
+               RETURNING l.id""",
+            {"iface": p.iface, "node": node.id, "path": p.path},
+        ).fetchone()
+        if row is not None:
+            moved.append(f"{p.path}={p.iface}")
+    if moved:
+        audit.record(conn, f"node:{node.name}", "box.ports", node.name, node.customer_id, {"links": moved})
+        desired.refresh(conn, node.customer_id)
 
 
 def _event(conn, customer_id, node_id, kind: str, detail: dict, at: dt.datetime | None = None) -> None:

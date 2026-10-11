@@ -123,7 +123,8 @@ try {
   await owner.getByLabel('Speed you pay for (Mbps)').nth(1).fill('100');
   await owner.getByRole('button', { name: 'Connect and get the install code' }).click();
   await owner.getByRole('heading', { name: /Install the ExaCarib box at Head office/ }).waitFor({ timeout: 10000 });
-  (await owner.locator('pre.install-command').innerText()).includes('EXA_ENROL_TOKEN=') ? ok('install code shown after connecting a location') : bad('no install command');
+  (await owner.locator('pre.box-setup-code').innerText()).trim().startsWith('EXA1.') ? ok('box setup code shown after connecting a location') : bad('no box setup code');
+  (await owner.locator('details.install-alt pre.install-command').textContent()).includes('EXA_ENROL_TOKEN=') ? ok('install command kept for own Linux boxes') : bad('no install command');
   await shot(owner, '04_locations_install');
   await owner.getByRole('button', { name: 'Done' }).click();
   (await owner.locator('section.loc', { hasText: 'Head office' }).innerText()).includes('Waiting for the box') ? ok('head office shows it is waiting for the box') : bad('head office state wrong');

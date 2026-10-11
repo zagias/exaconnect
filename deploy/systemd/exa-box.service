@@ -1,0 +1,20 @@
+# ExaCarib box: the Connect edge agent with the box console (ADR 0046), for
+# whitebox appliances set up from the office network. deploy/agent/install.sh --box
+# installs and enables this. Until the box joins Connect it serves only the console
+# on port 443; then it also polls, applies, probes and reports like exa-agent.service.
+[Unit]
+Description=ExaCarib box (Connect agent and box console)
+Wants=network-online.target
+After=network-online.target frr.service
+Conflicts=exa-agent.service
+
+[Service]
+ExecStart=/usr/local/bin/exa-agent run --console :443
+Environment=EXA_STATE_DIR=/var/lib/exaconnect
+Restart=always
+RestartSec=5
+# Keep forwarding on the last good state when the agent stops: it does not tear down on exit.
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target

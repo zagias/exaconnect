@@ -3,6 +3,7 @@ import { useStormToggle } from "../customer";
 import { Link, useParams } from "react-router-dom";
 import { num, useApi, type EventRow, type MetricPoint, type SiteDetail, type SiteSummary, type SteeringRow } from "../api";
 import { ErrorNote, Eyebrow, LineChart, Stamp, StatusPill, ago, fmt, when, type Series } from "../components";
+import { BoxManagedNote } from "../box";
 import { NodeState } from "./Overview";
 
 export function SiteList() {
@@ -100,6 +101,7 @@ export function SitePage() {
           {s.node_id ? `agent seen ${ago(s.last_seen)}, config v${s.applied_version ?? 0}` : "agent not enrolled"}
         </p>
         {s.apply_error && <p className="pill bad">Last config failed: {s.apply_error}</p>}
+        <BoxManagedNote box={s.box} />
         {s.kind === "site" && <SiteStorm name={s.name} />}
       </div>
       <div className="grid">
@@ -294,6 +296,7 @@ const EVENT_WORDS: Record<string, string> = {
   cert_renewed: "Certificate renewed",
   cert_installed: "New certificate in use",
   cert_renew_failed: "Certificate renewal failed, will retry",
+  local_change: "Changed on the box",
 };
 
 function eventWord(kind: string) {

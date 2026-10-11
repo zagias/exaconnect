@@ -9,20 +9,29 @@
 # token (once). The token goes in the environment so it stays out of the process list
 # and shell history; it works once and expires. Without --binary the script uses
 # exa-agent from this directory, or bin/linux-<arch>/ in a checkout (make build-agent).
+#
+# For a whitebox appliance set up from the office network instead (ADR 0046):
+#
+#   sudo bash install.sh --box [--binary ./exa-agent]
+#
+# installs the same agent with the box console on port 443 and no token. Someone at the
+# branch then opens https://<the box's office address>, enters the setup code the script
+# prints, chooses the ports and pastes the box setup code from the portal.
 set -euo pipefail
 
-ctrl="" fp="" name="$(hostname -s)" bin=""
+ctrl="" fp="" name="$(hostname -s)" bin="" box=0
 while (($#)); do
   case $1 in
     --controller) ctrl=$2; shift 2 ;;
     --ca-fingerprint) fp=$2; shift 2 ;;
     --name) name=$2; shift 2 ;;
     --binary) bin=$2; shift 2 ;;
-    *) sed -n '2,12p' "$0"; exit 2 ;;
+    --box) box=1; shift ;;
+    *) sed -n '2,20p' "$0"; exit 2 ;;
   esac
 done
 [[ $(id -u) == 0 ]] || { echo "run as root (sudo)"; exit 1; }
-[[ -n $ctrl && -n $fp ]] || { echo "--controller and --ca-fingerprint are required"; exit 2; }
+[[ $box == 1 || (-n $ctrl && -n $fp) ]] || { echo "--controller and --ca-fingerprint are required (or --box)"; exit 2; }
 
 here=$(cd "$(dirname "$0")" && pwd)
 arch=$(dpkg --print-architecture)
@@ -46,6 +55,23 @@ install -d -m 700 /var/lib/exaconnect
 install -m 644 "$here/../systemd/exa-agent.service" /etc/systemd/system/exa-agent.service 2>/dev/null ||
   install -m 644 "$here/exa-agent.service" /etc/systemd/system/exa-agent.service
 /usr/local/bin/exa-agent version
+
+if [[ $box == 1 ]]; then
+  echo "== box console (ADR 0046)"
+  # PPPoE internet links and handing out office addresses, offered by the console.
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ppp dnsmasq-base >/dev/null || true
+  install -m 644 "$here/../systemd/exa-box.service" /etc/systemd/system/exa-box.service 2>/dev/null ||
+    install -m 644 "$here/exa-box.service" /etc/systemd/system/exa-box.service
+  systemctl daemon-reload
+  systemctl disable --now exa-agent >/dev/null 2>&1 || true
+  systemctl enable --now exa-box
+  sleep 3
+  EXA_STATE_DIR=/var/lib/exaconnect /usr/local/bin/exa-agent console-code
+  ip -4 -br addr | grep -v "^lo " || true
+  echo "Open https://<this box's office address>/ from the office network and enter the setup code above."
+  echo "Keep the code with the box (on its label): it is needed once, to set the console password."
+  exit 0
+fi
 
 if [[ -s /var/lib/exaconnect/identity.json ]]; then
   echo "already enrolled; keeping the existing identity (delete /var/lib/exaconnect to enrol again)"

@@ -146,6 +146,7 @@ def locations(conn: psycopg.Connection, cid: Any) -> list[dict]:
     rows = conn.execute("SELECT * FROM org_locations WHERE customer_id = %s ORDER BY lower(name)", (cid,)).fetchall()
     sites = conn.execute(
         """SELECT s.id, s.name, s.org_location_id, n.id AS node_id, n.last_seen,
+                  coalesce((n.box ->> 'console')::boolean, false) AS box_console, n.box -> 'last_change' AS box_change,
                   coalesce(n.last_seen > now() - interval '30 seconds', false) AS online,
                   (SELECT count(*) FROM links l WHERE l.site_id = s.id) AS links
            FROM sites s LEFT JOIN nodes n ON n.site_id = s.id

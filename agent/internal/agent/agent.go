@@ -111,6 +111,8 @@ type Telemetry struct {
 	Circuits []CircuitState `json:"circuits,omitempty"`
 	// Internet is where internet traffic leaves, with firewall counters (ADR 0010).
 	Internet *InternetState `json:"internet,omitempty"`
+	// Box is what the box console set up locally (ADR 0046), when it runs.
+	Box any `json:"box,omitempty"`
 }
 
 type Agent struct {
@@ -120,6 +122,9 @@ type Agent struct {
 	Steerer *steer.Steerer // nil disables steering
 	Sys     system.Runner
 	Log     *slog.Logger
+	// Box, when set, reports what the box console set up locally (ADR 0046)
+	// with every telemetry flush.
+	Box func() any
 
 	mu          sync.Mutex
 	current     *desired.State
@@ -134,6 +139,7 @@ type Agent struct {
 	lastContact time.Time
 	silent      bool
 	lastFailure string // version+error of the last failed apply, to avoid repeating events
+	applyErr    string // the last apply's error, for the box console; guarded by mu
 	steerMap    *steer.Map
 	choices     []steer.Choice
 	steerErr    string
@@ -347,12 +353,18 @@ func (a *Agent) poll(ctx context.Context) {
 		if apply.IsRolledBack(err) {
 			kind = "config_rolled_back"
 		}
+		a.mu.Lock()
+		a.applyErr = err.Error()
+		a.mu.Unlock()
 		if key := itoa(ds.Version) + err.Error(); key != a.lastFailure {
 			a.lastFailure = key
 			a.event(kind, map[string]string{"version": itoa(ds.Version), "error": err.Error()})
 		}
 	} else {
 		a.lastFailure = ""
+		a.mu.Lock()
+		a.applyErr = ""
+		a.mu.Unlock()
 		a.setCurrent(ctx, ds)
 		a.event("config_applied", map[string]string{"version": itoa(ds.Version)})
 	}
@@ -688,6 +700,9 @@ func (a *Agent) flush(ctx context.Context) {
 	}
 	cur := a.current
 	a.mu.Unlock()
+	if a.Box != nil {
+		t.Box = a.Box()
+	}
 	t.Circuits = a.circuitStates(ctx, cur, now)
 	t.Internet = a.internetState(ctx, cur)
 	for i := range t.Tunnels {
@@ -709,6 +724,14 @@ func (a *Agent) flush(ctx context.Context) {
 	a.buf.Counters = a.buf.Counters[len(t.Counters):]
 	a.buf.Flows = a.buf.Flows[len(t.Flows):]
 	a.buf.Events = a.buf.Events[len(t.Events):]
+	a.mu.Unlock()
+}
+
+// EventAt queues an event for the controller, for callers outside the loop
+// such as the box console, keeping when it happened.
+func (a *Agent) EventAt(at time.Time, kind string, detail map[string]string) {
+	a.mu.Lock()
+	a.buf.Events = append(a.buf.Events, Event{At: at, Kind: kind, Detail: detail})
 	a.mu.Unlock()
 }
 
