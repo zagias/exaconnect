@@ -11,7 +11,7 @@ systemctl start systemd-networkd
 for _ in $(seq 1 60); do ip -4 route show default | grep -q . && break; sleep 1; done
 rm -f /etc/resolv.conf
 echo "nameserver 10.0.2.3" >/etc/resolv.conf
-apt-get update -qq
+apt-get update -q
 # Use the 4 GB the image was resized to; each box grows it to its own disk at first boot.
 apt-get install -y -qq cloud-guest-utils >/dev/null
 root=$(findmnt -no SOURCE /)
