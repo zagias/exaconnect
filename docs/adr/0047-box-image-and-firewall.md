@@ -21,7 +21,9 @@ the box, not traffic to it.
    on Debian 12 or Ubuntu 22.04+ turns the box console on (or leaves a running
    `exa-agent` site alone).
 2. **An image for x86 boxes** (`deploy/box/build-image.sh`): Debian 12's official
-   cloud image (BIOS and UEFI), updated, with FRR 10 from the FRR project and the
+   cloud image (BIOS and UEFI), booted once in QEMU to install with its own apt
+   (libguestfs only puts the files in; its own networking does not run on GitHub's
+   runners), updated, with FRR 10 from the FRR project and the
    package, networking by netplan and systemd-networkd, ports named eth0, eth1… in
    hardware order, root password locked and no SSH. Each box makes its own machine
    id, setup code and console certificate at first boot, and grows its disk.

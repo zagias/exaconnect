@@ -77,10 +77,7 @@ jobs:
           sudo apt-get update -qq
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq libguestfs-tools qemu-utils qemu-system-x86 >/dev/null
           sudo chmod 0644 /boot/vmlinuz-*
-          # Ubuntu's AppArmor profile for passt (libguestfs's network) stops it starting here.
-          if [ -f /etc/apparmor.d/usr.bin.passt ]; then sudo apparmor_parser -R /etc/apparmor.d/usr.bin.passt || true; fi
       - name: build the image
-        # As the runner user: libguestfs networking (passt) will not run as root.
         run: deploy/box/build-image.sh debs/exacarib-box_${BOX_VERSION}_amd64.deb out "$BOX_VERSION"
       - name: boot it and set it up
         run: |

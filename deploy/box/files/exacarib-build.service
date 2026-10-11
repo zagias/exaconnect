@@ -1,0 +1,14 @@
+# Only in the build VM (deploy/box/build-image.sh): runs the set-up once, then powers off.
+[Unit]
+Description=Build the ExaCarib box image
+After=local-fs.target systemd-networkd.service
+
+[Service]
+Type=oneshot
+StandardOutput=tty
+StandardError=tty
+TTYPath=/dev/ttyS0
+ExecStart=/bin/sh -c '/root/exacarib-build.sh && echo EXACARIB-BUILD-OK; systemctl poweroff'
+
+[Install]
+WantedBy=multi-user.target

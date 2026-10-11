@@ -4,9 +4,9 @@
 # agent and the box console, ready to boot into set-up. Output, in <output dir>:
 #   exacarib-box-<version>-amd64.img.xz  for a USB stick or the box's own disk
 #   exacarib-box-<version>-amd64.qcow2   for a virtual machine
-# Needs libguestfs-tools and qemu-utils (CI installs them on Ubuntu). Run it as an
-# ordinary user with a readable kernel in /boot: libguestfs networking (passt)
-# will not run as root.
+# The image is booted once in QEMU (KVM when there is /dev/kvm) to install
+# everything with its own apt; libguestfs only puts the files in. Needs
+# libguestfs-tools, qemu-utils and qemu-system-x86 (CI installs them on Ubuntu).
 #
 #   deploy/box/build-image.sh <exacarib-box_*_amd64.deb> <output dir> [version]
 set -euo pipefail
@@ -23,19 +23,36 @@ echo "== Debian 12 cloud image"
 curl -fsSL -o "$work/$base" "$base_url/$base"
 curl -fsSL -o "$work/SHA512SUMS" "$base_url/SHA512SUMS"
 (cd "$work" && grep " $base\$" SHA512SUMS | sha512sum -c --quiet)
-# Room for updates and logs; the root file system grows to the whole disk at first boot.
 qemu-img resize -q "$work/$base" 4G
-cp "$deb" "$work/exacarib-box.deb"
 
-echo "== ExaCarib box on top"
+echo "== files for the one-off build boot"
 export LIBGUESTFS_BACKEND=direct
-virt-customize -a "$work/$base" --network --memsize 2048 \
-  --hostname exacarib-box --timezone UTC --root-password disabled \
-  --copy-in "$work/exacarib-box.deb:/tmp" \
-  --run "$here/files/image-setup.sh" \
-  --upload "$here/files/growroot:/usr/lib/exacarib/growroot" \
-  --chmod 0755:/usr/lib/exacarib/growroot \
-  --firstboot-command /usr/lib/exacarib/growroot
+virt-customize -q -a "$work/$base" --no-network \
+  --copy-in "$deb:/root" --run-command "mv /root/$(basename "$deb") /root/exacarib-box.deb" \
+  --upload "$here/files/image-setup.sh:/root/exacarib-build.sh" --chmod 0755:/root/exacarib-build.sh \
+  --mkdir /usr/lib/exacarib \
+  --upload "$here/files/growroot:/usr/lib/exacarib/growroot" --chmod 0755:/usr/lib/exacarib/growroot \
+  --upload "$here/files/exacarib-growroot.service:/etc/systemd/system/exacarib-growroot.service" \
+  --upload "$here/files/exacarib-build.service:/etc/systemd/system/exacarib-build.service" \
+  --link /etc/systemd/system/exacarib-build.service:/etc/systemd/system/multi-user.target.wants/exacarib-build.service \
+  --write '/etc/systemd/network/99-exacarib-build.network:[Match]
+Name=e*
+
+[Network]
+DHCP=yes
+'
+
+echo "== build boot (installs and updates with the image's own apt)"
+accel=tcg
+[[ -w /dev/kvm ]] && accel=kvm
+timeout 3600 qemu-system-x86_64 -machine "q35,accel=$accel" -cpu max -m 2048 -smp 2 -no-reboot \
+  -display none -monitor none -serial "file:$work/build.log" \
+  -drive "file=$work/$base,if=virtio" -netdev user,id=n -device virtio-net-pci,netdev=n || true
+if ! tr -d '\r' <"$work/build.log" | grep -q '^EXACARIB-BUILD-OK'; then
+  echo "the build boot did not finish; its last lines:"
+  tr -d '\r' <"$work/build.log" | tail -n 40
+  exit 1
+fi
 
 name=exacarib-box-$ver-amd64
 echo "== $name"
