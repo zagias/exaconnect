@@ -27,6 +27,8 @@ if ! docker image inspect "$image" >/dev/null 2>&1; then
   fi
 fi
 
+# From here on the test changes the carrier lists; the proxy should reload them after this.
+started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 users=$("${COMPOSE[@]}" exec -T controller python - <"$REPO/deploy/voice/uat/trunk_users.py" 2>/dev/null | tail -1)
 if ! jq -e '.OWNER_EMAIL and .OWNER_PW and .HEAD_EXT and .BRANCH_EXT' >/dev/null 2>&1 <<<"$users"; then
   bad "could not set up the trunk test organisation"
@@ -58,7 +60,7 @@ fi
 # The edge proxy picked up the new trunk lists without a restart.
 if [[ -n $("${COMPOSE[@]}" ps -q --status running kamailio 2>/dev/null) ]]; then
   sleep 8
-  if "${COMPOSE[@]}" logs --since 15m kamailio 2>/dev/null | grep -q "exacarib: carrier lists reloaded"; then
+  if "${COMPOSE[@]}" logs --since "$started" kamailio 2>/dev/null | grep -q "exacarib: carrier lists reloaded"; then
     ok "edge proxy reloaded the carrier lists by itself"
   else
     bad "edge proxy did not reload the carrier lists"
