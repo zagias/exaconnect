@@ -1,11 +1,11 @@
-commit bd08dea: Merge pull request #25 from zagias/claude/commai-phase-2-ff4dzd
+commit d5d5a63: Live check: grant the phones the microphone and report the phone system's hang-up cause (#26)
 
-== Lab already up; rebuilding the agent (03:56:12)
+== Lab already up; rebuilding the agent (05:01:22)
 
-== Release (controller, agent gateway, public portal) (03:56:41)
-[release 03:56:42] no backup before this release (deploy/backup is not set up on this server)
-[release 03:56:42] releasing bd08deac5ed6 (previous 97d61ca334b1)
-time="2026-10-11T05:56:43+02:00" level=warning msg="Docker Compose is configured to build using Bake, but buildx isn't installed"
+== Release (controller, agent gateway, public portal) (05:01:53)
+[release 05:01:54] no backup before this release (deploy/backup is not set up on this server)
+[release 05:01:54] releasing d5d5a63a8a15 (previous bd08deac5ed6)
+time="2026-10-11T07:01:55+02:00" level=warning msg="Docker Compose is configured to build using Bake, but buildx isn't installed"
 #0 building with "default" instance using docker driver
 
 #1 [controller internal] load build definition from Dockerfile
@@ -13,7 +13,80 @@ time="2026-10-11T05:56:43+02:00" level=warning msg="Docker Compose is configured
 #1 DONE 0.0s
 
 #2 [controller internal] load metadata for docker.io/library/python:3.12-slim
-#2 DONE 0.4s
+#2 DONE 0.5s
+
+#3 [controller internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 [controller 1/5] FROM docker.io/library/python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1
+#4 resolve docker.io/library/python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1 0.1s done
+#4 DONE 0.1s
+
+#5 [controller internal] load build context
+#5 transferring context: 22.68kB 0.1s done
+#5 DONE 0.1s
+
+#6 [controller 3/5] COPY pyproject.toml ./
+#6 CACHED
+
+#7 [controller 4/5] COPY exaconnect_controller ./exaconnect_controller
+#7 CACHED
+
+#8 [controller 2/5] WORKDIR /app
+#8 CACHED
+
+#9 [controller 5/5] RUN pip install --no-cache-dir . && mkdir -p /data && chown nobody:nogroup /data
+#9 CACHED
+
+#10 [controller] exporting to image
+#10 exporting layers 0.0s done
+#10 exporting manifest sha256:b7084d61a19e27957da74d35165116f971793ccbdf69efed5cf0a640b580b87d 0.0s done
+#10 exporting config sha256:e6a47367ba54ee0df2a4647567f149521d5dd3a6dbe3d7244bd91d82df7d134f 0.0s done
+#10 exporting attestation manifest sha256:84e1e6d3bc186031881c034deda42257f589c49b337a3c38fdc79823a0e0455f
+#10 exporting attestation manifest sha256:84e1e6d3bc186031881c034deda42257f589c49b337a3c38fdc79823a0e0455f 0.1s done
+#10 exporting manifest list sha256:62dded9b17f83933bcf8083718834df25fa3d6577cec6c8ae6022d631e7433ac 0.0s done
+#10 naming to docker.io/library/exaconnect-controller:latest 0.0s done
+#10 unpacking to docker.io/library/exaconnect-controller:latest
+#10 unpacking to docker.io/library/exaconnect-controller:latest 0.1s done
+#10 DONE 0.4s
+
+#11 [controller] resolving provenance for metadata file
+#11 DONE 0.0s
+ controller  Built
+time="2026-10-11T07:01:57+02:00" level=warning msg="Found orphan containers ([exaconnect-web-1]) for this project. If you removed or renamed this service in your compose file, you can run this command with the --remove-orphans flag to clean it up."
+ Container exaconnect-db-1  Running
+ Container exaconnect-controller-1  Recreate
+ Container exaconnect-controller-1  Recreated
+ Container exaconnect-proxy-1  Running
+ Container exaconnect-db-1  Waiting
+ Container exaconnect-db-1  Healthy
+ Container exaconnect-controller-1  Starting
+ Container exaconnect-controller-1  Started
+ Container exaconnect-controller-1  Waiting
+ Container exaconnect-controller-1  Healthy
+ Container exaconnect-proxy-1  Waiting
+ Container exaconnect-db-1  Waiting
+ Container exaconnect-controller-1  Waiting
+ Container exaconnect-controller-1  Healthy
+ Container exaconnect-proxy-1  Healthy
+ Container exaconnect-db-1  Healthy
+time="2026-10-11T07:02:27+02:00" level=warning msg="Found orphan containers ([exaconnect-web-1]) for this project. If you removed or renamed this service in your compose file, you can run this command with the --remove-orphans flag to clean it up."
+ Container exaconnect-proxy-1  Recreate
+ Container exaconnect-proxy-1  Recreated
+ Container exaconnect-proxy-1  Starting
+ Container exaconnect-proxy-1  Started
+ Container exaconnect-proxy-1  Waiting
+ Container exaconnect-proxy-1  Healthy
+time="2026-10-11T07:02:30+02:00" level=warning msg="Docker Compose is configured to build using Bake, but buildx isn't installed"
+#0 building with "default" instance using docker driver
+
+#1 [controller internal] load build definition from Dockerfile
+#1 transferring dockerfile: 697B done
+#1 DONE 0.0s
+
+#2 [controller internal] load metadata for docker.io/library/python:3.12-slim
+#2 DONE 0.2s
 
 #3 [controller internal] load .dockerignore
 #3 transferring context: 2B done
@@ -31,164 +104,100 @@ time="2026-10-11T05:56:43+02:00" level=warning msg="Docker Compose is configured
 
 #4 [controller internal] load build context
 #4 transferring context: 22.68kB 0.1s done
-#4 DONE 0.2s
-
-#6 [controller 2/5] WORKDIR /app
-#6 CACHED
-
-#7 [controller 3/5] COPY pyproject.toml ./
-#7 CACHED
-
-#8 [controller 4/5] COPY exaconnect_controller ./exaconnect_controller
-#8 CACHED
-
-#9 [controller 5/5] RUN pip install --no-cache-dir . && mkdir -p /data && chown nobody:nogroup /data
-#9 CACHED
-
-#10 [controller] exporting to image
-#10 exporting layers 0.0s done
-#10 exporting manifest sha256:3a4bce5cd5c98b3c191108b90644aa82fd6c143c56e9cc5321a8c5862f53fffe 0.1s done
-#10 exporting config sha256:8a07270dd513ea5a13cca862889a555e496aa8a9dab6d7a8404a8c0f55e102fd 0.0s done
-#10 exporting attestation manifest sha256:7e7b246dd0e38434a4a997516e56ae1c0ca98d62dbec71ba3db4b1f1157546a6 0.1s done
-#10 exporting manifest list sha256:baeddb2a21b78d9c92ad77cdedc6b396b79327c4184de7bb084957beb2f0f503 0.1s done
-#10 naming to docker.io/library/exaconnect-controller:latest 0.0s done
-#10 unpacking to docker.io/library/exaconnect-controller:latest 0.0s done
-#10 DONE 0.6s
-
-#11 [controller] resolving provenance for metadata file
-#11 DONE 0.1s
- controller  Built
-time="2026-10-11T05:56:45+02:00" level=warning msg="Found orphan containers ([exaconnect-web-1]) for this project. If you removed or renamed this service in your compose file, you can run this command with the --remove-orphans flag to clean it up."
- Container exaconnect-db-1  Running
- Container exaconnect-controller-1  Recreate
- Container exaconnect-controller-1  Recreated
- Container exaconnect-proxy-1  Running
- Container exaconnect-db-1  Waiting
- Container exaconnect-db-1  Healthy
- Container exaconnect-controller-1  Starting
- Container exaconnect-controller-1  Started
- Container exaconnect-controller-1  Waiting
- Container exaconnect-controller-1  Healthy
- Container exaconnect-controller-1  Waiting
- Container exaconnect-db-1  Waiting
- Container exaconnect-proxy-1  Waiting
- Container exaconnect-controller-1  Healthy
- Container exaconnect-proxy-1  Healthy
- Container exaconnect-db-1  Healthy
-time="2026-10-11T05:57:16+02:00" level=warning msg="Found orphan containers ([exaconnect-web-1]) for this project. If you removed or renamed this service in your compose file, you can run this command with the --remove-orphans flag to clean it up."
- Container exaconnect-proxy-1  Recreate
- Container exaconnect-proxy-1  Recreated
- Container exaconnect-proxy-1  Starting
- Container exaconnect-proxy-1  Started
- Container exaconnect-proxy-1  Waiting
- Container exaconnect-proxy-1  Healthy
-time="2026-10-11T05:57:19+02:00" level=warning msg="Docker Compose is configured to build using Bake, but buildx isn't installed"
-#0 building with "default" instance using docker driver
-
-#1 [controller internal] load build definition from Dockerfile
-#1 transferring dockerfile: 697B done
-#1 DONE 0.0s
-
-#2 [controller internal] load metadata for docker.io/library/python:3.12-slim
-#2 DONE 0.2s
-
-#3 [controller internal] load .dockerignore
-#3 transferring context: 2B done
-#3 DONE 0.0s
-
-#4 [controller 1/5] FROM docker.io/library/python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1
-#4 resolve docker.io/library/python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1 0.1s done
 #4 DONE 0.1s
 
-#5 [controller internal] load build context
-#5 transferring context: 22.68kB 0.1s done
-#5 DONE 0.1s
-
-#6 [controller 4/5] COPY exaconnect_controller ./exaconnect_controller
+#6 [controller 3/5] COPY pyproject.toml ./
 #6 CACHED
 
-#7 [controller 2/5] WORKDIR /app
+#7 [controller 4/5] COPY exaconnect_controller ./exaconnect_controller
 #7 CACHED
 
-#8 [controller 3/5] COPY pyproject.toml ./
+#8 [controller 2/5] WORKDIR /app
 #8 CACHED
 
 #9 [controller 5/5] RUN pip install --no-cache-dir . && mkdir -p /data && chown nobody:nogroup /data
 #9 CACHED
 
 #10 [controller] exporting to image
-#10 exporting layers
-#10 exporting layers 0.0s done
-#10 exporting manifest sha256:3a4bce5cd5c98b3c191108b90644aa82fd6c143c56e9cc5321a8c5862f53fffe 0.0s done
-#10 exporting config sha256:8a07270dd513ea5a13cca862889a555e496aa8a9dab6d7a8404a8c0f55e102fd done
-#10 exporting attestation manifest sha256:5d844a60c89b20dbfbc42aa34a388b66325c61658796a3769e63f8e6fd3c38ee
-#10 exporting attestation manifest sha256:5d844a60c89b20dbfbc42aa34a388b66325c61658796a3769e63f8e6fd3c38ee 0.1s done
-#10 exporting manifest list sha256:90efffdcb96eb7e31f1266eae61fdc9606b62b8fe2a8758f8f9fe2179e9cbf97 0.0s done
-#10 naming to docker.io/library/exaconnect-controller:latest
-#10 naming to docker.io/library/exaconnect-controller:latest 0.0s done
-#10 unpacking to docker.io/library/exaconnect-controller:latest 0.0s done
+#10 exporting layers done
+#10 exporting manifest sha256:b7084d61a19e27957da74d35165116f971793ccbdf69efed5cf0a640b580b87d done
+#10 exporting config sha256:e6a47367ba54ee0df2a4647567f149521d5dd3a6dbe3d7244bd91d82df7d134f 0.0s done
+#10 exporting attestation manifest sha256:a051b414a6ce4e55cbc8d300fae59d7274e8e1c1481f9745490685f5e341fa1b
+#10 exporting attestation manifest sha256:a051b414a6ce4e55cbc8d300fae59d7274e8e1c1481f9745490685f5e341fa1b 0.1s done
+#10 exporting manifest list sha256:7d22bb7225a53cc7b4472e1c618a41c15e3fde4e125d097a3f2a5a003c10bace
+#10 exporting manifest list sha256:7d22bb7225a53cc7b4472e1c618a41c15e3fde4e125d097a3f2a5a003c10bace 0.1s done
+#10 naming to docker.io/library/exaconnect-controller:latest done
+#10 unpacking to docker.io/library/exaconnect-controller:latest 0.1s done
 #10 DONE 0.4s
 
 #11 [controller] resolving provenance for metadata file
 #11 DONE 0.0s
 
 #12 [web internal] load build definition from Dockerfile
-#12 transferring dockerfile: 529B 0.0s done
+#12 transferring dockerfile: 529B done
 #12 DONE 0.0s
 
 #13 [web internal] load metadata for docker.io/library/node:22-alpine
-#13 DONE 0.3s
+#13 ...
 
 #14 [web internal] load metadata for docker.io/library/caddy:2-alpine
 #14 DONE 0.3s
+
+#13 [web internal] load metadata for docker.io/library/node:22-alpine
+#13 DONE 0.3s
 
 #15 [web internal] load .dockerignore
 #15 transferring context: 2B done
 #15 DONE 0.0s
 
-#16 [web portal 1/6] FROM docker.io/library/node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402
-#16 resolve docker.io/library/node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 0.0s done
+#16 [web internal] load build context
 #16 DONE 0.0s
 
 #17 [web stage-1 1/3] FROM docker.io/library/caddy:2-alpine@sha256:d8542f48d34a9cf4e4c11a478865229840e87e4c96ea3f439101f31a5d35f75f
-#17 resolve docker.io/library/caddy:2-alpine@sha256:d8542f48d34a9cf4e4c11a478865229840e87e4c96ea3f439101f31a5d35f75f 0.0s done
+#17 resolve docker.io/library/caddy:2-alpine@sha256:d8542f48d34a9cf4e4c11a478865229840e87e4c96ea3f439101f31a5d35f75f 0.1s done
 #17 DONE 0.1s
 
-#18 [web internal] load build context
-#18 transferring context: 104.30kB 0.3s done
-#18 DONE 0.3s
+#18 [web portal 1/6] FROM docker.io/library/node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402
+#18 resolve docker.io/library/node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402
+#18 resolve docker.io/library/node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 0.1s done
+#18 DONE 0.1s
 
-#19 [web portal 5/6] COPY portal/ ./
+#16 [web internal] load build context
+#16 transferring context: 104.30kB 0.3s done
+#16 DONE 0.3s
+
+#19 [web portal 6/6] RUN npm run build
 #19 CACHED
 
-#20 [web portal 6/6] RUN npm run build
+#20 [web stage-1 2/3] COPY deploy/public/Caddyfile /etc/caddy/Caddyfile
 #20 CACHED
 
-#21 [web stage-1 2/3] COPY deploy/public/Caddyfile /etc/caddy/Caddyfile
+#21 [web portal 2/6] WORKDIR /src/portal
 #21 CACHED
 
-#22 [web portal 2/6] WORKDIR /src/portal
+#22 [web portal 3/6] COPY portal/package.json portal/package-lock.json ./
 #22 CACHED
 
-#23 [web portal 3/6] COPY portal/package.json portal/package-lock.json ./
+#23 [web portal 4/6] RUN npm ci --no-audit --no-fund
 #23 CACHED
 
-#24 [web portal 4/6] RUN npm ci --no-audit --no-fund
+#24 [web portal 5/6] COPY portal/ ./
 #24 CACHED
 
 #25 [web stage-1 3/3] COPY --from=portal /src/portal/dist /srv/portal
 #25 CACHED
 
 #26 [web] exporting to image
-#26 exporting layers done
+#26 exporting layers 0.0s done
 #26 exporting manifest sha256:de44e9fdaee7d20c437aea270421973d90d98586d06401006c5a3ce4cf18de14 done
 #26 exporting config sha256:6899c430dd0660711139c17d7a938a3854fa76b09ced694fbc34be1801e409ef done
-#26 exporting attestation manifest sha256:06460a11a093dfe1a1ce3eab39dfe86ef2fe1995d41ef0c0a82c67501b2fc116 0.1s done
-#26 exporting manifest list sha256:9cfd8d3e85c3383a63d501670010dc17de687ee810c22e0cb5a91fc27ed2a192
-#26 exporting manifest list sha256:9cfd8d3e85c3383a63d501670010dc17de687ee810c22e0cb5a91fc27ed2a192 0.1s done
+#26 exporting attestation manifest sha256:2cdf11ac46f51aa8e5dd62ed03284c3083136ffd9efbf2ce3e09c5341af186e5
+#26 exporting attestation manifest sha256:2cdf11ac46f51aa8e5dd62ed03284c3083136ffd9efbf2ce3e09c5341af186e5 0.1s done
+#26 exporting manifest list sha256:02fabd585248d07784aa9f50fd56a92379f07b7c50ea168420a04665f863bae7 0.0s done
+#26 naming to docker.io/library/exaconnect-web:latest
 #26 naming to docker.io/library/exaconnect-web:latest done
 #26 unpacking to docker.io/library/exaconnect-web:latest 0.0s done
-#26 DONE 0.3s
+#26 DONE 0.4s
 
 #27 [web] resolving provenance for metadata file
 #27 DONE 0.0s
@@ -207,24 +216,22 @@ time="2026-10-11T05:57:19+02:00" level=warning msg="Docker Compose is configured
  Container exaconnect-controller-1  Healthy
  Container exaconnect-web-1  Starting
  Container exaconnect-web-1  Started
- Container exaconnect-web-1  Waiting
- Container exaconnect-controller-1  Waiting
  Container exaconnect-db-1  Waiting
- Container exaconnect-web-1  Healthy
+ Container exaconnect-controller-1  Waiting
+ Container exaconnect-web-1  Waiting
  Container exaconnect-db-1  Healthy
+ Container exaconnect-web-1  Healthy
  Container exaconnect-controller-1  Healthy
-[release 03:58:11] bd08deac5ed6 is live
+[release 05:03:03] d5d5a63a8a15 is live
 
-== Voice SBC (03:58:11)
+== Voice SBC (05:03:03)
 test phone: extension 200 already set up
-time="2026-10-11T05:58:44+02:00" level=warning msg="Found orphan containers ([exaconnect-web-1]) for this project. If you removed or renamed this service in your compose file, you can run this command with the --remove-orphans flag to clean it up."
+time="2026-10-11T07:03:36+02:00" level=warning msg="Found orphan containers ([exaconnect-web-1]) for this project. If you removed or renamed this service in your compose file, you can run this command with the --remove-orphans flag to clean it up."
  Container exaconnect-freeswitch-1  Running
  Container exaconnect-kamailio-1  Running
- Container exaconnect-kamailio-1  Restarting
- Container exaconnect-kamailio-1  Started
 SBC started: Kamailio on 5060/5061 (allow-listed carriers only), call audio on UDP 16384-16483
 
-== Agents (03:58:51)
+== Agents (05:03:37)
 pop-miami: agent stopped
 site-a: agent stopped
 site-b: agent stopped
@@ -232,16 +239,16 @@ pop-miami: agent started
 site-a: agent started
 site-b: agent started
 
-== Waiting for tunnels, BGP and BFD (03:59:11)
+== Waiting for tunnels, BGP and BFD (05:03:56)
 
-== Checks (03:59:27)
+== Checks (05:04:12)
 -- lab/scripts/check-routing.sh
 ok    site-a wg-a handshake 17s ago
 ok    site-a wg-b handshake 17s ago
 ok    site-a wg-sat handshake 17s ago
 ok    site-b wg-a handshake 17s ago
 ok    site-b wg-b handshake 17s ago
-ok    site-b wg-sat handshake 17s ago
+ok    site-b wg-sat handshake 16s ago
 ok    pop-miami BGP 6/6 established
 ok    pop-miami BFD 6/6 up
 ok    site-a BGP 3/3 established
@@ -253,41 +260,41 @@ ok    lan-b -> lan-a
 ok    lan-a -> lan-pop
 
   traceroute to 192.168.20.10 (192.168.20.10), 30 hops max, 46 byte packets
-   1  192.168.10.1  0.015 ms
-   2  100.64.1.1  27.372 ms
-   3  100.64.1.12  57.568 ms
-   4  192.168.20.10  55.748 ms
+   1  192.168.10.1  0.012 ms
+   2  100.64.1.1  29.395 ms
+   3  100.64.1.12  53.606 ms
+   4  192.168.20.10  51.830 ms
 -- lab/ci/checks/m0-timing.sh
 -- host timing
       clocksource kvm-clock, available: kvm-clock hpet acpi_pm 
       kernel 6.8.0-139-generic, timers: hres_active    : 1, resolution: 1 nsecs
-      HZ 1000, 4 CPUs, load 4.90 4.71 4.55
+      HZ 1000, 4 CPUs, load 5.36 4.46 4.13
       netem on carrier-a: qdisc netem 80f8: root refcnt 5 limit 10000 delay 12.5ms  1ms seed 4224415357793959298
       cpuidle driver none, governor menu
       (netem asks for 25 ms on A and 35 ms on B round trip, with 2 and 4 ms jitter; min/avg/max/mdev)
-      site-a to lan-a (no netem):              0.048/0.141/1.782/0.232 ms
-      site-a to carrier-a router (one netem):  10.015/13.391/51.550/4.030 ms
-      site-a to PoP underlay via carrier A:    22.561/29.493/128.695/15.450 ms, pipe 2
-      site-a to PoP through wg-a:              24.044/30.970/72.266/8.569 ms, pipe 2
-      site-a to PoP underlay via carrier B:    30.086/36.153/51.206/3.620 ms, pipe 2
+      site-a to lan-a (no netem):              0.049/0.115/0.762/0.101 ms
+      site-a to carrier-a router (one netem):  10.220/12.897/16.764/1.171 ms
+      site-a to PoP underlay via carrier A:    22.191/25.919/31.415/1.616 ms
+      site-a to PoP through wg-a:              23.437/29.583/54.374/5.568 ms
+      site-a to PoP underlay via carrier B:    28.267/36.227/52.914/3.726 ms
 -- busiest containers
-      59.03% clab-exaconnect-pop-miami
-      30.65% clab-exaconnect-site-b
-      30.38% clab-exaconnect-site-a
-      17.28% exaconnect-controller-1
-      12.91% exaconnect-freeswitch-1
-      11.41% exaconnect-db-1
-      1.10% exaconnect-kamailio-1
-      0.78% clab-exaconnect-lan-b
+      60.49% clab-exaconnect-pop-miami
+      30.17% clab-exaconnect-site-b
+      23.28% clab-exaconnect-site-a
+      22.11% exaconnect-controller-1
+      11.71% exaconnect-freeswitch-1
+      3.71% exaconnect-db-1
+      1.15% clab-exaconnect-cloud-aws
+      0.85% clab-exaconnect-lan-pop
 -- busiest processes
-      37.5 runc
-      29.4 ps
-      17.3 uvicorn
-       8.0 kamailio
-       7.7 exa-agent
-       7.2 exa-agent
-       6.4 exa-agent
+       500 ps
+      16.9 uvicorn
+       6.7 exa-agent
+       5.7 exa-agent
        5.7 freeswitch
+       5.6 exa-agent
+       3.6 rcu_preempt
+       3.6 containerd-shim
 -- lab/ci/checks/m4-steering.sh
 -- steering applied
 ok    pop-miami nftables classifier
@@ -296,15 +303,15 @@ ok    site-a nftables classifier
 ok    site-a 3 steering rules
 ok    site-b nftables classifier
 ok    site-b 3 steering rules
-      voice state at start: site-a carrier-a since 2026-10-11 03:38:58.436375+00 return - -; site-b carrier-a since 2026-10-11 03:38:48.271048+00 return - -
-      probe jitter, last 3 min, carrier-a avg 8.5 p95 19.5, carrier-b avg 9.3 p95 18.5, sat avg 20.5 p95 37.5
-      host load 3.50 4.37 4.45 on 4 CPUs, CPU steal 0.0% over 5 s
+      voice state at start: site-a carrier-a since 2026-10-11 04:29:45.141364+00 return - -; site-b carrier-a since 2026-10-11 04:29:45.141364+00 return - -
+      probe jitter, last 3 min, carrier-a avg 5.6 p95 14.7, carrier-b avg 7.2 p95 15.9, sat avg 12.4 p95 19.8
+      host load 5.19 4.46 4.14 on 4 CPUs, CPU steal 0.0% over 5 s
 ok    site-a voice on wg-a at start
-      maps: pop-miami v1736, site-a v1309, site-b v924
+      maps: pop-miami v1752, site-a v1327, site-b v933
 -- brownout: carrier A loss 0 -> 3% over 180 s (demo step 2)
-ok    voice moved 113 s into the ramp
-      Moved voice from Carrier A to Carrier B: loss on Carrier A rising 1.0% a minute, forecast 1.3% in 60 s against a 1% SLA.
-ok    moved before the 1% SLA was breached (measured 0.51%)
+ok    voice moved 171 s into the ramp
+      Moved voice from Carrier A to Carrier B: loss on Carrier A rising 0.9% a minute, forecast 1.8% in 60 s against a 1% SLA.
+ok    moved before the 1% SLA was breached (measured 0.82%)
 ok    site-a kernel sends voice on wg-b
 ok    bulk stayed on carrier A (3% is under its 5% threshold)
 -- hard cut of carrier B while voice is on it (demo step 3)
@@ -315,56 +322,53 @@ ok    voice on wg-a after the cut
 -- recovery: restore B, classes move back only after the hold time (demo step 4)
 ok    no moves in the first minute after recovery
       moves since the brownout began: 6
-      04:02:10 site-a voice move: Moved voice from Carrier A to Carrier B: loss on Carrier A rising 1.0% a minute, forecast 1.3% in 60 s against a 1% SLA.
-      04:03:21 site-b voice move: Moved voice from Carrier A to Carrier B: loss on Carrier A rising 0.5% a minute, forecast 1.6% in 60 s against a 1% SLA.
-      04:04:22 site-a business move: Moved business from Carrier A to Carrier B: loss on Carrier A rising 1.1% a minute, forecast 2.9% in 60 s against a 2% SLA.
-      04:04:43 site-b business hold: Kept business on Carrier A: loss on Carrier A rising 0.8% a minute, forecast 2.5% in 60 s against a 2% SLA, but no other path is forecast within SLA.
-      04:04:43 site-a voice failover: Moved voice from Carrier B to Carrier A: Carrier B is down (BFD reports it down).
-      04:04:43 site-a business failover: Moved business from Carrier B to Carrier A: Carrier B is down (BFD reports it down).
-      04:04:43 site-b voice failover: Moved voice from Carrier B to Carrier A: Carrier B is down (BFD reports it down).
-      04:05:03 site-b voice hold: Kept voice on Carrier A: loss on Carrier A is 1.7% against a 1% SLA, but it moved here 20 s ago (hold time 120 s).
-      04:05:03 site-a voice hold: Kept voice on Carrier A: loss on Carrier A is 1.9% against a 1% SLA, but it moved here 20 s ago (hold time 120 s).
-      04:05:13 site-a voice hold: Kept voice on Carrier A: loss on Carrier A is 1.9% against a 1% SLA, but it moved here 30 s ago (hold time 120 s).
-      04:05:13 site-b voice hold: Kept voice on Carrier A: loss on Carrier A is 1.6% against a 1% SLA, but it moved here 30 s ago (hold time 120 s).
-      04:05:23 site-b voice hold: Kept voice on Carrier A: loss on Carrier A is 1.6% against a 1% SLA, but it moved here 40 s ago (hold time 120 s).
-      04:05:23 site-a voice hold: Kept voice on Carrier A: loss on Carrier A is 1.8% against a 1% SLA, but it moved here 40 s ago (hold time 120 s).
-      04:05:33 site-a voice hold: Kept voice on Carrier A: loss on Carrier A is 1.7% against a 1% SLA, but it moved here 50 s ago (hold time 120 s).
-      04:05:33 site-b voice hold: Kept voice on Carrier A: loss on Carrier A is 1.6% against a 1% SLA, but it moved here 50 s ago (hold time 120 s).
-      04:05:44 site-a voice hold: Kept voice on Carrier A: loss on Carrier A is 1.6% against a 1% SLA, but it moved here 60 s ago (hold time 120 s).
-      04:05:44 site-b voice hold: Kept voice on Carrier A: loss on Carrier A is 1.5% against a 1% SLA, but it moved here 60 s ago (hold time 120 s).
-      04:05:54 site-a voice hold: Kept voice on Carrier A: loss on Carrier A is 1.6% against a 1% SLA, but it moved here 71 s ago (hold time 120 s).
-      04:05:54 site-b voice hold: Kept voice on Carrier A: loss on Carrier A is 1.4% against a 1% SLA, but it moved here 71 s ago (hold time 120 s).
-      04:06:04 site-b voice hold: Kept voice on Carrier A: loss on Carrier A is 1.4% against a 1% SLA, but it moved here 81 s ago (hold time 120 s).
-      04:06:04 site-a voice hold: Kept voice on Carrier A: loss on Carrier A is 1.5% against a 1% SLA, but it moved here 81 s ago (hold time 120 s).
-      04:06:14 site-a voice hold: Kept voice on Carrier A: loss on Carrier A is 1.4% against a 1% SLA, but it moved here 91 s ago (hold time 120 s).
-      04:06:14 site-b voice hold: Kept voice on Carrier A: loss on Carrier A is 1.2% against a 1% SLA, but it moved here 91 s ago (hold time 120 s).
+      05:07:47 site-b voice move: Moved voice from Carrier A to Carrier B: loss on Carrier A rising 0.6% a minute, forecast 1.5% in 60 s against a 1% SLA.
+      05:07:47 site-a voice move: Moved voice from Carrier A to Carrier B: loss on Carrier A rising 0.9% a minute, forecast 1.8% in 60 s against a 1% SLA.
+      05:08:08 site-a business move: Moved business from Carrier A to Carrier B: loss on Carrier A rising 1.2% a minute, forecast 2.4% in 60 s against a 2% SLA.
+      05:09:19 site-a business failover: Moved business from Carrier B to Carrier A: Carrier B is down (BFD reports it down).
+      05:09:19 site-b voice failover: Moved voice from Carrier B to Carrier A: Carrier B is down (BFD reports it down).
+      05:09:19 site-a voice failover: Moved voice from Carrier B to Carrier A: Carrier B is down (BFD reports it down).
+      05:09:39 site-b voice hold: Kept voice on Carrier A: loss on Carrier A is 1.6% against a 1% SLA, but it moved here 20 s ago (hold time 120 s).
+      05:09:39 site-a voice hold: Kept voice on Carrier A: loss on Carrier A is 1.9% against a 1% SLA, but it moved here 20 s ago (hold time 120 s).
+      05:09:49 site-b voice hold: Kept voice on Carrier A: loss on Carrier A is 1.6% against a 1% SLA, but it moved here 30 s ago (hold time 120 s).
+      05:09:49 site-a voice hold: Kept voice on Carrier A: loss on Carrier A is 1.8% against a 1% SLA, but it moved here 30 s ago (hold time 120 s).
+      05:10:00 site-a voice hold: Kept voice on Carrier A: loss on Carrier A is 1.8% against a 1% SLA, but it moved here 40 s ago (hold time 120 s).
+      05:10:00 site-b voice hold: Kept voice on Carrier A: loss on Carrier A is 1.5% against a 1% SLA, but it moved here 40 s ago (hold time 120 s).
+      05:10:10 site-a voice hold: Kept voice on Carrier A: loss on Carrier A is 1.7% against a 1% SLA, but it moved here 50 s ago (hold time 120 s).
+      05:10:10 site-b voice hold: Kept voice on Carrier A: loss on Carrier A is 1.4% against a 1% SLA, but it moved here 50 s ago (hold time 120 s).
+      05:10:20 site-a voice hold: Kept voice on Carrier A: loss on Carrier A is 1.6% against a 1% SLA, but it moved here 61 s ago (hold time 120 s).
+      05:10:20 site-b voice hold: Kept voice on Carrier A: loss on Carrier A is 1.4% against a 1% SLA, but it moved here 61 s ago (hold time 120 s).
+      05:10:30 site-a voice hold: Kept voice on Carrier A: loss on Carrier A is 1.6% against a 1% SLA, but it moved here 71 s ago (hold time 120 s).
+      05:10:30 site-b voice hold: Kept voice on Carrier A: loss on Carrier A is 1.3% against a 1% SLA, but it moved here 71 s ago (hold time 120 s).
+      05:10:40 site-b voice hold: Kept voice on Carrier A: loss on Carrier A is 1.1% against a 1% SLA, but it moved here 81 s ago (hold time 120 s).
+      05:10:40 site-a voice hold: Kept voice on Carrier A: loss on Carrier A is 1.3% against a 1% SLA, but it moved here 81 s ago (hold time 120 s).
 -- lab/ci/checks/m5-storm.sh
 -- Storm Mode on at site-a only
 ok    Storm Mode switched on for site-a through the API
 ok    site-a agent has the Storm Mode steering map
 ok    site-b is not in Storm Mode
-ok    satellite warm: 43 probes per 10 s
+ok    satellite warm: 44 probes per 10 s
 ok    satellite BGP established
 -- both terrestrial links cut
 ok    voice continues on satellite
 ok    business continues on satellite
 ok    bulk paused (blackhole rule)
-ok    voice stream lost 1420 ms across the double cut
+ok    voice stream lost 1500 ms across the double cut
 -- restore and switch Storm Mode off
 ok    Storm Mode switched off
 ok    voice and business back on terrestrial paths, bulk resumed
       Storm Mode last switched by user:admin@exacarib.local
-      04:07:33 storm_off
-      04:06:18 storm_on
+      05:11:59 storm_off
+      05:10:47 storm_on
 -- lab/ci/checks/m6-metering.sh
 -- traffic: 20 Mbit/s bulk (CS1, TCP) from lan-a to lan-b for 11 minutes
-      bulk leaves site-a on ?
+      bulk leaves site-a on wg-a
 ok    5-minute samples with traffic for site-a
-      iperf: [  5] 450.00-451.00 sec  2.25 MBytes  18.9 Mbits/sec    0    228 KBytes        [  5] 451.00-452.00 sec  2.50 MBytes  21.0 Mbits/sec    0    236 KBytes        [  5] 452.00-453.00 sec  2.38 MBytes  19.9 Mbits/sec    0    246 KBytes        [  5] 453
-      site-a carrier-a: samples 11, 95th in 1.400103 out 21.898562, billable 21.898562, commit 100, burst 0.000, total 400.00
-ok    billable rate 21.898562 Mbps matches the ~20 Mbit/s offered
+      iperf: [  5] 489.00-490.00 sec  2.38 MBytes  19.9 Mbits/sec    0    418 KBytes        [  5] 490.00-491.00 sec  2.50 MBytes  21.0 Mbits/sec    0    418 KBytes        [  5] 491.00-492.00 sec  2.38 MBytes  20.0 Mbits/sec    0    418 KBytes        [  5] 492
+      site-a carrier-a: samples 11, 95th in 1.396989 out 21.911947, billable 21.911947, commit 100, burst 0.000, total 400.00
+ok    billable rate 21.911947 Mbps matches the ~20 Mbit/s offered
 -- CSV matches the screen
-ok    CSV 95th percentile 21.899 equals the screen
+ok    CSV 95th percentile 21.912 equals the screen
 ok    CSV settlement total equals the screen
 -- carrier view
 ok    carrier user sees only Carrier A links
@@ -375,10 +379,10 @@ ok    the agents' route to the controller is cut
 ok    all three agents noticed after 66 s and hold the last good state
 ok    site A still reaches site B through the PoP
 -- BFD failover with the controller down
-ok    voice moved from wg-a to wg-b in 5.0 s, without the controller
+ok    voice moved from wg-a to wg-b in 3.4 s, without the controller
 ok    the live controller stayed up throughout
 -- give the agents the controller back
-ok    all three agents reconciled 7 s after the controller came back
+ok    all three agents reconciled 4 s after the controller came back
 -- lab/ci/checks/m8-ai.sh
 -- hurricane watch
 ok    NHC feed read from the lab host: 3 active storms
@@ -386,20 +390,20 @@ ok    example hurricane raised a warning
 ok    only site-a (Kingston) is warned
       Hurricane Example (90 kt) is moving at 23 km/h on a heading of 285°. Projecting that motion forward, it passes about 92 km from site-a in about 25 h. Consider switching Storm Mode on so the satellite path is warm before the terrestrial links suffer. This is a straight-line projection; check the NHC advisory for the official forecast track.
 -- disaster watch
-ok    all disaster feeds read from the lab host: gdacs=3 ptwc=2 usgs=28 events=30 failed= 
+ok    all disaster feeds read from the lab host: gdacs=3 ptwc=2 usgs=27 events=29 failed= 
 ok    example earthquake from USGS, GDACS and tsunami.gov raised one alert, for site-b only
       Magnitude 6.4 earthquake, 38 km NE of Port of Spain, Trinidad and Tobago, reported by USGS and GDACS and tsunami.gov. Latest tsunami message: Tsunami Information Statement Number 2. Sites in range: site-b 47 km (critical). Consider switching Storm Mode on for the sites marked critical, so the satellite path is warm if terrestrial links fail. Distances are straight lines from the reported location; check the source's report.
 -- insights from this run
-      anomaly critical: Carrier B at site-b: loss 7.82%, usually 0.00%
-      anomaly critical: Carrier B at site-a: loss 8.24%, usually 0.00%
-      anomaly critical: Carrier A at site-a: loss 4.39%, usually 0.00%
-      anomaly critical: Carrier A at site-b: loss 4.28%, usually 0.00%
+      anomaly critical: Carrier B at site-b: loss 7.61%, usually 0.00%
+      anomaly critical: Carrier A at site-a: loss 4.35%, usually 0.00%
+      anomaly critical: Carrier B at site-a: loss 7.58%, usually 0.00%
+      anomaly critical: Carrier A at site-b: loss 4.29%, usually 0.00%
       hazard warning: Earthquake in Panama: 1232 km from site-a
-      hazard critical: Example data: Magnitude 6.4 earthquake, 38 km NE of Port of Spain, Trinidad and Tobago: 47 km from site-b
       storm_warning critical: Example data: Hurricane Example may pass 92 km from site-a in about 25 h
       hazard critical: Example data: Magnitude 6.4 earthquake, 38 km NE of Port of Spain, Trinidad and Tobago: 47 km from site-b
+      hazard critical: Example data: Magnitude 6.4 earthquake, 38 km NE of Port of Spain, Trinidad and Tobago: 47 km from site-b
       storm_warning critical: Example data: Hurricane Example may pass 92 km from site-a in about 25 h
-      anomaly critical: Carrier B at site-a: loss 3.81%, usually 0.00%
+      anomaly critical: Carrier B at site-b: loss 3.77%, usually 0.00%
 -- ask your network
 curl: (22) The requested URL returned error: 502
 FAIL  no answer from the AI service
@@ -410,8 +414,8 @@ FAIL  no usable plan:
 -- simulated cloud gateways
 ok    AWS and Azure gateways configured
 -- cloud circuits
-ok    created circuits 192 (AWS) and 193 (Azure)
-ok    both circuits up (IPsec and BGP) 12 s after they were created
+ok    created circuits 197 (AWS) and 198 (Azure)
+ok    both circuits up (IPsec and BGP) 18 s after they were created
       AWS: up, BGP Established, routes 10.100.0.0/16
 ok    site-a learned the AWS VPC route from the PoP
 ok    lan-a reaches the AWS VPC (10.100.0.1) through the PoP
@@ -419,11 +423,11 @@ ok    site-a puts traffic for AWS in business
 -- cloud router
 ok    AWS reaches Azure through the PoP
 -- elastic bandwidth
-ok    20 Mbps reached the PoP's shaper on vc192
-      charges so far: [{"mbps":50,"hours":0.0},{"mbps":20,"hours":0.0}]
+ok    20 Mbps reached the PoP's shaper on vc197
+      charges so far: [{"mbps":50,"hours":0.01},{"mbps":20,"hours":0.0}]
 -- layer 2 circuit
 ok    VLAN 100 at site A and VLAN 200 at site B are one segment (lan-a pings lan-b)
-ok    layer 2 circuit up and monitored: round trip 61.2 ms, 0.0% loss over the last minute
+ok    layer 2 circuit up and monitored: round trip 58.7 ms, 0.0% loss over the last minute
 -- clean up
 ok    deleted circuits are torn down at the PoP
 -- lab/ci/checks/m9-gateway.sh
@@ -454,8 +458,8 @@ ok    deleting the rule lets the pings through again
 ok    a connection to 100.64.0.2:8080 from the internet reaches lan-a
 ok    the internet cannot reach lan-a directly through the PoP
 -- straight out at the site
-FAIL  no local breakout over carrier A (exits by eth1)
-ok    with carrier A cut, it leaves by carrier B within 5 s
+ok    lan-a reaches the internet over carrier A, translated to site-a's address
+ok    with carrier A cut, it leaves by carrier B within 4 s
 ok    site-a reports it exits by eth1
 -- clean up
 ok    back through the PoP
@@ -491,7 +495,7 @@ ok    lan-a kept reaching the VPC: 300 of 300 pings answered (about 0.0 s lost; 
 ok    the first tunnel recovers
 -- DDoS protection at the PoP
 ok    the internet reaches the PoP's public address
-ok    the flooding source was blocked automatically ({"blocked":0,"auto":305,"flood":1,"syn":0})
+ok    the flooding source was blocked automatically ({"blocked":0,"auto":292,"flood":1,"syn":0})
 ok    the blocked source can't reach the public address
 ok    lifting the block lets it back in
 ok    customers see the drop counts, not the addresses
@@ -630,7 +634,7 @@ ok    site-a wg-b: qdisc cake 8108: root refcnt 2 bandwidth 95Mbit diffserv4 tri
 ok    site-a reported its flows to UDP 8801
 ok    recognised: Zoom meetings seen at site-a: 1 flow(s) to UDP 8801, matches Zoom meetings (calls and meetings); currently unclassified. Suggest voice (real-time priority).
 ok    suggests voice
-ok    applied as rule 157
+ok    applied as rule 159
 ok    site-a classifies UDP 8801-8810 as voice
 ok    Zoom flows now report as voice
 ok    site-b is unchanged (the rule is for site-a)
@@ -666,8 +670,7 @@ ok    set-up: People and access lists the extensions no member holds (200)
 ok    set-up: a person invited by copied link joins with their own password (no email needed)
 ok    set-up: new people are given phone extensions 204 and 205
 ok    set-up: both sign in to Jibsy Phone and are connected
-FAIL  set-up: call not answered (rang: true; caller sees: nothing; callee sees: nothing)
-FAIL  set-up: walk-through stopped: TypeError: Cannot read properties of null (reading 'catch')
+ok    set-up: a new person's call rings the other, who answers
 -- lab/ci/checks/voice-phone-app.sh
 -- phone app
 ok    test accounts ready (extensions 201 and 202)
@@ -684,9 +687,9 @@ ok    app: contacts leave yourself out
 ok    app: search narrows the list (1 shown)
 ok    app: B sees the incoming call with A's name (Incoming call |  | Phone app test A |  | 201)
 ok    app: both sides show On a call 
-ok    app: audio starts both ways within 3 s of answering (1.5 s)
-ok    app: audio reaches A steadily ({"ice":"connected","rx":281,"energy":1.7304057781981899,"tx":304,"in5s":247})
-ok    app: audio reaches B steadily ({"ice":"connected","rx":288,"energy":1.344998114752997,"tx":284,"in5s":251})
+ok    app: audio starts both ways within 3 s of answering (1.6 s)
+ok    app: audio reaches A steadily ({"ice":"connected","rx":240,"energy":1.2699150423168206,"tx":272,"in5s":201})
+ok    app: audio reaches B steadily ({"ice":"connected","rx":249,"energy":1.2888562682788247,"tx":249,"in5s":210})
 ok    app: the call timer runs (0:06)
 ok    app: mute shows as on 
 ok    app: the in-call keypad opens and sends a tone 
@@ -696,7 +699,7 @@ ok    app: B's recents show the incoming call (Phone app test A | Incoming, 0:08
 ok    app: B's recents mark it missed (Phone app test A | Missed · just now | Phone app test A | Incoming, 0:08 · just now | Clear the list)
 ok    app: a missing extension gets a plain message (That extension or number doesn't exist.)
 ok    app: a computer keyboard types into the keypad (2*)
-ok    app: declining sends the caller to voicemail, which speaks ({"ice":"connected","rx":194,"energy":0.03339411603602989,"tx":193})
+ok    app: declining sends the caller to voicemail, which speaks ({"ice":"connected","rx":208,"energy":0.03415153265995244,"tx":208})
 ok    app: do not disturb saves 
 ok    app: with do not disturb on, A's app doesn't ring 
 ok    app: forwarding to a missing extension is refused with a reason (There is no extension 299.)
@@ -749,177 +752,177 @@ ok    trunks: number moved to Branch office
 ok    trunks: primary working again carries the call
 FAIL  edge proxy did not reload the carrier lists
       proxy start: /bin/sh /exacarib-start.sh 
-      list in proxy: b3465ac6c56dfba8f94369ee27314aff  /exacarib/kamailio/dispatcher.list
-      list written: b3465ac6c56dfba8f94369ee27314aff  /data/kamailio/dispatcher.list
+      list in proxy: 836787b44221c9d5140528b6991ce091  /exacarib/kamailio/dispatcher.list
+      list written: 836787b44221c9d5140528b6991ce091  /data/kamailio/dispatcher.list
       sets loaded: 0
       reload by hand: Ok. Dispatcher successfully reloaded. 
       address reload by hand: Reload OK 
-      watcher says: kamailio-1  | exacarib: carrier lists reloaded kamailio-1  | exacarib: watching carrier lists kamailio-1  | exacarib: carrier lists reloaded kamailio-1  | exacarib: carrier lists reloaded 
+      watcher says: kamailio-1  | exacarib: carrier lists reloaded kamailio-1  | exacarib: carrier lists reloaded kamailio-1  | exacarib: carrier lists reloaded kamailio-1  | exacarib: carrier lists reloaded 
 
-== Diagnostics (04:45:09)
+== Diagnostics (05:40:46)
 pop-miami: running
 site-a: running
 site-b: running
 -- agent log pop-miami
-time=2026-10-11T04:23:53.588Z level=INFO msg="class moved" node=pop-miami class=voice dst=192.168.10.0/24 from=carrier-b to=carrier-a why=bfd
-time=2026-10-11T04:23:53.588Z level=INFO msg="class moved" node=pop-miami class=bulk dst=192.168.20.0/24 from=carrier-b to=carrier-a why=bfd
-time=2026-10-11T04:23:53.673Z level=INFO msg="bfd change" node=pop-miami peer=100.64.2.11 tunnel=wg-b status=init
-time=2026-10-11T04:23:53.680Z level=INFO msg="class moved" node=pop-miami class=voice dst=192.168.10.0/24 from=carrier-a to=carrier-b why=bfd
-time=2026-10-11T04:23:53.681Z level=INFO msg="class moved" node=pop-miami class=bulk dst=192.168.20.0/24 from=carrier-a to=carrier-b why=bfd
-time=2026-10-11T04:23:54.223Z level=INFO msg="bfd change" node=pop-miami peer=100.64.3.12 tunnel=wg-sat status=init
-time=2026-10-11T04:23:54.223Z level=INFO msg="bfd change" node=pop-miami peer=100.64.3.11 tunnel=wg-sat status=init
-time=2026-10-11T04:23:54.717Z level=INFO msg="bfd change" node=pop-miami peer=100.64.2.12 tunnel=wg-b status=up
-time=2026-10-11T04:23:54.717Z level=INFO msg="bfd change" node=pop-miami peer=100.64.1.11 tunnel=wg-a status=up
-time=2026-10-11T04:23:54.718Z level=INFO msg="bfd change" node=pop-miami peer=100.64.1.12 tunnel=wg-a status=up
-time=2026-10-11T04:23:54.718Z level=INFO msg="bfd change" node=pop-miami peer=100.64.3.12 tunnel=wg-sat status=up
-time=2026-10-11T04:23:54.718Z level=INFO msg="bfd change" node=pop-miami peer=100.64.2.11 tunnel=wg-b status=up
-time=2026-10-11T04:23:54.718Z level=INFO msg="bfd change" node=pop-miami peer=100.64.3.11 tunnel=wg-sat status=up
-time=2026-10-11T04:29:16.672Z level=INFO msg="new steering map" node=pop-miami version=1748 storm=false
-time=2026-10-11T04:29:46.681Z level=INFO msg="new steering map" node=pop-miami version=1749 storm=false
-time=2026-10-11T04:29:46.689Z level=INFO msg="class moved" node=pop-miami class=voice dst=192.168.10.0/24 from=carrier-b to=carrier-a why=controller
-time=2026-10-11T04:29:46.689Z level=INFO msg="class moved" node=pop-miami class=business dst=192.168.10.0/24 from=carrier-b to=carrier-a why=controller
-time=2026-10-11T04:29:46.689Z level=INFO msg="class moved" node=pop-miami class=bulk dst=192.168.10.0/24 from=carrier-b to=carrier-a why=controller
-time=2026-10-11T04:29:46.689Z level=INFO msg="class moved" node=pop-miami class=voice dst=192.168.20.0/24 from=carrier-b to=carrier-a why=controller
-time=2026-10-11T04:29:46.689Z level=INFO msg="class moved" node=pop-miami class=business dst=192.168.20.0/24 from=carrier-b to=carrier-a why=controller
-time=2026-10-11T04:29:46.689Z level=INFO msg="class moved" node=pop-miami class=bulk dst=192.168.20.0/24 from=carrier-b to=carrier-a why=controller
-time=2026-10-11T04:30:16.680Z level=INFO msg="new steering map" node=pop-miami version=1751 storm=false
-time=2026-10-11T04:30:21.783Z level=INFO msg="new steering map" node=pop-miami version=1752 storm=false
-time=2026-10-11T04:33:01.248Z level=INFO msg="bfd change" node=pop-miami peer=100.64.2.12 tunnel=wg-b status=down
-time=2026-10-11T04:33:02.256Z level=INFO msg="bfd change" node=pop-miami peer=100.64.2.12 tunnel=wg-b status=up
+time=2026-10-11T05:34:02.855Z level=INFO msg="new steering map" node=pop-miami version=1762 storm=false
+time=2026-10-11T05:34:02.869Z level=INFO msg="class moved" node=pop-miami class=voice dst=192.168.20.0/24 from=carrier-b to=carrier-a why=controller
+time=2026-10-11T05:34:02.869Z level=INFO msg="class moved" node=pop-miami class=business dst=192.168.20.0/24 from=carrier-b to=carrier-a why=controller
+time=2026-10-11T05:34:02.869Z level=INFO msg="class moved" node=pop-miami class=bulk dst=192.168.20.0/24 from=carrier-b to=carrier-a why=controller
+time=2026-10-11T05:34:12.555Z level=INFO msg="new steering map" node=pop-miami version=1763 storm=false
+time=2026-10-11T05:34:17.855Z level=INFO msg="new steering map" node=pop-miami version=1764 storm=false
+time=2026-10-11T05:34:17.863Z level=INFO msg="class moved" node=pop-miami class=voice dst=192.168.10.0/24 from=carrier-b to=carrier-a why=controller
+time=2026-10-11T05:34:17.863Z level=INFO msg="class moved" node=pop-miami class=business dst=192.168.10.0/24 from=carrier-b to=carrier-a why=controller
+time=2026-10-11T05:34:17.863Z level=INFO msg="class moved" node=pop-miami class=bulk dst=192.168.10.0/24 from=carrier-b to=carrier-a why=controller
+time=2026-10-11T05:35:02.875Z level=INFO msg="new steering map" node=pop-miami version=1766 storm=false
+time=2026-10-11T05:35:07.772Z level=INFO msg="new steering map" node=pop-miami version=1767 storm=false
+time=2026-10-11T05:37:03.610Z level=INFO msg="bfd change" node=pop-miami peer=100.64.1.12 tunnel=wg-a status=down
+time=2026-10-11T05:37:03.623Z level=INFO msg="class moved" node=pop-miami class=voice dst=192.168.10.0/24 from=carrier-a to=carrier-b why=bfd
+time=2026-10-11T05:37:03.623Z level=INFO msg="class moved" node=pop-miami class=business dst=192.168.10.0/24 from=carrier-a to=carrier-b why=bfd
+time=2026-10-11T05:37:03.623Z level=INFO msg="class moved" node=pop-miami class=bulk dst=192.168.10.0/24 from=carrier-a to=carrier-b why=bfd
+time=2026-10-11T05:37:03.623Z level=INFO msg="class moved" node=pop-miami class=voice dst=192.168.20.0/24 from=carrier-a to=carrier-b why=bfd
+time=2026-10-11T05:37:03.623Z level=INFO msg="class moved" node=pop-miami class=business dst=192.168.20.0/24 from=carrier-a to=carrier-b why=bfd
+time=2026-10-11T05:37:03.623Z level=INFO msg="class moved" node=pop-miami class=bulk dst=192.168.20.0/24 from=carrier-a to=carrier-b why=bfd
+time=2026-10-11T05:37:04.110Z level=INFO msg="bfd change" node=pop-miami peer=100.64.1.12 tunnel=wg-a status=up
+time=2026-10-11T05:37:04.121Z level=INFO msg="class moved" node=pop-miami class=voice dst=192.168.10.0/24 from=carrier-b to=carrier-a why=bfd
+time=2026-10-11T05:37:04.121Z level=INFO msg="class moved" node=pop-miami class=business dst=192.168.10.0/24 from=carrier-b to=carrier-a why=bfd
+time=2026-10-11T05:37:04.121Z level=INFO msg="class moved" node=pop-miami class=bulk dst=192.168.10.0/24 from=carrier-b to=carrier-a why=bfd
+time=2026-10-11T05:37:04.121Z level=INFO msg="class moved" node=pop-miami class=voice dst=192.168.20.0/24 from=carrier-b to=carrier-a why=bfd
+time=2026-10-11T05:37:04.121Z level=INFO msg="class moved" node=pop-miami class=business dst=192.168.20.0/24 from=carrier-b to=carrier-a why=bfd
+time=2026-10-11T05:37:04.121Z level=INFO msg="class moved" node=pop-miami class=bulk dst=192.168.20.0/24 from=carrier-b to=carrier-a why=bfd
 -- agent log site-a
-time=2026-10-11T04:29:47.006Z level=INFO msg="new steering map" node=site-a version=1324 storm=false
-time=2026-10-11T04:29:47.044Z level=INFO msg="class moved" node=site-a class=voice dst="" from=carrier-b to=carrier-a why=controller
-time=2026-10-11T04:29:47.044Z level=INFO msg="class moved" node=site-a class=business dst="" from=carrier-b to=carrier-a why=controller
-time=2026-10-11T04:29:47.044Z level=INFO msg="class moved" node=site-a class=bulk dst="" from=carrier-b to=carrier-a why=controller
-time=2026-10-11T04:30:16.976Z level=INFO msg="new steering map" node=site-a version=1326 storm=false
-time=2026-10-11T04:30:21.985Z level=INFO msg="new steering map" node=site-a version=1327 storm=false
-time=2026-10-11T04:30:41.999Z level=INFO msg="path breaches class SLA" node=site-a class=voice path=sat latency_ms=55.995 jitter_ms=12.86 loss_pct=10
-time=2026-10-11T04:30:41.999Z level=INFO msg="path breaches class SLA" node=site-a class=business path=sat latency_ms=55.995 jitter_ms=12.86 loss_pct=10
-time=2026-10-11T04:30:41.999Z level=INFO msg="path breaches class SLA" node=site-a class=bulk path=sat latency_ms=55.995 jitter_ms=12.86 loss_pct=10
-time=2026-10-11T04:33:02.120Z level=INFO msg="path breaches class SLA" node=site-a class=voice path=carrier-b latency_ms=44.712 jitter_ms=31.096 loss_pct=0
-time=2026-10-11T04:33:02.120Z level=INFO msg="path breaches class SLA" node=site-a class=voice path=sat latency_ms=90.507 jitter_ms=53.173 loss_pct=0
-time=2026-10-11T04:33:52.040Z level=INFO msg="path breaches class SLA" node=site-a class=voice path=sat latency_ms=52.038 jitter_ms=14.983 loss_pct=10
-time=2026-10-11T04:33:52.041Z level=INFO msg="path breaches class SLA" node=site-a class=business path=sat latency_ms=52.038 jitter_ms=14.983 loss_pct=10
-time=2026-10-11T04:33:52.041Z level=INFO msg="path breaches class SLA" node=site-a class=bulk path=sat latency_ms=52.038 jitter_ms=14.983 loss_pct=10
-time=2026-10-11T04:35:02.131Z level=INFO msg="path breaches class SLA" node=site-a class=voice path=sat latency_ms=77.548 jitter_ms=33.392 loss_pct=0
-time=2026-10-11T04:36:12.005Z level=INFO msg="path breaches class SLA" node=site-a class=voice path=sat latency_ms=73.833 jitter_ms=31.833 loss_pct=0
-time=2026-10-11T04:39:12.062Z level=INFO msg="path breaches class SLA" node=site-a class=voice path=sat latency_ms=59.38 jitter_ms=23.265 loss_pct=10
-time=2026-10-11T04:39:12.062Z level=INFO msg="path breaches class SLA" node=site-a class=business path=sat latency_ms=59.38 jitter_ms=23.265 loss_pct=10
-time=2026-10-11T04:39:12.062Z level=INFO msg="path breaches class SLA" node=site-a class=bulk path=sat latency_ms=59.38 jitter_ms=23.265 loss_pct=10
-time=2026-10-11T04:40:02.271Z level=INFO msg="path breaches class SLA" node=site-a class=voice path=carrier-b latency_ms=42.512 jitter_ms=30.258 loss_pct=0
-time=2026-10-11T04:44:02.436Z level=INFO msg="path breaches class SLA" node=site-a class=voice path=carrier-a latency_ms=31.887 jitter_ms=35.607 loss_pct=0
-time=2026-10-11T04:44:02.437Z level=INFO msg="path breaches class SLA" node=site-a class=voice path=carrier-b latency_ms=42.416 jitter_ms=35.475 loss_pct=0
-time=2026-10-11T04:44:32.026Z level=INFO msg="path breaches class SLA" node=site-a class=voice path=sat latency_ms=53.353 jitter_ms=11.472 loss_pct=10
-time=2026-10-11T04:44:32.026Z level=INFO msg="path breaches class SLA" node=site-a class=business path=sat latency_ms=53.353 jitter_ms=11.472 loss_pct=10
-time=2026-10-11T04:44:32.026Z level=INFO msg="path breaches class SLA" node=site-a class=bulk path=sat latency_ms=53.353 jitter_ms=11.472 loss_pct=10
+time=2026-10-11T05:28:18.391Z level=INFO msg="bfd change" node=site-a peer=100.64.1.1 tunnel=wg-a status=down
+time=2026-10-11T05:28:18.391Z level=INFO msg="bfd change" node=site-a peer=100.64.2.1 tunnel=wg-b status=down
+time=2026-10-11T05:28:18.397Z level=INFO msg="class moved" node=site-a class=voice dst="" from=carrier-b to=bgp why=bfd
+time=2026-10-11T05:28:18.398Z level=INFO msg="class moved" node=site-a class=business dst="" from=carrier-b to=bgp why=bfd
+time=2026-10-11T05:28:18.398Z level=INFO msg="class moved" node=site-a class=bulk dst="" from=carrier-b to=paused why=bfd
+time=2026-10-11T05:28:20.413Z level=INFO msg="bfd change" node=site-a peer=100.64.3.1 tunnel=wg-sat status=up
+time=2026-10-11T05:28:20.413Z level=INFO msg="bfd change" node=site-a peer=100.64.1.1 tunnel=wg-a status=up
+time=2026-10-11T05:28:20.413Z level=INFO msg="bfd change" node=site-a peer=100.64.2.1 tunnel=wg-b status=up
+time=2026-10-11T05:28:20.422Z level=INFO msg="class moved" node=site-a class=voice dst="" from=bgp to=carrier-b why=bfd
+time=2026-10-11T05:28:20.423Z level=INFO msg="class moved" node=site-a class=business dst="" from=bgp to=carrier-b why=bfd
+time=2026-10-11T05:28:20.423Z level=INFO msg="class moved" node=site-a class=bulk dst="" from=paused to=carrier-b why=bfd
+time=2026-10-11T05:31:57.924Z level=INFO msg="path breaches class SLA" node=site-a class=voice path=sat latency_ms=45.303 jitter_ms=8.957 loss_pct=10
+time=2026-10-11T05:31:57.924Z level=INFO msg="path breaches class SLA" node=site-a class=business path=sat latency_ms=45.303 jitter_ms=8.957 loss_pct=10
+time=2026-10-11T05:31:57.924Z level=INFO msg="path breaches class SLA" node=site-a class=bulk path=sat latency_ms=45.303 jitter_ms=8.957 loss_pct=10
+time=2026-10-11T05:34:12.864Z level=INFO msg="new steering map" node=site-a version=1341 storm=false
+time=2026-10-11T05:34:18.003Z level=INFO msg="new steering map" node=site-a version=1342 storm=false
+time=2026-10-11T05:34:18.008Z level=INFO msg="class moved" node=site-a class=voice dst="" from=carrier-b to=carrier-a why=controller
+time=2026-10-11T05:34:18.008Z level=INFO msg="class moved" node=site-a class=business dst="" from=carrier-b to=carrier-a why=controller
+time=2026-10-11T05:34:18.008Z level=INFO msg="class moved" node=site-a class=bulk dst="" from=carrier-b to=carrier-a why=controller
+time=2026-10-11T05:35:02.897Z level=INFO msg="new steering map" node=site-a version=1344 storm=false
+time=2026-10-11T05:35:08.032Z level=INFO msg="new steering map" node=site-a version=1345 storm=false
+time=2026-10-11T05:37:07.923Z level=INFO msg="path breaches class SLA" node=site-a class=voice path=sat latency_ms=84.486 jitter_ms=42.145 loss_pct=0
+time=2026-10-11T05:38:57.953Z level=INFO msg="path breaches class SLA" node=site-a class=voice path=sat latency_ms=49.779 jitter_ms=10.016 loss_pct=10
+time=2026-10-11T05:38:57.953Z level=INFO msg="path breaches class SLA" node=site-a class=business path=sat latency_ms=49.779 jitter_ms=10.016 loss_pct=10
+time=2026-10-11T05:38:57.953Z level=INFO msg="path breaches class SLA" node=site-a class=bulk path=sat latency_ms=49.779 jitter_ms=10.016 loss_pct=10
 -- agent log site-b
-time=2026-10-11T04:29:22.398Z level=INFO msg="path breaches class SLA" node=site-b class=bulk path=sat latency_ms=48.747 jitter_ms=15.502 loss_pct=10
-time=2026-10-11T04:29:47.399Z level=INFO msg="new steering map" node=site-b version=931 storm=false
-time=2026-10-11T04:29:47.411Z level=INFO msg="class moved" node=site-b class=voice dst="" from=carrier-b to=carrier-a why=controller
-time=2026-10-11T04:29:47.411Z level=INFO msg="class moved" node=site-b class=business dst="" from=carrier-b to=carrier-a why=controller
-time=2026-10-11T04:29:47.411Z level=INFO msg="class moved" node=site-b class=bulk dst="" from=carrier-b to=carrier-a why=controller
-time=2026-10-11T04:30:17.351Z level=INFO msg="new steering map" node=site-b version=932 storm=false
-time=2026-10-11T04:30:22.459Z level=INFO msg="new steering map" node=site-b version=933 storm=false
-time=2026-10-11T04:31:52.474Z level=INFO msg="path breaches class SLA" node=site-b class=voice path=sat latency_ms=46.572 jitter_ms=17.653 loss_pct=20
-time=2026-10-11T04:31:52.474Z level=INFO msg="path breaches class SLA" node=site-b class=business path=sat latency_ms=46.572 jitter_ms=17.653 loss_pct=20
-time=2026-10-11T04:31:52.474Z level=INFO msg="path breaches class SLA" node=site-b class=bulk path=sat latency_ms=46.572 jitter_ms=17.653 loss_pct=20
-time=2026-10-11T04:33:01.518Z level=INFO msg="bfd change" node=site-b peer=100.64.2.1 tunnel=wg-b status=init
-time=2026-10-11T04:33:02.649Z level=INFO msg="bfd change" node=site-b peer=100.64.2.1 tunnel=wg-b status=up
-time=2026-10-11T04:33:02.654Z level=INFO msg="path breaches class SLA" node=site-b class=voice path=sat latency_ms=100.934 jitter_ms=61.499 loss_pct=0
-time=2026-10-11T04:35:02.643Z level=INFO msg="path breaches class SLA" node=site-b class=voice path=sat latency_ms=82.122 jitter_ms=47.645 loss_pct=0
-time=2026-10-11T04:35:42.518Z level=INFO msg="path breaches class SLA" node=site-b class=business path=sat latency_ms=47.833 jitter_ms=14.315 loss_pct=10
-time=2026-10-11T04:35:42.518Z level=INFO msg="path breaches class SLA" node=site-b class=bulk path=sat latency_ms=47.833 jitter_ms=14.315 loss_pct=10
-time=2026-10-11T04:36:02.671Z level=INFO msg="path breaches class SLA" node=site-b class=voice path=carrier-a latency_ms=33.094 jitter_ms=45.471 loss_pct=0
-time=2026-10-11T04:38:02.479Z level=INFO msg="path breaches class SLA" node=site-b class=voice path=sat latency_ms=43.998 jitter_ms=11.78 loss_pct=10
-time=2026-10-11T04:38:02.480Z level=INFO msg="path breaches class SLA" node=site-b class=business path=sat latency_ms=43.998 jitter_ms=11.78 loss_pct=10
-time=2026-10-11T04:38:02.480Z level=INFO msg="path breaches class SLA" node=site-b class=bulk path=sat latency_ms=43.998 jitter_ms=11.78 loss_pct=10
-time=2026-10-11T04:43:12.426Z level=INFO msg="path breaches class SLA" node=site-b class=voice path=sat latency_ms=48.638 jitter_ms=9.21 loss_pct=10
-time=2026-10-11T04:43:12.427Z level=INFO msg="path breaches class SLA" node=site-b class=business path=sat latency_ms=48.638 jitter_ms=9.21 loss_pct=10
-time=2026-10-11T04:43:12.427Z level=INFO msg="path breaches class SLA" node=site-b class=bulk path=sat latency_ms=48.638 jitter_ms=9.21 loss_pct=10
-time=2026-10-11T04:44:02.587Z level=INFO msg="path breaches class SLA" node=site-b class=voice path=carrier-a latency_ms=32.058 jitter_ms=40.903 loss_pct=0
-time=2026-10-11T04:44:02.588Z level=INFO msg="path breaches class SLA" node=site-b class=voice path=carrier-b latency_ms=41.584 jitter_ms=32.238 loss_pct=0
+time=2026-10-11T05:30:00.690Z level=INFO msg="bfd change" node=site-b peer=100.64.1.1 tunnel=wg-a status=down
+time=2026-10-11T05:30:00.694Z level=INFO msg="internet exit changed" node=site-b from=wg-a to=wg-b
+time=2026-10-11T05:30:01.003Z level=INFO msg="bfd change" node=site-b peer=100.64.1.1 tunnel=wg-a status=init
+time=2026-10-11T05:30:01.007Z level=INFO msg="internet exit changed" node=site-b from=wg-b to=wg-a
+time=2026-10-11T05:30:02.144Z level=INFO msg="bfd change" node=site-b peer=100.64.1.1 tunnel=wg-a status=up
+time=2026-10-11T05:34:02.955Z level=INFO msg="new steering map" node=site-b version=939 storm=false
+time=2026-10-11T05:34:02.961Z level=INFO msg="class moved" node=site-b class=voice dst="" from=carrier-b to=carrier-a why=controller
+time=2026-10-11T05:34:02.961Z level=INFO msg="class moved" node=site-b class=business dst="" from=carrier-b to=carrier-a why=controller
+time=2026-10-11T05:34:02.961Z level=INFO msg="class moved" node=site-b class=bulk dst="" from=carrier-b to=carrier-a why=controller
+time=2026-10-11T05:35:03.016Z level=INFO msg="new steering map" node=site-b version=940 storm=false
+time=2026-10-11T05:35:08.180Z level=INFO msg="new steering map" node=site-b version=941 storm=false
+time=2026-10-11T05:37:03.952Z level=INFO msg="bfd change" node=site-b peer=100.64.1.1 tunnel=wg-a status=down
+time=2026-10-11T05:37:03.965Z level=INFO msg="class moved" node=site-b class=voice dst="" from=carrier-a to=carrier-b why=bfd
+time=2026-10-11T05:37:03.965Z level=INFO msg="class moved" node=site-b class=business dst="" from=carrier-a to=carrier-b why=bfd
+time=2026-10-11T05:37:03.965Z level=INFO msg="class moved" node=site-b class=bulk dst="" from=carrier-a to=carrier-b why=bfd
+time=2026-10-11T05:37:04.018Z level=INFO msg="internet exit changed" node=site-b from=wg-a to=wg-b
+time=2026-10-11T05:37:04.097Z level=INFO msg="bfd change" node=site-b peer=100.64.1.1 tunnel=wg-a status=up
+time=2026-10-11T05:37:04.103Z level=INFO msg="class moved" node=site-b class=voice dst="" from=carrier-b to=carrier-a why=bfd
+time=2026-10-11T05:37:04.103Z level=INFO msg="class moved" node=site-b class=business dst="" from=carrier-b to=carrier-a why=bfd
+time=2026-10-11T05:37:04.103Z level=INFO msg="class moved" node=site-b class=bulk dst="" from=carrier-b to=carrier-a why=bfd
+time=2026-10-11T05:37:04.106Z level=INFO msg="internet exit changed" node=site-b from=wg-b to=wg-a
+time=2026-10-11T05:37:08.049Z level=INFO msg="path breaches class SLA" node=site-b class=voice path=sat latency_ms=88.823 jitter_ms=39.632 loss_pct=0
+time=2026-10-11T05:38:57.983Z level=INFO msg="path breaches class SLA" node=site-b class=voice path=sat latency_ms=45.557 jitter_ms=13.062 loss_pct=10
+time=2026-10-11T05:38:57.984Z level=INFO msg="path breaches class SLA" node=site-b class=business path=sat latency_ms=45.557 jitter_ms=13.062 loss_pct=10
+time=2026-10-11T05:38:57.985Z level=INFO msg="path breaches class SLA" node=site-b class=bulk path=sat latency_ms=45.557 jitter_ms=13.062 loss_pct=10
 -- controller log
-controller-1  | INFO:     172.18.0.4:52758 - "GET /api/v1/agent/steering?have=933 HTTP/1.0" 204 No Content
-controller-1  | INFO:     172.18.0.4:52764 - "GET /api/v1/agent/desired-state?have=659 HTTP/1.0" 204 No Content
-controller-1  | INFO:     172.18.0.4:52766 - "POST /api/v1/agent/telemetry HTTP/1.0" 204 No Content
-controller-1  | INFO:     127.0.0.1:60420 - "GET /healthz HTTP/1.1" 200 OK
-controller-1  | INFO:     172.18.0.4:52782 - "GET /api/v1/agent/steering?have=1752 HTTP/1.0" 204 No Content
-controller-1  | INFO:     172.18.0.4:52790 - "GET /api/v1/agent/desired-state?have=459 HTTP/1.0" 204 No Content
-controller-1  | INFO:     172.18.0.4:52798 - "POST /api/v1/agent/telemetry HTTP/1.0" 204 No Content
-controller-1  | INFO:     172.18.0.4:52806 - "GET /api/v1/agent/steering?have=1327 HTTP/1.0" 204 No Content
-controller-1  | INFO:     172.18.0.4:52810 - "GET /api/v1/agent/desired-state?have=201 HTTP/1.0" 204 No Content
-controller-1  | INFO:     172.18.0.4:52818 - "POST /api/v1/agent/telemetry HTTP/1.0" 204 No Content
-controller-1  | INFO:     172.18.0.4:52830 - "GET /api/v1/agent/steering?have=933 HTTP/1.0" 204 No Content
-controller-1  | INFO:     172.18.0.4:32884 - "GET /api/v1/agent/steering?have=1752 HTTP/1.0" 204 No Content
-controller-1  | INFO:     172.18.0.4:32886 - "GET /api/v1/agent/steering?have=1327 HTTP/1.0" 204 No Content
-controller-1  | INFO:     127.0.0.1:58644 - "GET /healthz HTTP/1.1" 200 OK
-controller-1  | INFO:     172.18.0.4:32900 - "GET /api/v1/agent/steering?have=933 HTTP/1.0" 204 No Content
-controller-1  | INFO:     172.18.0.4:32910 - "GET /api/v1/agent/desired-state?have=659 HTTP/1.0" 204 No Content
-controller-1  | INFO:     172.18.0.4:32912 - "GET /api/v1/agent/steering?have=1752 HTTP/1.0" 204 No Content
-controller-1  | INFO:     172.18.0.4:32914 - "POST /api/v1/agent/telemetry HTTP/1.0" 204 No Content
-controller-1  | INFO:     172.18.0.4:32922 - "GET /api/v1/agent/desired-state?have=459 HTTP/1.0" 204 No Content
-controller-1  | INFO:     172.18.0.4:32926 - "GET /api/v1/agent/steering?have=1327 HTTP/1.0" 204 No Content
-controller-1  | INFO:     172.18.0.4:32936 - "POST /api/v1/agent/telemetry HTTP/1.0" 204 No Content
-controller-1  | INFO:     172.18.0.4:32938 - "GET /api/v1/agent/desired-state?have=201 HTTP/1.0" 204 No Content
-controller-1  | INFO:     172.18.0.4:32944 - "POST /api/v1/agent/telemetry HTTP/1.0" 204 No Content
-controller-1  | INFO:     172.18.0.4:32946 - "GET /api/v1/agent/steering?have=933 HTTP/1.0" 204 No Content
-controller-1  | INFO:     127.0.0.1:58658 - "GET /healthz HTTP/1.1" 200 OK
-controller-1  | INFO:     172.18.0.5:35894 - "GET /api/v1/commai/customers/4d26813b-aaa6-4be7-9b73-1730be959882/conversations?view=open&limit=100 HTTP/1.1" 200 OK
-controller-1  | INFO:     172.18.0.5:35918 - "GET /api/v1/customers/mine HTTP/1.1" 200 OK
-controller-1  | INFO:     172.18.0.5:35908 - "GET /api/v1/orgs/4d26813b-aaa6-4be7-9b73-1730be959882/setup HTTP/1.1" 200 OK
-controller-1  | INFO:     172.18.0.4:47850 - "GET /api/v1/agent/steering?have=1752 HTTP/1.0" 204 No Content
-controller-1  | INFO:     172.18.0.4:47854 - "GET /api/v1/agent/steering?have=1327 HTTP/1.0" 204 No Content
-controller-1  | INFO:     172.18.0.4:47868 - "GET /api/v1/agent/steering?have=933 HTTP/1.0" 204 No Content
-controller-1  | INFO:     127.0.0.1:48450 - "GET /healthz HTTP/1.1" 200 OK
-controller-1  | INFO:     172.18.0.4:47876 - "GET /api/v1/agent/desired-state?have=659 HTTP/1.0" 204 No Content
-controller-1  | INFO:     172.18.0.4:47878 - "GET /api/v1/agent/steering?have=1752 HTTP/1.0" 204 No Content
-controller-1  | INFO:     172.18.0.4:47894 - "POST /api/v1/agent/telemetry HTTP/1.0" 204 No Content
-controller-1  | INFO:     172.18.0.4:47906 - "GET /api/v1/agent/desired-state?have=459 HTTP/1.0" 204 No Content
-controller-1  | INFO:     172.18.0.4:47918 - "POST /api/v1/agent/telemetry HTTP/1.0" 204 No Content
-controller-1  | INFO:     172.18.0.4:47932 - "GET /api/v1/agent/steering?have=1327 HTTP/1.0" 204 No Content
-controller-1  | INFO:     172.18.0.4:47940 - "GET /api/v1/agent/desired-state?have=201 HTTP/1.0" 204 No Content
-controller-1  | INFO:     172.18.0.4:47950 - "POST /api/v1/agent/telemetry HTTP/1.0" 204 No Content
-controller-1  | INFO:     172.18.0.4:47956 - "GET /api/v1/agent/steering?have=933 HTTP/1.0" 204 No Content
-controller-1  | INFO:     127.0.0.1:48454 - "GET /healthz HTTP/1.1" 200 OK
-controller-1  | INFO:     172.18.0.4:36270 - "GET /api/v1/agent/steering?have=1752 HTTP/1.0" 204 No Content
-controller-1  | INFO:     172.18.0.4:36278 - "GET /api/v1/agent/steering?have=1327 HTTP/1.0" 204 No Content
-controller-1  | INFO:     172.18.0.4:36286 - "GET /api/v1/agent/steering?have=933 HTTP/1.0" 204 No Content
-controller-1  | INFO:     127.0.0.1:55622 - "GET /healthz HTTP/1.1" 200 OK
-controller-1  | INFO:     172.18.0.4:36302 - "GET /api/v1/agent/desired-state?have=659 HTTP/1.0" 204 No Content
-controller-1  | INFO:     172.18.0.4:36308 - "GET /api/v1/agent/steering?have=1752 HTTP/1.0" 204 No Content
-controller-1  | INFO:     172.18.0.4:36310 - "GET /api/v1/agent/desired-state?have=459 HTTP/1.0" 204 No Content
-controller-1  | INFO:     172.18.0.4:36312 - "POST /api/v1/agent/telemetry HTTP/1.0" 204 No Content
-controller-1  | INFO:     172.18.0.4:36316 - "POST /api/v1/agent/telemetry HTTP/1.0" 204 No Content
-controller-1  | INFO:     172.18.0.4:36332 - "GET /api/v1/agent/steering?have=1327 HTTP/1.0" 204 No Content
-controller-1  | INFO:     172.18.0.4:36344 - "GET /api/v1/agent/desired-state?have=201 HTTP/1.0" 204 No Content
-controller-1  | INFO:     172.18.0.4:36358 - "GET /api/v1/agent/steering?have=933 HTTP/1.0" 204 No Content
-controller-1  | INFO:     172.18.0.4:36366 - "POST /api/v1/agent/telemetry HTTP/1.0" 204 No Content
-controller-1  | INFO:     127.0.0.1:55638 - "GET /healthz HTTP/1.1" 200 OK
-controller-1  | INFO:     172.18.0.4:58260 - "GET /api/v1/agent/steering?have=1752 HTTP/1.0" 204 No Content
-controller-1  | INFO:     172.18.0.4:58266 - "GET /api/v1/agent/steering?have=1327 HTTP/1.0" 204 No Content
-controller-1  | INFO:     172.18.0.4:58268 - "GET /api/v1/agent/steering?have=933 HTTP/1.0" 204 No Content
-controller-1  | INFO:     127.0.0.1:41570 - "GET /healthz HTTP/1.1" 200 OK
+controller-1  | INFO:     172.18.0.4:57530 - "GET /api/v1/agent/steering?have=1345 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.5:33974 - "POST /api/v1/commai/customers/926068e4-87e1-426f-aca6-e5525b05f53c/voice/calls/simulate HTTP/1.1" 201 Created
+controller-1  | INFO:     172.18.0.5:33974 - "GET /api/v1/commai/customers/926068e4-87e1-426f-aca6-e5525b05f53c/voice/calls HTTP/1.1" 200 OK
+controller-1  | INFO:     172.18.0.4:57536 - "GET /api/v1/agent/steering?have=941 HTTP/1.0" 204 No Content
+controller-1  | INFO:     127.0.0.1:58360 - "GET /healthz HTTP/1.1" 200 OK
+controller-1  | INFO:     172.18.0.4:54926 - "GET /api/v1/agent/desired-state?have=676 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:54930 - "POST /api/v1/agent/telemetry HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:54940 - "GET /api/v1/agent/steering?have=1767 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:54942 - "GET /api/v1/agent/desired-state?have=470 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:54972 - "GET /api/v1/agent/desired-state?have=206 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:54956 - "POST /api/v1/agent/telemetry HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:54976 - "GET /api/v1/agent/steering?have=941 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:55008 - "GET /api/v1/agent/steering?have=1345 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:54992 - "POST /api/v1/agent/telemetry HTTP/1.0" 204 No Content
+controller-1  | INFO:     127.0.0.1:60656 - "GET /healthz HTTP/1.1" 200 OK
+controller-1  | INFO:     172.18.0.4:55022 - "GET /api/v1/agent/steering?have=1767 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:55030 - "GET /api/v1/agent/steering?have=1345 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:55034 - "GET /api/v1/agent/steering?have=941 HTTP/1.0" 204 No Content
+controller-1  | INFO:     127.0.0.1:60664 - "GET /healthz HTTP/1.1" 200 OK
+controller-1  | INFO:     172.18.0.4:36632 - "GET /api/v1/agent/desired-state?have=676 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:36644 - "POST /api/v1/agent/telemetry HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:36646 - "GET /api/v1/agent/steering?have=1767 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:36656 - "GET /api/v1/agent/desired-state?have=470 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:36666 - "POST /api/v1/agent/telemetry HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:36672 - "GET /api/v1/agent/steering?have=1345 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:36680 - "GET /api/v1/agent/desired-state?have=206 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:36688 - "POST /api/v1/agent/telemetry HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:36700 - "GET /api/v1/agent/steering?have=941 HTTP/1.0" 204 No Content
+controller-1  | INFO:     127.0.0.1:41644 - "GET /healthz HTTP/1.1" 200 OK
+controller-1  | INFO:     172.18.0.4:36702 - "GET /api/v1/agent/steering?have=1767 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:36710 - "GET /api/v1/agent/steering?have=1345 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:36716 - "GET /api/v1/agent/steering?have=941 HTTP/1.0" 204 No Content
+controller-1  | INFO:     127.0.0.1:41660 - "GET /healthz HTTP/1.1" 200 OK
+controller-1  | INFO:     172.18.0.4:42068 - "GET /api/v1/agent/desired-state?have=676 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:42074 - "GET /api/v1/agent/steering?have=1767 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:42078 - "POST /api/v1/agent/telemetry HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:42088 - "GET /api/v1/agent/desired-state?have=470 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:42100 - "GET /api/v1/agent/steering?have=1345 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:42106 - "GET /api/v1/agent/desired-state?have=206 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:42110 - "POST /api/v1/agent/telemetry HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:42118 - "POST /api/v1/agent/telemetry HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:42130 - "GET /api/v1/agent/steering?have=941 HTTP/1.0" 204 No Content
+controller-1  | INFO:     127.0.0.1:33634 - "GET /healthz HTTP/1.1" 200 OK
+controller-1  | INFO:     172.18.0.4:42134 - "GET /api/v1/agent/steering?have=1767 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:42148 - "GET /api/v1/agent/steering?have=1345 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:42158 - "GET /api/v1/agent/steering?have=941 HTTP/1.0" 204 No Content
+controller-1  | INFO:     127.0.0.1:58116 - "GET /healthz HTTP/1.1" 200 OK
+controller-1  | INFO:     172.18.0.4:35748 - "GET /api/v1/agent/desired-state?have=676 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:35752 - "GET /api/v1/agent/steering?have=1767 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:35760 - "POST /api/v1/agent/telemetry HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:35772 - "GET /api/v1/agent/desired-state?have=470 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:35782 - "GET /api/v1/agent/steering?have=1345 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:35790 - "POST /api/v1/agent/telemetry HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:35796 - "GET /api/v1/agent/desired-state?have=206 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:35804 - "GET /api/v1/agent/steering?have=941 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:35812 - "POST /api/v1/agent/telemetry HTTP/1.0" 204 No Content
+controller-1  | INFO:     127.0.0.1:58128 - "GET /healthz HTTP/1.1" 200 OK
+controller-1  | INFO:     172.18.0.4:35828 - "GET /api/v1/agent/steering?have=1767 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:35834 - "GET /api/v1/agent/steering?have=1345 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:35846 - "GET /api/v1/agent/steering?have=941 HTTP/1.0" 204 No Content
 -- controller containers
-exaconnect-controller-1 Up 47 minutes (healthy)
+exaconnect-controller-1 Up 38 minutes (healthy)
 exaconnect-db-1 Up 10 days (healthy)
-exaconnect-freeswitch-1 Up 10 hours (healthy)
-exaconnect-kamailio-1 Up 46 minutes
-exaconnect-proxy-1 Up 47 minutes
-exaconnect-web-1 Up 47 minutes
-/exaconnect-controller-1 restarts 0, started 2026-10-11T03:57:45.896344745Z, OOM killed false
+exaconnect-freeswitch-1 Up 11 hours (healthy)
+exaconnect-kamailio-1 Up 2 hours
+exaconnect-proxy-1 Up 38 minutes
+exaconnect-web-1 Up 37 minutes
+/exaconnect-controller-1 restarts 0, started 2026-10-11T05:02:38.052769806Z, OOM killed false
 /exaconnect-db-1 restarts 0, started 2026-10-01T05:06:52.589123103Z, OOM killed false
 /exaconnect-freeswitch-1 restarts 0, started 2026-10-10T19:07:40.106844184Z, OOM killed false
 /exaconnect-kamailio-1 restarts 0, started 2026-10-11T03:58:50.08511241Z, OOM killed false
-/exaconnect-proxy-1 restarts 0, started 2026-10-11T03:57:17.997372753Z, OOM killed false
-/exaconnect-web-1 restarts 0, started 2026-10-11T03:58:03.244229536Z, OOM killed false
+/exaconnect-proxy-1 restarts 0, started 2026-10-11T05:02:28.448105043Z, OOM killed false
+/exaconnect-web-1 restarts 0, started 2026-10-11T05:02:54.535115142Z, OOM killed false
 -- host
- 06:45:12 up 10 days,  3:09,  0 user,  load average: 4.64, 4.18, 4.72
+ 07:40:48 up 10 days,  4:05,  0 user,  load average: 4.83, 4.38, 4.53
                total        used        free      shared  buff/cache   available
-Mem:            7941        3085        2829         473        2882        4855
+Mem:            7941        3022        2911         473        2862        4918
 Swap:              0           0           0
 procs -----------memory---------- ---swap-- -----io---- -system-- -------cpu-------
  r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st gu
- 6  0      0 2897836  13888 2937584    0    0    56   253 5325   21  8 22 70  0  0  0
- 0  0      0 2901040  13888 2937664    0    0     0   128 5738 7121  4 19 77  0  0  0
- 0  0      0 2904584  13888 2937664    0    0     0   160 7498 10238 11 21 67  0  0  0
+ 1  0      0 2981252  13880 2917528    0    0    57   254 5340   21  8 22 70  0  0  0
+ 0  0      0 2959164  13880 2917660    0    0     0   140 7394 9213  6 21 73  0  0  0
+ 1  0      0 2979728  13880 2917688    0    0     0   160 8025 10109  7 21 72  0  0  0
 make: *** [Makefile:125: lab-ci] Error 1
