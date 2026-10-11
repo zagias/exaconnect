@@ -3,6 +3,7 @@ import { api, useApi } from "../api";
 import { AuthGate, useAuth } from "../auth";
 import { CustomerProvider, useCustomer } from "../customer";
 import { plainReason, VertoPhone, type CallState } from "../pages/commai/voice/verto";
+import { reportQuality } from "../pages/commai/voice/quality";
 import type { Me } from "../pages/commai/voice/types";
 import { Ringer, RINGTONES, type Ringtone } from "./ringer";
 
@@ -389,6 +390,7 @@ function usePhone(base: string | null, cfg: WebPhone | null, settings: Settings)
             setTimeout(() => setState((st) => (st === "ended" ? "idle" : st)), 300);
           }
         },
+        onQuality: (q) => base && reportQuality(base, q),
         onRemoteStream: (stream) => {
           const el = audioRef.current;
           if (!el) return;

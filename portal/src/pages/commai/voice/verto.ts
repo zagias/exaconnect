@@ -5,12 +5,16 @@
  * keypad tones and mute. No library from a CDN.
  */
 
+import { type CallQuality, QualityMeter } from "./quality";
+
 export type CallState = "idle" | "calling" | "ringing" | "incoming" | "active" | "ended";
 
 export interface VertoEvents {
   onStatus: (connected: boolean, message: string) => void;
   onCall: (state: CallState, detail: { number?: string; name?: string; reason?: string }) => void;
   onRemoteStream: (stream: MediaStream) => void;
+  /** When an answered call ends: how it sounded from here (quality.ts). */
+  onQuality?: (q: CallQuality) => void;
 }
 
 interface Pending {
@@ -57,6 +61,7 @@ export class VertoPhone {
   private callID: string | null = null;
   private incomingSdp: string | null = null;
   private incomingParams: Record<string, unknown> = {};
+  private meter: QualityMeter | null = null;
   /** The microphone to use (a deviceId from enumerateDevices); the default when unset. */
   micId = "";
 
@@ -130,7 +135,10 @@ export class VertoPhone {
       case "verto.media":
       case "verto.answer":
         if (params.sdp && this.pc) void this.pc.setRemoteDescription({ type: "answer", sdp: String(params.sdp) });
-        if (msg.method === "verto.answer") this.ev.onCall("active", {});
+        if (msg.method === "verto.answer") {
+          this.measure("out");
+          this.ev.onCall("active", {});
+        }
         else this.ev.onCall("ringing", {});
         break;
       case "verto.invite": {
@@ -224,6 +232,7 @@ export class VertoPhone {
       this.cleanup("ended", reason);
       throw new Error(reason);
     }
+    this.measure("in");
     this.ev.onCall("active", {});
   }
 
@@ -243,8 +252,15 @@ export class VertoPhone {
     this.local?.getAudioTracks().forEach((t) => (t.enabled = !on));
   }
 
+  private measure(direction: "in" | "out"): void {
+    if (this.pc && this.callID && !this.meter) this.meter = new QualityMeter(this.pc, this.callID, direction);
+  }
+
   private cleanup(state: CallState, reason: string): void {
     const had = !!this.callID || !!this.pc;
+    const q = this.meter?.stop();
+    this.meter = null;
+    if (q) this.ev.onQuality?.(q);
     this.pc?.close();
     this.pc = null;
     this.local?.getTracks().forEach((t) => t.stop());

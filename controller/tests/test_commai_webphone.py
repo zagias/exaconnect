@@ -91,3 +91,38 @@ def test_verto_signs_in_through_the_public_proxy_only():
     fs = compose[compose.index("\n  freeswitch:") : compose.index("\n  kamailio:")]
     assert "verto.conf.xml:/etc/freeswitch/autoload_configs/verto.conf.xml:ro" in fs
     assert "ports:" not in fs and "8081" not in fs.replace("port 8081", "")  # never published on the host
+
+
+def test_call_quality_is_stored_for_your_own_extension(client):
+    b = setup_voice(client)
+    u = base(b)
+    q = {
+        "call_id": "c-1",
+        "direction": "out",
+        "secs": 42,
+        "codec": "opus",
+        "rx_packets": 2100,
+        "rx_lost": 12,
+        "concealed_pct": 1.5,
+        "bad_stretches": 2,
+        "jitter_ms": 9,
+        "jitter_max_ms": 31,
+        "jitter_buffer_ms": 60,
+        "rtt_ms": 88,
+        "rtt_max_ms": 140,
+        "up_lost_pct": 0.4,
+        "up_jitter_ms": 7,
+        "path": "host/udp",
+        "network": "wifi",
+    }
+    ua = {"User-Agent": "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/129.0 Mobile Safari/537.36"}
+    r = client.post(f"{u}/voice/webphone/quality", json=q, headers={**b["ana"]["h"], **ua})
+    assert r.status_code == 204
+    with db.tx() as conn:
+        row = conn.execute("SELECT * FROM voice_call_quality WHERE customer_id = %s", (b["id"],)).fetchone()
+    assert row["extension"] == "201" and row["device"] == "Chrome on Android"
+    assert row["concealed_pct"] == 1.5 and row["rtt_ms"] == 88 and row["path"] == "host/udp"
+    # Nonsense is refused, and someone without an extension has nothing to report.
+    bad = {**q, "concealed_pct": 400}
+    assert client.post(f"{u}/voice/webphone/quality", json=bad, headers=b["ana"]["h"]).status_code == 422
+    assert client.post(f"{u}/voice/webphone/quality", json=q, headers=b["boss"]["h"]).status_code == 404
