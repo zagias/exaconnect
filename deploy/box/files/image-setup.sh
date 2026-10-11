@@ -44,7 +44,8 @@ hostnamectl set-hostname exacarib-box 2>/dev/null || echo exacarib-box >/etc/hos
 mkdir -p /etc/exacarib && touch /etc/exacarib/growroot-pending
 # Each box makes its own identity at first boot.
 systemctl disable exacarib-build.service
-rm -f /etc/systemd/system/exacarib-build.service /root/exacarib-build.sh
+# The serial login was held off while the build wrote to the serial console.
+rm -f /etc/systemd/system/exacarib-build.service /root/exacarib-build.sh /etc/systemd/system/serial-getty@ttyS0.service
 rm -rf /var/lib/exaconnect/* /etc/ssh/ssh_host_* /var/lib/dbus/machine-id
 truncate -s 0 /etc/machine-id
 apt-get clean

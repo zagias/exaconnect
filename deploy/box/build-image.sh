@@ -35,6 +35,7 @@ virt-customize -q -a "$work/$base" --no-network \
   --upload "$here/files/exacarib-growroot.service:/etc/systemd/system/exacarib-growroot.service" \
   --upload "$here/files/exacarib-build.service:/etc/systemd/system/exacarib-build.service" \
   --link /etc/systemd/system/exacarib-build.service:/etc/systemd/system/multi-user.target.wants/exacarib-build.service \
+  --link /dev/null:/etc/systemd/system/serial-getty@ttyS0.service \
   --write '/etc/systemd/network/99-exacarib-build.network:[Match]
 Name=e*
 
