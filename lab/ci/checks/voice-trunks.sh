@@ -28,7 +28,8 @@ if ! docker image inspect "$image" >/dev/null 2>&1; then
 fi
 
 # From here on the test changes the carrier lists; the proxy should reload them after this.
-started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+reloads() { "${COMPOSE[@]}" logs kamailio 2>/dev/null | grep -c "exacarib: carrier lists reloaded" || true; }
+before=$(reloads)
 users=$("${COMPOSE[@]}" exec -T controller python - <"$REPO/deploy/voice/uat/trunk_users.py" 2>/dev/null | tail -1)
 if ! jq -e '.OWNER_EMAIL and .OWNER_PW and .HEAD_EXT and .BRANCH_EXT' >/dev/null 2>&1 <<<"$users"; then
   bad "could not set up the trunk test organisation"
@@ -60,11 +61,12 @@ fi
 # The edge proxy picked up the new trunk lists without a restart.
 if [[ -n $("${COMPOSE[@]}" ps -q --status running kamailio 2>/dev/null) ]]; then
   sleep 8
-  if "${COMPOSE[@]}" logs --since "$started" kamailio 2>/dev/null | grep -q "exacarib: carrier lists reloaded"; then
+  if (($(reloads) > before)); then
     ok "edge proxy reloaded the carrier lists by itself"
   else
     bad "edge proxy did not reload the carrier lists"
     # What to look at: the watcher's process, the list each side sees, and the proxy's own words.
+    note "reloads logged: $before before the test, $(reloads) after"
     note "proxy start: $("${COMPOSE[@]}" exec -T kamailio sh -c 'tr "\0" " " </proc/1/cmdline' 2>&1 | cut -c1-120)"
     note "list in proxy: $("${COMPOSE[@]}" exec -T kamailio md5sum /exacarib/kamailio/dispatcher.list 2>&1 | cut -c1-80)"
     note "list written: $("${COMPOSE[@]}" exec -T controller md5sum /data/kamailio/dispatcher.list 2>&1 | cut -c1-80)"
