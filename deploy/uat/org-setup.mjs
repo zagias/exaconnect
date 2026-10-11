@@ -223,10 +223,23 @@ try {
       return { email, ext: row.match(/\b\d{3,6}\b/)?.[0] };
     };
     // Each phone in its own browser, as two people on two devices (and as the phone app's own test does).
+    let t0 = Date.now();
     const signInPhone = async ({ email, ext }) => {
       const own = await chromium.launch({ args: MEDIA, ...(E.CHROMIUM_PATH ? { executablePath: E.CHROMIUM_PATH } : {}) });
-      const p = await (await own.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1440, height: 900 } })).newPage();
+      const p = await (await own.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1440, height: 900 }, permissions: ["microphone"] })).newPage();
       p.on("pageerror", (e) => console.log("phone page error:", String(e).slice(0, 160)));
+      // What the phone system says about the call (hang-up causes), for the failure report.
+      p.verto = [];
+      p.on("websocket", (ws) => {
+        const note = (dir) => (f) => {
+          const raw = String(f.payload || "");
+          const m = raw.match(/"method":"verto\.([a-z]+)"/);
+          const cause = raw.match(/"cause":"([A-Z_]+)"/)?.[1];
+          if (m && m[1] !== "ping") p.verto.push(`${dir}${m[1]}${cause ? ":" + cause : ""}@${((Date.now() - t0) / 1000).toFixed(1)}s`);
+        };
+        ws.on("framereceived", note("<"));
+        ws.on("framesent", note(">"));
+      });
       await p.goto(E.PHONE_BASE.replace(/\/$/, "") + "/", { waitUntil: "networkidle" });
       await p.getByLabel("Work email").fill(email);
       await p.getByRole("button", { name: "Continue" }).click();
@@ -261,15 +274,16 @@ try {
         await a.waitForTimeout(3000); // both registrations settle
         await a.getByRole("navigation", { name: "Phone" }).getByRole("button", { name: "Keypad" }).click();
         await a.getByLabel("Extension or number").fill(callee.ext);
+        t0 = Date.now();
         await a.getByRole("button", { name: "Call", exact: true }).click();
         const rang = await waitFor(b.locator(".ph-overlay"), /Incoming call/, 30000);
         if (rang) await b.getByRole("button", { name: "Answer" }).click();
-        const talking = rang && (await waitFor(a.locator(".ph-overlay"), /On a call/));
+        const talking = rang && (await waitFor(a.locator(".ph-overlay"), /On a call/, 20000));
         const seen = async (p) => (await p.locator(".ph-overlay, .ph-toast").allInnerTexts().catch(() => [])).join(" / ").replace(/\s+/g, " ").slice(0, 160) || "nothing";
         talking
           ? ok("a new person's call rings the other, who answers")
-          : bad(`call not answered (rang: ${rang}; caller sees: ${await seen(a)}; callee sees: ${await seen(b)})`);
-        await shot(a, "10_new_people_call").catch(() => {});
+          : bad(`call not answered (rang: ${rang}; caller sees: ${await seen(a)}; callee sees: ${await seen(b)}; caller verto: ${a.verto.join(" ").slice(0, 300)}; callee verto: ${b.verto.join(" ").slice(0, 300)})`);
+        await Promise.resolve(shot(a, "10_new_people_call")).catch(() => {});
         if (await a.getByRole("button", { name: "Hang up" }).count().catch(() => 0)) await a.getByRole("button", { name: "Hang up" }).click();
       }
     }
