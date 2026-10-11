@@ -1,0 +1,15 @@
+# ExaCarib box (ADR 0047): default ports for a box nobody has set up yet.
+[Unit]
+Description=ExaCarib box default ports
+DefaultDependencies=no
+After=local-fs.target systemd-udev-settle.service systemd-udevd.service
+Before=network-pre.target systemd-networkd.service
+Wants=network-pre.target
+ConditionPathExists=!/etc/netplan/80-exacarib-default.yaml
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/exacarib/exacarib-box-ports
+
+[Install]
+WantedBy=sysinit.target

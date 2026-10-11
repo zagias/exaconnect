@@ -405,3 +405,14 @@ connection to ExaCarib and run ping, traceroute and DNS checks. It runs inside t
 agent (`exa-agent run --console :443`, `install.sh --box`). The portal marks boxes
 managed locally and lists changes made on them, and follows the box's choice of
 ports. Every lab run sets up a fresh box this way end to end.
+
+**ExaCarib box image and the box's own firewall** (ADR 0047, 2026-10-11). The box
+now ships as Linux: an image for x86 boxes (Debian 12, FRR 10, WireGuard, nftables,
+the agent and box console) to write to a USB stick or disk, and an `exacarib-box`
+package for boxes already on Debian or Ubuntu. A fresh box needs no screen: plug a
+laptop into the last port and open https://192.168.50.1. The box protects itself
+with a default-deny firewall (nothing new from the internet; console, DHCP and DNS
+on the office side only; flood and SYN limits like the PoP's), SYN cookies and daily
+security updates. GitHub Actions builds both, boots the image and sets it up, and
+publishes them as a release; the lab boots the published image and joins it to live
+Connect.

@@ -1,0 +1,16 @@
+# ExaCarib box (ADR 0047): office addresses for a laptop until the box console
+# is set up. The console takes over the same pid file (and stops this) when
+# someone saves the ports.
+[Unit]
+Description=ExaCarib box office DHCP until set-up
+After=network.target
+ConditionPathExists=/etc/exacarib/setup-dhcp.conf
+ConditionPathExists=!/var/lib/exaconnect/console-network.json
+
+[Service]
+Type=forking
+PIDFile=/run/exacarib-dnsmasq.pid
+ExecStart=/usr/sbin/dnsmasq --conf-file=/etc/exacarib/setup-dhcp.conf --pid-file=/run/exacarib-dnsmasq.pid
+
+[Install]
+WantedBy=multi-user.target

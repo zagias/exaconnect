@@ -1,0 +1,7 @@
+[Unit]
+Description=ExaCarib box console address and setup code on the screen
+After=exa-box.service network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/exacarib/exacarib-box-banner

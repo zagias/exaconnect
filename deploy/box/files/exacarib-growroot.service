@@ -1,0 +1,13 @@
+# First boot of the ExaCarib image: use the whole disk (ADR 0047).
+[Unit]
+Description=ExaCarib box: grow the root file system to the disk
+ConditionPathExists=/etc/exacarib/growroot-pending
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/exacarib/growroot
+ExecStartPost=/bin/rm -f /etc/exacarib/growroot-pending
+
+[Install]
+WantedBy=multi-user.target

@@ -267,6 +267,7 @@ func (h HostBackend) Caps() Caps {
 const (
 	netplanFile = "/etc/netplan/90-exacarib.yaml"
 	dnsmasqConf = "/etc/dnsmasq.d/exacarib-lan.conf"
+	dnsmasqPid  = "/run/exacarib-dnsmasq.pid"
 )
 
 func (h HostBackend) Apply(ctx context.Context, n Network) error {
@@ -302,7 +303,10 @@ func (h HostBackend) Apply(ctx context.Context, n Network) error {
 			}
 		}
 	}
-	return h.applyDHCPServer(ctx, n)
+	if err := h.applyDHCPServer(ctx, n); err != nil {
+		return err
+	}
+	return h.guard(ctx, &n)
 }
 
 // Restore re-applies everything on boxes without netplan, where ip settings
@@ -311,6 +315,9 @@ func (h HostBackend) Apply(ctx context.Context, n Network) error {
 func (h HostBackend) Restore(ctx context.Context, n Network) error {
 	if !h.Caps().Netplan {
 		return h.Apply(ctx, n)
+	}
+	if err := h.guard(ctx, &n); err != nil {
+		return err
 	}
 	for i, p := range n.WAN {
 		if p.Mode == "pppoe" {
@@ -326,7 +333,9 @@ func (h HostBackend) Restore(ctx context.Context, n Network) error {
 func Netplan(n Network) string {
 	var b strings.Builder
 	b.WriteString("# Written by the ExaCarib box console (ADR 0046). Change it there, not here.\n")
-	b.WriteString("network:\n  version: 2\n  ethernets:\n")
+	b.WriteString("network:\n  version: 2\n")
+	head := b.Len()
+	b.WriteString("  ethernets:\n")
 	ports := append([]Port(nil), n.WAN...)
 	metric := map[string]int{}
 	for i, p := range n.WAN {
@@ -355,6 +364,9 @@ func Netplan(n Network) string {
 		if len(p.DNS) > 0 {
 			fmt.Fprintf(&b, "      nameservers:\n        addresses: [%s]\n", strings.Join(p.DNS, ", "))
 		}
+	}
+	if b.Len() == head+len("  ethernets:\n") {
+		return b.String()[:head] + "  ethernets: {}\n"
 	}
 	return b.String()
 }
@@ -483,7 +495,10 @@ dhcp-option=option:dns-server,%s
 func (h HostBackend) applyDHCPServer(ctx context.Context, n Network) error {
 	conf := h.file(dnsmasqConf)
 	if !n.LANDHCP || n.LAN == nil {
-		if _, err := os.Stat(conf); err == nil {
+		// Also stops the office DHCP a fresh ExaCarib image runs until set-up (same pid file).
+		_, errConf := os.Stat(conf)
+		_, errPid := os.Stat(h.file(dnsmasqPid))
+		if errConf == nil || errPid == nil {
 			_ = os.Remove(conf)
 			h.restartDNSMasq(ctx, conf, false)
 		}
@@ -508,7 +523,7 @@ func (h HostBackend) restartDNSMasq(ctx context.Context, conf string, on bool) e
 			return err
 		}
 	}
-	pid := h.file("/run/exacarib-dnsmasq.pid")
+	pid := h.file(dnsmasqPid)
 	if b, err := os.ReadFile(pid); err == nil {
 		_, _ = h.Sys.Run(ctx, "kill", strings.TrimSpace(string(b)))
 	}
