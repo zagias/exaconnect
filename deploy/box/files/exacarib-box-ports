@@ -1,0 +1,51 @@
+#!/bin/sh
+# ExaCarib box (ADR 0047): ports for a box nobody has set up yet. The first
+# Ethernet port gets its internet address by DHCP; on a box with two or more,
+# the last port is the office port, 192.168.50.1/24, handing out addresses so
+# a laptop plugged into it can open https://192.168.50.1. The box console's
+# own settings (90-exacarib.yaml) win over these once someone saves them.
+# Runs before the network starts; does nothing once the defaults exist.
+set -eu
+out=/etc/netplan/80-exacarib-default.yaml
+lan_conf=/etc/exacarib/setup-dhcp.conf
+[ -e "$out" ] && exit 0
+ports=$(for d in /sys/class/net/*; do
+  [ -e "$d/device" ] && [ "$(cat "$d/type")" = 1 ] && [ ! -d "$d/wireless" ] && echo "${d##*/}"
+done | sort -V)
+first=$(echo "$ports" | head -n1)
+last=$(echo "$ports" | tail -n1)
+[ -n "$first" ] || exit 0
+mkdir -p /etc/exacarib
+{
+  echo "# Ports for a box not set up yet (ADR 0047). Written once at first boot."
+  echo "# Set the ports in the box console instead of editing this file."
+  echo "network:"
+  echo "  version: 2"
+  echo "  renderer: networkd"
+  echo "  ethernets:"
+  # Match-based names sort after the console's own (90-exacarib.yaml), so its
+  # settings for a port take over from these.
+  echo "    zz-internet:"
+  echo "      match: {name: $first}"
+  echo "      dhcp4: true"
+  echo "      dhcp4-overrides: {route-metric: 100}"
+  if [ "$last" != "$first" ]; then
+    echo "    zz-office:"
+    echo "      match: {name: $last}"
+    echo "      dhcp4: false"
+    echo "      addresses: [192.168.50.1/24]"
+  fi
+} >"$out.tmp"
+chmod 600 "$out.tmp"
+mv "$out.tmp" "$out"
+if [ "$last" != "$first" ]; then
+  cat >"$lan_conf" <<CONF
+# Hands out office addresses until the box console is set up (ADR 0047).
+interface=$last
+bind-dynamic
+dhcp-range=192.168.50.100,192.168.50.200,1h
+dhcp-option=option:router,192.168.50.1
+dhcp-option=option:dns-server,192.168.50.1
+CONF
+fi
+netplan generate

@@ -1,0 +1,28 @@
+#!/bin/sh
+# exacarib-box (ADR 0047): routing daemons on, the box console on, defaults in place.
+set -e
+if [ "$1" = configure ]; then
+  install -d -m 700 /var/lib/exaconnect
+  if [ -f /etc/frr/daemons ]; then
+    sed -i -e 's/^bgpd=no/bgpd=yes/' -e 's/^bfdd=no/bfdd=yes/' /etc/frr/daemons
+  fi
+  sysctl -q --system >/dev/null 2>&1 || true
+  if [ -d /run/systemd/system ]; then
+    systemctl daemon-reload
+    systemctl enable frr >/dev/null 2>&1 || true
+    systemctl restart frr >/dev/null 2>&1 || true
+    systemctl enable exacarib-box-ports.service exacarib-setup-dhcp.service exacarib-box-banner.timer >/dev/null
+    # A site already running the plain agent keeps it; otherwise the box console runs.
+    if systemctl is-enabled --quiet exa-agent.service 2>/dev/null; then
+      echo "exa-agent.service is enabled; leaving it (switch with: systemctl disable --now exa-agent; systemctl enable --now exa-box)"
+    else
+      systemctl enable exa-box.service >/dev/null
+      systemctl restart exa-box.service || true
+      systemctl start exacarib-box-banner.timer || true
+      sleep 2
+      EXA_STATE_DIR=/var/lib/exaconnect /usr/bin/exa-agent console-code || true
+      echo "Open https://<this box's office address>/ from the office network and enter the setup code."
+    fi
+  fi
+fi
+exit 0

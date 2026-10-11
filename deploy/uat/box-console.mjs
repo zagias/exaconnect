@@ -120,10 +120,12 @@ try {
   await p.getByRole("heading", { name: "About this box" }).waitFor({ timeout: 10000 });
   await shot(p, "07_box_settings");
 
-  // 7. The console does not answer on the box's internet side.
+  // 7. The console does not answer on the box's internet side: the box's firewall
+  // drops it (ADR 0047), and the console itself would refuse it with 403.
   if (E.WAN_URL) {
-    const r = await p.request.get(E.WAN_URL.replace(/\/$/, "") + "/api/state", { ignoreHTTPSErrors: true, failOnStatusCode: false }).catch((e) => ({ status: () => "error " + e.message.slice(0, 60) }));
-    r.status() === 403 ? ok("the console refuses requests on the internet port") : bad("console on the internet port answered " + r.status());
+    const r = await p.request.get(E.WAN_URL.replace(/\/$/, "") + "/api/state", { ignoreHTTPSErrors: true, failOnStatusCode: false, timeout: 6000 })
+      .then((x) => x.status(), (e) => "no answer (" + String(e.message).split("\n")[0].slice(0, 60) + ")");
+    r === 403 || String(r).startsWith("no answer") ? ok("the console is closed on the internet port: " + r) : bad("console on the internet port answered " + r);
   }
 
   // 8. The portal shows the box online and managed locally too.

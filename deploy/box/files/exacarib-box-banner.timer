@@ -1,0 +1,10 @@
+# Keeps the screen's console address and setup code current (ADR 0047).
+[Unit]
+Description=Refresh the ExaCarib box screen
+
+[Timer]
+OnBootSec=15s
+OnUnitActiveSec=30s
+
+[Install]
+WantedBy=timers.target

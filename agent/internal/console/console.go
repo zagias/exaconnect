@@ -134,6 +134,14 @@ func (s *Server) Restore(ctx context.Context) {
 	n := s.net
 	s.mu.Unlock()
 	if n == nil {
+		// A fresh box: only its own firewall, so the console answers on every port.
+		if g, ok := s.Backend.(interface {
+			guard(context.Context, *Network) error
+		}); ok {
+			if err := g.guard(ctx, nil); err != nil {
+				s.Log.Warn("box firewall failed", "err", err)
+			}
+		}
 		return
 	}
 	if err := s.Backend.Restore(ctx, *n); err != nil {
@@ -758,8 +766,12 @@ func (s *Server) undo(gen int) {
 	p := filepath.Join(s.Dir, networkFile)
 	if prev == nil {
 		_ = os.Remove(p)
+		// No earlier set-up: the box's own port files go and its firewall opens again.
+		if err := s.Backend.Apply(context.Background(), Network{}); err != nil {
+			s.Log.Error("clearing the port set-up failed", "err", err)
+		}
 		s.Log.Warn("box console port change not confirmed; nothing earlier to go back to")
-		s.change("box console", "Port change not confirmed in time; earlier ports kept on file")
+		s.change("box console", "Port change not confirmed in time; went back to the ports as they were")
 		return
 	}
 	if err := s.Backend.Apply(context.Background(), *prev); err != nil {
