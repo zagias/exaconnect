@@ -23,7 +23,7 @@ echo "== Debian 12 cloud image"
 curl -fsSL -o "$work/$base" "$base_url/$base"
 curl -fsSL -o "$work/SHA512SUMS" "$base_url/SHA512SUMS"
 (cd "$work" && grep " $base\$" SHA512SUMS | sha512sum -c --quiet)
-qemu-img resize -q "$work/$base" 4G
+# The 3 GB disk is room enough here; each box grows it to its own disk at first boot.
 
 echo "== files for the one-off build boot"
 export LIBGUESTFS_BACKEND=direct

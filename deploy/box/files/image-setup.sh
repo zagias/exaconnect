@@ -12,17 +12,12 @@ for _ in $(seq 1 60); do ip -4 route show default | grep -q . && break; sleep 1;
 rm -f /etc/resolv.conf
 echo "nameserver 10.0.2.3" >/etc/resolv.conf
 apt-get update -q
-# Use the 4 GB the image was resized to; each box grows it to its own disk at first boot.
-apt-get install -y -qq cloud-guest-utils >/dev/null
-root=$(findmnt -no SOURCE /)
-growpart "/dev/$(lsblk -no PKNAME "$root")" "$(cat "/sys/class/block/${root##*/}/partition")" || true
-resize2fs "$root"
 apt-get install -y -qq curl gnupg ca-certificates >/dev/null
 curl -fsSL https://deb.frrouting.org/frr/keys.gpg -o /usr/share/keyrings/frrouting.gpg
 echo "deb [signed-by=/usr/share/keyrings/frrouting.gpg] https://deb.frrouting.org/frr bookworm frr-10" >/etc/apt/sources.list.d/frr.list
 apt-get update -qq
 apt-get -y -qq dist-upgrade >/dev/null
-apt-get install -y -qq linux-image-amd64 netplan.io systemd-resolved frr frr-pythontools >/dev/null
+apt-get install -y -qq linux-image-amd64 cloud-guest-utils netplan.io systemd-resolved frr frr-pythontools >/dev/null
 apt-get install -y -qq /root/exacarib-box.deb >/dev/null
 rm -f /root/exacarib-box.deb
 systemctl stop exa-box exacarib-box-banner.timer || true
