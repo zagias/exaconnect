@@ -4,9 +4,11 @@
 # agent and the box console, ready to boot into set-up. Output, in <output dir>:
 #   exacarib-box-<version>-amd64.img.xz  for a USB stick or the box's own disk
 #   exacarib-box-<version>-amd64.qcow2   for a virtual machine
-# Needs root, libguestfs-tools and qemu-utils (CI installs them on Ubuntu).
+# Needs libguestfs-tools and qemu-utils (CI installs them on Ubuntu). Run it as an
+# ordinary user with a readable kernel in /boot: libguestfs networking (passt)
+# will not run as root.
 #
-#   sudo deploy/box/build-image.sh <exacarib-box_*_amd64.deb> <output dir> [version]
+#   deploy/box/build-image.sh <exacarib-box_*_amd64.deb> <output dir> [version]
 set -euo pipefail
 deb=$1 out=$2 ver=${3:-0.0.0-dev}
 here=$(cd "$(dirname "$0")" && pwd)

@@ -78,7 +78,8 @@ jobs:
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq libguestfs-tools qemu-utils qemu-system-x86 >/dev/null
           sudo chmod 0644 /boot/vmlinuz-*
       - name: build the image
-        run: sudo deploy/box/build-image.sh debs/exacarib-box_${BOX_VERSION}_amd64.deb out "$BOX_VERSION" && sudo chown -R "$USER" out
+        # As the runner user: libguestfs networking (passt) will not run as root.
+        run: deploy/box/build-image.sh debs/exacarib-box_${BOX_VERSION}_amd64.deb out "$BOX_VERSION"
       - name: boot it and set it up
         run: |
           dir=$RUNNER_TEMP/vm
