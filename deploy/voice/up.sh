@@ -96,7 +96,15 @@ fi
 # deploy/public/site.env, so a recreated controller would lose the public agent
 # gateway (EXA_PUBLIC_HOST) and enrolment tokens would carry no install address.
 "${VOICE[@]}" --profile voice up -d --no-deps freeswitch kamailio
-# Kamailio reads its host settings only at start.
+# Kamailio reads its host settings only at start. Its start script and config are
+# single-file mounts: a running container keeps the old files after a git pull,
+# so restart it when either changed (calls in progress drop; this happens only on
+# a deploy that changes them).
+for f in start.sh:/exacarib-start.sh kamailio.cfg:/etc/kamailio/kamailio.cfg; do
+  have=$("${COMPOSE[@]}" exec -T kamailio md5sum "${f#*:}" 2>/dev/null | cut -d' ' -f1 || true)
+  want=$(md5sum "deploy/kamailio/${f%%:*}" | cut -d' ' -f1)
+  [[ -n $have && $have != "$want" ]] && restart_kamailio=1
+done
 if [[ -n $restart_kamailio ]]; then "${VOICE[@]}" --profile voice restart kamailio; fi
 # A FreeSWITCH that was already running reads the files rendered above.
 for _ in $(seq 30); do

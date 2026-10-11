@@ -68,7 +68,8 @@ if [[ -n $("${COMPOSE[@]}" ps -q --status running kamailio 2>/dev/null) ]]; then
     note "list written: $("${COMPOSE[@]}" exec -T controller md5sum /data/kamailio/dispatcher.list 2>&1 | cut -c1-80)"
     note "sets loaded: $("${COMPOSE[@]}" exec -T kamailio kamcmd dispatcher.list 2>&1 | grep -c 'ID:')"
     note "reload by hand: $("${COMPOSE[@]}" exec -T kamailio kamcmd dispatcher.reload 2>&1 | tr '\n' ' ' | cut -c1-200)"
-    note "proxy says: $("${COMPOSE[@]}" logs --since 15m kamailio 2>/dev/null | grep -iE 'exacarib|ERROR' | tail -4 | tr '\n' ' ' | cut -c1-400)"
+    note "address reload by hand: $("${COMPOSE[@]}" exec -T kamailio kamcmd permissions.addressReload 2>&1 | tr '\n' ' ' | cut -c1-200)"
+    note "watcher says: $("${COMPOSE[@]}" logs kamailio 2>/dev/null | grep 'exacarib:' | tail -4 | tr '\n' ' ' | cut -c1-400)"
   fi
 else
   skip "edge proxy not running on this host"
