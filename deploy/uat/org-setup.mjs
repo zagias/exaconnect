@@ -222,8 +222,11 @@ try {
       const row = await staff.locator("tr", { hasText: name }).first().innerText().catch(() => "");
       return { email, ext: row.match(/\b\d{3,6}\b/)?.[0] };
     };
+    // Each phone in its own browser, as two people on two devices (and as the phone app's own test does).
     const signInPhone = async ({ email, ext }) => {
-      const p = await session();
+      const own = await chromium.launch({ args: MEDIA, ...(E.CHROMIUM_PATH ? { executablePath: E.CHROMIUM_PATH } : {}) });
+      const p = await (await own.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1440, height: 900 } })).newPage();
+      p.on("pageerror", (e) => console.log("phone page error:", String(e).slice(0, 160)));
       await p.goto(E.PHONE_BASE.replace(/\/$/, "") + "/", { waitUntil: "networkidle" });
       await p.getByLabel("Work email").fill(email);
       await p.getByRole("button", { name: "Continue" }).click();
@@ -255,17 +258,19 @@ try {
       const b = await signInPhone(callee);
       a && b ? ok("both sign in to Jibsy Phone and are connected") : bad("phone app not connected");
       if (a && b) {
+        await a.waitForTimeout(3000); // both registrations settle
         await a.getByRole("navigation", { name: "Phone" }).getByRole("button", { name: "Keypad" }).click();
         await a.getByLabel("Extension or number").fill(callee.ext);
         await a.getByRole("button", { name: "Call", exact: true }).click();
-        const rang = await waitFor(b.locator(".ph-overlay"), /Incoming call/);
+        const rang = await waitFor(b.locator(".ph-overlay"), /Incoming call/, 30000);
         if (rang) await b.getByRole("button", { name: "Answer" }).click();
         const talking = rang && (await waitFor(a.locator(".ph-overlay"), /On a call/));
+        const seen = async (p) => (await p.locator(".ph-overlay, .ph-toast").allInnerTexts().catch(() => [])).join(" / ").replace(/\s+/g, " ").slice(0, 160) || "nothing";
         talking
           ? ok("a new person's call rings the other, who answers")
-          : bad("call not answered: " + (await a.locator(".ph-toast").innerText().catch(() => "no message")));
-        await shot(a, "10_new_people_call");
-        if (await a.getByRole("button", { name: "Hang up" }).count()) await a.getByRole("button", { name: "Hang up" }).click();
+          : bad(`call not answered (rang: ${rang}; caller sees: ${await seen(a)}; callee sees: ${await seen(b)})`);
+        await shot(a, "10_new_people_call").catch(() => {});
+        if (await a.getByRole("button", { name: "Hang up" }).count().catch(() => 0)) await a.getByRole("button", { name: "Hang up" }).click();
       }
     }
   }
