@@ -3,6 +3,7 @@ import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { api, useApi, type NodeRow } from "../api";
 import { useAuth } from "../auth";
 import { ErrorNote, StatusPill, ago } from "../components";
+import { BoxTag, boxSetupCode } from "../box";
 import { useCustomer, who } from "../customer";
 import { Card, PageHead, RowActions, useAction } from "../ui";
 import { BillingAdmin } from "./BillingAdmin";
@@ -123,7 +124,14 @@ function Agents() {
           <tbody>
             {(data ?? []).map((n) => (
               <tr key={n.id}>
-                <td className="mono">{n.name}</td>
+                <td>
+                  <span className="mono">{n.name}</span> <BoxTag box={n.box} />
+                  {n.box?.last_change && (
+                    <span className="sub">
+                      On the box: {n.box.last_change.what} ({ago(n.box.last_change.at)})
+                    </span>
+                  )}
+                </td>
                 <td>{n.role === "pop" ? "PoP" : "Site"}</td>
                 <td className="nowrap">{ago(n.last_seen)}</td>
                 <td>
@@ -280,6 +288,12 @@ function SitesAdmin() {
                   </p>
                   <pre className="mono small">
                     {`EXA_ENROL_TOKEN=<the token above> bash install.sh \\\n  --controller ${token.public_agent_url} \\\n  --ca-fingerprint ${token.ca_fingerprint} \\\n  --name ${token.site}`}
+                  </pre>
+                  <p className="small muted">
+                    Or, on a box with the box console, paste this box setup code in its Connect step:
+                  </p>
+                  <pre className="mono small install-command box-setup-code">
+                    {boxSetupCode({ controller: token.public_agent_url, token: token.token, ca_fingerprint: token.ca_fingerprint, site: token.site })}
                   </pre>
                   <p className="small muted" style={{ marginBottom: 0 }}>
                     The site needs outbound HTTPS to port 8443 only; nothing inbound. The agent generates its own

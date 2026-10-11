@@ -29,7 +29,7 @@ jobs:
         run: CGO_ENABLED=0 GOOS=linux GOARCH=${{ matrix.arch }} go build -trimpath -o exa-agent ./cmd/exa-agent
       # The site kit (ADR 0024): binary, installer and unit, downloadable from the run.
       - name: site kit
-        run: cp agent/exa-agent deploy/agent/install.sh deploy/systemd/exa-agent.service "$RUNNER_TEMP/"
+        run: cp agent/exa-agent deploy/agent/install.sh deploy/systemd/exa-agent.service deploy/systemd/exa-box.service "$RUNNER_TEMP/"
       - uses: actions/upload-artifact@v4
         with:
           name: exa-agent-linux-${{ matrix.arch }}
@@ -37,6 +37,7 @@ jobs:
             ${{ runner.temp }}/exa-agent
             ${{ runner.temp }}/install.sh
             ${{ runner.temp }}/exa-agent.service
+            ${{ runner.temp }}/exa-box.service
           retention-days: 30
 
   terraform:

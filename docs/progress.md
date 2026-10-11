@@ -395,3 +395,13 @@ ExaCarib staff tools move to an Operations area, where a new organisation and
 its owner's invitation are made in one step. Checked in a browser from staff
 creating the organisation to the owner, a member and staff each seeing the
 right screens: 22 checks pass.
+
+**Box console** (ADR 0046, 2026-10-11). The ExaCarib box now has its own web page
+for people at the branch: claim it with the setup code, choose which port carries
+each internet link and the office network (DHCP, fixed, PPPoE, or as it is, with
+automatic undo if the change cuts the page off), join Connect by pasting the box
+setup code the portal now shows, then see the box's links, tunnels, routes and
+connection to ExaCarib and run ping, traceroute and DNS checks. It runs inside the
+agent (`exa-agent run --console :443`, `install.sh --box`). The portal marks boxes
+managed locally and lists changes made on them, and follows the box's choice of
+ports. Every lab run sets up a fresh box this way end to end.

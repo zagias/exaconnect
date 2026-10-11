@@ -937,3 +937,8 @@ CREATE INDEX IF NOT EXISTS password_resets_user ON password_resets (user_id, cre
 -- first used, so a lost renewal reply doesn't strand the site (api/agent.py).
 ALTER TABLE nodes ADD COLUMN IF NOT EXISTS prev_cert_serial text;
 CREATE INDEX IF NOT EXISTS nodes_prev_cert_serial ON nodes (prev_cert_serial) WHERE prev_cert_serial IS NOT NULL;
+
+-- What the box console set up on the box itself (ADR 0046): its ports, its
+-- local sign-in and the last change made there, reported with telemetry.
+ALTER TABLE nodes ADD COLUMN IF NOT EXISTS box jsonb;
+ALTER TABLE nodes ADD COLUMN IF NOT EXISTS box_at timestamptz;

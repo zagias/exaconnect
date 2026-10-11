@@ -56,7 +56,17 @@ export interface OrgLocation {
   timezone: string;
   latitude: number | null;
   longitude: number | null;
-  connect: { id: string; name: string; node_id: string | null; last_seen: string | null; online: boolean; links: number } | null;
+  connect: {
+    id: string;
+    name: string;
+    node_id: string | null;
+    last_seen: string | null;
+    online: boolean;
+    links: number;
+    /** The box runs the box console, so it is also managed locally (ADR 0046). */
+    box_console?: boolean;
+    box_change?: { at: string; by: string; what: string } | null;
+  } | null;
   phone: { id: string; name: string; emergency_status: string; people: number } | null;
   hours: { id: string; is_primary: boolean; intervals: number } | null;
 }

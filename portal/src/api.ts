@@ -214,6 +214,8 @@ export interface SiteDetail extends SiteSummary {
   tunnels: { tunnel: string; path: string; handshake_age_s: number; bfd: string | null; updated_at: string }[];
   steering: SteeringRow[];
   customer_id: string;
+  box?: BoxInfo | null;
+  box_at?: string | null;
   slas: {
     class_name: string;
     max_latency_ms: number | null;
@@ -241,6 +243,17 @@ export interface EventRow {
   node: string | null;
 }
 
+/** What the box console set up on the box itself (ADR 0046). */
+export interface BoxInfo {
+  console: boolean;
+  url?: string;
+  admin_set: boolean;
+  wan?: { iface: string; path: string; mode: string }[];
+  lan?: { iface: string; mode: string; address?: string } | null;
+  lan_dhcp?: boolean;
+  last_change?: { at: string; by: string; what: string } | null;
+}
+
 export interface NodeRow {
   id: string;
   name: string;
@@ -254,6 +267,8 @@ export interface NodeRow {
   agent_version: string | null;
   /** Its certificate no longer works; a new enrolment token brings it back. */
   revoked?: boolean;
+  box?: BoxInfo | null;
+  box_at?: string | null;
 }
 
 export interface User {

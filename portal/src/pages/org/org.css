@@ -36,3 +36,6 @@
 pre.install-command { white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-all; max-width: 100%; background: var(--page); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; }
 .empty-note { border: 1px dashed var(--line); border-radius: 8px; padding: 14px 16px; color: var(--ink-muted); margin-bottom: 16px; }
 .org-table td .sub { display: block; }
+.install-alt { margin: 4px 0 12px; }
+.install-alt summary { cursor: pointer; color: var(--blue-strong); font-weight: 600; font-size: 14px; }
+.box-note { margin: 6px 0 0; }
