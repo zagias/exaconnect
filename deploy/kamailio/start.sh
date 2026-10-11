@@ -17,6 +17,8 @@ while kill -0 "$pid" 2>/dev/null; do
   if kamcmd dispatcher.reload >/dev/null && kamcmd permissions.addressReload >/dev/null; then
     loaded=$now
     echo "exacarib: carrier lists reloaded"
+  else
+    echo "exacarib: carrier lists changed but the reload failed; trying again" >&2
   fi
 done
 wait "$pid"
