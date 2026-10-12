@@ -59,6 +59,17 @@ type State struct {
 // it was set: the box and the portal each keep the newest (ADR 0049).
 type Box struct {
 	ManagedFrom *ManagedFrom `json:"managed_from,omitempty"`
+	// Network is the box's ports as set in the portal (ADR 0051). The box
+	// takes it only while it is managed from the cloud or both.
+	Network *BoxNetwork `json:"network,omitempty"`
+}
+
+// BoxNetwork is a port set-up made in the portal, in the box console's own
+// format (internet ports, office port, handing out addresses).
+type BoxNetwork struct {
+	Network json.RawMessage `json:"network"`
+	At      time.Time       `json:"at"`
+	By      string          `json:"by,omitempty"`
 }
 
 // ManagedFrom is where the box's own settings may be changed: "site" (only

@@ -69,6 +69,16 @@ box_walkthrough box --network host --add-host "$host:127.0.0.1" \
 
 # 4. What the controller knows: the box, its console, its ports and the change made on it.
 box_controller_checks eth0
+# Cloud management (ADR 0049, 0051): the switches and the portal's ports are audited, and the box kept them.
+n=$(sql "SELECT count(*) FROM audit_log WHERE action = 'box.managed' AND target = (SELECT name FROM nodes WHERE id = '$node')")
+if ((${n:-0} >= 3)); then ok "managed-from switches from the portal and the box are audited ($n)"; else bad "box.managed audit rows: ${n:-0}, want 3"; fi
+n=$(sql "SELECT count(*) FROM events WHERE node_id = '$node' AND kind = 'box_portal_applied'")
+if ((${n:-0} >= 1)); then ok "the box reported keeping the ports set in the portal"; else bad "no box_portal_applied event from the box"; fi
+if [[ $(sql "SELECT box_network->'network'->>'lan_dhcp' FROM nodes WHERE id = '$node'") == true ]]; then
+  ok "the controller has the portal's port set-up"
+else
+  bad "no portal port set-up on the node"
+fi
 if docker exec "$box" ip -4 addr show dev eth1 | grep -q "$lan_ip/24"; then ok "office port kept its address"; else bad "office port lost its address"; fi
 fw=$(docker exec "$box" nft list table inet exa_box 2>&1)
 if grep -q 'policy drop' <<<"$fw" && grep -Eq 'iifname "eth0" counter packets [1-9][0-9]* .*comment "inbound"' <<<"$fw"; then

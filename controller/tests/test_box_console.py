@@ -155,3 +155,87 @@ def test_box_managed_from(client, admin_headers):
     assert client.post(url, json={"mode": "elsewhere"}, headers=admin_headers).status_code == 422
     r = client.post("/api/v1/sites/nope/box/managed", json={"mode": "cloud"}, headers=admin_headers)
     assert r.status_code == 404
+
+
+def test_box_ports_from_portal(client, admin_headers):
+    """Ports set in the portal (ADR 0051): checked like the box checks them, sent
+    down in desired state while the box is managed from the cloud or both, and a
+    typed PPPoE password forgotten once the box has handled the set-up."""
+    tokens = _seed()["tokens"]
+    _, h = _enrol(client, tokens, "site-a")
+    with db.tx() as conn:
+        site_id = str(conn.execute("SELECT id FROM sites WHERE name = 'site-a'").fetchone()["id"])
+    url = f"/api/v1/sites/{site_id}/box/network"
+    good = {"wan": [{"iface": "eth0", "path": "carrier-a", "mode": "dhcp"}], "lan": None, "lan_dhcp": False}
+    assert client.post(url, json=good, headers=admin_headers).status_code == 409  # no box console yet
+
+    now = dt.datetime.now(dt.UTC)
+    box = {
+        "console": True,
+        "admin_set": True,
+        "wan": [{"iface": "eth0", "path": "carrier-a", "mode": "dhcp"}],
+        "lan": {"iface": "eth1", "mode": "static", "address": "192.168.10.1/24"},
+        "ports": [{"name": "eth0"}, {"name": "eth1"}, {"name": "eth2"}],
+        "network_at": now.isoformat(),
+    }
+    r = client.post("/api/v1/agent/telemetry", headers=h, json={"at": now.isoformat(), "box": box})
+    assert r.status_code == 204
+
+    # Mistakes show at once, in the box's words.
+    for bad, words in [
+        ({"wan": [{"iface": "eth9", "mode": "dhcp"}]}, "no port called"),
+        ({"wan": [{"iface": "eth0", "mode": "static", "address": "10.0.0.2/24"}]}, "needs a gateway"),
+        ({"wan": [{"iface": "eth0", "mode": "dhcp"}, {"iface": "eth0", "mode": "dhcp"}]}, "chosen twice"),
+        ({"wan": [{"iface": "eth0", "mode": "pppoe", "pppoe_user": "u", "pppoe_password": "set"}]}, "PPPoE needs"),
+        ({"wan": [{"iface": "eth0", "mode": "dhcp"}], "lan_dhcp": True}, "office port"),
+    ]:
+        r = client.post(url, json=bad, headers=admin_headers)
+        assert r.status_code == 400 and words in r.json()["detail"], (bad, r.text)
+
+    # Managed on site: the portal does not set the ports.
+    client.post(f"/api/v1/sites/{site_id}/box/managed", json={"mode": "site"}, headers=admin_headers)
+    assert client.post(url, json=good, headers=admin_headers).status_code == 409
+    client.post(f"/api/v1/sites/{site_id}/box/managed", json={"mode": "cloud"}, headers=admin_headers)
+
+    ports = {
+        "wan": [
+            {"iface": "eth0", "path": "carrier-a", "mode": "pppoe", "pppoe_user": "branch@isp"}
+            | {"pppoe_password": "s3cret-pw"},
+            {"iface": "eth2", "path": "carrier-b", "mode": "dhcp", "dns": ["1.1.1.1"]},
+        ],
+        "lan": {"iface": "eth1", "mode": "static", "address": "192.168.20.1/24"},
+        "lan_dhcp": True,
+    }
+    r = client.post(url, json=ports, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    shown = r.json()["portal"]
+    assert shown["network"]["wan"][0]["pppoe_password"] == "set"  # never shown back
+    at = shown["at"]
+    down = _desired(client, h)["box"]["network"]
+    assert down["at"] == at and down["by"] == "Connect portal (admin@example.org)"
+    assert down["network"]["wan"][0]["pppoe_password"] == "s3cret-pw"
+    assert down["network"]["lan"]["address"] == "192.168.20.1/24" and down["network"]["lan_dhcp"] is True
+    detail = client.get(f"/api/v1/sites/{site_id}", headers=admin_headers).json()
+    assert detail["box_network"]["network"]["wan"][0]["pppoe_password"] == "set"
+    with db.tx() as conn:
+        a = conn.execute("SELECT detail FROM audit_log WHERE action = 'box.network'").fetchone()["detail"]
+    assert "s3cret-pw" not in str(a)
+
+    # The box is still trying it: the password stays. Once kept, it goes.
+    trying = dict(box, portal={"at": at, "by": down["by"], "state": "trying"})
+    client.post("/api/v1/agent/telemetry", headers=h, json={"at": now.isoformat(), "box": trying})
+    assert _desired(client, h)["box"]["network"]["network"]["wan"][0]["pppoe_password"] == "s3cret-pw"
+    kept = dict(box, network_at=at, portal={"at": at, "by": down["by"], "state": "kept"})
+    client.post("/api/v1/agent/telemetry", headers=h, json={"at": now.isoformat(), "box": kept})
+    after = _desired(client, h)["box"]["network"]
+    assert after["at"] == at and after["network"]["wan"][0]["pppoe_password"] == "set"
+    with db.tx() as conn:
+        left = conn.execute("SELECT count(*) AS n FROM desired_states WHERE body::text LIKE '%s3cret-pw%'").fetchone()
+    assert left["n"] == 0
+
+    # A later portal change is newer than the box's ports, even from a box clock running fast.
+    fast = dict(kept, network_at=(dt.datetime.now(dt.UTC) + dt.timedelta(minutes=5)).isoformat())
+    client.post("/api/v1/agent/telemetry", headers=h, json={"at": now.isoformat(), "box": fast})
+    r = client.post(url, json=good, headers=admin_headers)
+    assert r.status_code == 200
+    assert dt.datetime.fromisoformat(r.json()["portal"]["at"]) > dt.datetime.fromisoformat(fast["network_at"])

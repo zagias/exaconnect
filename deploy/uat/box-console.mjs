@@ -199,6 +199,25 @@ try {
     await pressed(q, "On site and cloud").click();
     const boxBoth = await until(async () => { await p.reload(); return (await pressed(p, "On site and cloud").getAttribute("aria-pressed", { timeout: 4000 })) === "true"; });
     boxBoth ? ok("switched to both in the portal, the box follows") : bad("box never showed On site and cloud");
+
+    // 10. Ports from the portal (ADR 0051): the office network starts handing out
+    // addresses, set in the portal; the box tries it, still reaches ExaCarib, keeps it.
+    await q.reload();
+    const ports = q.getByRole("region", { name: "Box ports" });
+    await ports.getByRole("button", { name: "Change the ports" }).click();
+    (await q.getByLabel("Address and size for " + (E.LAN_IFACE || "eth1")).inputValue({ timeout: 5000 })) === E.LAN_ADDR
+      ? ok("the portal's port form starts from the box's own ports") : bad("portal port form did not show the office address");
+    await ports.getByLabel("Hand out addresses on the office network").check();
+    await shot(q, "13_portal_box_ports");
+    await ports.getByRole("button", { name: "Send to the box" }).click();
+    const kept = await until(async () => { await q.reload(); return (await q.getByRole("region", { name: "Box ports" }).innerText({ timeout: 5000 })).includes("The box is using the ports set here"); }, 20);
+    kept ? ok("the box takes the ports set in the portal and keeps them") : bad("portal ports never kept: " + (await q.getByRole("region", { name: "Box ports" }).innerText().catch(() => "")).slice(0, 200));
+    await shot(q, "14_portal_box_ports_kept");
+    const net = await p.evaluate(async () => (await (await fetch("/api/network", { headers: { "X-Exa-Box": "1" } })).json()).network);
+    net && net.lan_dhcp && String(net.updated_by || "").startsWith("Connect portal") ? ok("the box hands out addresses on the office network, set from the portal") : bad("box network after portal change: " + JSON.stringify(net).slice(0, 200));
+    await p.getByRole("link", { name: "Overview" }).click();
+    await p.getByText("Ports last set in the Connect portal").waitFor({ timeout: 10000 }).then(() => ok("the box console says the ports were set in the portal"), () => bad("box overview has no note about the portal's ports"));
+    await shot(p, "15_box_overview_portal_ports");
   }
 } catch (e) {
   bad("stopped: " + String(e).split("\n")[0].slice(0, 300));

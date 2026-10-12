@@ -69,8 +69,6 @@ box_controller_checks() {
   if [[ $iface == "$1" ]]; then ok "the link follows the port chosen on the box ($1)"; else bad "link underlay is '$iface', not $1"; fi
   n=$(sql "SELECT count(*) FROM events WHERE node_id = '$node' AND kind = 'local_change'")
   if ((${n:-0} >= 1)); then ok "changes made on the box reach the controller ($n)"; else bad "no local_change events from the box"; fi
-  n=$(sql "SELECT count(*) FROM audit_log WHERE action = 'box.managed' AND target = (SELECT name FROM nodes WHERE id = '$node')")
-  if ((${n:-0} >= 3)); then ok "managed-from switches from the portal and the box are audited ($n)"; else bad "box.managed audit rows: ${n:-0}, want 3"; fi
   v=$(sql "SELECT applied_version FROM nodes WHERE id = '$node'")
   okv=$(sql "SELECT coalesce(apply_ok::text, 'none') FROM nodes WHERE id = '$node'")
   if ((${v:-0} >= 1)) && [[ $okv == true ]]; then
