@@ -338,6 +338,7 @@ def test_box_software(client, admin_headers, monkeypatch):
     from exaconnect_controller import box as boxes
 
     boxes._releases.update(at=0.0, versions=None)
+    releases = boxes.releases
     fake = [
         {"tag_name": "box-v1.0.21", "assets": [{"name": "exacarib-box-1.0.21-amd64.root.tar.zst"}]},
         {"tag_name": "box-v1.0.20", "assets": [{"name": "exacarib-box-1.0.20-amd64.iso"}]},
@@ -346,6 +347,15 @@ def test_box_software(client, admin_headers, monkeypatch):
     monkeypatch.setattr(boxes, "releases", lambda fetch=None, _r=boxes.releases: _r(lambda u: fake))
     r = client.get("/api/v1/box-software/versions", headers=admin_headers)
     assert r.json() == {"versions": ["1.0.21"], "latest": "1.0.21"}
+
+    # GitHub's API refusing (rate limit): the releases feed and each version's checksum file instead.
+    def refused(u):
+        raise OSError("HTTP Error 403: rate limit exceeded")
+
+    tag = "<a href='/zagias/exaconnect/releases/tag/box-v{}'/>"
+    atom = tag.format("1.0.29") + tag.format("1.0.27")
+    boxes._releases.update(at=0.0, versions=None)
+    assert releases(refused, lambda: atom, lambda v: v == "1.0.29") == ["1.0.29"]
 
     url = f"/api/v1/box-software?customer_id={cid}"
     listed = {x["site"]: x for x in client.get(url, headers=admin_headers).json()["boxes"]}
