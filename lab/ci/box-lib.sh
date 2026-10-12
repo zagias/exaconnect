@@ -60,6 +60,12 @@ box_walkthrough() {
 box_controller_checks() {
   local iface n v okv
   node=$(sql "SELECT id FROM nodes WHERE site_id = '$site'")
+  # A box in an emulated machine (no KVM) is slow: give its first reports time to arrive.
+  for _ in $(seq 1 36); do
+    [[ -n $node && $(sql "SELECT box->>'console' = 'true' AND coalesce(applied_version, 0) >= 1 FROM nodes WHERE id = '$node'") == t ]] && break
+    sleep 5
+    node=$(sql "SELECT id FROM nodes WHERE site_id = '$site'")
+  done
   if [[ -n $node && $(sql "SELECT box->>'console' FROM nodes WHERE id = '$node'") == true ]]; then
     ok "the controller has the box's console report"
   else

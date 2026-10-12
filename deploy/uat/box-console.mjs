@@ -42,7 +42,7 @@ try {
   await p.getByLabel("Admin password").fill(PW);
   await p.getByLabel("Password again").fill(PW);
   await p.getByRole("button", { name: "Set password and continue" }).click();
-  (await p.getByRole("alert").innerText({ timeout: 5000 })).includes("not right") ? ok("a wrong setup code is refused") : bad("wrong setup code not refused");
+  (await p.getByRole("alert").innerText({ timeout: 30000 })).includes("not right") ? ok("a wrong setup code is refused") : bad("wrong setup code not refused");
   await p.getByLabel("Setup code").fill(E.BOX_SETUP_CODE.toLowerCase());
   await p.getByRole("button", { name: "Set password and continue" }).click();
 
@@ -112,10 +112,10 @@ try {
   await p.getByRole("heading", { name: "Sign in to the box console" }).waitFor({ timeout: 10000 });
   await p.getByLabel("Password").fill("not-the-password");
   await p.getByRole("button", { name: "Sign in" }).click();
-  (await p.getByRole("alert").innerText({ timeout: 5000 })).includes("not right") ? ok("a wrong password is refused") : bad("wrong password not refused");
+  (await p.getByRole("alert").innerText({ timeout: 30000 })).includes("not right") ? ok("a wrong password is refused") : bad("wrong password not refused");
   await p.getByLabel("Password").fill(PW);
   await p.getByRole("button", { name: "Sign in" }).click();
-  await p.getByRole("link", { name: "Settings" }).waitFor({ timeout: 10000 });
+  await p.getByRole("link", { name: "Settings" }).waitFor({ timeout: 30000 });
   ok("signs in again with the new password");
   await p.getByRole("link", { name: "Settings" }).click();
   await p.getByRole("heading", { name: "About this box" }).waitFor({ timeout: 10000 });
@@ -189,7 +189,7 @@ try {
     await p.getByRole("link", { name: "Settings" }).click();
     await p.getByLabel("Admin password").fill("not-the-password");
     await p.getByRole("button", { name: "Take back control" }).click();
-    (await p.getByRole("alert").innerText({ timeout: 5000 })).includes("not right") ? ok("taking back control needs the right password") : bad("take back with a wrong password not refused");
+    (await p.getByRole("alert").innerText({ timeout: 30000 })).includes("not right") ? ok("taking back control needs the right password") : bad("take back with a wrong password not refused");
     await p.getByLabel("Admin password").fill(PW);
     await p.getByRole("button", { name: "Take back control" }).click();
     (await until(async () => (await pressed(p, "On site").getAttribute("aria-pressed")) === "true", 5, 1000)) ? ok("the box console takes back control (On site)") : bad("take back did not switch the box to On site");
