@@ -440,7 +440,7 @@ keeps them once it can still reach ExaCarib, otherwise it puts the earlier ones
 back after two minutes, and the portal shows which happened. Every lab run turns
 on handing out addresses on a fresh box's office network from the portal.
 
-**Box cloud management, step 3: templates** (ADR 0052, 2026-10-12). Connect › Set up ›
+**Box cloud management, step 3: templates** (ADR 0053, 2026-10-12). Connect › Set up ›
 Box templates holds port set-ups for many boxes. "Save as a template" on a site
 page copies a box's ports; boxes that follow a template get its ports now and
 whenever it changes, each office port on its own location's network with the

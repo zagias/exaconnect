@@ -106,7 +106,7 @@ def set_network(site_id: str, body: NetworkIn, user: UserDep) -> dict:
     return {"portal": boxes.public_network(bn)}
 
 
-# Templates (ADR 0052)
+# Templates (ADR 0053)
 
 
 class TemplateIn(BaseModel):

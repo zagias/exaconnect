@@ -276,7 +276,7 @@ def set_network(
     return bn
 
 
-# Templates (ADR 0052): one port set-up for many boxes of an organisation. A box
+# Templates (ADR 0053): one port set-up for many boxes of an organisation. A box
 # that follows a template gets the template's ports, and again whenever the
 # template changes. PPPoE sign-ins differ per location, so a template cannot hold
 # one; its office port can take the address "auto": the first address of each

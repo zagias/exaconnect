@@ -1,4 +1,4 @@
-// Box templates (ADR 0052): one port set-up for many of an organisation's
+// Box templates (ADR 0053): one port set-up for many of an organisation's
 // ExaCarib boxes. A box that follows a template gets its ports now and every
 // time the template changes; its office port can take "auto", the first
 // address of each location's own office network.

@@ -949,7 +949,7 @@ ALTER TABLE nodes ADD COLUMN IF NOT EXISTS box_at timestamptz;
 ALTER TABLE nodes ADD COLUMN IF NOT EXISTS box_managed jsonb;
 -- The box's ports as set in the portal (ADR 0051): {network, at, by}.
 ALTER TABLE nodes ADD COLUMN IF NOT EXISTS box_network jsonb;
--- Box port templates (ADR 0052): one port set-up for many boxes of an organisation.
+-- Box port templates (ADR 0053): one port set-up for many boxes of an organisation.
 CREATE TABLE IF NOT EXISTS box_templates (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   customer_id uuid NOT NULL REFERENCES customers(id) ON DELETE CASCADE,

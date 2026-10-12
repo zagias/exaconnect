@@ -281,7 +281,7 @@ export interface BoxNetwork {
   network: { wan: BoxPort[]; lan?: BoxPort | null; lan_dhcp?: boolean };
   at: string;
   by: string;
-  /** The template the box follows, if any (ADR 0052). */
+  /** The template the box follows, if any (ADR 0053). */
   template?: { id: string; name: string };
 }
 

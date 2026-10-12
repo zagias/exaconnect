@@ -219,7 +219,7 @@ try {
     await p.getByText("Ports last set in the Connect portal").waitFor({ timeout: 10000 }).then(() => ok("the box console says the ports were set in the portal"), () => bad("box overview has no note about the portal's ports"));
     await shot(p, "15_box_overview_portal_ports");
 
-    // 11. Templates (ADR 0052): this box's ports saved as a template, then the box made
+    // 11. Templates (ADR 0053): this box's ports saved as a template, then the box made
     // to follow it from Box templates; the box takes the template's ports and keeps them.
     const tpl = "Lab template " + (E.SITE_NAME || "box").slice(-6);
     await q.reload();

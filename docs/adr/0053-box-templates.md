@@ -1,4 +1,4 @@
-# ADR 0052: Box port templates
+# ADR 0053: Box port templates
 
 Date: 2026-10-12. Status: accepted.
 

@@ -242,7 +242,7 @@ def test_box_ports_from_portal(client, admin_headers):
 
 
 def test_box_templates(client, admin_headers):
-    """Box templates (ADR 0052): one port set-up for many boxes; boxes that follow
+    """Box templates (ADR 0053): one port set-up for many boxes; boxes that follow
     it get its ports now and on every change, each office port on its own
     location's network; setting a box's ports directly takes it off the template."""
     tokens = _seed()["tokens"]
