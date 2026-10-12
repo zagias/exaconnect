@@ -949,6 +949,17 @@ ALTER TABLE nodes ADD COLUMN IF NOT EXISTS box_at timestamptz;
 ALTER TABLE nodes ADD COLUMN IF NOT EXISTS box_managed jsonb;
 -- The box's ports as set in the portal (ADR 0051): {network, at, by}.
 ALTER TABLE nodes ADD COLUMN IF NOT EXISTS box_network jsonb;
+-- Box port templates (ADR 0052): one port set-up for many boxes of an organisation.
+CREATE TABLE IF NOT EXISTS box_templates (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_id uuid NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  name        text NOT NULL,
+  network     jsonb NOT NULL,
+  updated_by  text NOT NULL DEFAULT '',
+  updated_at  timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (customer_id, name)
+);
+ALTER TABLE nodes ADD COLUMN IF NOT EXISTS box_template_id uuid REFERENCES box_templates(id) ON DELETE SET NULL;
 
 -- ExaCarib boxes by serial number, for zero-touch installation (ADR 0050). A box
 -- calls home with its serial and a key it made on first boot; the first key seen

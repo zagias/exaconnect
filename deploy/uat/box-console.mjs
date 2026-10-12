@@ -218,6 +218,35 @@ try {
     await p.getByRole("link", { name: "Overview" }).click();
     await p.getByText("Ports last set in the Connect portal").waitFor({ timeout: 10000 }).then(() => ok("the box console says the ports were set in the portal"), () => bad("box overview has no note about the portal's ports"));
     await shot(p, "15_box_overview_portal_ports");
+
+    // 11. Templates (ADR 0052): this box's ports saved as a template, then the box made
+    // to follow it from Box templates; the box takes the template's ports and keeps them.
+    const tpl = "Lab template " + (E.SITE_NAME || "box").slice(-6);
+    await q.reload();
+    const card = q.getByRole("region", { name: "Box ports" });
+    await card.getByRole("button", { name: "Save as a template" }).click();
+    await card.getByLabel("Template name").fill(tpl);
+    await card.getByRole("button", { name: "Save the template" }).click();
+    await card.getByText("Saved the template " + tpl).waitFor({ timeout: 10000 }).then(() => ok("the box's ports are saved as a template"), () => bad("saving the box's ports as a template failed"));
+    await q.goto(P + "/box-templates");
+    if (E.ORG_NAME) {
+      const pick = q.locator("label.picker select:visible").first();
+      await pick.waitFor({ timeout: 15000 }).catch(() => {});
+      await pick.selectOption({ label: E.ORG_NAME }).catch(() => {});
+    }
+    const sec = q.getByRole("region", { name: "Template " + tpl });
+    await sec.waitFor({ timeout: 15000 });
+    await sec.getByLabel(E.SITE_NAME + " follows " + tpl).check();
+    await shot(q, "16_portal_box_templates");
+    await sec.getByRole("button", { name: "Send to these boxes" }).click();
+    await q.getByText(E.SITE_NAME + ": sent to the box").waitFor({ timeout: 10000 }).then(() => ok("Box templates sends the template to the box"), async () => bad("template not sent: " + (await text(q)).slice(0, 200)));
+    const using = await until(async () => {
+      await q.reload();
+      const row = q.getByRole("region", { name: "Template " + tpl }).locator(`tr[data-site="${E.SITE_NAME}"]`);
+      return (await row.innerText({ timeout: 5000 })).includes("Box is using it");
+    }, 20);
+    using ? ok("the box follows the template and keeps its ports") : bad("box never showed as using the template");
+    await shot(q, "17_portal_box_template_kept");
   }
 } catch (e) {
   bad("stopped: " + String(e).split("\n")[0].slice(0, 300));

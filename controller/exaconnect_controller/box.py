@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import datetime as dt
 import ipaddress
+import json
 import re
 from typing import Any
 
@@ -220,11 +221,23 @@ def public_network(bn: dict | None) -> dict | None:
         return None
     net = bn.get("network") or {}
     wan = [{**p, "pppoe_password": SET} if p.get("pppoe_password") else p for p in net.get("wan") or []]
-    return {"network": {**net, "wan": wan}, "at": bn.get("at"), "by": bn.get("by")}
+    out = {"network": {**net, "wan": wan}, "at": bn.get("at"), "by": bn.get("by")}
+    if bn.get("template"):
+        out["template"] = bn["template"]
+    return out
 
 
-def set_network(conn: psycopg.Connection, node: dict, net: dict, actor: str) -> dict[str, Any]:
-    """Set a box's ports from the portal. Raises NetworkError for a set-up the box would refuse."""
+def set_network(
+    conn: psycopg.Connection,
+    node: dict,
+    net: dict,
+    actor: str,
+    template: dict | None = None,
+    refresh: bool = True,
+) -> dict[str, Any]:
+    """Set a box's ports from the portal, directly or through a template.
+    Raises NetworkError for a set-up the box would refuse. Setting them directly
+    takes the box off any template it followed."""
     clean = check_network(net, node.get("box"))
     prev = node.get("box_network") or {}
     # A password left as "set" keeps the one typed in the portal before, if the box has not had it yet.
@@ -237,15 +250,104 @@ def set_network(conn: psycopg.Connection, node: dict, net: dict, actor: str) -> 
     newest = max(box_at, _at(prev), _at(node.get("box_managed")))
     if newest >= now:
         now = newest + dt.timedelta(milliseconds=1)
-    bn = {"network": clean, "at": now.isoformat(), "by": f"Connect portal ({actor.removeprefix('user:')})"}
-    conn.execute("UPDATE nodes SET box_network = %s WHERE id = %s", (Jsonb(bn), node["id"]))
-    audit.record(conn, actor, "box.network", node["name"], node["customer_id"], public_network(bn)["network"])
+    who = actor.removeprefix("user:")
+    bn: dict[str, Any] = {"network": clean, "at": now.isoformat(), "by": f"Connect portal ({who})"}
+    if template:
+        bn["by"] = f"Template {template['name']} ({who})"
+        bn["template"] = {"id": str(template["id"]), "name": template["name"]}
+    conn.execute(
+        "UPDATE nodes SET box_network = %s, box_template_id = %s WHERE id = %s",
+        (Jsonb(bn), template["id"] if template else None, node["id"]),
+    )
+    audit.record(
+        conn,
+        actor,
+        "box.network",
+        node["name"],
+        node["customer_id"],
+        {**public_network(bn)["network"], **({"template": template["name"]} if template else {})},
+    )
     conn.execute(
         "INSERT INTO events (time, customer_id, node_id, kind, detail) VALUES (%s, %s, %s, 'box_network', %s)",
         (now, node["customer_id"], node["id"], Jsonb({"by": bn["by"]})),
     )
-    desired.refresh(conn, node["customer_id"])
+    if refresh:
+        desired.refresh(conn, node["customer_id"])
     return bn
+
+
+# Templates (ADR 0052): one port set-up for many boxes of an organisation. A box
+# that follows a template gets the template's ports, and again whenever the
+# template changes. PPPoE sign-ins differ per location, so a template cannot hold
+# one; its office port can take the address "auto": the first address of each
+# location's own office network (the site's first LAN prefix).
+
+AUTO = "auto"
+
+
+def check_template(net: dict) -> dict:
+    """A template's set-up: the box checks without a box's port list, no PPPoE."""
+    for p in (net.get("wan") or []) + ([net["lan"]] if net.get("lan") else []):
+        if p.get("mode") == "pppoe":
+            raise NetworkError(
+                "PPPoE sign-ins differ per location: set them on each box, or choose Leave as it is in the template."
+            )
+    work = json.loads(json.dumps(net))
+    auto = bool(work.get("lan")) and work["lan"].get("address") == AUTO
+    if auto:
+        work["lan"]["address"] = "10.0.0.1/24"  # any address: each location's own goes in at apply time
+    clean = check_network(work, None)
+    if auto:
+        clean["lan"]["address"] = AUTO
+    return clean
+
+
+def for_site(net: dict, lan_prefixes: list) -> dict:
+    """A template's set-up made concrete for one location."""
+    out = json.loads(json.dumps(net))
+    lan = out.get("lan")
+    if lan and lan.get("address") == AUTO:
+        if not lan_prefixes:
+            raise NetworkError('This location has no office network (LAN prefix) for the address "auto".')
+        n = ipaddress.ip_network(str(lan_prefixes[0]), strict=False)
+        if n.version != 4 or n.num_addresses < 4:
+            raise NetworkError(f'This location\'s office network {n} is too small for the address "auto".')
+        lan["address"] = f"{next(n.hosts())}/{n.prefixlen}"
+    return out
+
+
+def apply_template(conn: psycopg.Connection, template: dict, site_ids: list[str], actor: str) -> list[dict]:
+    """Put a template on boxes and make them follow it. Returns one result per site."""
+    results = []
+    touched = False
+    for sid in site_ids:
+        row = conn.execute(
+            """SELECT n.id, n.name, n.customer_id, n.box, n.box_managed, n.box_network, s.name AS site, s.lan_prefixes
+               FROM sites s LEFT JOIN nodes n ON n.site_id = s.id
+               WHERE s.id = %s AND s.customer_id = %s FOR UPDATE OF s""",
+            (sid, template["customer_id"]),
+        ).fetchone()
+        if row is None:
+            results.append({"site_id": sid, "ok": False, "error": "No such location in this organisation."})
+            continue
+        res: dict[str, Any] = {"site_id": sid, "site": row["site"], "ok": False}
+        if row["id"] is None or not (row["box"] or {}).get("console"):
+            res["error"] = "No ExaCarib box at this location."
+        elif managed(row)["mode"] == "site":
+            res["error"] = "This box is managed on site. Switch Managed from to Cloud or both first."
+        else:
+            try:
+                set_network(
+                    conn, row, for_site(template["network"], row["lan_prefixes"]), actor, template, refresh=False
+                )
+                res["ok"] = True
+                touched = True
+            except NetworkError as e:
+                res["error"] = str(e)
+        results.append(res)
+    if touched:
+        desired.refresh(conn, template["customer_id"])
+    return results
 
 
 def portal_report(conn: psycopg.Connection, node: Any, portal: dict | None) -> None:

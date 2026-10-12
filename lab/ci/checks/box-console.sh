@@ -74,6 +74,11 @@ n=$(sql "SELECT count(*) FROM audit_log WHERE action = 'box.managed' AND target 
 if ((${n:-0} >= 3)); then ok "managed-from switches from the portal and the box are audited ($n)"; else bad "box.managed audit rows: ${n:-0}, want 3"; fi
 n=$(sql "SELECT count(*) FROM events WHERE node_id = '$node' AND kind = 'box_portal_applied'")
 if ((${n:-0} >= 1)); then ok "the box reported keeping the ports set in the portal"; else bad "no box_portal_applied event from the box"; fi
+if [[ $(sql "SELECT box_template_id IS NOT NULL FROM nodes WHERE id = '$node'") == t ]]; then
+  ok "the box follows the template made from its ports"
+else
+  bad "the box does not follow a template"
+fi
 if [[ $(sql "SELECT box_network->'network'->>'lan_dhcp' FROM nodes WHERE id = '$node'") == true ]]; then
   ok "the controller has the portal's port set-up"
 else

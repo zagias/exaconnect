@@ -109,7 +109,7 @@ export function SitePage() {
         {s.kind === "site" && <SiteStorm name={s.name} />}
       </div>
       <div className="grid">
-        <BoxPorts siteId={s.id} box={s.box} managed={s.box_managed} portal={s.box_network} canManage={canManage} onChange={site.reload} />
+        <BoxPorts siteId={s.id} customerId={s.customer_id} box={s.box} managed={s.box_managed} portal={s.box_network} canManage={canManage} onChange={site.reload} />
         {s.kind === "site" && (
           <section className="card span-12">
             <div className="card-head">
