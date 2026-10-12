@@ -344,6 +344,7 @@ export function navGroups(
         { to: "/traffic", label: "Traffic rules", icon: icons.traffic, keywords: "traffic applications priorities classes" },
         { to: "/fabric", label: "Private links", icon: icons.fabric, keywords: "fabric virtual circuits cloud router" },
         { to: "/internet", label: "Internet access", icon: icons.internet, keywords: "breakout firewall port forwards" },
+        { to: "/box-templates", label: "Box templates", icon: icons.sites, keywords: "boxes ports templates many sites cloud managed" },
         { to: "/encryption", label: "Encryption", icon: icons.encryption },
         { to: "/integrations", label: "Integrations", icon: icons.fabric, keywords: "monitoring ticketing snmp syslog" },
       ],

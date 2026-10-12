@@ -12,6 +12,7 @@ import InvitePage, { inviteToken, PENDING_INVITE } from "./pages/Invite";
 import People from "./pages/People";
 import { ForgotPage, ResetPage, resetRoute } from "./pages/Reset";
 import Internet from "./pages/Internet";
+import { BoxTemplates } from "./pages/BoxTemplates";
 import Admin from "./pages/Admin";
 import Billing from "./pages/Billing";
 import Decisions from "./pages/Decisions";
@@ -96,6 +97,7 @@ function Layout() {
           <Route path="/decisions" element={<Decisions />} />
           <Route path="/fabric" element={<Fabric />} />
           <Route path="/internet" element={<Internet />} />
+          <Route path="/box-templates" element={<BoxTemplates />} />
           <Route path="/encryption" element={<Encryption />} />
           <Route path="/order" element={<OrderPage />} />
           <Route path="/metering" element={<Metering />} />

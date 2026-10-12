@@ -200,24 +200,53 @@ try {
     const boxBoth = await until(async () => { await p.reload(); return (await pressed(p, "On site and cloud").getAttribute("aria-pressed", { timeout: 4000 })) === "true"; });
     boxBoth ? ok("switched to both in the portal, the box follows") : bad("box never showed On site and cloud");
 
-    // 10. Ports from the portal (ADR 0051): the office network starts handing out
-    // addresses, set in the portal; the box tries it, still reaches ExaCarib, keeps it.
+    // 10. Ports from the portal (ADR 0051): the internet port gets DNS servers, set in
+    // the portal; the box tries it, still reaches ExaCarib, and keeps it.
     await q.reload();
     const ports = q.getByRole("region", { name: "Box ports" });
     await ports.getByRole("button", { name: "Change the ports" }).click();
     (await q.getByLabel("Address and size for " + (E.LAN_IFACE || "eth1")).inputValue({ timeout: 5000 })) === E.LAN_ADDR
       ? ok("the portal's port form starts from the box's own ports") : bad("portal port form did not show the office address");
-    await ports.getByLabel("Hand out addresses on the office network").check();
+    await ports.getByLabel("DNS servers for " + (E.WAN_IFACE || "eth0")).fill("9.9.9.9, 1.1.1.1");
     await shot(q, "13_portal_box_ports");
     await ports.getByRole("button", { name: "Send to the box" }).click();
     const kept = await until(async () => { await q.reload(); return (await q.getByRole("region", { name: "Box ports" }).innerText({ timeout: 5000 })).includes("The box is using the ports set here"); }, 20);
-    kept ? ok("the box takes the ports set in the portal and keeps them") : bad("portal ports never kept: " + (await q.getByRole("region", { name: "Box ports" }).innerText().catch(() => "")).slice(0, 200));
+    kept ? ok("the box takes the ports set in the portal and keeps them") : bad("portal ports never kept: " + (await q.getByRole("region", { name: "Box ports" }).innerText().catch(() => "")).replace(/\s+/g, " ").slice(0, 300));
     await shot(q, "14_portal_box_ports_kept");
     const net = await p.evaluate(async () => (await (await fetch("/api/network", { headers: { "X-Exa-Box": "1" } })).json()).network);
-    net && net.lan_dhcp && String(net.updated_by || "").startsWith("Connect portal") ? ok("the box hands out addresses on the office network, set from the portal") : bad("box network after portal change: " + JSON.stringify(net).slice(0, 200));
+    net && (net.wan?.[0]?.dns || []).includes("9.9.9.9") && String(net.updated_by || "").startsWith("Connect portal") ? ok("the box uses the DNS servers set from the portal") : bad("box network after portal change: " + JSON.stringify(net).slice(0, 300));
     await p.getByRole("link", { name: "Overview" }).click();
     await p.getByText("Ports last set in the Connect portal").waitFor({ timeout: 10000 }).then(() => ok("the box console says the ports were set in the portal"), () => bad("box overview has no note about the portal's ports"));
     await shot(p, "15_box_overview_portal_ports");
+
+    // 11. Templates (ADR 0053): this box's ports saved as a template, then the box made
+    // to follow it from Box templates; the box takes the template's ports and keeps them.
+    const tpl = "Lab template " + (E.SITE_NAME || "box").slice(-6);
+    await q.reload();
+    const card = q.getByRole("region", { name: "Box ports" });
+    await card.getByRole("button", { name: "Save as a template" }).click();
+    await card.getByLabel("Template name").fill(tpl);
+    await card.getByRole("button", { name: "Save the template" }).click();
+    await card.getByText("Saved the template " + tpl).waitFor({ timeout: 10000 }).then(() => ok("the box's ports are saved as a template"), () => bad("saving the box's ports as a template failed"));
+    await q.goto(P + "/box-templates");
+    if (E.ORG_NAME) {
+      const pick = q.locator("label.picker select:visible").first();
+      await pick.waitFor({ timeout: 15000 }).catch(() => {});
+      await pick.selectOption({ label: E.ORG_NAME }).catch(() => {});
+    }
+    const sec = q.getByRole("region", { name: "Template " + tpl });
+    await sec.waitFor({ timeout: 15000 });
+    await sec.getByLabel(E.SITE_NAME + " follows " + tpl).check();
+    await shot(q, "16_portal_box_templates");
+    await sec.getByRole("button", { name: "Send to these boxes" }).click();
+    await q.getByText(E.SITE_NAME + ": sent to the box").waitFor({ timeout: 10000 }).then(() => ok("Box templates sends the template to the box"), async () => bad("template not sent: " + (await text(q)).slice(0, 200)));
+    const using = await until(async () => {
+      await q.reload();
+      const row = q.getByRole("region", { name: "Template " + tpl }).locator(`tr[data-site="${E.SITE_NAME}"]`);
+      return (await row.innerText({ timeout: 5000 })).includes("Box is using it");
+    }, 20);
+    using ? ok("the box follows the template and keeps its ports") : bad("box never showed as using the template");
+    await shot(q, "17_portal_box_template_kept");
   }
 } catch (e) {
   bad("stopped: " + String(e).split("\n")[0].slice(0, 300));

@@ -239,3 +239,81 @@ def test_box_ports_from_portal(client, admin_headers):
     r = client.post(url, json=good, headers=admin_headers)
     assert r.status_code == 200
     assert dt.datetime.fromisoformat(r.json()["portal"]["at"]) > dt.datetime.fromisoformat(fast["network_at"])
+
+
+def test_box_templates(client, admin_headers):
+    """Box templates (ADR 0053): one port set-up for many boxes; boxes that follow
+    it get its ports now and on every change, each office port on its own
+    location's network; setting a box's ports directly takes it off the template."""
+    tokens = _seed()["tokens"]
+    _, ha = _enrol(client, tokens, "site-a")
+    _, hb = _enrol(client, tokens, "site-b")
+    with db.tx() as conn:
+        sites = {r["name"]: r for r in conn.execute("SELECT id, name, customer_id, lan_prefixes FROM sites").fetchall()}
+    a, b = str(sites["site-a"]["id"]), str(sites["site-b"]["id"])
+    cid = str(sites["site-a"]["customer_id"])
+    now = dt.datetime.now(dt.UTC).isoformat()
+    box = {
+        "console": True,
+        "admin_set": True,
+        "wan": [{"iface": "eth0", "path": "carrier-a", "mode": "dhcp"}],
+        "lan": {"iface": "eth1", "mode": "static", "address": "192.168.99.1/24"},
+        "ports": [{"name": "eth0"}, {"name": "eth1"}, {"name": "eth2"}],
+    }
+    for h in (ha, hb):
+        assert client.post("/api/v1/agent/telemetry", headers=h, json={"at": now, "box": box}).status_code == 204
+    url = f"/api/v1/box-templates?customer_id={cid}"
+
+    # PPPoE has no place in a template; a template from a box copies its ports.
+    pppoe = {"wan": [{"iface": "eth0", "mode": "pppoe", "pppoe_user": "u", "pppoe_password": "p"}]}
+    r = client.post(url, json={"name": "Branch", "network": pppoe}, headers=admin_headers)
+    assert r.status_code == 400 and "PPPoE" in r.json()["detail"]
+    r = client.post(url, json={"name": "Copy", "from_site_id": a}, headers=admin_headers)
+    assert r.status_code == 201 and r.json()["network"]["lan"]["address"] == "192.168.99.1/24"
+    net = {
+        "wan": [
+            {"iface": "eth0", "path": "carrier-a", "mode": "dhcp"},
+            {"iface": "eth2", "path": "carrier-b", "mode": "dhcp"},
+        ],
+        "lan": {"iface": "eth1", "mode": "static", "address": "auto"},
+        "lan_dhcp": True,
+    }
+    r = client.post(url, json={"name": "Branch", "network": net}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+    tid = r.json()["id"]
+    assert client.post(url, json={"name": "Branch", "network": net}, headers=admin_headers).status_code == 409
+
+    # Following it: each box gets the template, with its own location's office address.
+    r = client.post(f"/api/v1/box-templates/{tid}/sites", json={"site_ids": [a, b]}, headers=admin_headers)
+    assert r.status_code == 200 and all(x["ok"] for x in r.json()["results"]), r.text
+    for h, s in ((ha, "site-a"), (hb, "site-b")):
+        down = _desired(client, h)["box"]["network"]
+        prefix = sites[s]["lan_prefixes"][0]
+        assert down["network"]["lan"]["address"] == f"{next(prefix.hosts())}/{prefix.prefixlen}"
+        assert down["by"].startswith("Template Branch")
+    listed = client.get(url, headers=admin_headers).json()
+    assert {x["site"]: x["template_id"] for x in listed["boxes"]} == {"site-a": tid, "site-b": tid}
+
+    # Changing the template changes every box that follows it.
+    net2 = dict(net, lan_dhcp=False)
+    r = client.put(f"/api/v1/box-templates/{tid}", json={"name": "Branch", "network": net2}, headers=admin_headers)
+    assert r.status_code == 200 and len(r.json()["results"]) == 2
+    assert _desired(client, hb)["box"]["network"]["network"]["lan_dhcp"] is False
+
+    # A box with no such port, or managed on site, is reported, not changed.
+    bad = dict(net2, wan=[{"iface": "eth7", "path": "carrier-a", "mode": "dhcp"}])
+    client.put(f"/api/v1/box-templates/{tid}", json={"name": "Odd", "network": bad}, headers=admin_headers)
+    client.post(f"/api/v1/sites/{b}/box/managed", json={"mode": "site"}, headers=admin_headers)
+    r = client.put(f"/api/v1/box-templates/{tid}", json={"name": "Branch", "network": net}, headers=admin_headers)
+    res = {x["site"]: x for x in r.json()["results"]}
+    assert res["site-a"]["ok"] and not res["site-b"]["ok"] and "managed on site" in res["site-b"]["error"]
+    r = client.post(f"/api/v1/box-templates/{tid}", json={}, headers=admin_headers)
+    assert r.status_code == 405
+
+    # Ports set directly on a box take it off the template; deleting the template keeps the ports.
+    own = {"wan": [{"iface": "eth0", "path": "carrier-a", "mode": "dhcp"}]}
+    assert client.post(f"/api/v1/sites/{a}/box/network", json=own, headers=admin_headers).status_code == 200
+    listed = client.get(url, headers=admin_headers).json()
+    assert {x["site"]: x["template_id"] for x in listed["boxes"]}["site-a"] is None
+    assert client.delete(f"/api/v1/box-templates/{tid}", headers=admin_headers).status_code == 200
+    assert "network" in _desired(client, ha)["box"]
