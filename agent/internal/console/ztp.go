@@ -200,6 +200,7 @@ func (s *Server) ZeroTouch(ctx context.Context) {
 		every = 30 * time.Second
 	}
 	start := time.Now()
+	lastErr := ""
 	for {
 		if _, _, ok := s.identity(); ok {
 			s.setZTP(func(z *ZTPStatus) { z.State, z.Detail = "joined", "" })
@@ -213,7 +214,11 @@ func (s *Server) ZeroTouch(ctx context.Context) {
 			if ctx.Err() != nil {
 				return
 			}
-			s.Log.Debug("zero-touch: no answer", "err", err)
+			// Say so once per new reason, so a box that cannot call home shows why in its log.
+			if err.Error() != lastErr {
+				s.Log.Warn("zero-touch: no answer", "err", err)
+				lastErr = err.Error()
+			}
 			s.setZTP(func(z *ZTPStatus) { z.State, z.Detail = "error", err.Error() })
 		case ans.State == "assigned":
 			s.setZTP(func(z *ZTPStatus) { z.State, z.Detail = "assigned", "Joining Connect as "+ans.Site })
