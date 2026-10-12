@@ -85,7 +85,12 @@ check)
   [[ $r == 000 ]] && pass "the internet port now drops the console (box firewall)" || fail "the internet port answered $r"
   r=$("${c[@]}" "$B/api/overview")
   grep -q '"eth0"' <<<"$r" && pass "still reachable from the office after the change" || fail "overview: ${r:0:200}"
-  r=$("${c[@]}" -X POST "$B/api/diag" -d '{"tool": "dns", "target": "deb.debian.org"}')
+  # The internet port may still be getting its address back after the change.
+  for _ in $(seq 1 15); do
+    r=$("${c[@]}" -X POST "$B/api/diag" -d '{"tool": "dns", "target": "deb.debian.org"}')
+    grep -q 'answered in' <<<"$r" && break
+    sleep 2
+  done
   grep -q 'answered in' <<<"$r" && pass "the box resolves names through its internet port" || fail "dns: ${r:0:200}"
 
   # Monitoring (ADR 0048): SNMP v2c and v3 polling from the office, none from the
