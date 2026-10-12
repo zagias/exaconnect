@@ -591,8 +591,63 @@ async function monitoringView() {
 
 // ---- settings ----
 
+function softwareCard(u) {
+  const msg = h("div");
+  const card = h("section", { class: "card" }, h("h2", {}, "Software"));
+  if (!u.ab) {
+    card.append(h("p", { class: "muted" }, `This box runs ${u.version}, installed from the package. Update it with apt; Debian's security updates install on their own.`));
+    return card;
+  }
+  const last = u.last;
+  const res = { ok: pill("ok", "Kept"), rolled_back: pill("warn", "Went back"), trying: pill("none", "Trying") };
+  const wd = u.watchdog || {};
+  card.append(
+    u.trial ? note("warn", "This software is on trial: the box keeps it once it is healthy, or goes back on its own.") : null,
+    h("table", {}, h("tbody", {},
+      h("tr", {}, h("th", { scope: "row" }, "Running"), h("td", {}, h("span", { class: "mono" }, u.version), h("span", { class: "sub" }, `Slot ${u.slot}`))),
+      h("tr", {}, h("th", { scope: "row" }, "Other slot"), h("td", {}, u.other && u.other.version ? h("span", { class: "mono" }, u.other.version) : h("span", { class: "muted" }, "Empty"), h("span", { class: "sub" }, `Slot ${u.other ? u.other.slot : "–"}: an update goes here, and the box can go back to it`))),
+      h("tr", {}, h("th", { scope: "row" }, "Watchdog"), h("td", {}, wd.state === "active" ? pill("ok", "On") : pill("warn", wd.device ? "Not running" : "No watchdog found"), wd.device ? h("span", { class: "sub" }, `${wd.device}: restarts the box if it hangs`) : null)),
+      last ? h("tr", {}, h("th", { scope: "row" }, "Last update"), h("td", {}, res[last.result] || last.result, " ", h("span", { class: "mono" }, last.version || ""), h("span", { class: "sub" }, `${last.why} · ${ago(last.at)}`))) : null)),
+    msg);
+  const restart = (text) => {
+    show(head("Settings", "Restarting", text), note("warn", "The box is restarting. This page reconnects by itself; it can take a few minutes. If the new software is not healthy, the box goes back to the old one on its own."));
+    const wait = setInterval(async () => { try { const r = await fetch("/api/state", { cache: "no-store" }); if (r.ok) { clearInterval(wait); location.hash = "#/settings"; location.reload(); } } catch { /* still down */ } }, 5000);
+  };
+  const poll = () => {
+    const t = setInterval(async () => {
+      let x;
+      try { x = await api("update"); } catch { clearInterval(t); restart("Installing the new software."); return; }
+      if (x.running) { msg.replaceChildren(note("warn", x.progress || "Installing…")); return; }
+      clearInterval(t);
+      if (x.error) msg.replaceChildren(note("bad", x.error)); else restart("Installing the new software.");
+    }, 3000);
+  };
+  const install = (v) => h("button", { class: "button", onclick: async (e) => {
+    if (!confirm(`Install ${v}? The box restarts (about a minute without internet) and keeps the new software only if it comes up healthy.`)) return;
+    const done = busy(e.target, "Starting…");
+    try { await api("update", { version: v }); msg.replaceChildren(note("warn", "Installing…")); poll(); } catch (x) { msg.replaceChildren(note("bad", x.message)); done(); }
+  } }, `Install ${v}`);
+  const acts = h("div", { class: "actions" },
+    h("button", { class: "button secondary", onclick: async (e) => {
+      const done = busy(e.target, "Checking…");
+      try {
+        const l = await api("update/latest");
+        msg.replaceChildren(l.version === u.version ? note("good", `This box has the newest software, ${l.version}.`) : h("div", { class: "actions" }, note("good", `Version ${l.version} is available.`), install(l.version)));
+      } catch (x) { msg.replaceChildren(note("bad", x.message)); }
+      done();
+    } }, "Check for new software"),
+    u.other && u.other.version && !u.trial ? h("button", { class: "button secondary", onclick: async (e) => {
+      if (!confirm(`Go back to ${u.other.version}? The box restarts.`)) return;
+      busy(e.target, "Restarting…");
+      try { await api("update/rollback", {}); restart(`Going back to ${u.other.version}.`); } catch (x) { msg.replaceChildren(note("bad", x.message)); }
+    } }, `Go back to ${u.other.version}`) : null);
+  card.append(acts);
+  if (u.running) { msg.replaceChildren(note("warn", u.progress || "Installing…")); poll(); }
+  return card;
+}
+
 async function settingsView() {
-  const o = await api("overview");
+  const [o, u] = await Promise.all([api("overview"), api("update").catch(() => null)]);
   const err = h("div");
   const f = h("form", { class: "card", onsubmit: async (e) => {
     e.preventDefault();
@@ -609,7 +664,7 @@ async function settingsView() {
     h("label", {}, "New password", h("input", { name: "new", type: "password", required: true, minlength: 10, autocomplete: "new-password" })),
     h("label", {}, "New password again", h("input", { name: "again", type: "password", required: true, autocomplete: "new-password" }))),
   err, h("div", { class: "actions" }, h("button", { class: "button" }, "Change the password")));
-  show(head("Settings", "Settings", "Where this box is managed from, this console's sign-in, and details to give ExaCarib support."), managedCard(o), f,
+  show(head("Settings", "Settings", "Where this box is managed from, this console's sign-in, the box's software, and details to give ExaCarib support."), managedCard(o), u ? softwareCard(u) : null, f,
     h("section", { class: "card" }, h("h2", {}, "About this box"), h("table", {}, h("tbody", {},
       h("tr", {}, h("th", { scope: "row" }, "Host name"), h("td", { class: "mono" }, o.hostname)),
       h("tr", {}, h("th", { scope: "row" }, "Software"), h("td", { class: "mono" }, o.version)),
