@@ -11,7 +11,7 @@
 #
 #   deploy/box/test-image.sh start <image.qcow2> <dir>  boot; <dir>/setup-code (0600) once shown
 #   deploy/box/test-image.sh check <dir>                set-up checks through the console API
-#   deploy/box/test-image.sh update <dir> <root.tar.zst> software slots (ADR 0049): a good update
+#   deploy/box/test-image.sh update <dir> <root.tar.zst> software slots (ADR 0051): a good update
 #                                                       is kept, a broken one and a hanging one undo
 #                                                       themselves (the hardware watchdog resets the hang)
 #   deploy/box/test-image.sh stop <dir>

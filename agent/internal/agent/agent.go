@@ -125,6 +125,9 @@ type Agent struct {
 	// Box, when set, reports what the box console set up locally (ADR 0046)
 	// with every telemetry flush.
 	Box func() any
+	// BoxDesired, when set, hears the portal's side of the box's settings
+	// (ADR 0049) with every new desired state, whether or not it applied.
+	BoxDesired func(*desired.Box)
 	// Notify, when set, hears every event as it happens (the box's SNMP traps,
 	// ADR 0048). It runs on its own goroutine and must not block for long.
 	Notify func(Event)
@@ -348,6 +351,9 @@ func (a *Agent) poll(ctx context.Context) {
 		return
 	}
 	a.Log.Info("new desired state", "version", ds.Version)
+	if a.BoxDesired != nil {
+		a.BoxDesired(ds.Box)
+	}
 	st := client.Status{AppliedVersion: ds.Version, OK: true, AgentVersion: version.String()}
 	if err := a.Applier.Apply(ctx, ds); err != nil {
 		a.Log.Error("apply failed", "version", ds.Version, "err", err)
@@ -747,7 +753,7 @@ func (a *Agent) event(kind string, detail map[string]string) {
 }
 
 // ControllerOK says the controller has answered since the agent started and
-// is not silent now (the box's update health check, ADR 0049).
+// is not silent now (the box's update health check, ADR 0051).
 func (a *Agent) ControllerOK() bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()

@@ -165,6 +165,7 @@ func startConsole(ctx context.Context, ks keys.Store, addr string, log *slog.Log
 		}
 	}()
 	go watchdog(ctx, addr)
+	go con.ZeroTouch(ctx)
 	select {
 	case <-con.Joined():
 		return con, nil
@@ -174,7 +175,7 @@ func startConsole(ctx context.Context, ks keys.Store, addr string, log *slog.Log
 }
 
 // watchdog tells systemd the agent is alive while its console answers
-// (exa-box.service WatchdogSec, ADR 0049). Without systemd it does nothing.
+// (exa-box.service WatchdogSec, ADR 0051). Without systemd it does nothing.
 func watchdog(ctx context.Context, addr string) {
 	sock := os.Getenv("NOTIFY_SOCKET")
 	if sock == "" {
@@ -244,6 +245,7 @@ func run(ctx context.Context, ks keys.Store, consoleAddr string, log *slog.Logge
 	}
 	if con != nil {
 		a.Box = con.BoxInfo
+		a.BoxDesired = con.FromPortal
 		a.Notify = con.Notify
 		con.SetAgent(a)
 	}
@@ -313,6 +315,9 @@ func consoleCode(dir string, reset bool) error {
 		return nil
 	}
 	fmt.Println("Box console setup code:", code)
+	if sn := console.Serial(""); sn != "" {
+		fmt.Println("Serial number:", sn)
+	}
 	if fp := console.CertFingerprint(dir); fp != "" {
 		fmt.Println("Console certificate SHA-256:", fp)
 	}

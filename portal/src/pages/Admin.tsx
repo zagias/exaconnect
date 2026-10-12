@@ -3,10 +3,11 @@ import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { api, useApi, type NodeRow } from "../api";
 import { useAuth } from "../auth";
 import { ErrorNote, StatusPill, ago } from "../components";
-import { BoxTag, boxSetupCode } from "../box";
+import { BoxTag, ManagedTag, boxSetupCode } from "../box";
 import { useCustomer, who } from "../customer";
 import { Card, PageHead, RowActions, useAction } from "../ui";
 import { BillingAdmin } from "./BillingAdmin";
+import { BoxesAdmin } from "./Boxes";
 import { Classes } from "./Classes";
 import { IntegrationsAdmin } from "./IntegrationsAdmin";
 import { PartnersAdmin } from "./PartnersAdmin";
@@ -34,6 +35,7 @@ interface EnrolToken {
 // enrolment tokens, classes and SLA policies, partners, DDoS protection, users, settings, releases and the audit log.
 const SECTIONS: Record<string, [string, string]> = {
   agents: ["Agents", "Every box that has enrolled, what it runs and when it last checked in."],
+  boxes: ["Boxes", "Every ExaCarib box by serial number, across all organisations. Assign one to a location and it installs itself."],
   sites: ["Sites and links", "Each organisation's Connect sites, their carrier links and install codes, with every network setting."],
   classes: ["Classes and SLA", "Application classes and the SLA each one is held to."],
   partners: ["Partners", "White-label partners and the apps they offer."],
@@ -57,6 +59,7 @@ export default function Admin() {
       <Routes>
         <Route index element={<Navigate to="agents" replace />} />
         <Route path="agents" element={<Agents />} />
+        <Route path="boxes" element={<BoxesAdmin />} />
         <Route path="sites" element={<SitesAdmin />} />
         <Route path="classes" element={<Classes />} />
         <Route path="partners" element={<PartnersAdmin />} />
@@ -125,7 +128,8 @@ function Agents() {
             {(data ?? []).map((n) => (
               <tr key={n.id}>
                 <td>
-                  <span className="mono">{n.name}</span> <BoxTag box={n.box} />
+                  <span className="mono">{n.name}</span> <BoxTag box={n.box} />{" "}
+                  {n.box?.console ? <ManagedTag managed={n.box_managed ?? { mode: "both", at: null, by: null }} /> : null}
                   {n.box?.last_change && (
                     <span className="sub">
                       On the box: {n.box.last_change.what} ({ago(n.box.last_change.at)})

@@ -43,6 +43,11 @@ The controller builds one desired-state document per node from inventory
 }
 ```
 
+A box that runs the box console also gets `"box": {"managed_from": {"mode":
+"site" | "cloud" | "both", "at": "…", "by": "…"}}`: where its own settings may be
+changed (ADR 0049). The agent passes it to the console whether or not the rest of
+the document applied; the box and the portal each keep the newest setting.
+
 On the PoP each tunnel has a `listen_port`, one peer per site (allowed IPs are
 the site's overlay /32 and its LAN prefixes) and one BGP neighbour per site.
 

@@ -1,6 +1,6 @@
 package console
 
-// Software updates on the ExaCarib box image (ADR 0049). The image has two root
+// Software updates on the ExaCarib box image (ADR 0051). The image has two root
 // slots; /usr/lib/exacarib/exacarib-update writes new software into the other
 // slot, the box restarts into it once, and keeps it only if it comes up healthy
 // (GET /api/health on loopback). Anything else, including a hang the hardware

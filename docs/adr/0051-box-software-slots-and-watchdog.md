@@ -1,4 +1,4 @@
-# 0049 Box software slots (A/B updates that undo themselves) and watchdogs
+# 0051 Box software slots (A/B updates that undo themselves) and watchdogs
 
 Date: 2026-10-12
 Status: accepted
@@ -23,7 +23,7 @@ watchdog.
   formats the other slot, streams the release's `root.tar.zst` into it while
   hashing it, refuses it if the SHA-256 differs, carries this box's settings
   over (state directory with identity and keys, netplan, PPPoE, office DHCP,
-  SNMP, syslog, FRR, machine ID, host name), and sets `try`.
+  SNMP, syslog, FRR, machine ID, host name, zero-touch address), and sets `try`.
 - **Keep or undo** (`exacarib-update-confirm.service` at every boot): on a
   tried slot the box must answer `GET /api/health` (loopback; once joined,
   Connect must have answered too) for 2 minutes without a break, within 7
@@ -47,6 +47,9 @@ watchdog.
   is the entry point for Connect's fleet management; the box reports its
   slots in telemetry (`box.software`) and sends `box_update_restarting` and
   `box_update_failed` events.
+- While the box is managed from the Connect portal (ADR 0049), installing from
+  the console is refused like any other local change; going back to the previous
+  software stays allowed, as an emergency undo.
 - Boxes installed from the .deb (not the image) get the watchdogs, not slots:
   they update with apt.
 

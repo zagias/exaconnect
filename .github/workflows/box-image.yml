@@ -85,7 +85,7 @@ jobs:
           deploy/box/test-image.sh start out/exacarib-box-${BOX_VERSION}-amd64.qcow2 "$dir"
           rc=0
           deploy/box/test-image.sh check "$dir" || rc=1
-          # Software slots (ADR 0049): a good update kept, a broken and a hanging one undone.
+          # Software slots (ADR 0051): a good update kept, a broken and a hanging one undone.
           deploy/box/test-image.sh update "$dir" "out/exacarib-box-${BOX_VERSION}-amd64.root.tar.zst" || rc=1
           echo "--- box screen (last lines)"; tr -d '\r' <"$dir/serial.log" | grep -v 'Setup code' | tail -n 25
           deploy/box/test-image.sh stop "$dir"
