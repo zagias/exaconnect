@@ -97,3 +97,5 @@ details summary { cursor: pointer; color: var(--blue); font-weight: 600; font-si
 .stat-sm { font-size: 18px; } .w420 { max-width: 420px; } .break { word-break: break-all; }
 th[scope="row"] { text-transform: none; letter-spacing: 0; font-size: 14px; width: 220px; vertical-align: top; padding-left: 0; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.segmented { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0; }
+.segmented .button[aria-pressed="true"]:disabled { opacity: 1; cursor: default; }

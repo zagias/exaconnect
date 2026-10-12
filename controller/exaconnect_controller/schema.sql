@@ -942,3 +942,36 @@ CREATE INDEX IF NOT EXISTS nodes_prev_cert_serial ON nodes (prev_cert_serial) WH
 -- local sign-in and the last change made there, reported with telemetry.
 ALTER TABLE nodes ADD COLUMN IF NOT EXISTS box jsonb;
 ALTER TABLE nodes ADD COLUMN IF NOT EXISTS box_at timestamptz;
+
+-- Where a box's own settings may be changed (ADR 0049): {"mode": "site" |
+-- "cloud" | "both", "at", "by"}. NULL means both. The box and the portal each
+-- keep the newest setting.
+ALTER TABLE nodes ADD COLUMN IF NOT EXISTS box_managed jsonb;
+
+-- ExaCarib boxes by serial number, for zero-touch installation (ADR 0050). A box
+-- calls home with its serial and a key it made on first boot; the first key seen
+-- is kept. ExaCarib staff assign a serial to a customer's site, and the box then
+-- joins by itself. Boxes that joined through their console are listed too.
+CREATE TABLE IF NOT EXISTS boxes (
+  serial       text PRIMARY KEY,
+  public_key   text,
+  key_conflict text,
+  customer_id  uuid REFERENCES customers(id) ON DELETE SET NULL,
+  site_id      uuid REFERENCES sites(id) ON DELETE SET NULL,
+  node_id      uuid REFERENCES nodes(id) ON DELETE SET NULL,
+  note         text NOT NULL DEFAULT '',
+  mac          text,
+  model        text,
+  version      text,
+  last_ip      text,
+  first_seen   timestamptz,
+  last_seen    timestamptz,
+  added_by     text,
+  added_at     timestamptz NOT NULL DEFAULT now(),
+  assigned_by  text,
+  assigned_at  timestamptz,
+  token_at     timestamptz,
+  joined_at    timestamptz
+);
+CREATE INDEX IF NOT EXISTS boxes_site ON boxes (site_id);
+CREATE INDEX IF NOT EXISTS boxes_node ON boxes (node_id);

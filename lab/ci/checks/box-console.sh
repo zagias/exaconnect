@@ -39,7 +39,7 @@ box_location "$tag" 172.31.250.0/24 "$host" || exit 1
 # 2. A fresh box: internet port on Docker's bridge (eth0), office port on its own network (eth1).
 docker network create --subnet 172.31.250.0/24 "$lan" >/dev/null 2>&1 || true
 if ! docker run -d --name "$box" --hostname box-check --privileged --network bridge \
-  --add-host "$host:host-gateway" -v "$REPO/bin/lab:/opt/exaconnect/bin:ro" exaconnect/node:dev >/dev/null ||
+  --add-host "$host:host-gateway" -e EXA_ZTP_URL=off -v "$REPO/bin/lab:/opt/exaconnect/bin:ro" exaconnect/node:dev >/dev/null ||
   ! docker network connect --ip "$lan_ip" "$lan" "$box"; then
   bad "could not start the test box"
   exit 1

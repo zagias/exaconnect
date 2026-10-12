@@ -3,7 +3,8 @@ import { useStormToggle } from "../customer";
 import { Link, useParams } from "react-router-dom";
 import { num, useApi, type EventRow, type MetricPoint, type SiteDetail, type SiteSummary, type SteeringRow } from "../api";
 import { ErrorNote, Eyebrow, LineChart, Stamp, StatusPill, ago, fmt, when, type Series } from "../components";
-import { BoxManagedNote } from "../box";
+import { BoxManagedNote, ManagedFrom } from "../box";
+import { useCanManage } from "./org/common";
 import { NodeState } from "./Overview";
 
 export function SiteList() {
@@ -58,6 +59,7 @@ export function SitePage() {
   const { id } = useParams();
   const [minutes, setMinutes] = useState(15);
   const site = useApi<SiteDetail>(`/sites/${id}`, 10_000);
+  const canManage = useCanManage();
   const metrics = useApi<{ points: MetricPoint[] }>(`/sites/${id}/metrics?minutes=${minutes}`, 10_000);
   const events = useApi<EventRow[]>(`/events?site_id=${id}&limit=20`, 10_000);
   const s = site.data;
@@ -102,6 +104,7 @@ export function SitePage() {
         </p>
         {s.apply_error && <p className="pill bad">Last config failed: {s.apply_error}</p>}
         <BoxManagedNote box={s.box} />
+        <ManagedFrom siteId={s.id} box={s.box} managed={s.box_managed} canManage={canManage} onChange={site.reload} />
         {s.kind === "site" && <SiteStorm name={s.name} />}
       </div>
       <div className="grid">
@@ -297,6 +300,7 @@ const EVENT_WORDS: Record<string, string> = {
   cert_installed: "New certificate in use",
   cert_renew_failed: "Certificate renewal failed, will retry",
   local_change: "Changed on the box",
+  box_managed: "Managed from changed in the portal",
 };
 
 function eventWord(kind: string) {
