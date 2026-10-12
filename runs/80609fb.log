@@ -1,0 +1,1170 @@
+commit 80609fb: Merge pull request #42 from zagias/claude/box-cloud-management-jiag06
+
+== Lab already up; rebuilding the agent (23:04:21)
+
+== Release (controller, agent gateway, public portal) (23:04:41)
+[release 23:04:41] no backup before this release (deploy/backup is not set up on this server)
+[release 23:04:41] releasing 80609fbf4258 (previous 7a0bd188b345)
+time="2026-10-13T01:04:42+02:00" level=warning msg="Docker Compose is configured to build using Bake, but buildx isn't installed"
+#0 building with "default" instance using docker driver
+
+#1 [controller internal] load build definition from Dockerfile
+#1 transferring dockerfile: 697B done
+#1 DONE 0.0s
+
+#2 [controller internal] load metadata for docker.io/library/python:3.12-slim
+#2 DONE 0.3s
+
+#3 [controller internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 [controller 1/5] FROM docker.io/library/python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1
+#4 resolve docker.io/library/python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1 0.0s done
+#4 DONE 0.0s
+
+#5 [controller internal] load build context
+#5 transferring context: 44.73kB 0.0s done
+#5 DONE 0.0s
+
+#6 [controller 2/5] WORKDIR /app
+#6 CACHED
+
+#7 [controller 3/5] COPY pyproject.toml ./
+#7 CACHED
+
+#8 [controller 4/5] COPY exaconnect_controller ./exaconnect_controller
+#8 DONE 0.3s
+
+#9 [controller 5/5] RUN pip install --no-cache-dir . && mkdir -p /data && chown nobody:nogroup /data
+#9 3.060 Processing /app
+#9 3.067   Installing build dependencies: started
+#9 4.861   Installing build dependencies: finished with status 'done'
+#9 4.862   Getting requirements to build wheel: started
+#9 5.226   Getting requirements to build wheel: finished with status 'done'
+#9 5.228   Preparing metadata (pyproject.toml): started
+#9 5.592   Preparing metadata (pyproject.toml): finished with status 'done'
+#9 5.745 Collecting fastapi>=0.115 (from exaconnect-controller==0.2.0)
+#9 5.780   Downloading fastapi-0.143.0-py3-none-any.whl.metadata (26 kB)
+#9 5.834 Collecting uvicorn>=0.30 (from uvicorn[standard]>=0.30->exaconnect-controller==0.2.0)
+#9 5.839   Downloading uvicorn-0.54.0-py3-none-any.whl.metadata (6.6 kB)
+#9 6.003 Collecting pydantic>=2.7 (from exaconnect-controller==0.2.0)
+#9 6.007   Downloading pydantic-2.14.1-py3-none-any.whl.metadata (133 kB)
+#9 6.044 Collecting psycopg>=3.2 (from psycopg[binary]>=3.2->exaconnect-controller==0.2.0)
+#9 6.051   Downloading psycopg-3.3.6-py3-none-any.whl.metadata (4.4 kB)
+#9 6.112 Collecting psycopg-pool>=3.2 (from exaconnect-controller==0.2.0)
+#9 6.120   Downloading psycopg_pool-3.3.3-py3-none-any.whl.metadata (2.8 kB)
+#9 6.373 Collecting cryptography>=43 (from exaconnect-controller==0.2.0)
+#9 6.378   Downloading cryptography-50.0.2-cp311-abi3-manylinux_2_34_x86_64.whl.metadata (4.4 kB)
+#9 6.396 Collecting webauthn>=2.0 (from exaconnect-controller==0.2.0)
+#9 6.406   Downloading webauthn-3.0.1-py3-none-any.whl.metadata (5.8 kB)
+#9 6.426 Collecting segno>=1.6 (from exaconnect-controller==0.2.0)
+#9 6.441   Downloading segno-1.6.6-py3-none-any.whl.metadata (7.7 kB)
+#9 6.460 Collecting ldap3>=2.9 (from exaconnect-controller==0.2.0)
+#9 6.466   Downloading ldap3-2.9.1-py2.py3-none-any.whl.metadata (5.4 kB)
+#9 6.480 Collecting python-multipart>=0.0.9 (from exaconnect-controller==0.2.0)
+#9 6.484   Downloading python_multipart-0.0.32-py3-none-any.whl.metadata (2.1 kB)
+#9 6.629 Collecting cffi>=2.0.0 (from cryptography>=43->exaconnect-controller==0.2.0)
+#9 6.635   Downloading cffi-2.1.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (2.5 kB)
+#9 6.671 Collecting starlette>=0.46.0 (from fastapi>=0.115->exaconnect-controller==0.2.0)
+#9 6.677   Downloading starlette-1.7.0-py3-none-any.whl.metadata (6.6 kB)
+#9 6.713 Collecting typing-extensions>=4.8.0 (from fastapi>=0.115->exaconnect-controller==0.2.0)
+#9 6.718   Downloading typing_extensions-4.16.0-py3-none-any.whl.metadata (3.3 kB)
+#9 6.729 Collecting typing-inspection>=0.4.2 (from fastapi>=0.115->exaconnect-controller==0.2.0)
+#9 6.734   Downloading typing_inspection-0.4.4-py3-none-any.whl.metadata (2.6 kB)
+#9 6.742 Collecting annotated-doc>=0.0.2 (from fastapi>=0.115->exaconnect-controller==0.2.0)
+#9 6.747   Downloading annotated_doc-0.0.5-py3-none-any.whl.metadata (6.5 kB)
+#9 6.770 Collecting opentelemetry-api>=1.44.0 (from fastapi>=0.115->exaconnect-controller==0.2.0)
+#9 6.775   Downloading opentelemetry_api-1.45.1-py3-none-any.whl.metadata (1.4 kB)
+#9 6.800 Collecting pyasn1>=0.4.6 (from ldap3>=2.9->exaconnect-controller==0.2.0)
+#9 6.805   Downloading pyasn1-0.6.4-py3-none-any.whl.metadata (8.4 kB)
+#9 7.023 Collecting psycopg-binary==3.3.6 (from psycopg[binary]>=3.2->exaconnect-controller==0.2.0)
+#9 7.030   Downloading psycopg_binary-3.3.6-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (2.7 kB)
+#9 7.043 Collecting annotated-types>=0.6.0 (from pydantic>=2.7->exaconnect-controller==0.2.0)
+#9 7.047   Downloading annotated_types-0.8.0-py3-none-any.whl.metadata (15 kB)
+#9 8.103 Collecting pydantic-core==2.50.1 (from pydantic>=2.7->exaconnect-controller==0.2.0)
+#9 8.108   Downloading pydantic_core-2.50.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (6.5 kB)
+#9 8.148 Collecting click>=7.0 (from uvicorn>=0.30->uvicorn[standard]>=0.30->exaconnect-controller==0.2.0)
+#9 8.153   Downloading click-8.5.0-py3-none-any.whl.metadata (2.6 kB)
+#9 8.166 Collecting h11>=0.8 (from uvicorn>=0.30->uvicorn[standard]>=0.30->exaconnect-controller==0.2.0)
+#9 8.171   Downloading h11-0.16.0-py3-none-any.whl.metadata (8.3 kB)
+#9 8.233 Collecting httptools>=0.8.0 (from uvicorn[standard]>=0.30->exaconnect-controller==0.2.0)
+#9 8.239   Downloading httptools-0.9.0-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl.metadata (3.5 kB)
+#9 8.262 Collecting python-dotenv>=0.13 (from uvicorn[standard]>=0.30->exaconnect-controller==0.2.0)
+#9 8.266   Downloading python_dotenv-1.2.4-py3-none-any.whl.metadata (29 kB)
+#9 8.319 Collecting pyyaml>=5.1 (from uvicorn[standard]>=0.30->exaconnect-controller==0.2.0)
+#9 8.325   Downloading pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.4 kB)
+#9 8.385 Collecting uvloop>=0.15.1 (from uvicorn[standard]>=0.30->exaconnect-controller==0.2.0)
+#9 8.399   Downloading uvloop-0.23.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (5.1 kB)
+#9 8.579 Collecting watchfiles>=0.20 (from uvicorn[standard]>=0.30->exaconnect-controller==0.2.0)
+#9 8.582   Downloading watchfiles-1.3.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (4.9 kB)
+#9 8.750 Collecting websockets>=13.0 (from uvicorn[standard]>=0.30->exaconnect-controller==0.2.0)
+#9 8.757   Downloading websockets-17.2-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl.metadata (6.3 kB)
+#9 8.785 Collecting pyasn1-modules>=0.4.2 (from webauthn>=2.0->exaconnect-controller==0.2.0)
+#9 8.790   Downloading pyasn1_modules-0.4.2-py3-none-any.whl.metadata (3.5 kB)
+#9 8.884 Collecting cbor2>=6.1.2 (from webauthn>=2.0->exaconnect-controller==0.2.0)
+#9 8.891   Downloading cbor2-6.1.5-cp312-cp312-manylinux_2_28_x86_64.whl.metadata (5.5 kB)
+#9 8.943 Collecting pyOpenSSL>=26.3.0 (from webauthn>=2.0->exaconnect-controller==0.2.0)
+#9 8.948   Downloading pyopenssl-26.4.0-py3-none-any.whl.metadata (22 kB)
+#9 8.968 Collecting pycparser (from cffi>=2.0.0->cryptography>=43->exaconnect-controller==0.2.0)
+#9 8.973   Downloading pycparser-3.11-py3-none-any.whl.metadata (8.2 kB)
+#9 9.051 Collecting anyio<5,>=4.0.0 (from starlette>=0.46.0->fastapi>=0.115->exaconnect-controller==0.2.0)
+#9 9.055   Downloading anyio-4.15.1-py3-none-any.whl.metadata (4.7 kB)
+#9 9.105 Collecting idna>=2.8 (from anyio<5,>=4.0.0->starlette>=0.46.0->fastapi>=0.115->exaconnect-controller==0.2.0)
+#9 9.112   Downloading idna-3.20-py3-none-any.whl.metadata (7.2 kB)
+#9 9.130 Downloading cryptography-50.0.2-cp311-abi3-manylinux_2_34_x86_64.whl (4.8 MB)
+#9 9.333    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.8/4.8 MB 23.6 MB/s eta 0:00:00
+#9 9.347 Downloading fastapi-0.143.0-py3-none-any.whl (144 kB)
+#9 9.363 Downloading ldap3-2.9.1-py2.py3-none-any.whl (432 kB)
+#9 9.386 Downloading psycopg-3.3.6-py3-none-any.whl (215 kB)
+#9 9.404 Downloading psycopg_pool-3.3.3-py3-none-any.whl (40 kB)
+#9 9.415 Downloading psycopg_binary-3.3.6-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (5.2 MB)
+#9 9.627    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5.2/5.2 MB 24.9 MB/s eta 0:00:00
+#9 9.641 Downloading pydantic-2.14.1-py3-none-any.whl (488 kB)
+#9 9.664 Downloading pydantic_core-2.50.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (2.2 MB)
+#9 9.759    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.2/2.2 MB 25.3 MB/s eta 0:00:00
+#9 9.764 Downloading python_multipart-0.0.32-py3-none-any.whl (30 kB)
+#9 9.771 Downloading segno-1.6.6-py3-none-any.whl (76 kB)
+#9 9.778 Downloading uvicorn-0.54.0-py3-none-any.whl (87 kB)
+#9 9.803 Downloading webauthn-3.0.1-py3-none-any.whl (73 kB)
+#9 9.808 Downloading annotated_doc-0.0.5-py3-none-any.whl (5.3 kB)
+#9 9.812 Downloading annotated_types-0.8.0-py3-none-any.whl (13 kB)
+#9 9.818 Downloading cbor2-6.1.5-cp312-cp312-manylinux_2_28_x86_64.whl (463 kB)
+#9 9.841 Downloading cffi-2.1.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (221 kB)
+#9 9.852 Downloading click-8.5.0-py3-none-any.whl (125 kB)
+#9 9.860 Downloading h11-0.16.0-py3-none-any.whl (37 kB)
+#9 9.865 Downloading httptools-0.9.0-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl (552 kB)
+#9 9.889    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 552.8/552.8 kB 27.1 MB/s eta 0:00:00
+#9 9.895 Downloading opentelemetry_api-1.45.1-py3-none-any.whl (60 kB)
+#9 9.902 Downloading pyasn1-0.6.4-py3-none-any.whl (84 kB)
+#9 9.908 Downloading pyasn1_modules-0.4.2-py3-none-any.whl (181 kB)
+#9 9.919 Downloading pyopenssl-26.4.0-py3-none-any.whl (56 kB)
+#9 9.926 Downloading python_dotenv-1.2.4-py3-none-any.whl (23 kB)
+#9 9.930 Downloading pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (807 kB)
+#9 9.963    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 807.9/807.9 kB 25.9 MB/s eta 0:00:00
+#9 9.967 Downloading starlette-1.7.0-py3-none-any.whl (78 kB)
+#9 9.974 Downloading typing_extensions-4.16.0-py3-none-any.whl (45 kB)
+#9 9.977 Downloading typing_inspection-0.4.4-py3-none-any.whl (14 kB)
+#9 9.988 Downloading uvloop-0.23.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (4.5 MB)
+#9 10.17    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.5/4.5 MB 25.1 MB/s eta 0:00:00
+#9 10.18 Downloading watchfiles-1.3.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (458 kB)
+#9 10.20 Downloading websockets-17.2-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl (225 kB)
+#9 10.21 Downloading anyio-4.15.1-py3-none-any.whl (132 kB)
+#9 10.22 Downloading pycparser-3.11-py3-none-any.whl (51 kB)
+#9 10.23 Downloading idna-3.20-py3-none-any.whl (69 kB)
+#9 10.29 Building wheels for collected packages: exaconnect-controller
+#9 10.30   Building wheel for exaconnect-controller (pyproject.toml): started
+#9 11.18   Building wheel for exaconnect-controller (pyproject.toml): finished with status 'done'
+#9 11.18   Created wheel for exaconnect-controller: filename=exaconnect_controller-0.2.0-py3-none-any.whl size=1248263 sha256=dadd45ecfebe89c7daf011d6e1a9b40234872272494dbdb9a9e6a237551b238d
+#9 11.18   Stored in directory: /tmp/pip-ephem-wheel-cache-y82mnyyl/wheels/54/1b/b7/aa63e25c8f14f4f2ae7b04e6097bdecb770e455c5c1ee0a600
+#9 11.19 Successfully built exaconnect-controller
+#9 11.30 Installing collected packages: websockets, uvloop, typing-extensions, segno, pyyaml, python-multipart, python-dotenv, pycparser, pyasn1, psycopg-binary, idna, httptools, h11, click, cbor2, annotated-types, annotated-doc, uvicorn, typing-inspection, pydantic-core, pyasn1-modules, psycopg-pool, psycopg, opentelemetry-api, ldap3, cffi, anyio, watchfiles, starlette, pydantic, cryptography, pyOpenSSL, fastapi, webauthn, exaconnect-controller
+#9 16.77 Successfully installed annotated-doc-0.0.5 annotated-types-0.8.0 anyio-4.15.1 cbor2-6.1.5 cffi-2.1.1 click-8.5.0 cryptography-50.0.2 exaconnect-controller-0.2.0 fastapi-0.143.0 h11-0.16.0 httptools-0.9.0 idna-3.20 ldap3-2.9.1 opentelemetry-api-1.45.1 psycopg-3.3.6 psycopg-binary-3.3.6 psycopg-pool-3.3.3 pyOpenSSL-26.4.0 pyasn1-0.6.4 pyasn1-modules-0.4.2 pycparser-3.11 pydantic-2.14.1 pydantic-core-2.50.1 python-dotenv-1.2.4 python-multipart-0.0.32 pyyaml-6.0.3 segno-1.6.6 starlette-1.7.0 typing-extensions-4.16.0 typing-inspection-0.4.4 uvicorn-0.54.0 uvloop-0.23.0 watchfiles-1.3.0 webauthn-3.0.1 websockets-17.2
+#9 16.77 WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+#9 16.88 
+#9 16.88 [notice] A new release of pip is available: 25.0.1 -> 26.2.1
+#9 16.88 [notice] To update, run: pip install --upgrade pip
+#9 DONE 17.6s
+
+#10 [controller] exporting to image
+#10 exporting layers
+#10 exporting layers 7.0s done
+#10 exporting manifest sha256:d5cb7a926267ff697b43105b83abe2c386d6da8e675d23f9b80864d4bea08ae7 0.0s done
+#10 exporting config sha256:b90f03c1a2f14ae2a1581651c3884588d8ad433e3f69d69b02ed5e6b5aea1e18 0.0s done
+#10 exporting attestation manifest sha256:ebb4ceae28184f01c5485dce586fe3f781307edc617c27f96ba3cc3d6f3a4453 0.0s done
+#10 exporting manifest list sha256:797f8c298d3fedd7374dfe0bbbe3672e3ef5a693cf77a8148a11b3439a3f2f11 done
+#10 naming to docker.io/library/exaconnect-controller:latest done
+#10 unpacking to docker.io/library/exaconnect-controller:latest
+#10 unpacking to docker.io/library/exaconnect-controller:latest 2.0s done
+#10 DONE 9.2s
+
+#11 [controller] resolving provenance for metadata file
+#11 DONE 0.0s
+ controller  Built
+time="2026-10-13T01:05:10+02:00" level=warning msg="Found orphan containers ([exaconnect-web-1]) for this project. If you removed or renamed this service in your compose file, you can run this command with the --remove-orphans flag to clean it up."
+ Container exaconnect-db-1  Running
+ Container exaconnect-controller-1  Recreate
+ Container exaconnect-controller-1  Recreated
+ Container exaconnect-proxy-1  Running
+ Container exaconnect-db-1  Waiting
+ Container exaconnect-db-1  Healthy
+ Container exaconnect-controller-1  Starting
+ Container exaconnect-controller-1  Started
+ Container exaconnect-controller-1  Waiting
+ Container exaconnect-controller-1  Healthy
+ Container exaconnect-db-1  Waiting
+ Container exaconnect-proxy-1  Waiting
+ Container exaconnect-controller-1  Waiting
+ Container exaconnect-proxy-1  Healthy
+ Container exaconnect-controller-1  Healthy
+ Container exaconnect-db-1  Healthy
+time="2026-10-13T01:05:25+02:00" level=warning msg="Found orphan containers ([exaconnect-web-1]) for this project. If you removed or renamed this service in your compose file, you can run this command with the --remove-orphans flag to clean it up."
+ Container exaconnect-proxy-1  Recreate
+ Container exaconnect-proxy-1  Recreated
+ Container exaconnect-proxy-1  Starting
+ Container exaconnect-proxy-1  Started
+ Container exaconnect-proxy-1  Waiting
+ Container exaconnect-proxy-1  Healthy
+time="2026-10-13T01:05:26+02:00" level=warning msg="Docker Compose is configured to build using Bake, but buildx isn't installed"
+#0 building with "default" instance using docker driver
+
+#1 [controller internal] load build definition from Dockerfile
+#1 transferring dockerfile: 697B done
+#1 DONE 0.0s
+
+#2 [controller internal] load metadata for docker.io/library/python:3.12-slim
+#2 DONE 0.1s
+
+#3 [controller internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 [controller 1/5] FROM docker.io/library/python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1
+#4 resolve docker.io/library/python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1 0.0s done
+#4 DONE 0.0s
+
+#5 [controller internal] load build context
+#5 transferring context: 23.08kB 0.0s done
+#5 DONE 0.0s
+
+#6 [controller 2/5] WORKDIR /app
+#6 CACHED
+
+#7 [controller 3/5] COPY pyproject.toml ./
+#7 CACHED
+
+#8 [controller 4/5] COPY exaconnect_controller ./exaconnect_controller
+#8 CACHED
+
+#9 [controller 5/5] RUN pip install --no-cache-dir . && mkdir -p /data && chown nobody:nogroup /data
+#9 CACHED
+
+#10 [controller] exporting to image
+#10 exporting layers done
+#10 exporting manifest sha256:d5cb7a926267ff697b43105b83abe2c386d6da8e675d23f9b80864d4bea08ae7 done
+#10 exporting config sha256:b90f03c1a2f14ae2a1581651c3884588d8ad433e3f69d69b02ed5e6b5aea1e18 done
+#10 exporting attestation manifest sha256:f7c96f2510ebccad5397d64b361baa5dae039b00f299846d8bd2e7965e365416 0.0s done
+#10 exporting manifest list sha256:de84315c485252d62b31e21e152eba98edb217d6ad9af58e117a259064964a72 done
+#10 naming to docker.io/library/exaconnect-controller:latest done
+#10 unpacking to docker.io/library/exaconnect-controller:latest done
+#10 DONE 0.1s
+
+#11 [controller] resolving provenance for metadata file
+#11 DONE 0.0s
+
+#12 [web internal] load build definition from Dockerfile
+#12 transferring dockerfile: 529B done
+#12 DONE 0.0s
+
+#13 [web internal] load metadata for docker.io/library/node:22-alpine
+#13 DONE 0.2s
+
+#14 [web internal] load metadata for docker.io/library/caddy:2-alpine
+#14 DONE 0.4s
+
+#15 [web internal] load .dockerignore
+#15 transferring context: 2B done
+#15 DONE 0.0s
+
+#16 [web portal 1/6] FROM docker.io/library/node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402
+#16 resolve docker.io/library/node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 0.0s done
+#16 DONE 0.0s
+
+#17 [web stage-1 1/3] FROM docker.io/library/caddy:2-alpine@sha256:d8542f48d34a9cf4e4c11a478865229840e87e4c96ea3f439101f31a5d35f75f
+#17 resolve docker.io/library/caddy:2-alpine@sha256:d8542f48d34a9cf4e4c11a478865229840e87e4c96ea3f439101f31a5d35f75f 0.0s done
+#17 DONE 0.0s
+
+#18 [web internal] load build context
+#18 transferring context: 104.64kB 0.1s done
+#18 DONE 0.1s
+
+#19 [web portal 2/6] WORKDIR /src/portal
+#19 CACHED
+
+#20 [web portal 3/6] COPY portal/package.json portal/package-lock.json ./
+#20 CACHED
+
+#21 [web stage-1 2/3] COPY deploy/public/Caddyfile /etc/caddy/Caddyfile
+#21 CACHED
+
+#22 [web portal 4/6] RUN npm ci --no-audit --no-fund
+#22 CACHED
+
+#23 [web portal 5/6] COPY portal/ ./
+#23 CACHED
+
+#24 [web portal 6/6] RUN npm run build
+#24 CACHED
+
+#25 [web stage-1 3/3] COPY --from=portal /src/portal/dist /srv/portal
+#25 CACHED
+
+#26 [web] exporting to image
+#26 exporting layers done
+#26 exporting manifest sha256:39d14440aaab81ce357f7ac4cbf22f9da1824081452f25b8bf1296453a59961d done
+#26 exporting config sha256:3202f9d4d52b357f0ac10eb04f464f908b9e3beac9ae8a7d9998666129c90f0d done
+#26 exporting attestation manifest sha256:c64e6a84f6a80392e7ba66ff0bd70b785fec6ff1ebcfef0904a788fafd0d6291 0.0s done
+#26 exporting manifest list sha256:16545706d6fbf72b5c9c410f1e7290a8413f228982006375162168fcf1c810fb 0.0s done
+#26 naming to docker.io/library/exaconnect-web:latest done
+#26 unpacking to docker.io/library/exaconnect-web:latest 0.0s done
+#26 DONE 0.1s
+
+#27 [web] resolving provenance for metadata file
+#27 DONE 0.0s
+ controller  Built
+ web  Built
+ Container exaconnect-db-1  Running
+ Container exaconnect-controller-1  Recreate
+ Container exaconnect-controller-1  Recreated
+ Container exaconnect-web-1  Recreate
+ Container exaconnect-web-1  Recreated
+ Container exaconnect-db-1  Waiting
+ Container exaconnect-db-1  Healthy
+ Container exaconnect-controller-1  Starting
+ Container exaconnect-controller-1  Started
+ Container exaconnect-controller-1  Waiting
+ Container exaconnect-controller-1  Healthy
+ Container exaconnect-web-1  Starting
+ Container exaconnect-web-1  Started
+ Container exaconnect-web-1  Waiting
+ Container exaconnect-controller-1  Waiting
+ Container exaconnect-db-1  Waiting
+ Container exaconnect-controller-1  Healthy
+ Container exaconnect-web-1  Healthy
+ Container exaconnect-db-1  Healthy
+[release 23:05:46] 80609fbf4258 is live
+
+== Voice SBC (23:05:46)
+test phone: extension 200 already set up
+time="2026-10-13T01:06:07+02:00" level=warning msg="Found orphan containers ([exaconnect-web-1]) for this project. If you removed or renamed this service in your compose file, you can run this command with the --remove-orphans flag to clean it up."
+ Container exaconnect-freeswitch-1  Running
+ Container exaconnect-kamailio-1  Running
+SBC started: Kamailio on 5060/5061 (allow-listed carriers only), call audio on UDP 16384-16483
+
+== Agents (23:06:08)
+pop-miami: agent stopped
+site-a: agent stopped
+site-b: agent stopped
+pop-miami: agent started
+site-a: agent started
+site-b: agent started
+
+== Waiting for tunnels, BGP and BFD (23:06:19)
+
+== Checks (23:06:32)
+-- lab/scripts/check-routing.sh
+ok    site-a wg-a handshake 13s ago
+ok    site-a wg-b handshake 13s ago
+ok    site-a wg-sat handshake 13s ago
+ok    site-b wg-a handshake 13s ago
+ok    site-b wg-b handshake 13s ago
+ok    site-b wg-sat handshake 13s ago
+ok    pop-miami BGP 6/6 established
+ok    pop-miami BFD 6/6 up
+ok    site-a BGP 3/3 established
+ok    site-a BFD 3/3 up
+ok    site-b BGP 3/3 established
+ok    site-b BFD 3/3 up
+ok    lan-a -> lan-b (site-a to site-b via the PoP)
+ok    lan-b -> lan-a
+ok    lan-a -> lan-pop
+
+  traceroute to 192.168.20.10 (192.168.20.10), 30 hops max, 46 byte packets
+   1  192.168.10.1  0.008 ms
+   2  100.64.1.1  24.365 ms
+   3  100.64.1.12  51.139 ms
+   4  192.168.20.10  53.918 ms
+-- lab/ci/checks/box-console.sh
+-- box console
+ok    test location connected as branch-box-check-046d94
+ok    fresh box serves its console on the office port
+      before set-up the internet port answers 200 (no port is marked internet yet)
+ok    a fresh box has its own firewall
+ok    box: fresh box asks for its setup code
+ok    box: a wrong setup code is refused
+ok    box: password set; the wizard opens at the ports step
+ok    box: ports applied and kept; the wizard moves on to joining
+ok    box: the box joined Connect with the box setup code
+ok    box: overview shows it connected to ExaCarib
+ok    box: overview shows the internet port
+ok    box: overview shows the office port
+ok    box: diagnostics reach ExaCarib
+ok    box: ping 172.17.0.1 from the box
+ok    box: a wrong password is refused
+ok    box: signs in again with the new password
+ok    box: the console is closed on the internet port: no answer (apiRequestContext.get: Request timed out after 6000ms)
+ok    box: Agents lists the box with its box console
+ok    box: Locations shows the box online, with its box console
+ok    box: the site page says the box is also managed locally
+ok    box: the portal hands the box to the cloud
+ok    box: the box picks up Cloud from the portal
+ok    box: managed from the cloud, the console's ports are read-only
+ok    box: the box refuses a port change while managed from the cloud
+ok    box: taking back control needs the right password
+ok    box: the box console takes back control (On site)
+ok    box: the portal follows the box: On site
+ok    box: switched to both in the portal, the box follows
+ok    box: the portal's port form starts from the box's own ports
+ok    box: the box takes the ports set in the portal and keeps them
+ok    box: the box uses the DNS servers set from the portal
+ok    box: the box console says the ports were set in the portal
+ok    box: the box's ports are saved as a template
+ok    box: Box templates sends the template to the box
+ok    box: the box follows the template and keeps its ports
+ok    box: Box software lists the box and how it updates
+FAIL  box: Box software has no versions to offer: 200 {"versions":["1.0.37","1.0.36","1.0.29"],"latest":"1.0.37"}
+ok    the controller has the box's console report
+ok    the link follows the port chosen on the box (eth0)
+ok    changes made on the box reach the controller (4)
+ok    the box applied its desired state (v7)
+ok    managed-from switches from the portal and the box are audited (3)
+ok    the box reported keeping the ports set in the portal
+ok    the box follows the template made from its ports
+ok    the controller has the portal's port set-up
+FAIL  software update from the portal: not sent
+ok    office port kept its address
+ok    the box's firewall drops what arrives on the internet port
+      agent log:
+      time=2026-10-12T23:06:41.375Z level=INFO msg=probing node=branch-box-check-046d94 paths=0
+      time=2026-10-12T23:06:41.402Z level=INFO msg="new steering map" node=branch-box-check-046d94 version=1 storm=false
+      time=2026-10-12T23:06:47.699Z level=WARN msg="box console sign-in refused" part=console from=172.31.250.1
+      time=2026-10-12T23:06:47.835Z level=INFO msg="box console sign-in" part=console user=admin from=172.31.250.1
+      time=2026-10-12T23:07:00.897Z level=INFO msg="new desired state" node=branch-box-check-046d94 version=3
+      time=2026-10-12T23:07:00.898Z level=INFO msg="managed from changed in the portal" part=console mode=cloud by="Connect portal (admin@exacarib.local)"
+      time=2026-10-12T23:07:03.765Z level=INFO msg="box console change" part=console by=admin what="Took back control on the box in an emergency: Managed from is now On site"
+      time=2026-10-12T23:07:20.894Z level=INFO msg="new desired state" node=branch-box-check-046d94 version=5
+      time=2026-10-12T23:07:20.894Z level=INFO msg="managed from changed in the portal" part=console mode=both by="Connect portal (admin@exacarib.local)"
+      time=2026-10-12T23:07:30.896Z level=INFO msg="new desired state" node=branch-box-check-046d94 version=6
+      time=2026-10-12T23:07:30.960Z level=INFO msg="ports from the portal applied; checking ExaCarib can still be reached" part=console by="Connect portal (admin@exacarib.local)"
+      time=2026-10-12T23:07:33.963Z level=INFO msg="ports from the portal kept" part=console by="Connect portal (admin@exacarib.local)"
+      time=2026-10-12T23:07:50.897Z level=INFO msg="new desired state" node=branch-box-check-046d94 version=7
+      time=2026-10-12T23:07:50.949Z level=INFO msg="ports from the portal applied; checking ExaCarib can still be reached" part=console by="Template Lab template 046d94 (admin@exacarib.local)"
+      time=2026-10-12T23:07:53.951Z level=INFO msg="ports from the portal kept" part=console by="Template Lab template 046d94 (admin@exacarib.local)"
+-- lab/ci/checks/box-ztp.sh
+-- zero-touch box
+ok    test location connected as branch-box-check-9764d8
+ok    a fresh box calls home with its serial number and key
+ok    zero-touch: the box that called home is in Operations > Boxes
+ok    zero-touch: listed as waiting, with its key
+ok    zero-touch: assigned to the location from the portal
+ok    zero-touch: the box joined by itself and shows Online at its location
+ok    zero-touch: Agents lists the zero-touch box
+ok    the zero-touch box applied its desired state (v1)
+ok    the box reports it joined by zero-touch
+ok    nobody set the box console up: no admin password on the box
+-- lab/ci/checks/m0-timing.sh
+-- host timing
+      clocksource kvm-clock, available: kvm-clock hpet acpi_pm 
+      kernel 6.8.0-139-generic, timers: hres_active    : 1, resolution: 1 nsecs
+      HZ 1000, 4 CPUs, load 2.69 2.19 1.50
+      netem on carrier-a: qdisc netem 80f8: root refcnt 5 limit 10000 delay 12.5ms  1ms seed 4224415357793959298
+      cpuidle driver none, governor menu
+      (netem asks for 25 ms on A and 35 ms on B round trip, with 2 and 4 ms jitter; min/avg/max/mdev)
+      site-a to lan-a (no netem):              0.041/0.074/0.267/0.033 ms
+      site-a to carrier-a router (one netem):  10.311/12.745/15.311/1.003 ms
+      site-a to PoP underlay via carrier A:    21.548/25.021/29.536/1.410 ms
+      site-a to PoP through wg-a:              21.859/25.585/30.007/1.582 ms
+      site-a to PoP underlay via carrier B:    28.655/35.500/45.862/2.999 ms
+-- busiest containers
+      10.05% clab-exaconnect-site-a
+      8.97% clab-exaconnect-pop-miami
+      7.64% clab-exaconnect-site-b
+      1.99% exaconnect-freeswitch-1
+      1.12% exaconnect-db-1
+      0.46% exaconnect-controller-1
+      0.11% exaconnect-kamailio-1
+      0.09% clab-exaconnect-lan-b
+-- busiest processes
+       8.8 uvicorn
+       4.4 freeswitch
+       3.4 rcu_preempt
+       3.3 bfdd
+       3.2 dockerd
+       2.3 exa-agent
+       2.2 exa-agent
+       2.0 exa-agent
+-- lab/ci/checks/m4-steering.sh
+-- steering applied
+ok    pop-miami nftables classifier
+ok    pop-miami 6 steering rules
+ok    site-a nftables classifier
+ok    site-a 3 steering rules
+ok    site-b nftables classifier
+ok    site-b 3 steering rules
+      voice state at start: site-a carrier-a since 2026-10-12 21:48:39.537868+00 return - -; site-b carrier-a since 2026-10-12 21:40:38.456088+00 return - -
+      probe jitter, last 3 min, carrier-a avg 1.8 p95 2.1, carrier-b avg 3.3 p95 3.8, sat avg 7.1 p95 9.1
+      host load 3.00 2.29 1.55 on 4 CPUs, CPU steal 0.0% over 5 s
+ok    site-a voice on wg-a at start
+      maps: branch-box-check-b6461f v1, branch-box-check-2940bf v1, branch-box-check-8b058b v1, branch-box-check-9764d8 v1, branch-box-check-f6a072 v1, branch-box-check-547acb v1, branch-box-check-cc205d v1, branch-box-check-40025a v1, branch-box-check-046d94 v1, branch-box-check-b3f6ce v1, branch-box-check-e347e3 v1, pop-miami v2037, branch-box-check-c61f22 v1, site-a v1625, site-b v1085, branch-box-check-9dba0b v1, branch-box-check-570e42 v1
+-- brownout: carrier A loss 0 -> 3% over 180 s (demo step 2)
+ok    voice moved 92 s into the ramp
+      Moved voice from Carrier A to Carrier B: loss on Carrier A rising 1.0% a minute, forecast 1.3% in 60 s against a 1% SLA.
+ok    moved before the 1% SLA was breached (measured 0.56%)
+ok    site-a kernel sends voice on wg-b
+ok    bulk stayed on carrier A (3% is under its 5% threshold)
+-- hard cut of carrier B while voice is on it (demo step 3)
+      voice probe stream: 1459 of 1500 received at 50 packets/s
+ok    voice lost 820 ms of packets (< 3 s)
+ok    agent failover on BFD after 2 s
+ok    voice on wg-a after the cut
+-- recovery: restore B, classes move back only after the hold time (demo step 4)
+ok    no moves in the first minute after recovery
+      moves since the brownout began: 6
+      23:11:03 site-a voice move: Moved voice from Carrier A to Carrier B: loss on Carrier A rising 1.0% a minute, forecast 1.3% in 60 s against a 1% SLA.
+      23:11:23 site-b voice move: Moved voice from Carrier A to Carrier B: loss on Carrier A rising 1.0% a minute, forecast 1.3% in 60 s against a 1% SLA.
+      23:12:45 site-a business move: Moved business from Carrier A to Carrier B: loss on Carrier A rising 1.0% a minute, forecast 2.4% in 60 s against a 2% SLA.
+      23:13:26 site-a voice failover: Moved voice from Carrier B to Carrier A: Carrier B is down (BFD reports it down).
+      23:13:26 site-a business failover: Moved business from Carrier B to Carrier A: Carrier B is down (BFD reports it down).
+      23:13:26 site-b voice failover: Moved voice from Carrier B to Carrier A: Carrier B is down (BFD reports it down).
+      23:13:46 site-b voice hold: Kept voice on Carrier A: loss on Carrier A is 1.7% against a 1% SLA, but it moved here 20 s ago (hold time 120 s).
+      23:13:46 site-a voice hold: Kept voice on Carrier A: loss on Carrier A is 1.9% against a 1% SLA, but it moved here 20 s ago (hold time 120 s).
+      23:13:56 site-a voice hold: Kept voice on Carrier A: loss on Carrier A is 1.8% against a 1% SLA, but it moved here 30 s ago (hold time 120 s).
+      23:13:56 site-b voice hold: Kept voice on Carrier A: loss on Carrier A is 1.6% against a 1% SLA, but it moved here 30 s ago (hold time 120 s).
+      23:14:06 site-b voice hold: Kept voice on Carrier A: loss on Carrier A is 1.6% against a 1% SLA, but it moved here 40 s ago (hold time 120 s).
+      23:14:06 site-a voice hold: Kept voice on Carrier A: loss on Carrier A is 1.7% against a 1% SLA, but it moved here 40 s ago (hold time 120 s).
+      23:14:17 site-a voice hold: Kept voice on Carrier A: loss on Carrier A is 1.6% against a 1% SLA, but it moved here 51 s ago (hold time 120 s).
+      23:14:17 site-b voice hold: Kept voice on Carrier A: loss on Carrier A is 1.5% against a 1% SLA, but it moved here 51 s ago (hold time 120 s).
+      23:14:27 site-b voice hold: Kept voice on Carrier A: loss on Carrier A is 1.4% against a 1% SLA, but it moved here 61 s ago (hold time 120 s).
+      23:14:27 site-a voice hold: Kept voice on Carrier A: loss on Carrier A is 1.6% against a 1% SLA, but it moved here 61 s ago (hold time 120 s).
+      23:14:37 site-a voice hold: Kept voice on Carrier A: loss on Carrier A is 1.5% against a 1% SLA, but it moved here 71 s ago (hold time 120 s).
+      23:14:37 site-b voice hold: Kept voice on Carrier A: loss on Carrier A is 1.3% against a 1% SLA, but it moved here 71 s ago (hold time 120 s).
+-- lab/ci/checks/m5-storm.sh
+-- Storm Mode on at site-a only
+ok    Storm Mode switched on for site-a through the API
+ok    site-a agent has the Storm Mode steering map
+ok    site-b is not in Storm Mode
+ok    satellite warm: 44 probes per 10 s
+ok    satellite BGP established
+-- both terrestrial links cut
+ok    voice continues on satellite
+ok    business continues on satellite
+ok    bulk paused (blackhole rule)
+ok    voice stream lost 1360 ms across the double cut
+-- restore and switch Storm Mode off
+ok    Storm Mode switched off
+ok    voice and business back on terrestrial paths, bulk resumed
+      Storm Mode last switched by user:admin@exacarib.local
+      23:15:56 storm_off
+      23:14:48 storm_on
+-- lab/ci/checks/m6-metering.sh
+-- traffic: 20 Mbit/s bulk (CS1, TCP) from lan-a to lan-b for 11 minutes
+      bulk leaves site-a on wg-a
+ok    5-minute samples with traffic for site-a
+      iperf: [  5] 541.00-542.00 sec  2.38 MBytes  19.9 Mbits/sec    0    355 KBytes        [  5] 542.00-543.00 sec  2.38 MBytes  19.9 Mbits/sec    0    355 KBytes        [  5] 543.00-544.00 sec  2.38 MBytes  19.9 Mbits/sec    0    355 KBytes        [  5] 544
+      site-a carrier-a: samples 11, 95th in 1.408736 out 21.881121, billable 21.881121, commit 100, burst 0.000, total 400.00
+ok    billable rate 21.881121 Mbps matches the ~20 Mbit/s offered
+-- CSV matches the screen
+ok    CSV 95th percentile 21.881 equals the screen
+ok    CSV settlement total equals the screen
+-- carrier view
+ok    carrier user sees only Carrier A links
+ok    carrier user cannot open the customer overview
+-- lab/ci/checks/m7-outage.sh
+-- cut the agents off from the controller (the live controller keeps running)
+ok    the agents' route to the controller is cut
+ok    all three agents noticed after 64 s and hold the last good state
+ok    site A still reaches site B through the PoP
+-- BFD failover with the controller down
+ok    voice moved from wg-a to wg-b in 2.5 s, without the controller
+ok    the live controller stayed up throughout
+-- give the agents the controller back
+ok    all three agents reconciled 1 s after the controller came back
+-- lab/ci/checks/m8-ai.sh
+-- hurricane watch
+ok    NHC feed read from the lab host: 1 active storms
+ok    example hurricane raised a warning
+ok    only site-a (Kingston) is warned
+      Hurricane Example (90 kt) is moving at 23 km/h on a heading of 285°. Projecting that motion forward, it passes about 92 km from site-a in about 25 h. Consider switching Storm Mode on so the satellite path is warm before the terrestrial links suffer. This is a straight-line projection; check the NHC advisory for the official forecast track.
+-- disaster watch
+ok    all disaster feeds read from the lab host: gdacs=3 ptwc=2 usgs=23 events=24 failed= 
+ok    example earthquake from USGS, GDACS and tsunami.gov raised one alert, for site-b only
+      Magnitude 6.4 earthquake, 38 km NE of Port of Spain, Trinidad and Tobago, reported by USGS and GDACS and tsunami.gov. Latest tsunami message: Tsunami Information Statement Number 2. Sites in range: site-b 47 km (critical). Consider switching Storm Mode on for the sites marked critical, so the satellite path is warm if terrestrial links fail. Distances are straight lines from the reported location; check the source's report.
+-- insights from this run
+      anomaly critical: Carrier B at site-a: loss 6.92%, usually 0.00%
+      anomaly critical: Carrier B at site-b: loss 6.73%, usually 0.00%
+      anomaly critical: Carrier A at site-a: loss 4.13%, usually 0.00%
+      anomaly critical: Carrier A at site-b: loss 3.79%, usually 0.00%
+      storm_warning critical: Example data: Hurricane Example may pass 92 km from site-a in about 25 h
+      hazard critical: Example data: Magnitude 6.4 earthquake, 38 km NE of Port of Spain, Trinidad and Tobago: 47 km from site-b
+      hazard critical: Example data: Magnitude 6.4 earthquake, 38 km NE of Port of Spain, Trinidad and Tobago: 47 km from site-b
+      storm_warning critical: Example data: Hurricane Example may pass 92 km from site-a in about 25 h
+      anomaly critical: Carrier B at site-b: loss 3.77%, usually 0.00%
+      anomaly critical: Carrier B at site-a: loss 3.81%, usually 0.00%
+-- ask your network
+curl: (22) The requested URL returned error: 502
+FAIL  no answer from the AI service
+      502: The AI service answered 402. Try again shortly.
+curl: (22) The requested URL returned error: 502
+FAIL  no usable plan: 
+-- lab/ci/checks/m9-fabric.sh
+-- simulated cloud gateways
+ok    AWS and Azure gateways configured
+-- cloud circuits
+ok    created circuits 272 (AWS) and 273 (Azure)
+ok    both circuits up (IPsec and BGP) 18 s after they were created
+      AWS: up, BGP Established, routes 10.100.0.0/16
+ok    site-a learned the AWS VPC route from the PoP
+ok    lan-a reaches the AWS VPC (10.100.0.1) through the PoP
+ok    site-a puts traffic for AWS in business
+-- cloud router
+ok    AWS reaches Azure through the PoP
+-- elastic bandwidth
+ok    20 Mbps reached the PoP's shaper on vc272
+      charges so far: [{"mbps":50,"hours":0.01},{"mbps":20,"hours":0.0}]
+-- layer 2 circuit
+ok    VLAN 100 at site A and VLAN 200 at site B are one segment (lan-a pings lan-b)
+ok    layer 2 circuit up and monitored: round trip 51.7 ms, 0.0% loss over the last minute
+-- clean up
+ok    deleted circuits are torn down at the PoP
+-- lab/ci/checks/m9-gateway.sh
+ok    agent gateway listens on 8443
+ok    CA served
+ok    CA fingerprint matches the one given with enrolment tokens
+ok    gateway certificate is valid for connect.exacarib.com
+ok    enrolment refuses a bad token (422)
+ok    agent endpoints need a client certificate
+ok    the portal API is not served on the gateway
+ok    https://connect.exacarib.com:8443 reachable from this host over the internet
+-- a real agent through the gateway
+ok    enrolment tokens give the public gateway (https://connect.exacarib.com:8443)
+ok    an agent outside the lab enrolled through https://connect.exacarib.com:8443
+ok    it polls desired state over mutual TLS (200)
+ok    after revoking, its certificate is refused (401)
+ok    repeated requests are rate limited
+-- lab/ci/checks/m9-internet.sh
+-- through the PoP (the default)
+FAIL  lan-a does not reach 198.51.100.1 through the PoP (exits by wg-a)
+      site-a exits by: wg-a
+-- firewall at the PoP
+ok    a deny rule stops lan-a's pings at the PoP
+ok    the rule's hits reach the portal
+ok    deleting the rule lets the pings through again
+-- port forward on the PoP's address
+      server on lan-a:8080 answers locally
+ok    a connection to 100.64.0.2:8080 from the internet reaches lan-a
+ok    the internet cannot reach lan-a directly through the PoP
+-- straight out at the site
+ok    lan-a reaches the internet over carrier A, translated to site-a's address
+ok    with carrier A cut, it leaves by carrier B within 4 s
+ok    site-a reports it exits by eth3
+-- clean up
+ok    back through the PoP
+-- lab/ci/checks/m9-order.sh
+-- a layer 2 circuit ordered in plain English
+      draft: {"actions":["site_circuit"],"summary":["New layer 2 circuit joining site-a and site-b, VLAN 100 at site-a and VLAN 200 at site-b, 20 Mbps."],"problems":[],"monthly_estimate":40.0}
+ok    the draft reads a VLAN 100 to VLAN 200 circuit between site-a and site-b
+ok    drafting changed nothing
+ok    confirmed: Created circuit lab order l2.
+ok    the ordered circuit carries traffic (lan-a pings lan-b over VLAN 100/200)
+-- two changes in one order
+      draft: {"actions":["bandwidth","internet_mode"],"summary":["Change lab order l2 from 20 to 30 Mbps, billed by the hour from now.","Send site-a's internet straight out of its own links (now through ExaCarib's PoP)."],"monthly_estimate":20.0}
+ok    the draft has a bandwidth change and an internet change
+ok    the circuit is now 30 Mbps
+ok    site-a's internet now goes straight out (local eth3)
+-- a draft with a problem
+ok    a draft with VLAN 5000 says why and can't be confirmed
+      AI draft (not confirmed): engine rules, [{"action":"cloud_circuit","provider":"aws","region":"us-east-1","site":"site-a","bandwidth_mbps":50}]
+-- clean up
+ok    circuit deleted and site-a back through the PoP
+-- lab/ci/checks/m9-protection.sh
+-- a resilient pair to the simulated AWS
+ok    both tunnels of the pair up (IPsec and BGP)
+ok    lan-a reaches the AWS VPC over the pair
+-- encryption report
+      summary: {"encrypted":8,"total":8}
+ok    both tunnels encrypted: IKE AES_CBC-256/HMAC_SHA2_256_128/PRF_HMAC_SHA2_256/MODP_2048, ESP AES_CBC-256/HMAC_SHA2_256_128
+ok    every site path is WireGuard-encrypted (6 encrypted)
+-- the first tunnel fails
+ok    the portal shows the first tunnel down and the second up
+ok    the circuit stays up on one tunnel
+ok    lan-a kept reaching the VPC: 300 of 300 pings answered (about 0.0 s lost; the BGP hold time is 30 s)
+ok    the first tunnel recovers
+-- DDoS protection at the PoP
+ok    the internet reaches the PoP's public address
+ok    the flooding source was blocked automatically ({"blocked":0,"auto":294,"flood":1,"syn":0})
+ok    the blocked source can't reach the public address
+ok    lifting the block lets it back in
+ok    customers see the drop counts, not the addresses
+-- the block list
+ok    a block list entry stops the source
+ok    removing it lets the source back in
+-- clean up
+ok    both tunnels torn down at the PoP
+-- lab/ci/checks/m9-public-e2e.sh
+-- API through https://connect.exacarib.com
+ok    admin signs in at https://connect.exacarib.com
+ok    every portal screen's data answers 200 through the public site
+      settlement CSV: 200 text/csv; charset=utf-8
+-- browser
+ok    forgotten-password page answers
+ok    a bad reset link is refused
+ok    signed in through the browser
+ok    Overview renders without errors
+ok    Sites renders without errors
+ok    Traffic: seen on your network renders without errors
+ok    Traffic: rules renders without errors
+ok    Traffic: classes renders without errors
+ok    Routing moves renders without errors
+ok    Fabric renders without errors
+ok    Internet renders without errors
+ok    Order renders without errors
+ok    Encryption renders without errors
+ok    Integrations renders without errors
+ok    Carrier notices renders without errors
+ok    Usage renders without errors
+ok    Billing renders without errors
+ok    Alerts renders without errors
+ok    Ask your network renders without errors
+ok    Carrier view renders without errors
+ok    Profile and sign-in renders without errors
+ok    Organisation: set-up checklist renders without errors
+ok    Organisation: company details renders without errors
+ok    Organisation: locations renders without errors
+ok    Organisation: people and access renders without errors
+ok    Organisation: sign-in and security renders without errors
+ok    Organisation: apps and plans renders without errors
+ok    ExaCarib operations: organisations renders without errors
+ok    Admin: agents renders without errors
+ok    Admin: sites renders without errors
+ok    Admin: classes renders without errors
+ok    Admin: users renders without errors
+ok    Admin: settings renders without errors
+ok    Admin: partners renders without errors
+ok    Admin: billing renders without errors
+ok    Admin: integrations renders without errors
+ok    Admin: protection renders without errors
+ok    Admin: releases renders without errors
+ok    Admin: audit renders without errors
+ok    Jibsy: inbox renders without errors
+ok    Jibsy: contacts renders without errors
+ok    Jibsy: phone, people and numbers renders without errors
+ok    Jibsy: phone, call routing renders without errors
+ok    Jibsy: phone, scheduled, history and bulk renders without errors
+ok    Jibsy: phone, access renders without errors
+ok    Jibsy: phone, orders renders without errors
+ok    Jibsy: phone, numbers renders without errors
+ok    Jibsy: phone, ports renders without errors
+ok    Jibsy: phone, emergency renders without errors
+ok    Jibsy: phone, fraud renders without errors
+ok    Jibsy: phone, billing renders without errors
+ok    Jibsy: phone, my phone renders without errors
+ok    Jibsy: phone, carriers renders without errors
+ok    Jibsy: phone, browser phone renders without errors
+ok    Jibsy: team renders without errors
+ok    Jibsy: AI agents, profile and mode renders without errors
+ok    Jibsy: AI agents, tools renders without errors
+ok    Jibsy: AI agents, knowledge renders without errors
+ok    Jibsy: AI agents, knowledge gaps renders without errors
+ok    Jibsy: AI agents, browser call renders without errors
+ok    Jibsy: workflows renders without errors
+ok    Jibsy: approvals renders without errors
+ok    Jibsy: apps, your apps renders without errors
+ok    Jibsy: apps, catalogue renders without errors
+ok    Jibsy: assistant renders without errors
+ok    Jibsy: reports renders without errors
+ok    Jibsy: quality, review renders without errors
+ok    Jibsy: quality, flags renders without errors
+ok    Jibsy: quality, knowledge gaps renders without errors
+ok    Jibsy: quality, follow-ups renders without errors
+ok    Jibsy: quality, satisfaction renders without errors
+ok    Jibsy: usage and bill renders without errors
+ok    Jibsy: getting started renders without errors
+ok    Jibsy: channels, website chat renders without errors
+ok    Jibsy: channels, WhatsApp renders without errors
+ok    Jibsy: channels, SMS renders without errors
+ok    Jibsy: channels, email renders without errors
+ok    Jibsy: channels, Messenger renders without errors
+ok    Jibsy: channels, Instagram renders without errors
+ok    Jibsy: channels, Telegram renders without errors
+ok    Jibsy: countries renders without errors
+ok    Jibsy: languages renders without errors
+ok    Jibsy: AI governance renders without errors
+ok    Jibsy: settings, service renders without errors
+ok    Jibsy: settings, teams and people renders without errors
+ok    Jibsy: settings, routing renders without errors
+ok    Jibsy: settings, webhooks and keys renders without errors
+ok    Jibsy: settings, organisation renders without errors
+ok    Jibsy: settings, roles renders without errors
+ok    Jibsy: settings, security renders without errors
+ok    Jibsy: settings, data renders without errors
+ok    Jibsy: settings, help centre renders without errors
+ok    Jibsy: partners renders without errors
+ok    Jibsy: my settings renders without errors
+ok    Jibsy: go-live renders without errors
+ok    Jibsy: support queue renders without errors
+ok    jump to (Ctrl+K) finds Phone > Numbers and opens it
+ok    jump to opens with "/" and closes with Escape
+ok    example hurricane and earthquake alerts appear on Insights
+-- lab/ci/checks/m9-public.sh
+ok    https://connect.exacarib.com/healthz answers on this host
+ok    certificate from Let's Encrypt (issuer=C = US, O = Let's Encrypt, CN = YE1)
+ok    portal served
+ok    agent endpoints not served publicly
+ok    API answers and needs sign-in
+ok    connect.exacarib.com reachable from this host over the internet
+      web container: running restarts=0
+      listening on public addresses: 22 80 443 5060 5061 8443 
+ok    controller, database and dev portal stay private
+ok    jibsyapp.exacarib.com opens the phone app
+ok    phone app served
+ok    app manifest served as a manifest
+ok    app service worker served
+ok    jibsyapp.exacarib.com has a Let's Encrypt certificate
+ok    an API key works through the public address
+ok    a revoked key is refused at once
+-- lab/ci/checks/m9-traffic.sh
+-- priority queues
+ok    site-a wg-a: qdisc cake 8105: root refcnt 2 bandwidth 190Mbit diffserv4 triple-isolate nonat nowash no-
+ok    site-a wg-b: qdisc cake 8108: root refcnt 2 bandwidth 95Mbit diffserv4 triple-isolate nonat nowash no-a
+-- application detection: Zoom-like traffic on UDP 8801 for 4 minutes
+ok    site-a reported its flows to UDP 8801
+ok    recognised: Zoom meetings seen at site-a: 1 flow(s) to UDP 8801, matches Zoom meetings (calls and meetings); currently unclassified. Suggest voice (real-time priority).
+ok    suggests voice
+ok    applied as rule 189
+ok    site-a classifies UDP 8801-8810 as voice
+ok    Zoom flows now report as voice
+ok    site-b is unchanged (the rule is for site-a)
+-- a customer rule: a subnet and port into business
+ok    site-a classifies TCP 5201 to site B as business
+ok    the PoP classifies the return direction
+-- lab/ci/checks/org-setup.sh
+-- organisation set-up
+FAIL  could not set up the set-up test's staff account
+-- lab/ci/checks/voice-phone-app.sh
+-- phone app
+ok    test accounts ready (extensions 201 and 202)
+      server during the test call (load, CPU steal %, CPU busy %, FreeSWITCH CPU %): load up to 2.91, steal 0.0%, busy 33%, FreeSWITCH 6.5% over 6 readings
+      FreeSWITCH heard on one leg: media_packet_count=942 skip_packet_count=4 jitter_max_variance=79.00 flaw_total=0 mos=4.50
+      FreeSWITCH heard on one leg: media_packet_count=943 skip_packet_count=7 jitter_max_variance=123.62 flaw_total=0 mos=4.50
+      call quality as A hears it: {"concealedPct":0,"lostPct":0,"jitterMs":0,"bufferMs":51,"rttMs":19}
+      call quality as B hears it: {"concealedPct":0,"lostPct":0,"jitterMs":0,"bufferMs":57,"rttMs":32}
+ok    app: the app's own address opens Jibsy Phone (https://jibsyapp.exacarib.com/phone)
+ok    app: sign-in names the phone app 
+ok    app: A connects automatically after sign-in (Ext 201)
+ok    app: no sideways scrolling on a phone screen 
+ok    app: manifest: name, standalone, start inside scope, icons load (one maskable) ({"name":"Jibsy Phone","display":"standalone","start":"/phone","scope":"/phone","icons":[true,true,true],"maskable":true})
+ok    app: service worker registered for the app (https://jibsyapp.exacarib.com/phone)
+ok    app: Chrome finds nothing stopping installation ([])
+ok    app: B connects automatically on a computer (Ext 202)
+ok    app: contacts list B by name and extension (Search contacts | PEOPLE | E | ExaCarib test phone | Ext 200 | L | Lab call check | Ext 203 | P | Phone app test B | Ext 202 | S | Set-up check callee | Ext 205)
+ok    app: contacts leave yourself out 
+ok    app: search narrows the list (1 shown)
+ok    app: B sees the incoming call with A's name (Incoming call |  | Phone app test A |  | 201)
+ok    app: both sides show On a call 
+ok    app: audio starts both ways within 3 s of answering (1.1 s)
+ok    app: audio reaches A steadily ({"ice":"connected","rx":282,"energy":1.291070005207122,"tx":291,"in5s":249})
+ok    app: audio reaches B steadily ({"ice":"connected","rx":284,"energy":1.4370673638672413,"tx":284,"in5s":251})
+ok    app: call quality as A hears it: under 2% made-up sound, 1% loss, 30 ms jitter, 150 ms buffering ({"concealedPct":0,"lostPct":0,"jitterMs":0,"bufferMs":51,"rttMs":19})
+ok    app: call quality as B hears it: under 2% made-up sound, 1% loss, 30 ms jitter, 150 ms buffering ({"concealedPct":0,"lostPct":0,"jitterMs":0,"bufferMs":57,"rttMs":32})
+ok    app: the call timer runs (0:20)
+ok    app: mute shows as on 
+ok    app: the in-call keypad opens and sends a tone 
+ok    app: hang-up closes the call on both sides and nothing rings again 
+ok    app: A's recents show the outgoing call with its length (Phone app test B | Outgoing, 0:21 · just now | Clear the list)
+ok    app: B's recents show the incoming call (Phone app test A | Incoming, 0:22 · just now | Clear the list)
+ok    app: B's recents mark it missed (Phone app test A | Missed · just now | Phone app test A | Incoming, 0:22 · just now | Clear the list)
+ok    app: a missing extension gets a plain message (That extension or number doesn't exist.)
+ok    app: a computer keyboard types into the keypad (2*)
+ok    app: declining sends the caller to voicemail, which speaks ({"ice":"connected","rx":210,"energy":0.03651073465216467,"tx":209})
+ok    app: do not disturb saves 
+ok    app: with do not disturb on, A's app doesn't ring 
+ok    app: forwarding to a missing extension is refused with a reason (There is no extension 299.)
+ok    app: the voicemail greeting saves (Voicemail greeting saved.)
+ok    app: dark appearance applies 
+ok    app: device settings survive reopening the app 
+ok    app: install help is shown for this device (Put Jibsy Phone on this device |  | In Chrome or Edge, choose Install from the address bar or the browser menu. On Android, choose Add to Home screen.)
+ok    app: losing the network shows as offline (Offline)
+ok    app: the app reconnects when the network returns (Ext 201)
+ok    app: the app opens offline from its saved copy and says it's offline (PHONE |  | You're offline. Phone will carry on when you're back online. Try again)
+ok    app: back online, the app carries on without signing in again (Ext 201)
+ok    app: no extension: a plain explanation, no keypad (No phone extension yet |  | Jibsy Phone rings on your own extension. Ask your company's voice admin to add you to the phone system, then open this app again. | )
+ok    app: no sideways scrolling on any screen size 
+ok    both phones reported the call's quality to the controller (4 reports)
+      real calls in the last 24 h, as people's phones heard them (test accounts left out):
+      0 call legs; made-up sound avg % (worst %); loss in %, out %; jitter avg  ms (max ); round trip avg  ms (max );  break-ups
+-- lab/ci/checks/voice-push.sh
+-- phone app rings when closed
+ok    rings closed: A's app connects (Ext 201)
+ok    rings closed: Settings offer: ring this device when Jibsy Phone is closed (When the app is closed | Ring this device when Jibsy Phone is closed |  | Turn this on to get calls while the app is closed or the screen is locked.)
+ok    rings closed: the app's service worker is ready (https://jibsyapp.exacarib.com/phone)
+ok    rings closed: ringing is available and the device is saved ({"customer":"4d26813b-aaa6-4be7-9b73-1730be959882","available":true,"status":200,"text":"{\"subscribed\":true}"})
+ok    rings closed: Send a test notification reaches the device, encrypted for it ({"t":{"devices":1,"reached":1},"testMsg":{"type":"test"}})
+ok    rings closed: calling a closed app sends its device a push message 
+ok    rings closed: the message names the call, the caller and the extension ({"type":"call","call":"89db43e4-1162-480c-9dfc-50ef44732060","from":"202","name":"Phone app test B","ext":"201","at":1791848418})
+ok    rings closed: sent urgently, signed with ExaCarib's key, short-lived ({"u":"high","ttl":"30"})
+ok    rings closed: B hears it ringing meanwhile 
+ok    rings closed: A's device shows an Incoming call notification with B's number ([{"title":"Incoming call","body":"Phone app test B (202) is calling your extension 201","data":{"url":"/phone?answer=89db43e4-1162-480c-9dfc-50ef44732060&from=202#keypad","at":1791848418000,"from":"20)
+ok    rings closed: the notification offers Answer and opens the app to answer (/phone?answer=89db43e4-1162-480c-9dfc-50ef44732060&from=202#keypad)
+ok    rings closed: the app opens signed in and answers the call (2.1 s after the tap; On a call |  | Phone app test B |  | 0:00 |  | Mute | Keypad)
+ok    rings closed: B is connected to A 
+ok    rings closed: the whole call took under 25 s from dialling to answer (3.6 s)
+ok    rings closed: audio reaches A ({"rx":249,"energy":1.3932760816980194,"in4s":201})
+ok    rings closed: audio reaches B ({"rx":248,"energy":1.282903956399093,"in4s":200})
+ok    rings closed: the address bar no longer says answer, so a reload doesn't answer again (https://jibsyapp.exacarib.com/phone#keypad)
+ok    rings closed: hang-up ends the call on both sides 
+ok    rings closed: with the app open, it rings in the app and no push is sent (0 pushes)
+ok    rings closed: turning ringing off removes the device 
+-- lab/ci/checks/voice-sbc.sh
+-- voice SBC
+ok    kamailio running
+ok    kamailio publishes only its voice ports
+ok    freeswitch running
+ok    freeswitch publishes only its voice ports
+ok    FreeSWITCH up
+ok    FreeSWITCH SIP profiles running
+ok    Kamailio refuses an unlisted caller (403)
+ok    browser phone sign-in listening (compose network only)
+ok    call: both browser phones signed in (200 and 203)
+ok    call: 203 rings, caller 200
+ok    call: answered, caller connected
+ok    call: hang-up reached the other side
+ok    call: call check passed
+ok    Kamailio on the public address refuses an unlisted caller (403)
+-- lab/ci/checks/voice-trunks.sh
+-- SIP trunks per location
+ok    trunk test organisation ready
+ok    trunks: owner signed in
+ok    trunks: SIP trunks screen shows none yet
+ok    trunks: without trunks a call goes out through ExaCarib
+ok    trunks: three simulated trunks added
+ok    trunks: Head office primary and secondary and the default are saved
+ok    trunks: Branch office uses the organisation default
+ok    trunks: route test: primary, secondary, default in order
+ok    trunks: route test knows the caller's location
+ok    trunks: Branch office calls go to the default trunk
+ok    trunks: call from Head office goes out on its primary
+ok    trunks: a call on your own trunk has no ExaCarib call charge
+ok    trunks: primary refuses: the secondary carries the call
+ok    trunks: a trunk that is down shows Down
+ok    trunks: secondary down: skipped, the default carries the call
+ok    trunks: Branch office call goes out on the default
+ok    trunks: number on the primary trunk is at Head office
+ok    trunks: number moved to Branch office
+ok    trunks: primary working again carries the call
+ok    edge proxy reloaded the carrier lists by itself
+-- lab/ci/checks/zz-box-image.sh
+-- box image
+ok    image release box-v1.0.37 is for this code
+ok    downloaded and checked exacarib-box-1.0.37-amd64.qcow2
+      booting (tcg)
+ok    image: the image boots and its screen shows the setup code
+ok    image: the screen shows the console address https://192.168.50.1
+ok    image: the box console answers on the office port
+ok    test location connected as branch-box-check-e9584e
+ok    image: fresh box asks for its setup code
+ok    image: a wrong setup code is refused
+ok    image: password set; the wizard opens at the ports step
+ok    image: ports applied and kept; the wizard moves on to joining
+ok    image: the box joined Connect with the box setup code
+ok    image: overview shows it connected to ExaCarib
+ok    image: overview shows the internet port
+ok    image: overview shows the office port
+ok    image: diagnostics reach ExaCarib
+ok    image: a wrong password is refused
+ok    image: signs in again with the new password
+ok    image: the console is closed on the internet port: no answer (apiRequestContext.get: Request timed out after 6000ms)
+ok    image: Agents lists the box with its box console
+ok    image: Locations shows the box online, with its box console
+ok    image: the site page says the box is also managed locally
+ok    image: the portal hands the box to the cloud
+FAIL  image: box console never showed Managed from: Cloud: SETTINGS
+ok    image: managed from the cloud, the console's ports are read-only
+ok    image: the box refuses a port change while managed from the cloud
+ok    image: taking back control needs the right password
+ok    image: the box console takes back control (On site)
+ok    image: the portal follows the box: On site
+ok    image: switched to both in the portal, the box follows
+FAIL  image: stopped: TimeoutError: locator.inputValue: Timeout 5000ms exceeded.
+ok    the controller has the box's console report
+ok    the link follows the port chosen on the box (eth0)
+ok    changes made on the box reach the controller (4)
+ok    the box applied its desired state (v5)
+      box screen:
+        Box console: https://192.168.50.1 (plug a laptop into the office port)
+      
+      exacarib-box login: [   88.605104] wireguard: WireGuard 1.0.0 loaded. See www.wireguard.com for information.
+      [   88.609948] wireguard: Copyright (C) 2015-2019 Jason A. Donenfeld <Jason@zx2c4.com>. All Rights Reserved.
+      [  104.727555] EXT4-fs (vda4): mounted filesystem with ordered data mode. Quota mode: none.
+      [  105.226600] EXT4-fs (vda4): unmounting filesystem.
+      
+      Debian GNU/Linux 12 exacarib-box ttyS0
+      
+      
+        ExaCarib box (Connect agent 1.0.37)
+      
+        lo         10.254.0.11/32
+        eth0       10.0.2.15/24
+        eth1       192.168.50.1/24
+        wg-a       100.64.1.11/24
+      
+        Box console: https://192.168.50.1 (plug a laptop into the office port)
+      
+      exacarib-box login: 
+
+== Diagnostics (23:47:27)
+pop-miami: running
+site-a: running
+site-b: running
+-- agent log pop-miami
+time=2026-10-12T23:33:01.843Z level=INFO msg="class moved" node=pop-miami class=business dst=192.168.20.0/24 from=bgp to=carrier-a why=bfd
+time=2026-10-12T23:33:01.843Z level=INFO msg="class moved" node=pop-miami class=bulk dst=192.168.20.0/24 from=paused to=carrier-a why=bfd
+time=2026-10-12T23:33:02.307Z level=INFO msg="bfd change" node=pop-miami peer=100.64.2.12 tunnel=wg-b status=init
+time=2026-10-12T23:33:02.311Z level=INFO msg="class moved" node=pop-miami class=voice dst=192.168.10.0/24 from=carrier-a to=carrier-b why=bfd
+time=2026-10-12T23:33:02.311Z level=INFO msg="class moved" node=pop-miami class=bulk dst=192.168.10.0/24 from=carrier-a to=carrier-b why=bfd
+time=2026-10-12T23:33:02.311Z level=INFO msg="class moved" node=pop-miami class=business dst=192.168.20.0/24 from=carrier-a to=carrier-b why=bfd
+time=2026-10-12T23:33:02.311Z level=INFO msg="class moved" node=pop-miami class=bulk dst=192.168.20.0/24 from=carrier-a to=carrier-b why=bfd
+time=2026-10-12T23:33:02.832Z level=INFO msg="bfd change" node=pop-miami peer=100.64.2.11 tunnel=wg-b status=up
+time=2026-10-12T23:33:02.832Z level=INFO msg="bfd change" node=pop-miami peer=100.64.2.12 tunnel=wg-b status=up
+time=2026-10-12T23:33:02.832Z level=INFO msg="bfd change" node=pop-miami peer=100.64.3.12 tunnel=wg-sat status=up
+time=2026-10-12T23:33:02.832Z level=INFO msg="bfd change" node=pop-miami peer=100.64.3.11 tunnel=wg-sat status=up
+time=2026-10-12T23:33:02.832Z level=INFO msg="bfd change" node=pop-miami peer=100.64.1.11 tunnel=wg-a status=up
+time=2026-10-12T23:33:02.832Z level=INFO msg="bfd change" node=pop-miami peer=100.64.1.12 tunnel=wg-a status=up
+time=2026-10-12T23:37:00.426Z level=INFO msg="new steering map" node=pop-miami version=2051 storm=false
+time=2026-10-12T23:37:00.435Z level=INFO msg="class moved" node=pop-miami class=bulk dst=192.168.10.0/24 from=carrier-b to=carrier-a why=controller
+time=2026-10-12T23:37:25.296Z level=INFO msg="new steering map" node=pop-miami version=2052 storm=false
+time=2026-10-12T23:37:40.305Z level=INFO msg="new steering map" node=pop-miami version=2053 storm=false
+time=2026-10-12T23:37:40.310Z level=INFO msg="class moved" node=pop-miami class=bulk dst=192.168.20.0/24 from=carrier-b to=carrier-a why=controller
+time=2026-10-12T23:38:25.292Z level=INFO msg="new steering map" node=pop-miami version=2055 storm=false
+time=2026-10-12T23:38:30.333Z level=INFO msg="new steering map" node=pop-miami version=2056 storm=false
+time=2026-10-12T23:38:50.341Z level=INFO msg="new steering map" node=pop-miami version=2057 storm=false
+time=2026-10-12T23:38:50.348Z level=INFO msg="class moved" node=pop-miami class=voice dst=192.168.10.0/24 from=carrier-b to=carrier-a why=controller
+time=2026-10-12T23:38:50.348Z level=INFO msg="class moved" node=pop-miami class=business dst=192.168.10.0/24 from=carrier-b to=carrier-a why=controller
+time=2026-10-12T23:38:50.348Z level=INFO msg="class moved" node=pop-miami class=voice dst=192.168.20.0/24 from=carrier-b to=carrier-a why=controller
+time=2026-10-12T23:38:50.348Z level=INFO msg="class moved" node=pop-miami class=business dst=192.168.20.0/24 from=carrier-b to=carrier-a why=controller
+-- agent log site-a
+time=2026-10-12T23:33:01.208Z level=INFO msg="class moved" node=site-a class=business dst="" from=carrier-b to=bgp why=bfd
+time=2026-10-12T23:33:01.208Z level=INFO msg="class moved" node=site-a class=bulk dst="" from=carrier-b to=paused why=bfd
+time=2026-10-12T23:33:02.718Z level=INFO msg="bfd change" node=site-a peer=100.64.3.1 tunnel=wg-sat status=up
+time=2026-10-12T23:33:02.718Z level=INFO msg="bfd change" node=site-a peer=100.64.1.1 tunnel=wg-a status=up
+time=2026-10-12T23:33:02.718Z level=INFO msg="bfd change" node=site-a peer=100.64.2.1 tunnel=wg-b status=up
+time=2026-10-12T23:33:02.723Z level=INFO msg="class moved" node=site-a class=voice dst="" from=bgp to=carrier-b why=bfd
+time=2026-10-12T23:33:02.723Z level=INFO msg="class moved" node=site-a class=business dst="" from=bgp to=carrier-b why=bfd
+time=2026-10-12T23:33:02.723Z level=INFO msg="class moved" node=site-a class=bulk dst="" from=paused to=carrier-b why=bfd
+time=2026-10-12T23:34:00.172Z level=INFO msg="path breaches class SLA" node=site-a class=voice path=sat latency_ms=48.257 jitter_ms=7.816 loss_pct=10
+time=2026-10-12T23:34:00.173Z level=INFO msg="path breaches class SLA" node=site-a class=business path=sat latency_ms=48.257 jitter_ms=7.816 loss_pct=10
+time=2026-10-12T23:34:00.173Z level=INFO msg="path breaches class SLA" node=site-a class=bulk path=sat latency_ms=48.257 jitter_ms=7.816 loss_pct=10
+time=2026-10-12T23:37:00.191Z level=INFO msg="new steering map" node=site-a version=1642 storm=false
+time=2026-10-12T23:37:00.195Z level=INFO msg="class moved" node=site-a class=bulk dst="" from=carrier-b to=carrier-a why=controller
+time=2026-10-12T23:37:25.172Z level=INFO msg="new steering map" node=site-a version=1643 storm=false
+time=2026-10-12T23:38:25.170Z level=INFO msg="new steering map" node=site-a version=1645 storm=false
+time=2026-10-12T23:38:30.229Z level=INFO msg="new steering map" node=site-a version=1646 storm=false
+time=2026-10-12T23:38:50.251Z level=INFO msg="new steering map" node=site-a version=1647 storm=false
+time=2026-10-12T23:38:50.254Z level=INFO msg="class moved" node=site-a class=voice dst="" from=carrier-b to=carrier-a why=controller
+time=2026-10-12T23:38:50.254Z level=INFO msg="class moved" node=site-a class=business dst="" from=carrier-b to=carrier-a why=controller
+time=2026-10-12T23:41:30.228Z level=INFO msg="path breaches class SLA" node=site-a class=voice path=sat latency_ms=44.025 jitter_ms=7.584 loss_pct=10
+time=2026-10-12T23:41:30.228Z level=INFO msg="path breaches class SLA" node=site-a class=business path=sat latency_ms=44.025 jitter_ms=7.584 loss_pct=10
+time=2026-10-12T23:41:30.228Z level=INFO msg="path breaches class SLA" node=site-a class=bulk path=sat latency_ms=44.025 jitter_ms=7.584 loss_pct=10
+time=2026-10-12T23:46:10.175Z level=INFO msg="path breaches class SLA" node=site-a class=voice path=sat latency_ms=47.358 jitter_ms=9.991 loss_pct=10
+time=2026-10-12T23:46:10.175Z level=INFO msg="path breaches class SLA" node=site-a class=business path=sat latency_ms=47.358 jitter_ms=9.991 loss_pct=10
+time=2026-10-12T23:46:10.175Z level=INFO msg="path breaches class SLA" node=site-a class=bulk path=sat latency_ms=47.358 jitter_ms=9.991 loss_pct=10
+-- agent log site-b
+time=2026-10-12T23:33:02.857Z level=INFO msg="bfd change" node=site-b peer=100.64.3.1 tunnel=wg-sat status=up
+time=2026-10-12T23:33:02.857Z level=INFO msg="bfd change" node=site-b peer=100.64.1.1 tunnel=wg-a status=up
+time=2026-10-12T23:33:02.857Z level=INFO msg="bfd change" node=site-b peer=100.64.2.1 tunnel=wg-b status=up
+time=2026-10-12T23:33:02.861Z level=INFO msg="class moved" node=site-b class=voice dst="" from=bgp to=carrier-b why=bfd
+time=2026-10-12T23:33:02.861Z level=INFO msg="class moved" node=site-b class=business dst="" from=bgp to=carrier-b why=bfd
+time=2026-10-12T23:33:02.861Z level=INFO msg="class moved" node=site-b class=bulk dst="" from=paused to=carrier-b why=bfd
+time=2026-10-12T23:37:40.382Z level=INFO msg="new steering map" node=site-b version=1092 storm=false
+time=2026-10-12T23:37:40.385Z level=INFO msg="class moved" node=site-b class=bulk dst="" from=carrier-b to=carrier-a why=controller
+time=2026-10-12T23:37:50.328Z level=INFO msg="path breaches class SLA" node=site-b class=voice path=sat latency_ms=47.228 jitter_ms=8.459 loss_pct=10
+time=2026-10-12T23:37:50.328Z level=INFO msg="path breaches class SLA" node=site-b class=business path=sat latency_ms=47.228 jitter_ms=8.459 loss_pct=10
+time=2026-10-12T23:37:50.329Z level=INFO msg="path breaches class SLA" node=site-b class=bulk path=sat latency_ms=47.228 jitter_ms=8.459 loss_pct=10
+time=2026-10-12T23:38:25.324Z level=INFO msg="new steering map" node=site-b version=1093 storm=false
+time=2026-10-12T23:38:30.407Z level=INFO msg="new steering map" node=site-b version=1094 storm=false
+time=2026-10-12T23:38:50.334Z level=INFO msg="path breaches class SLA" node=site-b class=voice path=sat latency_ms=46.324 jitter_ms=9.481 loss_pct=10
+time=2026-10-12T23:38:50.334Z level=INFO msg="path breaches class SLA" node=site-b class=business path=sat latency_ms=46.324 jitter_ms=9.481 loss_pct=10
+time=2026-10-12T23:38:50.334Z level=INFO msg="path breaches class SLA" node=site-b class=bulk path=sat latency_ms=46.324 jitter_ms=9.481 loss_pct=10
+time=2026-10-12T23:38:50.402Z level=INFO msg="new steering map" node=site-b version=1095 storm=false
+time=2026-10-12T23:38:50.406Z level=INFO msg="class moved" node=site-b class=voice dst="" from=carrier-b to=carrier-a why=controller
+time=2026-10-12T23:38:50.406Z level=INFO msg="class moved" node=site-b class=business dst="" from=carrier-b to=carrier-a why=controller
+time=2026-10-12T23:41:50.348Z level=INFO msg="path breaches class SLA" node=site-b class=voice path=sat latency_ms=42.603 jitter_ms=9.163 loss_pct=10
+time=2026-10-12T23:41:50.348Z level=INFO msg="path breaches class SLA" node=site-b class=business path=sat latency_ms=42.603 jitter_ms=9.163 loss_pct=10
+time=2026-10-12T23:41:50.348Z level=INFO msg="path breaches class SLA" node=site-b class=bulk path=sat latency_ms=42.603 jitter_ms=9.163 loss_pct=10
+time=2026-10-12T23:44:30.333Z level=INFO msg="path breaches class SLA" node=site-b class=voice path=sat latency_ms=42.492 jitter_ms=6.729 loss_pct=10
+time=2026-10-12T23:44:30.333Z level=INFO msg="path breaches class SLA" node=site-b class=business path=sat latency_ms=42.492 jitter_ms=6.729 loss_pct=10
+time=2026-10-12T23:44:30.333Z level=INFO msg="path breaches class SLA" node=site-b class=bulk path=sat latency_ms=42.492 jitter_ms=6.729 loss_pct=10
+-- controller log
+controller-1  | INFO:     172.18.0.4:35842 - "GET /api/v1/agent/steering?have=1647 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:35846 - "GET /api/v1/agent/steering?have=2057 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:35850 - "GET /api/v1/agent/steering?have=1095 HTTP/1.0" 204 No Content
+controller-1  | INFO:     127.0.0.1:57788 - "GET /healthz HTTP/1.1" 200 OK
+controller-1  | INFO:     172.18.0.5:46402 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+controller-1  | INFO:     172.18.0.5:46402 - "GET /api/v1/sites/55560e2e-2075-4651-9343-1b837a653c77 HTTP/1.1" 200 OK
+controller-1  | INFO:     172.18.0.5:46428 - "GET /api/v1/commai/branding/current HTTP/1.1" 200 OK
+controller-1  | INFO:     172.18.0.5:46426 - "GET /api/v1/sites/55560e2e-2075-4651-9343-1b837a653c77/metrics?minutes=15 HTTP/1.1" 200 OK
+controller-1  | INFO:     172.18.0.5:46406 - "GET /api/v1/customers/mine HTTP/1.1" 200 OK
+controller-1  | INFO:     172.18.0.5:46426 - "GET /api/v1/commai/customers/b1526f62-2e33-4c21-b51a-6998d036da7c/entitlements HTTP/1.1" 200 OK
+controller-1  | INFO:     172.18.0.5:46406 - "GET /api/v1/orgs/b1526f62-2e33-4c21-b51a-6998d036da7c/setup HTTP/1.1" 200 OK
+controller-1  | INFO:     172.18.0.5:46410 - "GET /api/v1/events?site_id=55560e2e-2075-4651-9343-1b837a653c77&limit=20 HTTP/1.1" 200 OK
+controller-1  | INFO:     172.18.0.4:52174 - "GET /api/v1/agent/steering?have=1 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.5:46410 - "POST /api/v1/sites/55560e2e-2075-4651-9343-1b837a653c77/box/managed HTTP/1.1" 200 OK
+controller-1  | INFO:     172.18.0.5:46410 - "GET /api/v1/sites/55560e2e-2075-4651-9343-1b837a653c77 HTTP/1.1" 200 OK
+controller-1  | INFO:     172.18.0.4:52182 - "GET /api/v1/agent/desired-state?have=635 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:52198 - "GET /api/v1/agent/steering?have=1647 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:52210 - "POST /api/v1/agent/telemetry HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:52212 - "GET /api/v1/agent/desired-state?have=931 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:52228 - "GET /api/v1/agent/steering?have=2057 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:52236 - "GET /api/v1/agent/desired-state?have=281 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:52240 - "POST /api/v1/agent/telemetry HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:52248 - "GET /api/v1/agent/steering?have=1095 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:52254 - "POST /api/v1/agent/telemetry HTTP/1.0" 204 No Content
+controller-1  | INFO:     127.0.0.1:57540 - "GET /healthz HTTP/1.1" 200 OK
+controller-1  | INFO:     172.18.0.4:52260 - "GET /api/v1/agent/desired-state?have=3 HTTP/1.0" 200 OK
+controller-1  | INFO:     172.18.0.4:52262 - "GET /api/v1/agent/steering?have=1647 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:52276 - "GET /api/v1/agent/steering?have=2057 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:52290 - "GET /api/v1/agent/steering?have=1095 HTTP/1.0" 204 No Content
+controller-1  | INFO:     127.0.0.1:33890 - "GET /healthz HTTP/1.1" 200 OK
+controller-1  | INFO:     172.18.0.5:53482 - "GET /api/v1/sites/55560e2e-2075-4651-9343-1b837a653c77/metrics?minutes=15 HTTP/1.1" 200 OK
+controller-1  | INFO:     172.18.0.5:53492 - "GET /api/v1/customers/mine HTTP/1.1" 200 OK
+controller-1  | INFO:     172.18.0.5:53492 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+controller-1  | INFO:     172.18.0.5:53518 - "GET /api/v1/commai/branding/current HTTP/1.1" 200 OK
+controller-1  | INFO:     172.18.0.5:53504 - "GET /api/v1/sites/55560e2e-2075-4651-9343-1b837a653c77/metrics?minutes=15 HTTP/1.1" 200 OK
+controller-1  | INFO:     172.18.0.5:53492 - "GET /api/v1/sites/55560e2e-2075-4651-9343-1b837a653c77 HTTP/1.1" 200 OK
+controller-1  | INFO:     172.18.0.5:53512 - "GET /api/v1/customers/mine HTTP/1.1" 200 OK
+controller-1  | INFO:     172.18.0.5:53492 - "GET /api/v1/commai/customers/b1526f62-2e33-4c21-b51a-6998d036da7c/entitlements HTTP/1.1" 200 OK
+controller-1  | INFO:     172.18.0.5:53482 - "GET /api/v1/events?site_id=55560e2e-2075-4651-9343-1b837a653c77&limit=20 HTTP/1.1" 200 OK
+controller-1  | INFO:     172.18.0.5:53512 - "GET /api/v1/orgs/b1526f62-2e33-4c21-b51a-6998d036da7c/setup HTTP/1.1" 200 OK
+controller-1  | INFO:     172.18.0.4:40334 - "GET /api/v1/agent/desired-state?have=635 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:40344 - "POST /api/v1/agent/telemetry HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:40358 - "GET /api/v1/agent/steering?have=1647 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:40364 - "GET /api/v1/agent/desired-state?have=931 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:40378 - "GET /api/v1/agent/steering?have=2057 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:40380 - "GET /api/v1/agent/desired-state?have=281 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:40394 - "GET /api/v1/agent/steering?have=1095 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:40410 - "POST /api/v1/agent/telemetry HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:40422 - "POST /api/v1/agent/telemetry HTTP/1.0" 204 No Content
+controller-1  | INFO:     127.0.0.1:33902 - "GET /healthz HTTP/1.1" 200 OK
+controller-1  | INFO:     172.18.0.4:40434 - "POST /api/v1/agent/status HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:40448 - "POST /api/v1/agent/telemetry HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:40458 - "GET /api/v1/agent/steering?have=1 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:40472 - "GET /api/v1/agent/desired-state?have=5 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:40480 - "GET /api/v1/agent/steering?have=1647 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:40488 - "GET /api/v1/agent/steering?have=2057 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.4:40490 - "GET /api/v1/agent/steering?have=1095 HTTP/1.0" 204 No Content
+controller-1  | INFO:     172.18.0.1:37496 - "POST /api/v1/auth/login HTTP/1.1" 200 OK
+controller-1  | INFO:     127.0.0.1:60046 - "GET /healthz HTTP/1.1" 200 OK
+controller-1  | INFO:     172.18.0.1:37510 - "POST /api/v1/nodes/0faff99f-7eae-47ad-b2a1-494e28497689/revoke HTTP/1.1" 200 OK
+-- controller containers
+exaconnect-controller-1 Up 41 minutes (healthy)
+exaconnect-db-1 Up 11 days (healthy)
+exaconnect-freeswitch-1 Up 33 hours (healthy)
+exaconnect-kamailio-1 Up 44 hours
+exaconnect-proxy-1 Up 42 minutes
+exaconnect-web-1 Up 41 minutes
+/exaconnect-controller-1 restarts 0, started 2026-10-12T23:05:31.425647049Z, OOM killed false
+/exaconnect-db-1 restarts 0, started 2026-10-01T05:06:52.589123103Z, OOM killed false
+/exaconnect-freeswitch-1 restarts 0, started 2026-10-11T14:17:55.179936056Z, OOM killed false
+/exaconnect-kamailio-1 restarts 0, started 2026-10-11T03:58:50.08511241Z, OOM killed false
+/exaconnect-proxy-1 restarts 0, started 2026-10-12T23:05:25.591858323Z, OOM killed false
+/exaconnect-web-1 restarts 0, started 2026-10-12T23:05:42.215032288Z, OOM killed false
+-- host
+ 01:47:29 up 11 days, 22:12,  0 user,  load average: 3.44, 2.68, 2.14
+               total        used        free      shared  buff/cache   available
+Mem:            7941        3167        2150         522        3577        4774
+Swap:              0           0           0
+procs -----------memory---------- ---swap-- -----io---- -system-- -------cpu-------
+ r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st gu
+ 0  0      0 2201940  15832 3647160    0    0    78   266 5702   22  8 21 70  0  0  0
+ 1  0      0 2214036  15832 3647200    0    0     0   196 6477 7874  4 10 85  0  0  0
+ 2  0      0 2096404  15832 3647276    0    0     0   360 6555 8139  6 13 80  0  0  0
+make: *** [Makefile:125: lab-ci] Error 1
