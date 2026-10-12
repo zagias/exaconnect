@@ -19,6 +19,7 @@ from __future__ import annotations
 import datetime as dt
 import ipaddress
 import json
+import logging
 import os
 import re
 import time
@@ -29,6 +30,8 @@ import psycopg
 from psycopg.types.json import Jsonb
 
 from . import audit, desired
+
+log = logging.getLogger(__name__)
 
 MODES = ("site", "cloud", "both")
 DEFAULT = "both"
@@ -392,26 +395,54 @@ RELEASES_REPO = os.environ.get("EXA_BOX_RELEASES", "zagias/exaconnect")
 _releases: dict[str, Any] = {"at": 0.0, "versions": None}
 
 
-def releases(fetch=None) -> list[str]:
+def releases(fetch=None, feed=None, exists=None) -> list[str]:
     """Box software versions with an update file, newest first (GitHub releases
-    box-v<version>), cached for ten minutes."""
+    box-v<version>), cached for ten minutes. GitHub's API allows few calls without
+    a token from one address, so when it refuses, the releases feed (no limit)
+    gives the versions and each one's checksum file is read to see it has an update file."""
     if _releases["versions"] is not None and time.monotonic() - _releases["at"] < 600:
         return _releases["versions"]
-    url = f"https://api.github.com/repos/{RELEASES_REPO}/releases?per_page=30"
+
+    def get(u: str, accept: str = "*/*") -> bytes:
+        req = urllib.request.Request(u, headers={"Accept": accept})
+        with urllib.request.urlopen(req, timeout=10) as r:  # noqa: S310 (fixed https addresses)
+            return r.read(4 << 20)
+
     if fetch is None:
 
         def fetch(u: str) -> list:
-            req = urllib.request.Request(u, headers={"Accept": "application/vnd.github+json"})
-            with urllib.request.urlopen(req, timeout=10) as r:  # noqa: S310 (fixed https address)
-                return json.loads(r.read(4 << 20))
+            return json.loads(get(u, "application/vnd.github+json"))
 
-    out = []
-    for r in fetch(url):
-        v = (r.get("tag_name") or "").removeprefix("box-v")
-        if v == r.get("tag_name") or not VERSION.match(v) or r.get("draft"):
-            continue
-        if any((a.get("name") or "").endswith("-amd64.root.tar.zst") for a in r.get("assets") or []):
-            out.append(v)
+    out: list[str] = []
+    try:
+        for r in fetch(f"https://api.github.com/repos/{RELEASES_REPO}/releases?per_page=30"):
+            v = (r.get("tag_name") or "").removeprefix("box-v")
+            if v == r.get("tag_name") or not VERSION.match(v) or r.get("draft"):
+                continue
+            if any((a.get("name") or "").endswith("-amd64.root.tar.zst") for a in r.get("assets") or []):
+                out.append(v)
+    except Exception as e:  # noqa: BLE001 (rate limited or unreachable: try the feed)
+        log.warning("GitHub releases API failed (%s); reading the releases feed", e)
+        if feed is None:
+
+            def feed() -> str:
+                return get(f"https://github.com/{RELEASES_REPO}/releases.atom").decode()
+
+        if exists is None:
+
+            def exists(v: str) -> bool:
+                u = f"https://github.com/{RELEASES_REPO}/releases/download/box-v{v}/exacarib-box-{v}-amd64.sha256"
+                try:
+                    return b".root.tar.zst" in get(u)
+                except Exception:  # noqa: BLE001
+                    return False
+
+        tags = re.findall(r"/releases/tag/box-v([0-9][0-9A-Za-z.+~-]{0,40})", feed())
+        seen: list[str] = []
+        for v in tags:
+            if v not in seen and VERSION.match(v):
+                seen.append(v)
+        out = [v for v in seen[:10] if exists(v)]
     _releases.update(at=time.monotonic(), versions=out)
     return out
 
