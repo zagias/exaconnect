@@ -261,7 +261,9 @@ try {
     const swRow = q.locator(`tr[data-site="${E.SITE_NAME}"]`);
     await swRow.waitFor({ timeout: 15000 });
     (await swRow.innerText()).includes("updates with apt") ? ok("Box software lists the box and how it updates") : bad("box software row: " + (await swRow.innerText()).replace(/\s+/g, " "));
-    const newest = await q.getByLabel("Version").inputValue({ timeout: 10000 }).catch(() => "");
+    // The versions list loads after the page: wait for the newest to be chosen.
+    let newest = "";
+    await until(async () => (newest = await q.getByRole("combobox", { name: "Version" }).inputValue({ timeout: 3000 })) !== "", 10, 1000);
     if (!newest) {
       const why = await q.evaluate(async () => { const r = await fetch("/api/v1/box-software/versions", { headers: { "X-Requested-With": "exa-portal" } }); return r.status + " " + (await r.text()); }).catch((e) => String(e));
       bad("Box software has no versions to offer: " + why.slice(0, 200));
