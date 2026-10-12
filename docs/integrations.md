@@ -117,7 +117,7 @@ sites.
 - **API**: SNMPv2-Trap-PDU over UDP (RFC 3416). Trap OIDs under
   `1.3.6.1.4.1.<PEN>.1.0.N`; varbinds for event, severity, site, path, summary.
   Path, node, SLA breach, carrier and maintenance events only.
-- **Seam**: SNMPv3 (USM) and an SNMP read agent.
+- **Seam**: SNMPv3 traps from the controller. Each ExaCarib box has its own SNMP v2c/v3 read agent, traps (v2c/v3), syslog and a read-only API, set in its box console (ADR 0048).
 - **Customer provides**: receiver host, port and community. **Status**: built.
 
 ### IPFIX flow export

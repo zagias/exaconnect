@@ -26,6 +26,7 @@ done
 install -D -m 755 "$here/files/exacarib-box-ports" "$root/usr/lib/exacarib/exacarib-box-ports"
 install -D -m 755 "$here/files/exacarib-box-banner" "$root/usr/lib/exacarib/exacarib-box-banner"
 install -D -m 644 "$here/files/90-exacarib-box.conf" "$root/usr/lib/sysctl.d/90-exacarib-box.conf"
+install -D -m 644 "$here/files/snmpd-exacarib.conf" "$root/lib/systemd/system/snmpd.service.d/exacarib.conf"
 install -D -m 644 "$here/files/networkd-wait-online.conf" "$root/lib/systemd/system/systemd-networkd-wait-online.service.d/exacarib.conf"
 install -D -m 644 "$here/files/52exacarib-box-upgrades" "$root/etc/apt/apt.conf.d/52exacarib-box-upgrades"
 install -d -m 755 "$root/usr/share/doc/exacarib-box"
@@ -42,15 +43,15 @@ Version: $ver
 Architecture: $arch
 Maintainer: ExaCarib <support@exacarib.com>
 Installed-Size: $size
-Depends: frr (>= 8.4), wireguard-tools, nftables, iproute2, netplan.io | ifupdown, ppp, dnsmasq-base, ca-certificates, iputils-ping, traceroute, unattended-upgrades
+Depends: frr (>= 8.4), wireguard-tools, nftables, iproute2, netplan.io | ifupdown, ppp, dnsmasq-base, ca-certificates, iputils-ping, traceroute, unattended-upgrades, snmpd, snmp, rsyslog
 Section: net
 Priority: optional
 Homepage: https://www.exacarib.com
 Description: ExaCarib Connect agent and box console for branch boxes
  Turns a Debian or Ubuntu box into an ExaCarib branch box: SD-WAN tunnels over
  every internet link with the Connect agent, a local web console on the office
- network to set the ports and join Connect, the box's own firewall and automatic
- security updates.
+ network to set the ports and join Connect, the box's own firewall, automatic
+ security updates, and SNMP, traps and syslog for the customer's monitoring.
 C
 cat >"$root/DEBIAN/conffiles" <<C
 /etc/apt/apt.conf.d/52exacarib-box-upgrades
