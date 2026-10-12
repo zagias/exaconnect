@@ -465,3 +465,13 @@ hardware watchdog resets a hung box and systemd restarts a hung agent. The
 image test proves a good update is kept with its settings, and that a broken
 and a hanging update both undo themselves.
 
+
+## 2026-10-12: box software updates from the portal (ADR 0054)
+
+Connect › Set up › Box software lists an organisation's boxes with the software
+each runs. Tick boxes, choose a version (newest first, from the box releases)
+and send: each box installs it into its spare slot, restarts and keeps it only
+if healthy, and the page shows Updated, Went back to its earlier software, Did
+not install or why the box did not take it. Choosing an earlier version takes
+boxes back. The live test sends the newest version to the lab box, which is not
+the box image, and checks it answers that it updates with apt.

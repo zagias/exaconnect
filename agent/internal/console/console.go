@@ -84,9 +84,10 @@ type Server struct {
 	mgd        Managed    // where the box's settings may be changed (ADR 0049)
 	mgdMu      sync.Mutex // one managed-from change at a time
 	ztp        ZTPStatus
-	joinMu     sync.Mutex   // one join at a time: the console's or zero-touch's
-	portal     PortalChange // the last port set-up from the portal (ADR 0051)
-	portalGen  int          // the unconfirmed change, when it came from the portal
+	joinMu     sync.Mutex      // one join at a time: the console's or zero-touch's
+	portal     PortalChange    // the last port set-up from the portal (ADR 0051)
+	portalGen  int             // the unconfirmed change, when it came from the portal
+	swReq      SoftwareRequest // the last software version the portal asked for (ADR 0054)
 
 	mon           *Monitoring // the box's own monitoring (ADR 0048)
 	pendingEngine string
@@ -141,6 +142,9 @@ func (s *Server) Init() error {
 	s.ztp = ZTPStatus{Serial: Serial(s.Root), State: "off"}
 	if s.portal, err = loadPortal(filepath.Join(s.Dir, portalFile)); err != nil {
 		return fmt.Errorf("box console portal file: %w", err)
+	}
+	if s.swReq, err = loadSoftwareRequest(filepath.Join(s.Dir, portalSWFile)); err != nil {
+		return fmt.Errorf("box console software file: %w", err)
 	}
 	mon, err := loadMonitoring(filepath.Join(s.Dir, monitoringFile))
 	if err != nil {
@@ -265,6 +269,8 @@ type BoxInfo struct {
 	Portal *PortalChange `json:"portal,omitempty"`
 	// Software is the box image's software slots (ADR 0052).
 	Software *UpdateInfo `json:"software,omitempty"`
+	// SoftwarePortal is what became of the last version the portal asked for (ADR 0054).
+	SoftwarePortal *SoftwareRequest `json:"software_portal,omitempty"`
 }
 
 // boxBase is BoxInfo without the software slots.
@@ -305,6 +311,10 @@ func (s *Server) BoxInfo() any {
 	if s.hasUpdater() {
 		st := s.updateStatus(context.Background(), false)
 		b.Software = &UpdateInfo{AB: st.AB, Slot: st.Slot, Version: st.Version, Trial: st.Trial, Running: st.Running, Last: st.Last}
+	}
+	s.checkSoftwareRequest()
+	if r := s.swRequest(); !r.At.IsZero() {
+		b.SoftwarePortal = &r
 	}
 	return b
 }

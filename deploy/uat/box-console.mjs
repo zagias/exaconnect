@@ -247,6 +247,35 @@ try {
     }, 20);
     using ? ok("the box follows the template and keeps its ports") : bad("box never showed as using the template");
     await shot(q, "17_portal_box_template_kept");
+
+    // 12. Box software (ADR 0054): the newest version sent from the portal. This lab
+    // box runs from a container, not the box image, so it has no spare software slot:
+    // it must say so and the portal must show why. (A real install and automatic
+    // rollback are tested on the box image in its own CI.)
+    await q.goto(P + "/box-software");
+    if (E.ORG_NAME) {
+      const pick = q.locator("label.picker select:visible").first();
+      await pick.waitFor({ timeout: 15000 }).catch(() => {});
+      await pick.selectOption({ label: E.ORG_NAME }).catch(() => {});
+    }
+    const swRow = q.locator(`tr[data-site="${E.SITE_NAME}"]`);
+    await swRow.waitFor({ timeout: 15000 });
+    (await swRow.innerText()).includes("updates with apt") ? ok("Box software lists the box and how it updates") : bad("box software row: " + (await swRow.innerText()).replace(/\s+/g, " "));
+    const newest = await q.getByLabel("Version").inputValue({ timeout: 10000 }).catch(() => "");
+    if (!newest) {
+      bad("Box software has no versions to offer: " + (await text(q)).slice(0, 200));
+    } else {
+      await q.getByLabel("Update " + E.SITE_NAME).check();
+      await q.getByRole("button", { name: "Send to the ticked boxes" }).click();
+      await q.getByText(E.SITE_NAME + ": sent to the box").waitFor({ timeout: 10000 }).then(() => ok("Box software sends version " + newest + " to the box"), async () => bad("software not sent: " + (await text(q)).slice(0, 200)));
+      const said = await until(async () => {
+        await q.reload();
+        return (await q.locator(`tr[data-site="${E.SITE_NAME}"]`).innerText({ timeout: 5000 })).includes("Box did not take it");
+      }, 20);
+      const row = (await q.locator(`tr[data-site="${E.SITE_NAME}"]`).innerText().catch(() => "")).replace(/\s+/g, " ");
+      said && row.includes("apt") ? ok("the box answers the update and the portal shows why it updates with apt") : bad("box never answered the software update: " + row.slice(0, 300));
+      await shot(q, "18_portal_box_software");
+    }
   }
 } catch (e) {
   bad("stopped: " + String(e).split("\n")[0].slice(0, 300));

@@ -307,6 +307,10 @@ const EVENT_WORDS: Record<string, string> = {
   box_portal_applied: "Box kept the ports from the portal",
   box_portal_undone: "Box put its earlier ports back",
   box_portal_refused: "Box did not use the ports from the portal",
+  box_software: "Software update sent from the portal",
+  box_update_restarting: "Box restarting into new software",
+  box_update_failed: "Software update did not install",
+  box_update_refused: "Box did not take the software update",
 };
 
 function eventWord(kind: string) {

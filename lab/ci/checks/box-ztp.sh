@@ -41,7 +41,7 @@ docker exec -d "$box" sh -c 'exec exa-agent run --console :443 >>/var/log/exa-ag
 if wait_for 90 test -n "$(sql "SELECT 1 FROM boxes WHERE serial = '$serial' AND public_key IS NOT NULL")"; then
   ok "a fresh box calls home with its serial number and key"
 else
-  bad "the box never called home: $(docker exec "$box" tail -n 3 /var/log/exa-agent.log | tr '\n' ' ' | cut -c1-300)"
+  bad "the box never called home: $(docker exec "$box" grep -i 'zero-touch' /var/log/exa-agent.log | tail -n 3 | tr '\n' ' ' | cut -c1-400)"
   exit 1
 fi
 

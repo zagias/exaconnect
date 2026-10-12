@@ -323,6 +323,26 @@ class BoxPortalIn(BaseModel):
     detail: str = Field(default="", max_length=300)
 
 
+class BoxSoftwareIn(BaseModel):
+    """The box image's software slots (ADR 0052)."""
+
+    ab: bool = False
+    slot: str = Field(default="", max_length=8)
+    version: str = Field(default="", max_length=48)
+    trial: bool = False
+    running: bool = False
+
+
+class BoxSoftwarePortalIn(BaseModel):
+    """What became of the last software version the portal asked for (ADR 0054)."""
+
+    version: str = Field(max_length=48)
+    at: dt.datetime
+    by: str = Field(default="", max_length=120)
+    state: Literal["installing", "done", "rolled_back", "failed", "refused", "current"]
+    detail: str = Field(default="", max_length=300)
+
+
 class BoxChangeIn(BaseModel):
     at: dt.datetime
     by: str = Field(max_length=120)
@@ -352,6 +372,8 @@ class BoxIn(BaseModel):
     network_at: dt.datetime | None = None
     ports: list[BoxIfaceIn] = Field(default=[], max_length=32)
     portal: BoxPortalIn | None = None
+    software: BoxSoftwareIn | None = None
+    software_portal: BoxSoftwarePortalIn | None = None
 
 
 class TelemetryIn(BaseModel):
