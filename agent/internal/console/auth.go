@@ -264,6 +264,23 @@ func (a *auth) login(ip, user, pw string, now time.Time) (string, error) {
 	return a.open(c.User, now), nil
 }
 
+// confirm checks a signed-in person's password again before an emergency step,
+// with the same lock-out as signing in.
+func (a *auth) confirm(ip, user, pw string, now time.Time) error {
+	if a.limited(ip, now) {
+		return errLocked
+	}
+	c, err := a.creds()
+	if err != nil {
+		return err
+	}
+	if c == nil || !c.check(user, pw) {
+		a.failed(ip, now)
+		return errors.New("the password is not right")
+	}
+	return nil
+}
+
 func (a *auth) changePassword(user, current, next string) error {
 	c, err := a.creds()
 	if err != nil || c == nil {

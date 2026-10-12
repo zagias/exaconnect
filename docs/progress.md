@@ -416,3 +416,13 @@ on the office side only; flood and SYN limits like the PoP's), SYN cookies and d
 security updates. GitHub Actions builds both, boots the image and sets it up, and
 publishes them as a release; the lab boots the published image and joins it to live
 Connect.
+
+**Box cloud management, step 1: "Managed from"** (ADR 0049, 2026-10-12). Each
+ExaCarib box now says where its settings may be changed: On site (its console only),
+Cloud (the portal only; the console turns read-only, with an emergency "Take back
+control" that needs the admin password), or both, where the latest change wins. It
+can be switched on the site page in the portal or on the box's Settings page, either
+way at any time, and the box keeps its set-up. The two copies meet in the middle: the
+newest switch wins, whichever side made it. Every lab run switches a fresh box both
+ways in a browser. Next: every box setting from the portal, templates, fleet
+firmware, and a staff device list with zero-touch claim.

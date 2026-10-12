@@ -13,6 +13,7 @@ from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field, IPvAnyAddress
 
 from .. import audit, db, desired, fabric, internet, pki
+from .. import box as boxes
 from ..routing import maps
 from ..security import token_hash
 from .deps import NodeDep
@@ -308,6 +309,12 @@ class BoxChangeIn(BaseModel):
     what: str = Field(max_length=500)
 
 
+class BoxManagedIn(BaseModel):
+    mode: Literal["site", "cloud", "both"]
+    at: dt.datetime
+    by: str = Field(default="", max_length=120)
+
+
 class BoxIn(BaseModel):
     """What the box console set up on the box itself (ADR 0046)."""
 
@@ -318,6 +325,9 @@ class BoxIn(BaseModel):
     lan: BoxPortIn | None = None
     lan_dhcp: bool = False
     last_change: BoxChangeIn | None = None
+    # Where the box's settings may be changed, as the box has it (ADR 0049).
+    managed: BoxManagedIn | None = None
+    network_at: dt.datetime | None = None
 
 
 class TelemetryIn(BaseModel):
@@ -443,6 +453,8 @@ def _box(conn, node, box: BoxIn, at: dt.datetime) -> None:
     if moved:
         audit.record(conn, f"node:{node.name}", "box.ports", node.name, node.customer_id, {"links": moved})
         desired.refresh(conn, node.customer_id)
+    if box.managed is not None:
+        boxes.from_box(conn, node, box.managed.model_dump())
 
 
 def _event(conn, customer_id, node_id, kind: str, detail: dict, at: dt.datetime | None = None) -> None:

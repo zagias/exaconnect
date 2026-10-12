@@ -942,3 +942,8 @@ CREATE INDEX IF NOT EXISTS nodes_prev_cert_serial ON nodes (prev_cert_serial) WH
 -- local sign-in and the last change made there, reported with telemetry.
 ALTER TABLE nodes ADD COLUMN IF NOT EXISTS box jsonb;
 ALTER TABLE nodes ADD COLUMN IF NOT EXISTS box_at timestamptz;
+
+-- Where a box's own settings may be changed (ADR 0049): {"mode": "site" |
+-- "cloud" | "both", "at", "by"}. NULL means both. The box and the portal each
+-- keep the newest setting.
+ALTER TABLE nodes ADD COLUMN IF NOT EXISTS box_managed jsonb;

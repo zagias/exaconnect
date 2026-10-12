@@ -1,7 +1,8 @@
 // The box console (ADR 0046), tested as someone at a branch uses it: a fresh box,
 // the setup code from its label, the port wizard, joining Connect with the box
 // setup code from the portal, the box's own status and diagnostics; then the
-// portal shows the box online and managed locally too.
+// portal shows the box online and managed locally too, and "Managed from" switches
+// both ways between the portal and the box (ADR 0049).
 // Run by lab/ci/checks/box-console.sh against a throwaway box after each deploy, and locally:
 //   BOX_BASE=https://127.0.0.1:9443 BOX_SETUP_CODE=... JOIN_CODE=EXA1.... WAN_IFACE=eth0 \
 //   PORTAL_BASE=http://localhost:5173 PORTAL_EMAIL=... PORTAL_PW=... SITE_NAME=... node box-console.mjs
@@ -168,6 +169,36 @@ try {
     if (E.SITE_ID) await q.goto(P + "/sites/" + E.SITE_ID);
     await q.getByText("Also managed on the box itself").waitFor({ timeout: 15000 }).then(() => ok("the site page says the box is also managed locally"), () => bad("site page has no box console note"));
     await shot(q, "10_portal_site");
+
+    // 9. Managed from (ADR 0049): handed to the cloud in the portal, the console turns
+    // read-only; taken back on the box in an emergency, the portal follows.
+    const pressed = (pg, name) => pg.getByRole("group", { name: "Managed from" }).getByRole("button", { name, exact: true });
+    const until = async (fn, tries = 15, wait = 3000) => { for (let i = 0; i < tries; i++) { if (await fn().catch(() => false)) return true; await q.waitForTimeout(wait); } return false; };
+    await pressed(q, "Cloud").click();
+    (await until(async () => (await pressed(q, "Cloud").getAttribute("aria-pressed")) === "true", 5, 1000)) ? ok("the portal hands the box to the cloud") : bad("portal switch to Cloud did not stick");
+    await p.getByRole("link", { name: "Settings" }).click();
+    const boxCloud = await until(async () => { await p.reload(); return p.getByRole("heading", { name: "Managed from: Cloud" }).isVisible({ timeout: 4000 }); });
+    boxCloud ? ok("the box picks up Cloud from the portal") : bad("box console never showed Managed from: Cloud: " + (await text(p)).slice(0, 160));
+    await shot(p, "11_box_managed_cloud");
+    await p.getByRole("link", { name: "Ports" }).click();
+    await p.getByRole("heading", { name: "Ports on this box" }).waitFor({ timeout: 10000 });
+    const saveBtn = await p.getByRole("button", { name: "Save the ports" }).count();
+    saveBtn === 0 && (await text(p)).includes("managed from the Connect portal") ? ok("managed from the cloud, the console's ports are read-only") : bad("ports still editable in cloud mode");
+    const refused = await p.evaluate(async () => (await fetch("/api/network", { method: "POST", headers: { "Content-Type": "application/json", "X-Exa-Box": "1" }, body: JSON.stringify({ wan: [] }) })).status);
+    refused === 409 ? ok("the box refuses a port change while managed from the cloud") : bad("port change in cloud mode answered " + refused);
+    await p.getByRole("link", { name: "Settings" }).click();
+    await p.getByLabel("Admin password").fill("not-the-password");
+    await p.getByRole("button", { name: "Take back control" }).click();
+    (await p.getByRole("alert").innerText({ timeout: 5000 })).includes("not right") ? ok("taking back control needs the right password") : bad("take back with a wrong password not refused");
+    await p.getByLabel("Admin password").fill(PW);
+    await p.getByRole("button", { name: "Take back control" }).click();
+    (await until(async () => (await pressed(p, "On site").getAttribute("aria-pressed")) === "true", 5, 1000)) ? ok("the box console takes back control (On site)") : bad("take back did not switch the box to On site");
+    const portalSite = await until(async () => { await q.reload(); return (await pressed(q, "On site").getAttribute("aria-pressed", { timeout: 5000 })) === "true"; });
+    portalSite ? ok("the portal follows the box: On site") : bad("portal never showed On site after the box took back control");
+    await shot(q, "12_portal_managed_site");
+    await pressed(q, "On site and cloud").click();
+    const boxBoth = await until(async () => { await p.reload(); return (await pressed(p, "On site and cloud").getAttribute("aria-pressed", { timeout: 4000 })) === "true"; });
+    boxBoth ? ok("switched to both in the portal, the box follows") : bad("box never showed On site and cloud");
   }
 } catch (e) {
   bad("stopped: " + String(e).split("\n")[0].slice(0, 300));

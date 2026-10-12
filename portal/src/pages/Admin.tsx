@@ -3,7 +3,7 @@ import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { api, useApi, type NodeRow } from "../api";
 import { useAuth } from "../auth";
 import { ErrorNote, StatusPill, ago } from "../components";
-import { BoxTag, boxSetupCode } from "../box";
+import { BoxTag, ManagedTag, boxSetupCode } from "../box";
 import { useCustomer, who } from "../customer";
 import { Card, PageHead, RowActions, useAction } from "../ui";
 import { BillingAdmin } from "./BillingAdmin";
@@ -125,7 +125,8 @@ function Agents() {
             {(data ?? []).map((n) => (
               <tr key={n.id}>
                 <td>
-                  <span className="mono">{n.name}</span> <BoxTag box={n.box} />
+                  <span className="mono">{n.name}</span> <BoxTag box={n.box} />{" "}
+                  {n.box?.console ? <ManagedTag managed={n.box_managed ?? { mode: "both", at: null, by: null }} /> : null}
                   {n.box?.last_change && (
                     <span className="sub">
                       On the box: {n.box.last_change.what} ({ago(n.box.last_change.at)})

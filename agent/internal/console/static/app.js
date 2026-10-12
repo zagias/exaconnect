@@ -4,6 +4,12 @@
 
 const main = document.getElementById("main");
 const PATHS = { "carrier-a": "Internet link 1", "carrier-b": "Internet link 2", sat: "Satellite" };
+const MANAGED = { site: "On site", cloud: "Cloud", both: "On site and cloud" };
+const MANAGED_LINE = {
+  site: "Only this console changes the box's settings. The Connect portal still runs routing and shows the box.",
+  cloud: "The Connect portal changes the box's settings. This console shows them but cannot change them, apart from taking back control in an emergency.",
+  both: "This console and the Connect portal can both change the box's settings. The latest change wins.",
+};
 const MODES = { dhcp: "Automatic (DHCP)", static: "Fixed address", pppoe: "PPPoE", keep: "Leave as it is" };
 let state = null;
 let timer = null;
@@ -146,6 +152,12 @@ function pendingBanner(p, after) {
     h("button", { class: "button small", onclick: async () => { await api("network/confirm", {}); (after || route)(); } }, "Keep the change")));
 }
 
+function cloudBanner(m) {
+  if (!m || m.mode !== "cloud") return null;
+  return note("warn", h("span", {}, "This box is managed from the Connect portal, so its settings are read-only here. ",
+    h("a", { href: "#/settings" }, "Take back control")));
+}
+
 async function overview() {
   const o = await api("overview");
   if (!o.setup.network || !o.setup.joined) {
@@ -156,9 +168,9 @@ async function overview() {
     return;
   }
   show(head("Overview", o.controller.name || o.hostname, `This box runs ExaCarib Connect at this location. It keeps forwarding on its last settings if it loses touch with ExaCarib.`),
-    pendingBanner(o.pending), ...overviewCards(o));
+    cloudBanner(o.managed), pendingBanner(o.pending), ...overviewCards(o));
   timer = setInterval(async () => {
-    try { const n = await api("overview"); if ((location.hash.slice(1) || "/") === "/") show(head("Overview", n.controller.name || n.hostname, "This box runs ExaCarib Connect at this location. It keeps forwarding on its last settings if it loses touch with ExaCarib."), pendingBanner(n.pending), ...overviewCards(n)); } catch { /* next time */ }
+    try { const n = await api("overview"); if ((location.hash.slice(1) || "/") === "/") show(head("Overview", n.controller.name || n.hostname, "This box runs ExaCarib Connect at this location. It keeps forwarding on its last settings if it loses touch with ExaCarib."), cloudBanner(n.managed), pendingBanner(n.pending), ...overviewCards(n)); } catch { /* next time */ }
   }, 5000);
 }
 
@@ -260,7 +272,8 @@ async function setup() {
 async function portsView() { return portsForm(false); }
 
 async function portsForm(wizard, setupState) {
-  const d = await api("network");
+  const [d, mg] = await Promise.all([api("network"), api("managed")]);
+  const readOnly = mg.managed.mode === "cloud";
   const cur = d.network || { wan: [], lan: null, lan_dhcp: false };
   const roleOf = (name) => {
     const w = (cur.wan || []).find((p) => p.iface === name);
@@ -297,11 +310,12 @@ async function portsForm(wizard, setupState) {
   h("div", { class: "card-head" }, h("h2", {}, "Ports on this box"), h("span", { class: "small muted" }, "Plug in a cable to see which port is which: its link turns to Up.")),
   rows.map((r) => r.el),
   err,
-  h("div", { class: "actions" }, h("button", { class: "button", type: "submit" }, wizard ? "Save and continue" : "Save the ports"),
+  readOnly ? null : h("div", { class: "actions" }, h("button", { class: "button", type: "submit" }, wizard ? "Save and continue" : "Save the ports"),
     h("span", { class: "small muted" }, "If the console loses touch after a change, the box goes back to the earlier ports after 2 minutes.")));
+  if (readOnly) for (const el of f.querySelectorAll("input, select")) el.disabled = true;
   show(wizard ? head("Set-up · step 1 of 2", "Choose which port goes where", "Pick the port each internet link is plugged into, and the port for the office network. Most internet links set themselves up automatically.")
     : head("Ports", "Ports", "Which port carries each internet link, and the office network. ExaCarib routes traffic over these links."),
-  wizard ? steps(1, setupState) : null, pendingBanner(d.pending), f);
+  wizard ? steps(1, setupState) : null, readOnly ? cloudBanner(mg.managed) : null, pendingBanner(d.pending), f);
 }
 
 function portRow(p, cur, caps, net) {
@@ -464,7 +478,7 @@ async function settingsView() {
     h("label", {}, "New password", h("input", { name: "new", type: "password", required: true, minlength: 10, autocomplete: "new-password" })),
     h("label", {}, "New password again", h("input", { name: "again", type: "password", required: true, autocomplete: "new-password" }))),
   err, h("div", { class: "actions" }, h("button", { class: "button" }, "Change the password")));
-  show(head("Settings", "Settings", "This console's sign-in, and details to give ExaCarib support."), f,
+  show(head("Settings", "Settings", "Where this box is managed from, this console's sign-in, and details to give ExaCarib support."), managedCard(o), f,
     h("section", { class: "card" }, h("h2", {}, "About this box"), h("table", {}, h("tbody", {},
       h("tr", {}, h("th", { scope: "row" }, "Host name"), h("td", { class: "mono" }, o.hostname)),
       h("tr", {}, h("th", { scope: "row" }, "Software"), h("td", { class: "mono" }, o.version)),
@@ -472,6 +486,37 @@ async function settingsView() {
       h("tr", {}, h("th", { scope: "row" }, "Console certificate"), h("td", { class: "mono small break" }, o.cert_sha256 || "–",
         h("span", { class: "sub" }, "SHA-256. Your browser warns about this certificate once because the box made it itself; check it matches what exa-agent console-code prints on the box."))),
       o.last_change ? h("tr", {}, h("th", { scope: "row" }, "Last change here"), h("td", {}, o.last_change.what, h("span", { class: "sub" }, `${o.last_change.by}, ${ago(o.last_change.at)}`))) : null))));
+}
+
+function managedCard(o) {
+  const m = o.managed || { mode: "both" };
+  const err = h("div");
+  const joined = o.setup && o.setup.joined;
+  const since = m.at && !m.at.startsWith("0001") ? h("p", { class: "small muted" }, `Set by ${m.by || "someone"}, ${ago(m.at)}.`) : null;
+  if (m.mode === "cloud") {
+    const f = h("form", { onsubmit: async (e) => {
+      e.preventDefault();
+      const done = busy(f.querySelector("button"), "Taking back control…");
+      try { await api("managed", { mode: "site", password: new FormData(f).get("password") }); route(); }
+      catch (x) { err.replaceChildren(note("bad", x.message)); done(); }
+    } },
+    h("p", {}, "In an emergency, for example when the portal cannot be reached or a change from it has cut off the office, take back control here. The box keeps its settings, switches to On site, and tells the portal."),
+    h("div", { class: "fields w420" }, h("label", {}, "Admin password", h("input", { name: "password", type: "password", required: true, autocomplete: "current-password" }))),
+    err, h("div", { class: "actions" }, h("button", { class: "button secondary" }, "Take back control")));
+    return h("section", { class: "card", id: "managed" }, h("h2", {}, "Managed from: Cloud"), h("p", {}, MANAGED_LINE.cloud), since, f);
+  }
+  const pick = (mode) => async (e) => {
+    const done = busy(e.target, "Saving…");
+    try { await api("managed", { mode }); route(); }
+    catch (x) { err.replaceChildren(note("bad", x.message)); done(); }
+  };
+  return h("section", { class: "card", id: "managed" }, h("h2", {}, "Managed from"),
+    h("p", {}, MANAGED_LINE[m.mode]), since,
+    h("div", { class: "segmented", role: "group", "aria-label": "Managed from" },
+      Object.entries(MANAGED).map(([v, t]) => h("button", { type: "button", class: "button small" + (v === m.mode ? "" : " secondary"), "aria-pressed": v === m.mode ? "true" : "false",
+        disabled: v === m.mode || (v === "cloud" && !joined), onclick: pick(v) }, t))),
+    joined ? null : h("p", { class: "small muted" }, "Join the box to Connect before handing it to the cloud."),
+    h("p", { class: "small muted" }, "Switching keeps the box's current settings."), err);
 }
 
 start().catch((e) => show(note("bad", e.message)));

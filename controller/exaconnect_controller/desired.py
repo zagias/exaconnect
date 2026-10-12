@@ -253,6 +253,11 @@ def build(inv: dict[str, Any], site: dict[str, Any]) -> dict[str, Any]:
     flows = ipfix.block(inv.get("ipfix") or [], site)
     if flows is not None:
         body["ipfix"] = flows
+    from . import box as boxes
+
+    b = boxes.block(node)
+    if b is not None:
+        body["box"] = b
     if site["kind"] == "pop":
         body["reflector"] = {"listen": f":{PROBE_PORT}"}
         circuits = cloud_circuits(inv, site)

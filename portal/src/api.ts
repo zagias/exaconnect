@@ -216,6 +216,7 @@ export interface SiteDetail extends SiteSummary {
   customer_id: string;
   box?: BoxInfo | null;
   box_at?: string | null;
+  box_managed?: BoxManaged | null;
   slas: {
     class_name: string;
     max_latency_ms: number | null;
@@ -252,6 +253,17 @@ export interface BoxInfo {
   lan?: { iface: string; mode: string; address?: string } | null;
   lan_dhcp?: boolean;
   last_change?: { at: string; by: string; what: string } | null;
+  /** Where the box's own settings may be changed, as the box has it (ADR 0049). */
+  managed?: BoxManaged;
+}
+
+/** Where a box's own settings may be changed (ADR 0049): on site (its console
+ *  only), the cloud (the portal only) or both (the latest change wins). */
+export type BoxManagedMode = "site" | "cloud" | "both";
+export interface BoxManaged {
+  mode: BoxManagedMode;
+  at: string | null;
+  by: string | null;
 }
 
 export interface NodeRow {
@@ -269,6 +281,7 @@ export interface NodeRow {
   revoked?: boolean;
   box?: BoxInfo | null;
   box_at?: string | null;
+  box_managed?: BoxManaged | null;
 }
 
 export interface User {

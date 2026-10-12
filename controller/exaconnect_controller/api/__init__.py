@@ -9,6 +9,7 @@ from . import (
     ai,
     auth,
     billing,
+    box,
     circuits,
     deps,
     directory,
@@ -47,6 +48,7 @@ router.include_router(admin.router, dependencies=_connect)
 router.include_router(inventory_admin.router, dependencies=_connect)
 router.include_router(agent.router)
 router.include_router(views.router, dependencies=_connect)
+router.include_router(box.router, dependencies=_connect)
 router.include_router(settings.shared)
 router.include_router(settings.router, dependencies=_connect)
 router.include_router(metering.router, dependencies=_connect)

@@ -125,6 +125,9 @@ type Agent struct {
 	// Box, when set, reports what the box console set up locally (ADR 0046)
 	// with every telemetry flush.
 	Box func() any
+	// BoxDesired, when set, hears the portal's side of the box's settings
+	// (ADR 0049) with every new desired state, whether or not it applied.
+	BoxDesired func(*desired.Box)
 
 	mu          sync.Mutex
 	current     *desired.State
@@ -344,6 +347,9 @@ func (a *Agent) poll(ctx context.Context) {
 		return
 	}
 	a.Log.Info("new desired state", "version", ds.Version)
+	if a.BoxDesired != nil {
+		a.BoxDesired(ds.Box)
+	}
 	st := client.Status{AppliedVersion: ds.Version, OK: true, AgentVersion: version.String()}
 	if err := a.Applier.Apply(ctx, ds); err != nil {
 		a.Log.Error("apply failed", "version", ds.Version, "err", err)

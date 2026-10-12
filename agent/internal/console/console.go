@@ -72,6 +72,8 @@ type Server struct {
 	applyMu    sync.Mutex // one port change at a time, including an undo
 	certFP     string
 	started    time.Time
+	mgd        Managed    // where the box's settings may be changed (ADR 0049)
+	mgdMu      sync.Mutex // one managed-from change at a time
 }
 
 // Change is the last thing changed on the box itself.
@@ -112,6 +114,11 @@ func (s *Server) Init() error {
 		return fmt.Errorf("box console network file: %w", err)
 	}
 	s.net = n
+	m, err := loadManaged(filepath.Join(s.Dir, managedFile))
+	if err != nil {
+		return fmt.Errorf("box console managed-from file: %w", err)
+	}
+	s.mgd = m
 	if c, _ := s.auth.creds(); c == nil {
 		if _, err := SetupCode(s.Dir); err != nil {
 			return err
@@ -196,6 +203,9 @@ type BoxInfo struct {
 	LAN        *BoxPort  `json:"lan,omitempty"`
 	LANDHCP    bool      `json:"lan_dhcp,omitempty"`
 	LastChange *Change   `json:"last_change,omitempty"`
+	Managed    Managed   `json:"managed"`
+	// NetworkAt is when the ports were last set on the box.
+	NetworkAt *time.Time `json:"network_at,omitempty"`
 }
 
 // BoxInfo is the agent's Box hook.
@@ -203,8 +213,12 @@ func (s *Server) BoxInfo() any {
 	c, _ := s.auth.creds()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	b := BoxInfo{Console: true, AdminSet: c != nil, LastChange: s.lastChange}
+	b := BoxInfo{Console: true, AdminSet: c != nil, LastChange: s.lastChange, Managed: s.mgd}
 	if s.net != nil {
+		if !s.net.UpdatedAt.IsZero() {
+			at := s.net.UpdatedAt
+			b.NetworkAt = &at
+		}
 		for _, p := range s.net.WAN {
 			b.WAN = append(b.WAN, BoxPort{Iface: p.Iface, Path: p.Path, Mode: p.Mode})
 		}
@@ -304,10 +318,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/password", s.signedIn(s.handlePassword))
 	mux.HandleFunc("GET /api/overview", s.signedIn(s.handleOverview))
 	mux.HandleFunc("GET /api/network", s.signedIn(s.handleGetNetwork))
-	mux.HandleFunc("POST /api/network", s.signedIn(s.handleSetNetwork))
+	mux.HandleFunc("POST /api/network", s.signedIn(s.local(s.handleSetNetwork)))
 	mux.HandleFunc("POST /api/network/confirm", s.signedIn(s.handleConfirm))
 	mux.HandleFunc("POST /api/join", s.signedIn(s.handleJoin))
 	mux.HandleFunc("POST /api/diag", s.signedIn(s.handleDiag))
+	mux.HandleFunc("GET /api/managed", s.signedIn(s.handleGetManaged))
+	mux.HandleFunc("POST /api/managed", s.signedIn(s.handleSetManaged))
 	return s.guard(mux)
 }
 
@@ -607,7 +623,7 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 	out := map[string]any{"hostname": host, "version": s.Version, "uptime_s": uptime(s.Root),
 		"setup": map[string]bool{"network": n != nil, "joined": joined}, "ports": ps,
 		"tunnels": []agent.TunnelView{}, "bgp": []bgpRow{}, "steering": []any{}, "pending": pend, "last_change": last,
-		"console_url": "", "cert_sha256": s.certFP}
+		"console_url": "", "cert_sha256": s.certFP, "managed": s.managed()}
 	s.mu.Lock()
 	out["console_url"] = s.consoleURL()
 	s.mu.Unlock()
