@@ -13,8 +13,11 @@ and calls outside the business need the SIP provider (not live yet).
 from __future__ import annotations
 
 import os
+import re
+from typing import Literal
 
 from fastapi import APIRouter, Body, HTTPException, Request, Response
+from pydantic import BaseModel, Field
 
 from ... import audit, db
 from ...api.deps import UserDep
@@ -98,6 +101,71 @@ def contacts(customer_id: str, user: UserDep, response: Response) -> dict:
         "people": [dict(r) for r in people],
         "lines": [dict(r) for r in lines],
     }
+
+
+class CallQuality(BaseModel):
+    """One answered call as the person's browser heard it (portal/src/pages/commai/voice/quality.ts)."""
+
+    call_id: str = Field(min_length=1, max_length=64)
+    direction: Literal["in", "out"]
+    secs: int = Field(ge=0, le=86_400)
+    codec: str = Field(default="", max_length=40)
+    rx_packets: int = Field(ge=0, le=10_000_000)
+    rx_lost: int = Field(ge=0, le=10_000_000)
+    concealed_pct: float = Field(ge=0, le=100)
+    bad_stretches: int = Field(ge=0, le=100_000)
+    jitter_ms: int = Field(ge=0, le=60_000)
+    jitter_max_ms: int = Field(ge=0, le=60_000)
+    jitter_buffer_ms: int = Field(ge=0, le=60_000)
+    rtt_ms: int | None = Field(default=None, ge=0, le=60_000)
+    rtt_max_ms: int | None = Field(default=None, ge=0, le=60_000)
+    up_lost_pct: float | None = Field(default=None, ge=-100, le=100)
+    up_jitter_ms: int | None = Field(default=None, ge=0, le=60_000)
+    path: str = Field(default="", max_length=40)
+    network: str = Field(default="", max_length=40)
+
+
+BROWSERS = (("Edge", r"Edg/"), ("Firefox", r"Firefox/"), ("Chrome", r"Chrome/|CriOS/"), ("Safari", r"Safari/"))
+SYSTEMS = (
+    ("Android", r"Android"),
+    ("iPhone", r"iPhone"),
+    ("iPad", r"iPad"),
+    ("Mac", r"Macintosh"),
+    ("Windows", r"Windows"),
+    ("Linux", r"Linux"),
+)
+
+
+def device(ua: str) -> str:
+    """Browser and system in a few words, e.g. "Chrome on Android"; never the full user agent."""
+    browser = next((n for n, pat in BROWSERS if re.search(pat, ua)), "other browser")
+    system = next((n for n, pat in SYSTEMS if re.search(pat, ua)), "other system")
+    return f"{browser} on {system}"
+
+
+@router.post("/voice/webphone/quality", status_code=204)
+def quality(customer_id: str, body: CallQuality, user: UserDep, request: Request) -> Response:
+    """Stores how a call sounded to this person, when it ends (kept 90 days)."""
+    access.check(user, customer_id, "commai:read")
+    with db.tx() as conn:
+        try:
+            me = selfservice.mine(conn, customer_id, user.id)
+        except VoiceError as e:
+            raise HTTPException(e.code, str(e)) from e
+        q = {**body.model_dump(), "cid": customer_id, "uid": str(user.id), "ext": me["extension"]}
+        q["device"] = device(request.headers.get("user-agent", ""))
+        conn.execute(
+            """INSERT INTO voice_call_quality (customer_id, user_id, extension, device, call_id, direction, secs, codec,
+                 rx_packets, rx_lost, concealed_pct, bad_stretches, jitter_ms, jitter_max_ms, jitter_buffer_ms,
+                 rtt_ms, rtt_max_ms, up_lost_pct, up_jitter_ms, path, network)
+               VALUES (%(cid)s, %(uid)s, %(ext)s, %(device)s, %(call_id)s, %(direction)s, %(secs)s, %(codec)s,
+                 %(rx_packets)s, %(rx_lost)s, %(concealed_pct)s, %(bad_stretches)s, %(jitter_ms)s,
+                 %(jitter_max_ms)s, %(jitter_buffer_ms)s, %(rtt_ms)s, %(rtt_max_ms)s, %(up_lost_pct)s,
+                 %(up_jitter_ms)s, %(path)s, %(network)s)""",
+            q,
+        )
+        conn.execute("DELETE FROM voice_call_quality WHERE created_at < now() - interval '90 days'")
+    return Response(status_code=204)
 
 
 # Ringing a closed app (ADR 0045): each device the person turns it on for.

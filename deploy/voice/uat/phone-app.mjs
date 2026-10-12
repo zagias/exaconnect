@@ -41,6 +41,32 @@ async function audio(p) {
     return out;
   });
 }
+// The numbers a listener hears as call quality, summed between two readings (quality.ts sends the
+// same for real calls): made-up sound, loss, jitter, the jitter buffer's delay and the round trip.
+async function qstats(p) {
+  return p.evaluate(async () => {
+    const pc = window.__pcs?.[window.__pcs.length - 1];
+    const o = {};
+    if (!pc) return o;
+    (await pc.getStats()).forEach((s) => {
+      if (s.kind !== "audio") return;
+      if (s.type === "inbound-rtp")
+        Object.assign(o, { rx: s.packetsReceived, lost: s.packetsLost, jitter: s.jitter, conc: s.concealedSamples, total: s.totalSamplesReceived, jbd: s.jitterBufferDelay, jbe: s.jitterBufferEmittedCount });
+      if (s.type === "remote-inbound-rtp") o.rtt = s.roundTripTime;
+    });
+    return o;
+  });
+}
+function quality(x0, x1) {
+  const n = x1.total - x0.total;
+  return {
+    concealedPct: n > 0 ? +((100 * (x1.conc - x0.conc)) / n).toFixed(2) : 100,
+    lostPct: x1.rx > x0.rx ? +((100 * (x1.lost - x0.lost)) / (x1.rx - x0.rx + x1.lost - x0.lost)).toFixed(2) : 100,
+    jitterMs: Math.round((x1.jitter || 0) * 1000),
+    bufferMs: x1.jbe > x0.jbe ? Math.round((1000 * (x1.jbd - x0.jbd)) / (x1.jbe - x0.jbe)) : null,
+    rttMs: x1.rtt == null ? null : Math.round(x1.rtt * 1000),
+  };
+}
 const chromiumOpts = { args: FAKE, ...(E.CHROMIUM ? { executablePath: E.CHROMIUM } : {}) };
 
 async function openApp(browser, ctxOpts, email, pw, tag) {
@@ -190,6 +216,16 @@ if (micOK) {
   const sb = await audio(b);
   check("audio reaches A steadily", sa?.rx - pa >= 200 && sa?.energy > 0, JSON.stringify({ ...sa, in5s: sa?.rx - pa }));
   check("audio reaches B steadily", sb?.rx - pb >= 200 && sb?.energy > 0, JSON.stringify({ ...sb, in5s: sb?.rx - pb }));
+  // Call quality over 15 s, each way. Both phones sit on this host, so the network adds nothing:
+  // what is left is the phone system itself (a busy server shows up as jitter and made-up sound).
+  const [qa0, qb0] = [await qstats(a), await qstats(b)];
+  await a.waitForTimeout(15000);
+  const [qa, qb] = [quality(qa0, await qstats(a)), quality(qb0, await qstats(b))];
+  for (const [who, q] of [["A", qa], ["B", qb]]) {
+    console.log(`QUALITY ${who} ${JSON.stringify(q)}`);
+    const good = q.concealedPct < 2 && q.lostPct < 1 && q.jitterMs < 30 && q.bufferMs !== null && q.bufferMs < 150;
+    check(`call quality as ${who} hears it: under 2% made-up sound, 1% loss, 30 ms jitter, 150 ms buffering`, good, JSON.stringify(q));
+  }
   const timer = await a.locator(".ph-timer").innerText().catch(() => "");
   check("the call timer runs", /^0:0[3-9]|^0:[1-5]\d/.test(timer), timer);
   await a.getByRole("button", { name: "Mute" }).click();

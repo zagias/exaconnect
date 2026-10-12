@@ -3,6 +3,7 @@ import { api, useApi } from "../../../api";
 import { ErrorNote } from "../../../components";
 import { Card, EmptyState, useAction } from "../../../ui";
 import { VertoPhone, type CallState } from "./verto";
+import { reportQuality } from "./quality";
 import "./dialer.css";
 
 /* Shape from controller/exaconnect_controller/commai/api/webphone.py (ADR 0039). */
@@ -57,6 +58,7 @@ export default function Dialer({ base }: { base: string }) {
           setDetail(d.reason || [d.name, d.number].filter(Boolean).join(" "));
           if (s === "ended") setMuted(false);
         },
+        onQuality: (q) => reportQuality(base, q),
         onRemoteStream: (stream) => {
           if (audio.current) audio.current.srcObject = stream;
         },

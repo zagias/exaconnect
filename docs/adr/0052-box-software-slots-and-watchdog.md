@@ -31,6 +31,9 @@ watchdog.
   old slot. A tried slot that panics or hangs never gets this far: the panic
   restart or the watchdog reset boots the old slot, which records that the
   update did not start.
+- **Slot versions** are kept in `EXABOOT/exacarib/slot-<A|B>.version` (written by
+  install and at every boot), so the console's status never mounts the other
+  slot.
 - **Watchdogs**: systemd drives the hardware watchdog (`RuntimeWatchdogSec=30s`,
   `RebootWatchdogSec=10min`): a box frozen for 30 s is reset. `exa-box.service`
   has `WatchdogSec=90`; the agent pings systemd every 20 s while its console
