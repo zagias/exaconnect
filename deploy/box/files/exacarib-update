@@ -40,6 +40,20 @@ version_of() { # the exacarib-box version in a root file system
   cat "$1/etc/exacarib/release" 2>/dev/null || dpkg-query --admindir="$1/var/lib/dpkg" -W -f='${Version}' exacarib-box 2>/dev/null || true
 }
 
+# Each slot's version is kept on the EFI partition, so status never has to mount
+# the other slot (the console asks often).
+verfile() { echo "$esp/exacarib/slot-$1.version"; }
+setver() { mkdir -p "$esp/exacarib" && printf '%s\n' "$2" >"$(verfile "$1").tmp" && mv "$(verfile "$1").tmp" "$(verfile "$1")"; }
+other_version() { # the other slot's version, from the record or (once) from the slot
+  local o f v=""
+  o=$(other "$(slot)")
+  f=$(verfile "$o")
+  if [[ -f $f ]]; then cat "$f"; return; fi
+  if mount_other; then v=$(version_of "$run/other"); umount "$run/other" 2>/dev/null || true; fi
+  setver "$o" "$v" 2>/dev/null || true
+  printf '%s' "$v"
+}
+
 mount_other() { # read-only, for its version
   local s dev
   s=$(other "$(slot)")
@@ -62,7 +76,7 @@ status)
     exit 0
   fi
   o=$(other "$cur") ov=""
-  if mount_other; then ov=$(version_of "$run/other"); umount "$run/other" 2>/dev/null || true; fi
+  ov=$(other_version)
   saved=$(genv slot)
   last=null
   [[ -s $rec ]] && last=$(cat "$rec")
@@ -87,6 +101,7 @@ install)
   umount "$run/other" 2>/dev/null || true
   trap 'umount "$mnt" 2>/dev/null || true; rm -f "$run/progress"' EXIT
   progress "Preparing slot $o"
+  setver "$o" ""
   mkfs.ext4 -q -F -L "exaroot-$o" "$dev"
   mount "$dev" "$mnt"
   progress "Downloading and writing the new software"
@@ -121,6 +136,7 @@ LABEL=EXABOOT /boot/efi vfat umask=0077,nofail 0 2
 F
   umount "$mnt"
   trap - EXIT
+  setver "$o" "${nv:-$ver}"
   grub-editenv "$env" set "try=$o"
   record trying "${nv:-$ver}" "$(version_of /)" "Installed in slot $o; trying it at the next start"
   progress "Ready: restart to try it"
@@ -128,6 +144,7 @@ F
   ;;
 
 confirm)
+  setver "$cur" "$(version_of /)" || true
   saved=$(genv slot)
   saved=${saved:-A}
   if [[ $saved == "$cur" ]]; then
@@ -162,9 +179,7 @@ confirm)
 rollback)
   o=$(other "$cur")
   [[ $(genv slot) == "$cur" ]] || { echo "this software is on trial; restart to go back" >&2; exit 4; }
-  mount_other || { echo "slot $o has no software" >&2; exit 3; }
-  ov=$(version_of "$run/other")
-  umount "$run/other" 2>/dev/null || true
+  ov=$(other_version)
   [[ -n $ov ]] || { echo "slot $o has no software" >&2; exit 3; }
   grub-editenv "$env" set "try=$o"
   record trying "$ov" "$(version_of /)" "Going back to $ov in slot $o"
