@@ -433,6 +433,13 @@ in Operations › Boxes, and once staff assign it to a customer's location it jo
 Connect and pulls its set-up by itself. The box console still works alongside. Every
 lab run plugs in a fresh box and assigns it in a browser against live.
 
+**Box cloud management, step 2: ports from the portal** (ADR 0051, 2026-10-12). A
+box managed from the cloud or both now has a "Box ports" card on its site page:
+the same choices as the box console's port page. The box tries the new ports and
+keeps them once it can still reach ExaCarib, otherwise it puts the earlier ones
+back after two minutes, and the portal shows which happened. Every lab run turns
+on handing out addresses on a fresh box's office network from the portal.
+
 ## 2026-10-12: box monitoring (ADR 0048)
 
 The box console has a Monitoring page: SNMP v2c/v3 polling (snmpd), traps for
@@ -442,7 +449,7 @@ message, and reads with an API key on every build. Also: the console now waits
 for the image's set-up DHCP to stop before starting its own (it failed box
 image run 12 with "Address already in use").
 
-## 2026-10-12: box software slots and watchdogs (ADR 0051)
+## 2026-10-12: box software slots and watchdogs (ADR 0052)
 
 The box image has two root slots. Settings > Software in the box console
 installs a release into the other slot; the box restarts into it and keeps it

@@ -301,6 +301,26 @@ class BoxPortIn(BaseModel):
     path: str = Field(default="", max_length=16)
     mode: Literal["dhcp", "static", "pppoe", "keep"]
     address: str = Field(default="", max_length=64)
+    gateway: str = Field(default="", max_length=64)
+    dns: list[str] = Field(default=[], max_length=4)
+    pppoe_user: str = Field(default="", max_length=128)
+    pppoe_set: bool = False
+
+
+class BoxIfaceIn(BaseModel):
+    name: str = Field(pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,14}$")
+    mac: str = Field(default="", max_length=32)
+    oper: str = Field(default="", max_length=16)
+    speed_mbps: int = 0
+
+
+class BoxPortalIn(BaseModel):
+    """What became of the last port set-up from the portal (ADR 0051)."""
+
+    at: dt.datetime
+    by: str = Field(default="", max_length=120)
+    state: Literal["trying", "kept", "undone", "refused", "replaced"]
+    detail: str = Field(default="", max_length=300)
 
 
 class BoxChangeIn(BaseModel):
@@ -330,6 +350,8 @@ class BoxIn(BaseModel):
     # The box's serial number, for the zero-touch device list (ADR 0050).
     serial: str = Field(default="", max_length=64)
     network_at: dt.datetime | None = None
+    ports: list[BoxIfaceIn] = Field(default=[], max_length=32)
+    portal: BoxPortalIn | None = None
 
 
 class TelemetryIn(BaseModel):
@@ -459,6 +481,8 @@ def _box(conn, node, box: BoxIn, at: dt.datetime) -> None:
         boxes.from_box(conn, node, box.managed.model_dump())
     if box.serial:
         ztp.seen_in_telemetry(conn, node, box.serial)
+    if box.portal is not None:
+        boxes.portal_report(conn, node, box.portal.model_dump(mode="json"))
 
 
 def _event(conn, customer_id, node_id, kind: str, detail: dict, at: dt.datetime | None = None) -> None:

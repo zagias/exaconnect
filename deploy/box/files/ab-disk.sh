@@ -1,5 +1,5 @@
 #!/bin/sh
-# ExaCarib box image (ADR 0051), the last step of the build boot: copy the system
+# ExaCarib box image (ADR 0052), the last step of the build boot: copy the system
 # just set up onto the image disk (/dev/vdb) with two root slots:
 #   1 BIOS boot · 2 EXABOOT (EFI system partition, GRUB and its grubenv)
 #   3 exaroot-A (this system) · 4 exaroot-B (empty until the first update)

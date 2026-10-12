@@ -753,7 +753,7 @@ func (a *Agent) event(kind string, detail map[string]string) {
 }
 
 // ControllerOK says the controller has answered since the agent started and
-// is not silent now (the box's update health check, ADR 0051).
+// is not silent now (the box's update health check, ADR 0052).
 func (a *Agent) ControllerOK() bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()

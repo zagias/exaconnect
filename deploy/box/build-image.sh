@@ -2,7 +2,7 @@
 # Builds the ExaCarib box image for x86 boxes (ADR 0047) from Debian 12's
 # official cloud image: Debian with FRR 10, WireGuard, nftables, the Connect
 # agent and the box console, ready to boot into set-up, on a disk with two
-# root slots for safe updates (ADR 0051). Output, in <output dir>:
+# root slots for safe updates (ADR 0052). Output, in <output dir>:
 #   exacarib-box-<version>-amd64.img.xz       for a USB stick or the box's own disk
 #   exacarib-box-<version>-amd64.qcow2        for a virtual machine
 #   exacarib-box-<version>-amd64.root.tar.zst the root file system, for updates

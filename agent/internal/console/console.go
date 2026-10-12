@@ -60,6 +60,10 @@ type Server struct {
 	ZTPURL    string
 	ZTPClient *http.Client  // for calling home (tests)
 	ZTPEvery  time.Duration // between calls; default 30 s
+	// Reach checks ExaCarib can be reached after ports set in the portal
+	// (tests); the default connects to the controller address.
+	Reach      func(ctx context.Context) error
+	ReachEvery time.Duration // between those checks; default 3 s
 
 	auth       *auth
 	mu         sync.Mutex
@@ -80,13 +84,15 @@ type Server struct {
 	mgd        Managed    // where the box's settings may be changed (ADR 0049)
 	mgdMu      sync.Mutex // one managed-from change at a time
 	ztp        ZTPStatus
-	joinMu     sync.Mutex // one join at a time: the console's or zero-touch's
+	joinMu     sync.Mutex   // one join at a time: the console's or zero-touch's
+	portal     PortalChange // the last port set-up from the portal (ADR 0051)
+	portalGen  int          // the unconfirmed change, when it came from the portal
 
 	mon           *Monitoring // the box's own monitoring (ADR 0048)
 	pendingEngine string
 	monMu         sync.Mutex // one monitoring change at a time
 	keyMu         sync.Mutex // the API key file
-	upd           updater    // software updates (ADR 0051)
+	upd           updater    // software updates (ADR 0052)
 }
 
 // Change is the last thing changed on the box itself.
@@ -133,6 +139,9 @@ func (s *Server) Init() error {
 	}
 	s.mgd = m
 	s.ztp = ZTPStatus{Serial: Serial(s.Root), State: "off"}
+	if s.portal, err = loadPortal(filepath.Join(s.Dir, portalFile)); err != nil {
+		return fmt.Errorf("box console portal file: %w", err)
+	}
 	mon, err := loadMonitoring(filepath.Join(s.Dir, monitoringFile))
 	if err != nil {
 		return fmt.Errorf("box console monitoring file: %w", err)
@@ -210,10 +219,29 @@ func (s *Server) report(kind string, detail map[string]string) {
 
 // BoxPort is a port as the controller hears about it.
 type BoxPort struct {
-	Iface   string `json:"iface"`
-	Path    string `json:"path,omitempty"`
-	Mode    string `json:"mode"`
-	Address string `json:"address,omitempty"`
+	Iface     string   `json:"iface"`
+	Path      string   `json:"path,omitempty"`
+	Mode      string   `json:"mode"`
+	Address   string   `json:"address,omitempty"`
+	Gateway   string   `json:"gateway,omitempty"`
+	DNS       []string `json:"dns,omitempty"`
+	PPPoEUser string   `json:"pppoe_user,omitempty"`
+	// PPPoESet says a PPPoE password is saved; the password stays on the box.
+	PPPoESet bool `json:"pppoe_set,omitempty"`
+}
+
+// BoxIface is one of the box's ports, set up or not, so the portal can offer
+// them all (ADR 0051).
+type BoxIface struct {
+	Name    string `json:"name"`
+	MAC     string `json:"mac,omitempty"`
+	Oper    string `json:"oper,omitempty"`
+	SpeedMb int    `json:"speed_mbps,omitempty"`
+}
+
+func boxPort(p Port) BoxPort {
+	return BoxPort{Iface: p.Iface, Path: p.Path, Mode: p.Mode, Address: p.Address, Gateway: p.Gateway,
+		DNS: p.DNS, PPPoEUser: p.PPPoEUser, PPPoESet: p.PPPoEPassword != ""}
 }
 
 // BoxInfo goes up with telemetry, so the portal can show the box is also
@@ -231,13 +259,18 @@ type BoxInfo struct {
 	Serial string `json:"serial,omitempty"`
 	// NetworkAt is when the ports were last set on the box.
 	NetworkAt *time.Time `json:"network_at,omitempty"`
-	// Software is the box image's software slots (ADR 0051).
+	// Ports are all the box's ports; Portal is what became of the last port
+	// set-up from the portal (ADR 0051).
+	Ports  []BoxIface    `json:"ports,omitempty"`
+	Portal *PortalChange `json:"portal,omitempty"`
+	// Software is the box image's software slots (ADR 0052).
 	Software *UpdateInfo `json:"software,omitempty"`
 }
 
 // boxBase is BoxInfo without the software slots.
 func (s *Server) boxBase() BoxInfo {
 	c, _ := s.auth.creds()
+	ifs, _ := Ports(s.Root)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	b := BoxInfo{Console: true, AdminSet: c != nil, LastChange: s.lastChange, Managed: s.mgd, Serial: s.ztp.Serial}
@@ -247,12 +280,20 @@ func (s *Server) boxBase() BoxInfo {
 			b.NetworkAt = &at
 		}
 		for _, p := range s.net.WAN {
-			b.WAN = append(b.WAN, BoxPort{Iface: p.Iface, Path: p.Path, Mode: p.Mode})
+			b.WAN = append(b.WAN, boxPort(p))
 		}
 		if l := s.net.LAN; l != nil {
-			b.LAN = &BoxPort{Iface: l.Iface, Mode: l.Mode, Address: l.Address}
+			lp := boxPort(*l)
+			b.LAN = &lp
 			b.LANDHCP = s.net.LANDHCP
 		}
+	}
+	for _, i := range ifs {
+		b.Ports = append(b.Ports, BoxIface{Name: i.Name, MAC: i.MAC, Oper: i.Oper, SpeedMb: i.SpeedMb})
+	}
+	if !s.portal.At.IsZero() {
+		p := s.portal
+		b.Portal = &p
 	}
 	b.URL = s.consoleURL()
 	return b
@@ -681,7 +722,7 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 	out := map[string]any{"hostname": host, "version": s.Version, "uptime_s": uptime(s.Root),
 		"setup": map[string]bool{"network": n != nil, "joined": joined}, "ports": ps,
 		"tunnels": []agent.TunnelView{}, "bgp": []bgpRow{}, "steering": []any{}, "pending": pend, "last_change": last,
-		"console_url": "", "cert_sha256": s.certFP, "managed": s.managed(), "ztp": s.ztpStatus()}
+		"console_url": "", "cert_sha256": s.certFP, "managed": s.managed(), "ztp": s.ztpStatus(), "portal": s.portalState()}
 	s.mu.Lock()
 	out["console_url"] = s.consoleURL()
 	s.mu.Unlock()
@@ -816,10 +857,17 @@ func (s *Server) handleSetNetwork(w http.ResponseWriter, r *http.Request) {
 	s.revertAt = time.Now().Add(s.RevertAfter)
 	s.gen++
 	gen := s.gen
+	replaced := s.portalGen != 0
+	s.portalGen = 0
 	s.revert = time.AfterFunc(s.RevertAfter, func() { s.undo(gen) })
 	pend := s.pendingInfo()
 	url := s.consoleURL()
 	s.mu.Unlock()
+	if replaced {
+		p := s.portalState()
+		p.State, p.Detail = "replaced", "the ports were changed again on the box"
+		s.setPortal(p)
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"network": n.Public(), "pending": pend, "console_url": url})
 }
 
@@ -836,7 +884,12 @@ func (s *Server) undo(gen int) {
 	prev := s.prev
 	s.revert, s.prev = nil, nil
 	s.net = prev
+	fromPortal := s.portalGen == gen
+	s.portalGen = 0
 	s.mu.Unlock()
+	if fromPortal {
+		defer s.portalUndone()
+	}
 	p := filepath.Join(s.Dir, networkFile)
 	if prev == nil {
 		_ = os.Remove(p)
@@ -852,6 +905,10 @@ func (s *Server) undo(gen int) {
 		s.Log.Error("putting the ports back failed", "err", err)
 	}
 	_ = saveNetwork(p, prev)
+	if fromPortal {
+		s.change("box console", "Ports from the Connect portal could not reach ExaCarib; went back to the earlier ports")
+		return
+	}
 	s.change("box console", "Port change not confirmed in time; went back to the earlier ports")
 }
 
@@ -865,7 +922,14 @@ func (s *Server) handleConfirm(w http.ResponseWriter, r *http.Request) {
 	s.revert.Stop()
 	s.revert, s.prev = nil, nil
 	n := s.net
+	kept := s.portalGen != 0
+	s.portalGen = 0
 	s.mu.Unlock()
+	if kept {
+		p := s.portalState()
+		p.State, p.Detail = "kept", "confirmed on the box"
+		s.setPortal(p)
+	}
 	s.change(userOf(r), describe(n))
 	writeJSON(w, http.StatusOK, map[string]any{"confirmed": true})
 }

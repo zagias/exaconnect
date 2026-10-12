@@ -4,6 +4,7 @@ import { Link, useParams } from "react-router-dom";
 import { num, useApi, type EventRow, type MetricPoint, type SiteDetail, type SiteSummary, type SteeringRow } from "../api";
 import { ErrorNote, Eyebrow, LineChart, Stamp, StatusPill, ago, fmt, when, type Series } from "../components";
 import { BoxManagedNote, ManagedFrom } from "../box";
+import { BoxPorts } from "../boxports";
 import { useCanManage } from "./org/common";
 import { NodeState } from "./Overview";
 
@@ -108,6 +109,7 @@ export function SitePage() {
         {s.kind === "site" && <SiteStorm name={s.name} />}
       </div>
       <div className="grid">
+        <BoxPorts siteId={s.id} box={s.box} managed={s.box_managed} portal={s.box_network} canManage={canManage} onChange={site.reload} />
         {s.kind === "site" && (
           <section className="card span-12">
             <div className="card-head">
@@ -301,6 +303,10 @@ const EVENT_WORDS: Record<string, string> = {
   cert_renew_failed: "Certificate renewal failed, will retry",
   local_change: "Changed on the box",
   box_managed: "Managed from changed in the portal",
+  box_network: "Ports sent from the portal",
+  box_portal_applied: "Box kept the ports from the portal",
+  box_portal_undone: "Box put its earlier ports back",
+  box_portal_refused: "Box did not use the ports from the portal",
 };
 
 function eventWord(kind: string) {

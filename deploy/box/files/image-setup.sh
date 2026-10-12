@@ -24,7 +24,7 @@ echo "deb [signed-by=/usr/share/keyrings/frrouting.gpg] https://deb.frrouting.or
 apt-get update -qq
 apt-get -y -qq dist-upgrade >/dev/null
 apt-get install -y -qq linux-image-amd64 netplan.io systemd-resolved frr frr-pythontools >/dev/null
-# The image disk: two root slots and GRUB for BIOS and UEFI (ADR 0051). The
+# The image disk: two root slots and GRUB for BIOS and UEFI (ADR 0052). The
 # cloud kernel lacks drivers for real boxes, and grub-pc would reinstall GRUB
 # into one slot on its upgrades: both go; GRUB stays as installed on EXABOOT.
 apt-get install -y -qq gdisk dosfstools rsync parted grub-pc-bin grub-efi-amd64-bin grub2-common zstd >/dev/null

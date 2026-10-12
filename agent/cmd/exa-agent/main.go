@@ -175,7 +175,7 @@ func startConsole(ctx context.Context, ks keys.Store, addr string, log *slog.Log
 }
 
 // watchdog tells systemd the agent is alive while its console answers
-// (exa-box.service WatchdogSec, ADR 0051). Without systemd it does nothing.
+// (exa-box.service WatchdogSec, ADR 0052). Without systemd it does nothing.
 func watchdog(ctx context.Context, addr string) {
 	sock := os.Getenv("NOTIFY_SOCKET")
 	if sock == "" {

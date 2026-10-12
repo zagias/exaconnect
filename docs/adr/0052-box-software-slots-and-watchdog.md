@@ -1,4 +1,4 @@
-# 0051 Box software slots (A/B updates that undo themselves) and watchdogs
+# 0052 Box software slots (A/B updates that undo themselves) and watchdogs
 
 Date: 2026-10-12
 Status: accepted

@@ -947,6 +947,8 @@ ALTER TABLE nodes ADD COLUMN IF NOT EXISTS box_at timestamptz;
 -- "cloud" | "both", "at", "by"}. NULL means both. The box and the portal each
 -- keep the newest setting.
 ALTER TABLE nodes ADD COLUMN IF NOT EXISTS box_managed jsonb;
+-- The box's ports as set in the portal (ADR 0051): {network, at, by}.
+ALTER TABLE nodes ADD COLUMN IF NOT EXISTS box_network jsonb;
 
 -- ExaCarib boxes by serial number, for zero-touch installation (ADR 0050). A box
 -- calls home with its serial and a key it made on first boot; the first key seen

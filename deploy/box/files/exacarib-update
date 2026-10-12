@@ -1,5 +1,5 @@
 #!/bin/bash
-# ExaCarib box software slots (ADR 0051). The ExaCarib box image has two root
+# ExaCarib box software slots (ADR 0052). The ExaCarib box image has two root
 # file systems, exaroot-A and exaroot-B, and GRUB on the EFI partition (EXABOOT)
 # boots the one named by `slot` in its grubenv. An update goes into the other
 # slot and is tried once (`try`, which GRUB clears as it boots it): only when

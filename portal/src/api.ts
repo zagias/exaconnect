@@ -217,6 +217,7 @@ export interface SiteDetail extends SiteSummary {
   box?: BoxInfo | null;
   box_at?: string | null;
   box_managed?: BoxManaged | null;
+  box_network?: BoxNetwork | null;
   slas: {
     class_name: string;
     max_latency_ms: number | null;
@@ -249,12 +250,37 @@ export interface BoxInfo {
   console: boolean;
   url?: string;
   admin_set: boolean;
-  wan?: { iface: string; path: string; mode: string }[];
-  lan?: { iface: string; mode: string; address?: string } | null;
+  wan?: BoxPort[];
+  lan?: BoxPort | null;
   lan_dhcp?: boolean;
   last_change?: { at: string; by: string; what: string } | null;
   /** Where the box's own settings may be changed, as the box has it (ADR 0049). */
   managed?: BoxManaged;
+  network_at?: string | null;
+  /** All the box's ports, and what became of the last port set-up from the portal (ADR 0051). */
+  ports?: { name: string; mac?: string; oper?: string; speed_mbps?: number }[];
+  portal?: { at: string; by?: string; state: "trying" | "kept" | "undone" | "refused" | "replaced"; detail?: string } | null;
+}
+
+/** A port as the box console set it up. */
+export interface BoxPort {
+  iface: string;
+  path?: string;
+  mode: string;
+  address?: string;
+  gateway?: string;
+  dns?: string[];
+  pppoe_user?: string;
+  pppoe_set?: boolean;
+  /** Only in the portal's copy, and then only ever "set". */
+  pppoe_password?: string;
+}
+
+/** The box's ports as set in the portal (ADR 0051). */
+export interface BoxNetwork {
+  network: { wan: BoxPort[]; lan?: BoxPort | null; lan_dhcp?: boolean };
+  at: string;
+  by: string;
 }
 
 /** Where a box's own settings may be changed (ADR 0049): on site (its console

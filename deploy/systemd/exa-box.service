@@ -14,7 +14,7 @@ Environment=EXA_STATE_DIR=/var/lib/exaconnect
 Restart=always
 RestartSec=5
 # The agent tells systemd it is alive every 20 s once its console answers; a
-# hung agent is restarted (ADR 0051).
+# hung agent is restarted (ADR 0052).
 WatchdogSec=90
 # Keep forwarding on the last good state when the agent stops: it does not tear down on exit.
 KillMode=process
