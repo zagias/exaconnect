@@ -525,7 +525,16 @@ func (h HostBackend) restartDNSMasq(ctx context.Context, conf string, on bool) e
 	}
 	pid := h.file(dnsmasqPid)
 	if b, err := os.ReadFile(pid); err == nil {
-		_, _ = h.Sys.Run(ctx, "kill", strings.TrimSpace(string(b)))
+		old := strings.TrimSpace(string(b))
+		_, _ = h.Sys.Run(ctx, "kill", old)
+		// The old one (the image's set-up DHCP, or ours) must let go of its
+		// ports before the new one starts, or it cannot listen.
+		for i := 0; i < 50 && old != ""; i++ {
+			if _, err := os.Stat(h.file("/proc/" + old)); err != nil {
+				break
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
 	}
 	if !on {
 		return nil

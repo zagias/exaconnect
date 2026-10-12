@@ -12,6 +12,10 @@ if [ "$1" = configure ]; then
     systemctl enable frr >/dev/null 2>&1 || true
     systemctl restart frr >/dev/null 2>&1 || true
     systemctl enable exacarib-box-ports.service exacarib-setup-dhcp.service exacarib-box-banner.timer >/dev/null
+    # SNMP stays off until someone sets it up in the box console (ADR 0048).
+    if [ ! -f /var/lib/exaconnect/console-monitoring.json ]; then
+      systemctl disable --now snmpd >/dev/null 2>&1 || true
+    fi
     # A site already running the plain agent keeps it; otherwise the box console runs.
     if systemctl is-enabled --quiet exa-agent.service 2>/dev/null; then
       echo "exa-agent.service is enabled; leaving it (switch with: systemctl disable --now exa-agent; systemctl enable --now exa-box)"

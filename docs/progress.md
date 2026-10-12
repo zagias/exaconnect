@@ -432,3 +432,12 @@ now: plugged into any internet line it calls home with its serial number, shows 
 in Operations › Boxes, and once staff assign it to a customer's location it joins
 Connect and pulls its set-up by itself. The box console still works alongside. Every
 lab run plugs in a fresh box and assigns it in a browser against live.
+
+## 2026-10-12: box monitoring (ADR 0048)
+
+The box console has a Monitoring page: SNMP v2c/v3 polling (snmpd), traps for
+link changes and every agent event, syslog to the customer's collector, and
+read-only API keys. The box image test polls, receives a trap and a syslog
+message, and reads with an API key on every build. Also: the console now waits
+for the image's set-up DHCP to stop before starting its own (it failed box
+image run 12 with "Address already in use").

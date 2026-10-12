@@ -81,6 +81,11 @@ type Server struct {
 	mgdMu      sync.Mutex // one managed-from change at a time
 	ztp        ZTPStatus
 	joinMu     sync.Mutex // one join at a time: the console's or zero-touch's
+
+	mon           *Monitoring // the box's own monitoring (ADR 0048)
+	pendingEngine string
+	monMu         sync.Mutex // one monitoring change at a time
+	keyMu         sync.Mutex // the API key file
 }
 
 // Change is the last thing changed on the box itself.
@@ -127,6 +132,11 @@ func (s *Server) Init() error {
 	}
 	s.mgd = m
 	s.ztp = ZTPStatus{Serial: Serial(s.Root), State: "off"}
+	mon, err := loadMonitoring(filepath.Join(s.Dir, monitoringFile))
+	if err != nil {
+		return fmt.Errorf("box console monitoring file: %w", err)
+	}
+	s.mon = mon
 	if c, _ := s.auth.creds(); c == nil {
 		if _, err := SetupCode(s.Dir); err != nil {
 			return err
@@ -188,6 +198,10 @@ func (s *Server) report(kind string, detail map[string]string) {
 		s.pending = append(s.pending, pendingEvent{now, kind, detail})
 	}
 	s.mu.Unlock()
+	if a == nil {
+		// Not joined yet: no agent to hear it, but traps still go out.
+		go s.Notify(agent.Event{At: now, Kind: kind, Detail: detail})
+	}
 	if a != nil {
 		a.EventAt(now, kind, detail)
 	}
@@ -335,6 +349,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/managed", s.signedIn(s.handleGetManaged))
 	mux.HandleFunc("GET /api/ztp", s.signedIn(s.handleZTP))
 	mux.HandleFunc("POST /api/managed", s.signedIn(s.handleSetManaged))
+	mux.HandleFunc("GET /api/monitoring", s.signedIn(s.handleGetMonitoring))
+	mux.HandleFunc("POST /api/monitoring", s.signedIn(s.local(s.handleSetMonitoring)))
+	mux.HandleFunc("POST /api/monitoring/test", s.signedIn(s.handleTestMonitoring))
+	mux.HandleFunc("POST /api/apikeys", s.signedIn(s.local(s.handleNewAPIKey)))
+	mux.HandleFunc("POST /api/apikeys/revoke", s.signedIn(s.local(s.handleRevokeAPIKey)))
 	return s.guard(mux)
 }
 
@@ -442,6 +461,16 @@ type userKey struct{}
 
 func (s *Server) signedIn(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// A read-only API key (ADR 0048) reads; only a signed-in person changes.
+		if r.Header.Get("Authorization") != "" {
+			u, ok := s.apiKeyUser(r)
+			if !ok || r.Method != http.MethodGet {
+				fail(w, http.StatusUnauthorized, "That API key is not right, or API keys only read.")
+				return
+			}
+			h(w, r.WithContext(context.WithValue(r.Context(), userKey{}, u)))
+			return
+		}
 		c, err := r.Cookie(cookieName)
 		if err != nil {
 			fail(w, http.StatusUnauthorized, "Sign in first.")

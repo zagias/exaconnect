@@ -202,6 +202,7 @@ func run(ctx context.Context, ks keys.Store, consoleAddr string, log *slog.Logge
 	if con != nil {
 		a.Box = con.BoxInfo
 		a.BoxDesired = con.FromPortal
+		a.Notify = con.Notify
 		con.SetAgent(a)
 	}
 	return a.Run(ctx)

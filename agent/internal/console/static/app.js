@@ -140,7 +140,7 @@ function route() {
   if (state.stage === "claim") return claimView();
   if (state.stage === "signin") return signinView();
   const r = location.hash.slice(1) || "/";
-  const views = { "/": overview, "/setup": setup, "/ports": portsView, "/connect": connectView, "/diagnostics": diagView, "/settings": settingsView };
+  const views = { "/": overview, "/setup": setup, "/ports": portsView, "/connect": connectView, "/diagnostics": diagView, "/monitoring": monitoringView, "/settings": settingsView };
   (views[r] || overview)().catch((e) => show(note("bad", e.message)));
 }
 window.addEventListener("hashchange", route);
@@ -472,6 +472,106 @@ async function diagView() {
   err,
   h("div", { class: "actions" }, h("button", { class: "button" }, "Run")), out);
   show(head("Diagnostics", "Diagnostics", "Check the box can reach the internet and ExaCarib over each link."), f);
+}
+
+// ---- monitoring (ADR 0048) ----
+
+async function monitoringView() {
+  const m = await api("monitoring");
+  const err = h("div");
+  const sn = m.snmp;
+  const field = (label, input, hint) => h("label", {}, label, input, hint ? h("span", { class: "hint" }, hint) : null);
+  const secret = (name, set, label) => h("input", { name, type: "password", autocomplete: "new-password", minlength: 8, maxlength: 64,
+    placeholder: set ? "Unchanged" : "", "aria-label": label });
+  const v2c = h("input", { type: "checkbox", name: "v2c", checked: sn.v2c });
+  const v3 = h("input", { type: "checkbox", name: "v3", checked: sn.v3 });
+  const traps = h("div", { class: "fields" });
+  const trapRow = (t) => {
+    const row = h("div", { class: "port-fields trap" },
+      field("Monitoring system", h("input", { name: "host", value: t.host || "", class: "mono", required: true, placeholder: "10.20.0.5" })),
+      field("Port", h("input", { name: "port", type: "number", min: 1, max: 65535, value: t.port || 162, class: "mono" })),
+      field("Version", h("select", { name: "version" }, ["v2c", "v3"].map((v) => h("option", { value: v, selected: t.version === v }, v === "v3" ? "SNMPv3 (the user above)" : "v2c")))),
+      field("Community (v2c)", secret("community", t.community_set, "Trap community"), t.community_set ? "Leave empty to keep it" : "Empty: the polling community"),
+      h("div", { class: "actions m0" }, h("button", { type: "button", class: "button secondary small", onclick: () => row.remove() }, "Remove")));
+    return row;
+  };
+  for (const t of m.traps) traps.append(trapRow(t));
+  const sl = m.syslog || {};
+  const f = h("form", { class: "card", onsubmit: async (e) => {
+    e.preventDefault();
+    err.replaceChildren();
+    const fd = new FormData(f);
+    const body = {
+      snmp: { v2c: v2c.checked, community: fd.get("community") || "", v3: v3.checked, v3_user: fd.get("v3_user") || "", v3_auth: fd.get("v3_auth") || "",
+        v3_priv: fd.get("v3_priv") || "", allowed: String(fd.get("allowed") || "").split(/[\s,]+/).filter(Boolean),
+        location: fd.get("location") || "", contact: fd.get("contact") || "" },
+      traps: [...traps.querySelectorAll(".trap")].map((r) => ({ host: r.querySelector("[name=host]").value.trim(), port: Number(r.querySelector("[name=port]").value) || 162,
+        version: r.querySelector("[name=version]").value, community: r.querySelector("[name=community]").value })),
+      syslog: fd.get("syslog_host") ? { host: String(fd.get("syslog_host")).trim(), port: Number(fd.get("syslog_port")) || 514, proto: fd.get("syslog_proto") } : null,
+    };
+    const done = busy(f.querySelector("button[type=submit]"), "Saving…");
+    try { await api("monitoring", body); await monitoringView(); main.prepend(note("good", "Monitoring saved. The box's SNMP agent and syslog now use these settings.")); }
+    catch (x) { err.replaceChildren(note("bad", x.message)); done(); }
+  } },
+  h("h2", {}, "SNMP polling"),
+  h("p", { class: "muted small" }, "Your monitoring system reads the box's interfaces, traffic, CPU, memory and disk (standard MIB-II and HOST-RESOURCES). It answers on the office side and over Connect, never on an internet port."),
+  h("div", { class: "fields" },
+    h("label", { class: "check" }, v2c, "SNMP v2c (read-only community)"),
+    field("Community", secret("community", sn.community_set, "Community"), sn.community_set ? "Leave empty to keep it" : "8 to 64 characters"),
+    h("label", { class: "check mt8" }, v3, "SNMPv3 (SHA authentication, AES privacy)"),
+    h("div", { class: "port-fields" },
+      field("User", h("input", { name: "v3_user", value: sn.v3_user || "", class: "mono", autocomplete: "off" })),
+      field("Authentication password", secret("v3_auth", sn.v3_passwords_set, "Authentication password"), sn.v3_passwords_set ? "Leave empty to keep it" : "8 to 64 characters"),
+      field("Privacy password", secret("v3_priv", sn.v3_passwords_set, "Privacy password"), sn.v3_passwords_set ? "Leave empty to keep it" : "Different from the authentication password")),
+    field("Who may poll", h("textarea", { name: "allowed", rows: 2, placeholder: "10.20.0.0/24" }, sn.allowed.join("\n")), "Address ranges, one per line. Empty: any private address."),
+    h("div", { class: "port-fields" },
+      field("Location", h("input", { name: "location", value: sn.location || "", maxlength: 120 })),
+      field("Contact", h("input", { name: "contact", value: sn.contact || "", maxlength: 120 })))),
+  h("h2", { class: "mt24" }, "Traps"),
+  h("p", { class: "muted small" }, "Sent when a port goes up or down, a link or tunnel fails (BFD), traffic moves to another link, the box loses ExaCarib, someone polls with a wrong community, or someone changes the box here."),
+  traps,
+  h("div", { class: "actions" }, h("button", { type: "button", class: "button secondary small", onclick: () => { if (traps.children.length < 4) traps.append(trapRow({ version: "v2c" })); } }, "Add a trap destination")),
+  h("table", { class: "mt12" }, h("tbody", {},
+    h("tr", {}, h("th", { scope: "row" }, "Engine ID (for v3 traps)"), h("td", { class: "mono small break" }, m.engine_id)),
+    h("tr", {}, h("th", { scope: "row" }, "ExaCarib trap OIDs"), h("td", { class: "mono small break" }, `${m.trap_oid}.0.n (kind, detail, box in ${m.trap_oid}.1.1 to .1.3)`)))),
+  h("h2", { class: "mt24" }, "Syslog"),
+  h("p", { class: "muted small" }, "The box's log (agent, routing, firewall, sign-ins) goes to your collector in RFC 5424 format. Empty: off."),
+  h("div", { class: "port-fields" },
+    field("Collector", h("input", { name: "syslog_host", value: sl.host || "", class: "mono", placeholder: "10.20.0.6" })),
+    field("Port", h("input", { name: "syslog_port", type: "number", min: 1, max: 65535, value: sl.port || 514, class: "mono" })),
+    field("Protocol", h("select", { name: "syslog_proto" }, ["udp", "tcp"].map((p) => h("option", { value: p, selected: (sl.proto || "udp") === p }, p.toUpperCase()))))),
+  err,
+  h("div", { class: "actions" }, h("button", { type: "submit", class: "button" }, "Save monitoring"),
+    h("button", { type: "button", class: "button secondary", onclick: async (e) => {
+      const done = busy(e.target, "Sending…");
+      try { const r = await api("monitoring/test", {}); err.replaceChildren(note("good", r.detail)); } catch (x) { err.replaceChildren(note("bad", x.message)); }
+      done();
+    } }, "Send a test trap and log message")));
+
+  const keyOut = h("div");
+  const kf = h("form", { class: "port-fields mt12", onsubmit: async (e) => {
+    e.preventDefault();
+    const name = kf.querySelector("[name=name]").value;
+    try {
+      const k = await api("apikeys", { name });
+      keyOut.replaceChildren(note("good", h("span", {}, "Copy this key now; the box shows it only once: ", h("code", { class: "mono break" }, k.key))));
+      kf.reset();
+      keyList.replaceChildren(...(await api("monitoring")).api_keys.map(keyRow));
+    } catch (x) { keyOut.replaceChildren(note("bad", x.message)); }
+  } }, field("Name", h("input", { name: "name", required: true, maxlength: 60, placeholder: "Zabbix" })), h("div", { class: "actions m0" }, h("button", { class: "button secondary" }, "Create a read-only key")));
+  const keyRow = (k) => h("tr", {}, h("td", {}, k.name), h("td", { class: "small" }, ago(k.created)), h("td", { class: "small" }, ago(k.last_used)),
+    h("td", {}, h("button", { class: "button secondary small", onclick: async () => {
+      try { await api("apikeys/revoke", { id: k.id }); keyList.replaceChildren(...(await api("monitoring")).api_keys.map(keyRow)); } catch (x) { keyOut.replaceChildren(note("bad", x.message)); }
+    } }, "Remove")));
+  const keyList = h("tbody", {}, m.api_keys.map(keyRow));
+  const keys = h("section", { class: "card" }, h("h2", {}, "Read-only API"),
+    h("p", { class: "muted small" }, "Monitoring tools can read this box's status as JSON from the office side: GET /api/overview, /api/network and /api/monitoring with the header Authorization: Bearer <key>. Keys cannot change anything."),
+    h("div", { class: "table-wrap" }, h("table", {}, h("thead", {}, h("tr", {}, ["Key", "Created", "Last used", ""].map((x) => h("th", { scope: "col" }, x)))), keyList)),
+    kf, keyOut);
+
+  show(head("Monitoring", "Monitoring", "Let your own monitoring system watch this box: SNMP, traps, syslog and a read-only API."),
+    !m.caps.snmp || !m.caps.syslog ? note("warn", "This box lacks " + [!m.caps.snmp ? "an SNMP agent (snmpd)" : null, !m.caps.syslog ? "rsyslog" : null].filter(Boolean).join(" and ") + ". The ExaCarib box image has both.") : null,
+    f, keys);
 }
 
 // ---- settings ----
