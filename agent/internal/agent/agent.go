@@ -141,7 +141,7 @@ type Agent struct {
 	bfdErr      string
 	lastContact time.Time
 	silent      bool
-	reached     bool // the controller has answered since start
+	reached     bool   // the controller has answered since start
 	lastFailure string // version+error of the last failed apply, to avoid repeating events
 	applyErr    string // the last apply's error, for the box console; guarded by mu
 	steerMap    *steer.Map
