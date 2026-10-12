@@ -99,6 +99,7 @@ export class QualityMeter {
   private jitters: number[] = [];
   private rtts: number[] = [];
   private timer: ReturnType<typeof setInterval>;
+  private started = performance.now();
 
   constructor(
     private pc: RTCPeerConnection,
@@ -117,8 +118,10 @@ export class QualityMeter {
       return; // closed
     }
     const p = this.last;
-    if (!this.first) this.first = s;
-    else if (p && s.total > p.total && (s.conc - p.conc) / (s.total - p.total) > 0.05) this.bad++;
+    // The first 2 s after answering are left out: the jitter buffer filling up there is not a fault.
+    if (!this.first) {
+      if (s.t - this.started >= 1900) this.first = s;
+    } else if (p && s.total > p.total && (s.conc - p.conc) / (s.total - p.total) > 0.05) this.bad++;
     if (s.jitter !== null) this.jitters.push(s.jitter);
     if (s.rtt !== null) this.rtts.push(s.rtt);
     this.last = s;
