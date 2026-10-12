@@ -117,3 +117,28 @@ WebKit 27 of 27, after fixing what they found:
 - The app could not reach the phone system from its own address (the security policy
   allowed only the portal's); it now uses its own host.
 
+
+## Call quality
+
+Every answered call on the browser phone or Jibsy Phone sends how it sounded
+to the controller when it ends (`portal/src/pages/commai/voice/quality.ts`,
+table `voice_call_quality`, kept 90 days): the share of sound the browser had
+to make up because audio was lost or late ("made-up sound", the best single
+measure of breaking up), 2 s stretches with more than 5% made up, loss and
+jitter each way, the jitter buffer's delay, the round trip to the phone
+system, the connection path, and the device in a few words ("Chrome on
+Android"). Numbers only: no audio and no addresses.
+
+The live check (`lab/ci/checks/voice-phone-app.sh`) holds its test call for
+15 s and fails it with more than 2% made-up sound, 1% loss, 30 ms jitter or
+150 ms buffering either way. Both test phones run on the server, so the
+network adds nothing: what it measures is the phone system itself. It also
+logs the server during the call (load, CPU steal, FreeSWITCH's CPU and its own
+view of each leg) and sums up the last 24 hours of real calls, test accounts
+left out.
+
+Local trial, 11 October 2026: two Chromium phones through FreeSWITCH with this
+repository's configuration, and a relay adding loss and jitter on the way in.
+Clean network: no made-up sound. 15 ms jitter: none (the browsers' buffers grew
+to 75 ms). 3% loss: 2 to 3% made up, the same as the loss. Six busy CPU loops on
+four CPUs: no change. FreeSWITCH passes Opus through without re-encoding it.
