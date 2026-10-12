@@ -22,6 +22,32 @@ inbound.
 4. **Check.** The node appears under Admin > Agents with its applied version, and the
    site turns green once its tunnels to the PoP are up.
 
+## Whitebox appliances: the box console
+
+The easiest way is the ExaCarib box image (ADR 0047): download
+`exacarib-box-<version>-amd64.img.xz` from the repository's Releases (tags `box-v…`),
+write it to a USB stick or the box's disk with balenaEtcher, and boot the box from it.
+Plug the internet link into the first port (eth0) and a laptop into the last port, and
+open https://192.168.50.1. The box's screen shows the setup code. A box that already
+runs Debian 12 or Ubuntu 22.04+ takes the package instead:
+`sudo apt install ./exacarib-box_<version>_amd64.deb` (or `_arm64.deb`).
+
+Without either, for a box set up by someone at the branch rather than over a root
+shell (ADR 0046), install it once with `sudo bash install.sh --box`. It prints a setup code (keep it
+with the box, or on its label). At the branch:
+
+1. Plug the internet links and the office network into the box.
+2. From a computer on the office network, open `https://<the box's address>/`, accept
+   the box's own certificate, enter the setup code and choose the console password.
+3. Mark each port (Internet link 1, Internet link 2, Satellite, Office network).
+4. In the portal, Organisation › Locations › Connect this location, copy the **box
+   setup code** and paste it into the console's Connect step.
+
+The location turns green in the portal and shows a "Box console" tag. The console
+keeps showing the box's links, tunnels and routes, and runs ping and traceroute, even
+when ExaCarib cannot be reached. `exa-agent console-reset` on the box sets a new
+password if it is lost.
+
 ## Tunnels need a reachable PoP
 
 Sites build one WireGuard tunnel per link to the PoP's address for that path. The

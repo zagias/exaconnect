@@ -111,6 +111,8 @@ type Telemetry struct {
 	Circuits []CircuitState `json:"circuits,omitempty"`
 	// Internet is where internet traffic leaves, with firewall counters (ADR 0010).
 	Internet *InternetState `json:"internet,omitempty"`
+	// Box is what the box console set up locally (ADR 0046), when it runs.
+	Box any `json:"box,omitempty"`
 }
 
 type Agent struct {
@@ -120,6 +122,15 @@ type Agent struct {
 	Steerer *steer.Steerer // nil disables steering
 	Sys     system.Runner
 	Log     *slog.Logger
+	// Box, when set, reports what the box console set up locally (ADR 0046)
+	// with every telemetry flush.
+	Box func() any
+	// BoxDesired, when set, hears the portal's side of the box's settings
+	// (ADR 0049) with every new desired state, whether or not it applied.
+	BoxDesired func(*desired.Box)
+	// Notify, when set, hears every event as it happens (the box's SNMP traps,
+	// ADR 0048). It runs on its own goroutine and must not block for long.
+	Notify func(Event)
 
 	mu          sync.Mutex
 	current     *desired.State
@@ -134,6 +145,7 @@ type Agent struct {
 	lastContact time.Time
 	silent      bool
 	lastFailure string // version+error of the last failed apply, to avoid repeating events
+	applyErr    string // the last apply's error, for the box console; guarded by mu
 	steerMap    *steer.Map
 	choices     []steer.Choice
 	steerErr    string
@@ -338,6 +350,9 @@ func (a *Agent) poll(ctx context.Context) {
 		return
 	}
 	a.Log.Info("new desired state", "version", ds.Version)
+	if a.BoxDesired != nil {
+		a.BoxDesired(ds.Box)
+	}
 	st := client.Status{AppliedVersion: ds.Version, OK: true, AgentVersion: version.String()}
 	if err := a.Applier.Apply(ctx, ds); err != nil {
 		a.Log.Error("apply failed", "version", ds.Version, "err", err)
@@ -347,12 +362,18 @@ func (a *Agent) poll(ctx context.Context) {
 		if apply.IsRolledBack(err) {
 			kind = "config_rolled_back"
 		}
+		a.mu.Lock()
+		a.applyErr = err.Error()
+		a.mu.Unlock()
 		if key := itoa(ds.Version) + err.Error(); key != a.lastFailure {
 			a.lastFailure = key
 			a.event(kind, map[string]string{"version": itoa(ds.Version), "error": err.Error()})
 		}
 	} else {
 		a.lastFailure = ""
+		a.mu.Lock()
+		a.applyErr = ""
+		a.mu.Unlock()
 		a.setCurrent(ctx, ds)
 		a.event("config_applied", map[string]string{"version": itoa(ds.Version)})
 	}
@@ -435,7 +456,7 @@ func (a *Agent) controllerError(err error) {
 	if !a.silent && time.Since(a.lastContact) > a.Cfg.SilentAfter {
 		a.silent = true
 		a.Log.Warn("controller silent; holding the last good state and current paths", "since", a.lastContact.Format(time.RFC3339), "err", err)
-		a.buf.Events = append(a.buf.Events, Event{At: time.Now(), Kind: "controller_silent"})
+		a.addEvent(Event{At: time.Now(), Kind: "controller_silent"})
 	} else if !a.silent {
 		a.Log.Warn("controller unreachable", "err", err)
 	}
@@ -448,7 +469,7 @@ func (a *Agent) controllerOK() {
 	if a.silent {
 		a.silent = false
 		a.Log.Info("controller reachable again; reconciling")
-		a.buf.Events = append(a.buf.Events, Event{At: time.Now(), Kind: "controller_back"})
+		a.addEvent(Event{At: time.Now(), Kind: "controller_back"})
 	}
 }
 
@@ -626,7 +647,7 @@ func (a *Agent) checkBFD(ctx context.Context) (changed bool) {
 		tunnel := tunnelOf(a.current, p.Peer, p.Interface)
 		old, ok := a.bfd[p.Peer]
 		if ok && old.Status != p.Status {
-			a.buf.Events = append(a.buf.Events, Event{At: time.Now(), Kind: "bfd_" + p.Status,
+			a.addEvent(Event{At: time.Now(), Kind: "bfd_" + p.Status,
 				Detail: map[string]string{"peer": p.Peer, "tunnel": tunnel}})
 			a.Log.Info("bfd change", "peer", p.Peer, "tunnel", tunnel, "status", p.Status)
 		}
@@ -688,6 +709,9 @@ func (a *Agent) flush(ctx context.Context) {
 	}
 	cur := a.current
 	a.mu.Unlock()
+	if a.Box != nil {
+		t.Box = a.Box()
+	}
 	t.Circuits = a.circuitStates(ctx, cur, now)
 	t.Internet = a.internetState(ctx, cur)
 	for i := range t.Tunnels {
@@ -712,10 +736,26 @@ func (a *Agent) flush(ctx context.Context) {
 	a.mu.Unlock()
 }
 
+// EventAt queues an event for the controller, for callers outside the loop
+// such as the box console, keeping when it happened.
+func (a *Agent) EventAt(at time.Time, kind string, detail map[string]string) {
+	a.mu.Lock()
+	a.addEvent(Event{At: at, Kind: kind, Detail: detail})
+	a.mu.Unlock()
+}
+
 func (a *Agent) event(kind string, detail map[string]string) {
 	a.mu.Lock()
-	a.buf.Events = append(a.buf.Events, Event{At: time.Now(), Kind: kind, Detail: detail})
+	a.addEvent(Event{At: time.Now(), Kind: kind, Detail: detail})
 	a.mu.Unlock()
+}
+
+// addEvent queues an event for the controller. Caller holds a.mu.
+func (a *Agent) addEvent(e Event) {
+	a.buf.Events = append(a.buf.Events, e)
+	if a.Notify != nil {
+		go a.Notify(e)
+	}
 }
 
 func itoa(n int64) string { b, _ := json.Marshal(n); return string(b) }
@@ -951,7 +991,7 @@ func (a *Agent) steer(ctx context.Context, why string) {
 	a.mu.Lock()
 	a.choices = choices
 	for _, ev := range moves(prev, choices, why) {
-		a.buf.Events = append(a.buf.Events, ev)
+		a.addEvent(ev)
 		a.Log.Info("class moved", "class", ev.Detail["class"], "dst", ev.Detail["dst"], "from", ev.Detail["from"], "to", ev.Detail["to"], "why", why)
 	}
 	a.mu.Unlock()

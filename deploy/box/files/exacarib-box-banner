@@ -1,0 +1,35 @@
+#!/bin/sh
+# ExaCarib box (ADR 0047): what the screen on the box shows above the login
+# prompt: where to open the box console and, until its admin password is set,
+# the setup code. Someone with the box in front of them may see the code; the
+# console only answers on the office side.
+set -u
+# agetty reads /run/issue.d only on systems without /etc/issue, so /etc/issue.d.
+out=/etc/issue.d/50-exacarib.issue
+mkdir -p /etc/issue.d
+code=$(EXA_STATE_DIR=/var/lib/exaconnect /usr/bin/exa-agent console-code 2>/dev/null | sed -n 's/^Box console setup code: //p')
+ver=$(/usr/bin/exa-agent version 2>/dev/null | awk '{print $2}')
+{
+  echo
+  echo "  ExaCarib box (Connect agent ${ver:-unknown})"
+  echo
+  ip -4 -o addr show scope global 2>/dev/null | awk '{printf "  %-10s %s\n", $2, $4}'
+  echo
+  if ip -4 -o addr show scope global 2>/dev/null | grep -q ' 192\.168\.50\.1/'; then
+    echo "  Box console: https://192.168.50.1 (plug a laptop into the office port)"
+  else
+    echo "  Box console: https://<this box's office address>, from the office network"
+  fi
+  if [ -n "$code" ]; then
+    echo "  Setup code:  $code"
+  fi
+  echo
+} >"$out.tmp"
+chmod 644 "$out.tmp"
+if cmp -s "$out.tmp" "$out"; then
+  rm -f "$out.tmp"
+  exit 0
+fi
+mv "$out.tmp" "$out"
+# --reload redraws the login prompts with the new text.
+agetty --reload 2>/dev/null || true

@@ -7,6 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 
+from .. import box as boxes
 from .. import db, sla
 from ..sla import MOVE as _MOVE
 from .deps import ViewerDep, customer_scope
@@ -237,6 +238,18 @@ def site_detail(site_id: str, user: ViewerDep) -> dict:
             else []
         )
         s["steering"] = steering_view(conn, s["id"]) if s["kind"] == "site" else []
+        # Set up on the box itself through the box console (ADR 0046), if it runs one.
+        box = (
+            conn.execute(
+                "SELECT box, box_at, box_managed, box_network FROM nodes WHERE id = %s", (s["node_id"],)
+            ).fetchone()
+            if s["node_id"]
+            else None
+        )
+        s["box"] = box["box"] if box else None
+        s["box_at"] = box["box_at"] if box else None
+        s["box_managed"] = boxes.managed(box) if box else None
+        s["box_network"] = boxes.public_network(box["box_network"]) if box else None
         s["slas"] = conn.execute(
             "SELECT class_name, max_latency_ms, max_jitter_ms, max_loss_pct, allow_satellite FROM sla_policies"
             " WHERE customer_id = %s ORDER BY class_name",

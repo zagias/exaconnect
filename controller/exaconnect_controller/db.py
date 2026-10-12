@@ -45,6 +45,8 @@ def apply_schema(conn: psycopg.Connection) -> None:
         conn.execute(resources.files(__package__).joinpath("organisation.sql").read_text())
         # The organisation's own SIP trunks, per location (ADR 0044): uses org_locations.
         conn.execute(resources.files(__package__).joinpath("voice_trunks.sql").read_text())
+        # Jibsy Phone rings when closed (ADR 0045): Web Push subscriptions per device.
+        conn.execute(resources.files(__package__).joinpath("voice_push.sql").read_text())
         # Go-live registry (ADR 0028): declared capabilities start off.
         from .commai import golive
 

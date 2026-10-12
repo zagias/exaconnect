@@ -395,3 +395,56 @@ ExaCarib staff tools move to an Operations area, where a new organisation and
 its owner's invitation are made in one step. Checked in a browser from staff
 creating the organisation to the owner, a member and staff each seeing the
 right screens: 22 checks pass.
+
+**Box console** (ADR 0046, 2026-10-11). The ExaCarib box now has its own web page
+for people at the branch: claim it with the setup code, choose which port carries
+each internet link and the office network (DHCP, fixed, PPPoE, or as it is, with
+automatic undo if the change cuts the page off), join Connect by pasting the box
+setup code the portal now shows, then see the box's links, tunnels, routes and
+connection to ExaCarib and run ping, traceroute and DNS checks. It runs inside the
+agent (`exa-agent run --console :443`, `install.sh --box`). The portal marks boxes
+managed locally and lists changes made on them, and follows the box's choice of
+ports. Every lab run sets up a fresh box this way end to end.
+
+**ExaCarib box image and the box's own firewall** (ADR 0047, 2026-10-11). The box
+now ships as Linux: an image for x86 boxes (Debian 12, FRR 10, WireGuard, nftables,
+the agent and box console) to write to a USB stick or disk, and an `exacarib-box`
+package for boxes already on Debian or Ubuntu. A fresh box needs no screen: plug a
+laptop into the last port and open https://192.168.50.1. The box protects itself
+with a default-deny firewall (nothing new from the internet; console, DHCP and DNS
+on the office side only; flood and SYN limits like the PoP's), SYN cookies and daily
+security updates. GitHub Actions builds both, boots the image and sets it up, and
+publishes them as a release; the lab boots the published image and joins it to live
+Connect.
+
+**Box cloud management, step 1: "Managed from"** (ADR 0049, 2026-10-12). Each
+ExaCarib box now says where its settings may be changed: On site (its console only),
+Cloud (the portal only; the console turns read-only, with an emergency "Take back
+control" that needs the admin password), or both, where the latest change wins. It
+can be switched on the site page in the portal or on the box's Settings page, either
+way at any time, and the box keeps its set-up. The two copies meet in the middle: the
+newest switch wins, whichever side made it. Every lab run switches a fresh box both
+ways in a browser. Next: every box setting from the portal, templates, fleet
+firmware, and a staff device list with zero-touch claim.
+
+**Zero-touch box installation** (ADR 0050, 2026-10-12). A box needs nobody on site
+now: plugged into any internet line it calls home with its serial number, shows up
+in Operations › Boxes, and once staff assign it to a customer's location it joins
+Connect and pulls its set-up by itself. The box console still works alongside. Every
+lab run plugs in a fresh box and assigns it in a browser against live.
+
+**Box cloud management, step 2: ports from the portal** (ADR 0051, 2026-10-12). A
+box managed from the cloud or both now has a "Box ports" card on its site page:
+the same choices as the box console's port page. The box tries the new ports and
+keeps them once it can still reach ExaCarib, otherwise it puts the earlier ones
+back after two minutes, and the portal shows which happened. Every lab run turns
+on handing out addresses on a fresh box's office network from the portal.
+
+## 2026-10-12: box monitoring (ADR 0048)
+
+The box console has a Monitoring page: SNMP v2c/v3 polling (snmpd), traps for
+link changes and every agent event, syslog to the customer's collector, and
+read-only API keys. The box image test polls, receives a trap and a syslog
+message, and reads with an API key on every build. Also: the console now waits
+for the image's set-up DHCP to stop before starting its own (it failed box
+image run 12 with "Address already in use").

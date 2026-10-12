@@ -29,7 +29,7 @@ jobs:
         run: CGO_ENABLED=0 GOOS=linux GOARCH=${{ matrix.arch }} go build -trimpath -o exa-agent ./cmd/exa-agent
       # The site kit (ADR 0024): binary, installer and unit, downloadable from the run.
       - name: site kit
-        run: cp agent/exa-agent deploy/agent/install.sh deploy/systemd/exa-agent.service "$RUNNER_TEMP/"
+        run: cp agent/exa-agent deploy/agent/install.sh deploy/systemd/exa-agent.service deploy/systemd/exa-box.service "$RUNNER_TEMP/"
       - uses: actions/upload-artifact@v4
         with:
           name: exa-agent-linux-${{ matrix.arch }}
@@ -37,6 +37,7 @@ jobs:
             ${{ runner.temp }}/exa-agent
             ${{ runner.temp }}/install.sh
             ${{ runner.temp }}/exa-agent.service
+            ${{ runner.temp }}/exa-box.service
           retention-days: 30
 
   terraform:
@@ -109,7 +110,9 @@ jobs:
         run: >-
           shellcheck -x lab/netem/*.sh lab/faults/*.sh lab/scripts/*.sh lab/host/*.sh
           lab/ci/checks/*.sh lab/ci/run.sh lab/demo.sh lab/runner/*.sh
-          deploy/agent/*.sh deploy/release/*.sh
+          deploy/agent/*.sh deploy/release/*.sh deploy/box/*.sh deploy/box/files/*.sh
+          deploy/box/files/exacarib-box-ports deploy/box/files/exacarib-box-banner deploy/box/files/growroot
+          deploy/box/files/postinst deploy/box/files/prerm
       - name: topology parses
         run: python3 -c "import yaml,sys; t=yaml.safe_load(open('lab/exaconnect.clab.yml')); print(len(t['topology']['nodes']), 'nodes')"
 
@@ -118,6 +121,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: shellcheck
-        run: shellcheck -x deploy/voice/*.sh deploy/kamailio/start.sh lab/ci/checks/voice-sbc.sh lab/ci/checks/voice-phone-app.sh lab/ci/checks/org-setup.sh lab/ci/checks/voice-trunks.sh
+        run: shellcheck -x deploy/voice/*.sh deploy/kamailio/start.sh lab/ci/checks/voice-sbc.sh lab/ci/checks/voice-phone-app.sh lab/ci/checks/org-setup.sh lab/ci/checks/voice-trunks.sh lab/ci/checks/voice-push.sh
       - name: Kamailio and FreeSWITCH start with this config
         run: make voice-check

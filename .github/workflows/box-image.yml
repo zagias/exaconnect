@@ -1,0 +1,108 @@
+name: ExaCarib box image
+
+# The exacarib-box package and the ExaCarib box image for x86 boxes (ADR 0047).
+# Every change to the agent or the box files builds both, boots the image in a
+# virtual machine and checks set-up through the box console. On the work branch
+# and main the result is published as a GitHub release, box-v1.0.<run>.
+on:
+  push:
+    branches: [main, claude/exaconnect-mvp-lp3alu]
+    paths: [agent/**, deploy/box/**, deploy/systemd/exa-agent.service, deploy/systemd/exa-box.service, .github/workflows/box-image.yml]
+  pull_request:
+    paths: [agent/**, deploy/box/**, deploy/systemd/exa-agent.service, deploy/systemd/exa-box.service, .github/workflows/box-image.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: box-image-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BOX_VERSION: 1.0.${{ github.run_number }}
+
+jobs:
+  deb:
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    strategy:
+      matrix:
+        arch: [arm64, amd64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: agent/go.mod
+      - name: build exa-agent
+        working-directory: agent
+        run: |
+          CGO_ENABLED=0 go build -trimpath -o exa-agent \
+            -ldflags "-s -w -X github.com/zagias/exaconnect/agent/internal/version.Version=$BOX_VERSION -X github.com/zagias/exaconnect/agent/internal/version.Commit=${GITHUB_SHA::7}" ./cmd/exa-agent
+      - name: package
+        run: deploy/box/build-deb.sh ${{ matrix.arch }} agent/exa-agent out "$BOX_VERSION"
+      # Installs on a clean Debian 12 and Ubuntu 24.04 with what they have (Debian's own FRR).
+      - name: installs on Debian 12 and Ubuntu 24.04
+        run: |
+          for img in debian:bookworm ubuntu:24.04; do
+            docker run --rm -v "$PWD/out:/out:ro" "$img" sh -ec '
+              apt-get update -qq
+              DEBIAN_FRONTEND=noninteractive apt-get install -y -qq /out/exacarib-box_*.deb >/dev/null
+              exa-agent version
+              test -x /usr/lib/exacarib/exacarib-box-ports
+              grep -q "^bgpd=yes" /etc/frr/daemons
+              grep -q "^bfdd=yes" /etc/frr/daemons'
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exacarib-box-deb-${{ matrix.arch }}
+          path: out/*.deb
+          retention-days: 30
+
+  image:
+    needs: deb
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: exacarib-box-deb-*
+          path: debs
+          merge-multiple: true
+      - name: tools
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm.rules >/dev/null
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq libguestfs-tools qemu-utils qemu-system-x86 snmp >/dev/null
+          sudo chmod 0644 /boot/vmlinuz-*
+      - name: build the image
+        run: deploy/box/build-image.sh debs/exacarib-box_${BOX_VERSION}_amd64.deb out "$BOX_VERSION"
+      - name: boot it and set it up
+        run: |
+          dir=$RUNNER_TEMP/vm
+          deploy/box/test-image.sh start out/exacarib-box-${BOX_VERSION}-amd64.qcow2 "$dir"
+          deploy/box/test-image.sh check "$dir"; rc=$?
+          echo "--- box screen (last lines)"; tr -d '\r' <"$dir/serial.log" | grep -v 'Setup code' | tail -n 25
+          deploy/box/test-image.sh stop "$dir"
+          exit $rc
+      - name: publish
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp debs/*.deb out/
+          cat >notes.md <<EOF
+          ExaCarib box ${BOX_VERSION}: the Connect agent with the box console, the box's own firewall and automatic security updates (ADR 0046, ADR 0047).
+
+          - **exacarib-box-${BOX_VERSION}-amd64.img.xz**: write it to a USB stick or the box's disk (for example with balenaEtcher), then boot the box from it. Debian 12 with FRR 10, WireGuard and nftables.
+          - **exacarib-box-${BOX_VERSION}-amd64.qcow2**: the same, for a virtual machine.
+          - **exacarib-box_${BOX_VERSION}_amd64.deb / _arm64.deb**: for a box that already runs Debian 12 or Ubuntu 22.04 or later: \`sudo apt install ./exacarib-box_*.deb\`.
+
+          The first port (eth0) takes its internet address by DHCP. On a box with two or more ports the last one is the office port, 192.168.50.1, and hands out addresses: plug a laptop into it and open https://192.168.50.1. The box's screen shows the setup code. Then get a box setup code for the location in the portal (Organisation > Locations) and paste it into the console.
+
+          Commit: ${GITHUB_SHA}
+          EOF
+          gh release create "box-v${BOX_VERSION}" --target "$GITHUB_SHA" --title "ExaCarib box ${BOX_VERSION}" --notes-file notes.md \
+            out/*.img.xz out/*.qcow2 out/*.deb out/*.sha256

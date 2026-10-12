@@ -123,6 +123,8 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 .ph-ok { font-size: 14px; color: var(--success); margin: 6px 0; }
 .ph-error { font-size: 14px; color: var(--danger); margin: 6px 0; }
 .ph-install { margin: 12px 0 16px; }
+.ph-ring-closed { margin-top: 14px; }
+.ph-ring-closed h3 { font-size: 15px; margin: 0 0 6px; }
 
 /* Tabs */
 .ph-tabs {

@@ -86,6 +86,17 @@ On the live server the lab runs it after every deploy (`lab/ci/checks/voice-phon
 Microsoft's Playwright image, with three test accounts in the demo business (Phone app test A, B
 and C) that `deploy/voice/uat/live_users.py` sets up and gives fresh random passwords each run.
 
+### Ringing when closed (ADR 0045)
+
+`deploy/voice/uat/push.mjs` (run on live by `lab/ci/checks/voice-push.sh` after the phone
+app test, with the same accounts) turns ringing on for a test device, closes A's app and has
+B call A. It checks that the phone system sends an encrypted, signed push message (to a
+stand-in push service, `push-check`, since test browsers have none), that A's own service
+worker shows the call notification, and that opening it answers with audio both ways. It
+also checks that no push is sent while the app is open, and that turning ringing off
+removes the device. It ran 20 of 20 on the local full stack on 11 October 2026, with the
+dial-to-answer time at about 3 seconds.
+
 `UAT_ENGINE=firefox` or `UAT_ENGINE=webkit` runs A in Firefox or in Safari's engine (B stays
 in Chromium). Playwright's WebKit has no stand-in microphone, so in that run A instead checks
 what someone sees who hasn't allowed the microphone.

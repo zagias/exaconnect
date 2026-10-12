@@ -3,6 +3,9 @@ import { useStormToggle } from "../customer";
 import { Link, useParams } from "react-router-dom";
 import { num, useApi, type EventRow, type MetricPoint, type SiteDetail, type SiteSummary, type SteeringRow } from "../api";
 import { ErrorNote, Eyebrow, LineChart, Stamp, StatusPill, ago, fmt, when, type Series } from "../components";
+import { BoxManagedNote, ManagedFrom } from "../box";
+import { BoxPorts } from "../boxports";
+import { useCanManage } from "./org/common";
 import { NodeState } from "./Overview";
 
 export function SiteList() {
@@ -57,6 +60,7 @@ export function SitePage() {
   const { id } = useParams();
   const [minutes, setMinutes] = useState(15);
   const site = useApi<SiteDetail>(`/sites/${id}`, 10_000);
+  const canManage = useCanManage();
   const metrics = useApi<{ points: MetricPoint[] }>(`/sites/${id}/metrics?minutes=${minutes}`, 10_000);
   const events = useApi<EventRow[]>(`/events?site_id=${id}&limit=20`, 10_000);
   const s = site.data;
@@ -100,9 +104,12 @@ export function SitePage() {
           {s.node_id ? `agent seen ${ago(s.last_seen)}, config v${s.applied_version ?? 0}` : "agent not enrolled"}
         </p>
         {s.apply_error && <p className="pill bad">Last config failed: {s.apply_error}</p>}
+        <BoxManagedNote box={s.box} />
+        <ManagedFrom siteId={s.id} box={s.box} managed={s.box_managed} canManage={canManage} onChange={site.reload} />
         {s.kind === "site" && <SiteStorm name={s.name} />}
       </div>
       <div className="grid">
+        <BoxPorts siteId={s.id} box={s.box} managed={s.box_managed} portal={s.box_network} canManage={canManage} onChange={site.reload} />
         {s.kind === "site" && (
           <section className="card span-12">
             <div className="card-head">
@@ -294,6 +301,12 @@ const EVENT_WORDS: Record<string, string> = {
   cert_renewed: "Certificate renewed",
   cert_installed: "New certificate in use",
   cert_renew_failed: "Certificate renewal failed, will retry",
+  local_change: "Changed on the box",
+  box_managed: "Managed from changed in the portal",
+  box_network: "Ports sent from the portal",
+  box_portal_applied: "Box kept the ports from the portal",
+  box_portal_undone: "Box put its earlier ports back",
+  box_portal_refused: "Box did not use the ports from the portal",
 };
 
 function eventWord(kind: string) {

@@ -214,6 +214,10 @@ export interface SiteDetail extends SiteSummary {
   tunnels: { tunnel: string; path: string; handshake_age_s: number; bfd: string | null; updated_at: string }[];
   steering: SteeringRow[];
   customer_id: string;
+  box?: BoxInfo | null;
+  box_at?: string | null;
+  box_managed?: BoxManaged | null;
+  box_network?: BoxNetwork | null;
   slas: {
     class_name: string;
     max_latency_ms: number | null;
@@ -241,6 +245,53 @@ export interface EventRow {
   node: string | null;
 }
 
+/** What the box console set up on the box itself (ADR 0046). */
+export interface BoxInfo {
+  console: boolean;
+  url?: string;
+  admin_set: boolean;
+  wan?: BoxPort[];
+  lan?: BoxPort | null;
+  lan_dhcp?: boolean;
+  last_change?: { at: string; by: string; what: string } | null;
+  /** Where the box's own settings may be changed, as the box has it (ADR 0049). */
+  managed?: BoxManaged;
+  network_at?: string | null;
+  /** All the box's ports, and what became of the last port set-up from the portal (ADR 0051). */
+  ports?: { name: string; mac?: string; oper?: string; speed_mbps?: number }[];
+  portal?: { at: string; by?: string; state: "trying" | "kept" | "undone" | "refused" | "replaced"; detail?: string } | null;
+}
+
+/** A port as the box console set it up. */
+export interface BoxPort {
+  iface: string;
+  path?: string;
+  mode: string;
+  address?: string;
+  gateway?: string;
+  dns?: string[];
+  pppoe_user?: string;
+  pppoe_set?: boolean;
+  /** Only in the portal's copy, and then only ever "set". */
+  pppoe_password?: string;
+}
+
+/** The box's ports as set in the portal (ADR 0051). */
+export interface BoxNetwork {
+  network: { wan: BoxPort[]; lan?: BoxPort | null; lan_dhcp?: boolean };
+  at: string;
+  by: string;
+}
+
+/** Where a box's own settings may be changed (ADR 0049): on site (its console
+ *  only), the cloud (the portal only) or both (the latest change wins). */
+export type BoxManagedMode = "site" | "cloud" | "both";
+export interface BoxManaged {
+  mode: BoxManagedMode;
+  at: string | null;
+  by: string | null;
+}
+
 export interface NodeRow {
   id: string;
   name: string;
@@ -254,6 +305,9 @@ export interface NodeRow {
   agent_version: string | null;
   /** Its certificate no longer works; a new enrolment token brings it back. */
   revoked?: boolean;
+  box?: BoxInfo | null;
+  box_at?: string | null;
+  box_managed?: BoxManaged | null;
 }
 
 export interface User {

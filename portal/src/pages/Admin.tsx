@@ -3,9 +3,11 @@ import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { api, useApi, type NodeRow } from "../api";
 import { useAuth } from "../auth";
 import { ErrorNote, StatusPill, ago } from "../components";
+import { BoxTag, ManagedTag, boxSetupCode } from "../box";
 import { useCustomer, who } from "../customer";
 import { Card, PageHead, RowActions, useAction } from "../ui";
 import { BillingAdmin } from "./BillingAdmin";
+import { BoxesAdmin } from "./Boxes";
 import { Classes } from "./Classes";
 import { IntegrationsAdmin } from "./IntegrationsAdmin";
 import { PartnersAdmin } from "./PartnersAdmin";
@@ -33,6 +35,7 @@ interface EnrolToken {
 // enrolment tokens, classes and SLA policies, partners, DDoS protection, users, settings, releases and the audit log.
 const SECTIONS: Record<string, [string, string]> = {
   agents: ["Agents", "Every box that has enrolled, what it runs and when it last checked in."],
+  boxes: ["Boxes", "Every ExaCarib box by serial number, across all organisations. Assign one to a location and it installs itself."],
   sites: ["Sites and links", "Each organisation's Connect sites, their carrier links and install codes, with every network setting."],
   classes: ["Classes and SLA", "Application classes and the SLA each one is held to."],
   partners: ["Partners", "White-label partners and the apps they offer."],
@@ -56,6 +59,7 @@ export default function Admin() {
       <Routes>
         <Route index element={<Navigate to="agents" replace />} />
         <Route path="agents" element={<Agents />} />
+        <Route path="boxes" element={<BoxesAdmin />} />
         <Route path="sites" element={<SitesAdmin />} />
         <Route path="classes" element={<Classes />} />
         <Route path="partners" element={<PartnersAdmin />} />
@@ -123,7 +127,15 @@ function Agents() {
           <tbody>
             {(data ?? []).map((n) => (
               <tr key={n.id}>
-                <td className="mono">{n.name}</td>
+                <td>
+                  <span className="mono">{n.name}</span> <BoxTag box={n.box} />{" "}
+                  {n.box?.console ? <ManagedTag managed={n.box_managed ?? { mode: "both", at: null, by: null }} /> : null}
+                  {n.box?.last_change && (
+                    <span className="sub">
+                      On the box: {n.box.last_change.what} ({ago(n.box.last_change.at)})
+                    </span>
+                  )}
+                </td>
                 <td>{n.role === "pop" ? "PoP" : "Site"}</td>
                 <td className="nowrap">{ago(n.last_seen)}</td>
                 <td>
@@ -280,6 +292,12 @@ function SitesAdmin() {
                   </p>
                   <pre className="mono small">
                     {`EXA_ENROL_TOKEN=<the token above> bash install.sh \\\n  --controller ${token.public_agent_url} \\\n  --ca-fingerprint ${token.ca_fingerprint} \\\n  --name ${token.site}`}
+                  </pre>
+                  <p className="small muted">
+                    Or, on a box with the box console, paste this box setup code in its Connect step:
+                  </p>
+                  <pre className="mono small install-command box-setup-code">
+                    {boxSetupCode({ controller: token.public_agent_url, token: token.token, ca_fingerprint: token.ca_fingerprint, site: token.site })}
                   </pre>
                   <p className="small muted" style={{ marginBottom: 0 }}>
                     The site needs outbound HTTPS to port 8443 only; nothing inbound. The agent generates its own

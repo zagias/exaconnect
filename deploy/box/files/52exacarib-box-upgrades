@@ -1,0 +1,6 @@
+// ExaCarib box (ADR 0047): install security updates by themselves, every day.
+// Reboots are left to whoever runs the box: a reboot drops the office briefly.
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+APT::Periodic::AutocleanInterval "7";
+Unattended-Upgrade::Automatic-Reboot "false";

@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const Schema = 1
@@ -49,6 +50,35 @@ type State struct {
 	// IPFIX, when set, exports the site's flow aggregates to the customer's
 	// collector (ADR 0026); absent means no export.
 	IPFIX *IPFIX `json:"ipfix,omitempty"`
+	// Box is what the portal says about a box that runs the box console
+	// (ADR 0049); absent for nodes without one.
+	Box *Box `json:"box,omitempty"`
+}
+
+// Box carries the portal's side of a box's settings. Each part has the time
+// it was set: the box and the portal each keep the newest (ADR 0049).
+type Box struct {
+	ManagedFrom *ManagedFrom `json:"managed_from,omitempty"`
+	// Network is the box's ports as set in the portal (ADR 0051). The box
+	// takes it only while it is managed from the cloud or both.
+	Network *BoxNetwork `json:"network,omitempty"`
+}
+
+// BoxNetwork is a port set-up made in the portal, in the box console's own
+// format (internet ports, office port, handing out addresses).
+type BoxNetwork struct {
+	Network json.RawMessage `json:"network"`
+	At      time.Time       `json:"at"`
+	By      string          `json:"by,omitempty"`
+}
+
+// ManagedFrom is where the box's own settings may be changed: "site" (only
+// the box console), "cloud" (only the portal; the console reads, apart from
+// an emergency take-back) or "both" (either; the newest change wins).
+type ManagedFrom struct {
+	Mode string    `json:"mode"`
+	At   time.Time `json:"at"`
+	By   string    `json:"by,omitempty"`
 }
 
 // IPFIX is where a site sends its flow records (RFC 7011 over UDP).

@@ -43,10 +43,20 @@ The controller builds one desired-state document per node from inventory
 }
 ```
 
+A box that runs the box console also gets `"box": {"managed_from": {"mode":
+"site" | "cloud" | "both", "at": "…", "by": "…"}}`: where its own settings may be
+changed (ADR 0049). The agent passes it to the console whether or not the rest of
+the document applied; the box and the portal each keep the newest setting.
+It may also carry `"network": {"network": {"wan": […], "lan": {…}, "lan_dhcp":
+true}, "at": "…", "by": "…"}`: the box's ports as set in the portal (ADR 0051). The
+box takes it only while managed from the cloud or both, and keeps it only once it
+can still reach the controller with it.
+
 On the PoP each tunnel has a `listen_port`, one peer per site (allowed IPs are
 the site's overlay /32 and its LAN prefixes) and one BGP neighbour per site.
 
-Private keys never appear here. The agent generated its WireGuard key at
+Private keys never appear here. The one exception is a PPPoE password typed in
+the portal, which is removed from every stored version once the box has it. The agent generated its WireGuard key at
 enrolment and fills it in locally when it renders the WireGuard config.
 
 ## How the agent applies it

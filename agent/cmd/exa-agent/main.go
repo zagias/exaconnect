@@ -4,7 +4,10 @@
 //	exa-agent keygen                       print this node's WireGuard public key
 //	exa-agent enrol --controller URL --token T --ca-fingerprint FP --name site-a
 //	exa-agent renew [--force]              renew the mTLS client certificate now
-//	exa-agent run                          poll, apply, probe, report (long-running)
+//	exa-agent run [--console :443]         poll, apply, probe, report (long-running); with
+//	                                       --console, also serve the box console (ADR 0046)
+//	exa-agent console-code                 print the box console's setup code
+//	exa-agent console-reset                forget the console password; print a new setup code
 //	exa-agent apply -f state.json          apply a desired-state file once (debugging)
 package main
 
@@ -23,6 +26,7 @@ import (
 	"github.com/zagias/exaconnect/agent/internal/agent"
 	"github.com/zagias/exaconnect/agent/internal/apply"
 	"github.com/zagias/exaconnect/agent/internal/client"
+	"github.com/zagias/exaconnect/agent/internal/console"
 	"github.com/zagias/exaconnect/agent/internal/desired"
 	"github.com/zagias/exaconnect/agent/internal/keys"
 	"github.com/zagias/exaconnect/agent/internal/steer"
@@ -68,8 +72,15 @@ func main() {
 		fs.Parse(args)
 		err = enrol(ctx, ks(), *ctrl, *token, *fp, *name, log)
 	case "run":
+		con := fs.String("console", os.Getenv("EXA_CONSOLE"), "serve the box console on this address, e.g. :443")
 		fs.Parse(args)
-		err = run(ctx, ks(), log)
+		err = run(ctx, ks(), *con, log)
+	case "console-code":
+		fs.Parse(args)
+		err = consoleCode(ks().Dir, false)
+	case "console-reset":
+		fs.Parse(args)
+		err = consoleCode(ks().Dir, true)
 	case "renew":
 		force := fs.Bool("force", true, "renew even if the certificate is not yet due")
 		fs.Parse(args)
@@ -118,14 +129,57 @@ func enrol(ctx context.Context, ks keys.Store, ctrl, token, fp, name string, log
 	return nil
 }
 
-func run(ctx context.Context, ks keys.Store, log *slog.Logger) error {
+func readIdentity(ks keys.Store) (identity, error) {
+	var id identity
 	b, err := os.ReadFile(ks.IdentityPath())
 	if err != nil {
-		return fmt.Errorf("not enrolled (run exa-agent enrol first): %w", err)
+		return id, err
 	}
-	var id identity
-	if err := json.Unmarshal(b, &id); err != nil {
-		return err
+	return id, json.Unmarshal(b, &id)
+}
+
+// startConsole serves the box console and waits until the box has joined
+// Connect, through the console or already.
+func startConsole(ctx context.Context, ks keys.Store, addr string, log *slog.Logger) (*console.Server, error) {
+	con := &console.Server{
+		Dir: ks.Dir, Addr: addr, Version: version.String(), Log: log.With("part", "console"),
+		Join: func(ctx context.Context, j console.JoinInfo) error {
+			return enrol(ctx, ks, j.Controller, j.Token, j.Fingerprint, j.Name, log)
+		},
+		Identity: func() (string, string, bool) {
+			id, err := readIdentity(ks)
+			return id.NodeName, id.Controller, err == nil && id.NodeID != ""
+		},
+	}
+	if err := con.Init(); err != nil {
+		return nil, err
+	}
+	con.Restore(ctx)
+	go func() {
+		if err := con.Serve(ctx); err != nil {
+			log.Error("box console stopped", "err", err)
+		}
+	}()
+	go con.ZeroTouch(ctx)
+	select {
+	case <-con.Joined():
+		return con, nil
+	case <-ctx.Done():
+		return nil, nil
+	}
+}
+
+func run(ctx context.Context, ks keys.Store, consoleAddr string, log *slog.Logger) error {
+	var con *console.Server
+	if consoleAddr != "" {
+		var err error
+		if con, err = startConsole(ctx, ks, consoleAddr, log); err != nil || con == nil {
+			return err
+		}
+	}
+	id, err := readIdentity(ks)
+	if err != nil {
+		return fmt.Errorf("not enrolled (run exa-agent enrol first): %w", err)
 	}
 	priv, _, err := ks.WireGuard()
 	if err != nil {
@@ -144,6 +198,12 @@ func run(ctx context.Context, ks keys.Store, log *slog.Logger) error {
 		Log:     log,
 		Applier: &apply.Applier{Sys: sys, StateDir: ks.Dir, PrivateKey: priv, Log: log},
 		Steerer: &steer.Steerer{Sys: sys, StateDir: ks.Dir},
+	}
+	if con != nil {
+		a.Box = con.BoxInfo
+		a.BoxDesired = con.FromPortal
+		a.Notify = con.Notify
+		con.SetAgent(a)
 	}
 	return a.Run(ctx)
 }
@@ -195,8 +255,33 @@ func applyFile(ctx context.Context, ks keys.Store, file string, log *slog.Logger
 	return nil
 }
 
+func consoleCode(dir string, reset bool) error {
+	var code string
+	var err error
+	if reset {
+		code, err = console.ResetPassword(dir)
+	} else {
+		code, err = console.SetupCode(dir)
+	}
+	if err != nil {
+		return err
+	}
+	if code == "" {
+		fmt.Println("The box console already has an admin password. To set a new one, run: exa-agent console-reset")
+		return nil
+	}
+	fmt.Println("Box console setup code:", code)
+	if sn := console.Serial(""); sn != "" {
+		fmt.Println("Serial number:", sn)
+	}
+	if fp := console.CertFingerprint(dir); fp != "" {
+		fmt.Println("Console certificate SHA-256:", fp)
+	}
+	return nil
+}
+
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: exa-agent version|keygen|enrol|renew|run|apply [flags]")
+	fmt.Fprintln(os.Stderr, "usage: exa-agent version|keygen|enrol|renew|run|apply|console-code|console-reset [flags]")
 	os.Exit(2)
 }
 

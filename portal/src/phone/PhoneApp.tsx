@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { api, useApi } from "../api";
 import { AuthGate, useAuth } from "../auth";
 import { CustomerProvider, useCustomer } from "../customer";
@@ -293,6 +293,8 @@ function usePhone(base: string | null, cfg: WebPhone | null, settings: Settings)
   const [connecting, setConnecting] = useState(false);
   const [status, setStatus] = useState("");
   const [state, setState] = useState<CallState>("idle");
+  const stateRef = useRef(state);
+  stateRef.current = state;
   const [peer, setPeer] = useState<{ number: string; name: string }>({ number: "", name: "" });
   const [endReason, setEndReason] = useState("");
   // A short message after a call ends or can't start; it stays long enough to read.
@@ -309,6 +311,25 @@ function usePhone(base: string | null, cfg: WebPhone | null, settings: Settings)
   const call = useRef<{ dir: "in" | "out"; number: string; name: string; answeredAt: number | null } | null>(null);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
+  // Opened from a call notification (ADR 0045): answer the call that rings in the next
+  // seconds. The push came because the app was closed; the caller still hears ringing.
+  const answerUntil = useRef(0);
+  const answerRef = useRef<() => void>(() => undefined);
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    if (q.has("answer")) {
+      answerUntil.current = Date.now() + 40_000;
+      window.history.replaceState(null, "", `/phone${window.location.hash || "#keypad"}`);
+    }
+    // The app was already open in the background when the notification was tapped.
+    const onMsg = (e: MessageEvent) => {
+      if (e.data?.type !== "answer") return;
+      answerUntil.current = Date.now() + 40_000;
+      if (stateRef.current === "incoming") answerRef.current();
+    };
+    navigator.serviceWorker?.addEventListener("message", onMsg);
+    return () => navigator.serviceWorker?.removeEventListener("message", onMsg);
+  }, []);
   // The contact's name for the call being placed (from Contacts or Recents).
   const pendingName = useRef("");
   const setPeerName = (n: string) => (pendingName.current = n);
@@ -364,8 +385,13 @@ function usePhone(base: string | null, cfg: WebPhone | null, settings: Settings)
           if (s === "incoming") {
             setPeer({ number: d.number || "", name: d.name || "" });
             call.current = { dir: "in", number: d.number || "", name: d.name || "", answeredAt: null };
-            ringer.start(settingsRef.current.ringtone, settingsRef.current.volume);
-            notify(d.name || d.number || "Unknown caller");
+            if (Date.now() < answerUntil.current) {
+              answerUntil.current = 0;
+              setTimeout(() => answerRef.current(), 300);
+            } else {
+              ringer.start(settingsRef.current.ringtone, settingsRef.current.volume);
+              notify(d.name || d.number || "Unknown caller");
+            }
           } else ringer.stop();
           if (s === "calling") {
             setPeer({ number: d.number || "", name: pendingName.current });
@@ -450,6 +476,12 @@ function usePhone(base: string | null, cfg: WebPhone | null, settings: Settings)
     if (phoneRef.current) phoneRef.current.micId = settings.micId;
   }, [settings.micId]);
 
+  const answerNow = () => {
+    ringer.stop();
+    phoneRef.current?.answer().catch((e: Error) => say(e.message));
+  };
+  answerRef.current = answerNow;
+
   const notify = (who: string) => {
     if (!settingsRef.current.notify || document.visibilityState === "visible") return;
     if (!("Notification" in window) || Notification.permission !== "granted") return;
@@ -483,10 +515,7 @@ function usePhone(base: string | null, cfg: WebPhone | null, settings: Settings)
       call.current = { dir: "out", number: to.replace(/[^\d+*#]/g, ""), name, answeredAt: null };
       phoneRef.current?.call(to).catch((e: Error) => say(e.message));
     },
-    answer: () => {
-      ringer.stop();
-      phoneRef.current?.answer().catch((e: Error) => say(e.message));
-    },
+    answer: answerNow,
     hangup: () => {
       ringer.stop();
       phoneRef.current?.hangup();
@@ -764,10 +793,7 @@ function SettingsTab({
             Show a notification for incoming calls while the app is in the background
           </label>
         )}
-        <p className="ph-note">
-          Calls ring here while Jibsy Phone is open. On iPhone and iPad, keep it open on screen to take calls; on a computer
-          or Android, it can sit in the background.
-        </p>
+        <RingWhenClosed base={base} />
       </section>
 
       <section>
@@ -975,6 +1001,149 @@ function Install() {
       ) : (
         <p className="ph-note">In Chrome or Edge, choose Install from the address bar or the browser menu. On Android, choose Add to Home screen.</p>
       )}
+    </div>
+  );
+}
+
+/* ---- Ringing a closed app (ADR 0045) -------------------------------------------------- */
+
+interface PushStatus {
+  available: boolean;
+  public_key: string;
+  this_device: boolean;
+  devices: number;
+}
+
+function keyBytes(b64url: string): Uint8Array<ArrayBuffer> {
+  const b64 = (b64url + "=".repeat((4 - (b64url.length % 4)) % 4)).replace(/-/g, "+").replace(/_/g, "/");
+  const out = new Uint8Array(new ArrayBuffer(atob(b64).length));
+  atob(b64).split("").forEach((c, i) => (out[i] = c.charCodeAt(0)));
+  return out;
+}
+
+function RingWhenClosed({ base }: { base: string }) {
+  const [st, setSt] = useState<PushStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const ua = navigator.userAgent;
+  const ios = /iPhone|iPad|iPod/.test(ua) || (ua.includes("Mac") && navigator.maxTouchPoints > 1);
+  const standalone =
+    window.matchMedia("(display-mode: standalone)").matches || (navigator as { standalone?: boolean }).standalone === true;
+  const supported = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+
+  const registration = () => navigator.serviceWorker.getRegistration("/phone");
+  const load = useCallback(async () => {
+    if (!supported) return;
+    try {
+      const sub = await (await registration())?.pushManager.getSubscription();
+      const s = await api<PushStatus>(`${base}/voice/webphone/push?endpoint=${encodeURIComponent(sub?.endpoint || "")}`);
+      // The browser renewed this device's subscription: tell ExaCarib the new one.
+      if (sub && !s.this_device && s.available && Notification.permission === "granted") {
+        await api(`${base}/voice/webphone/push`, { method: "POST", body: JSON.stringify(sub.toJSON()) });
+        s.this_device = true;
+      }
+      setSt(s);
+    } catch (e) {
+      setMsg({ ok: false, text: (e as Error).message });
+    }
+  }, [base, supported]);
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const turnOn = async () => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      if ((await Notification.requestPermission()) !== "granted") {
+        throw new Error("Notifications are blocked for Jibsy Phone. Allow them in this device's settings, then try again.");
+      }
+      const reg = (await registration()) || (await navigator.serviceWorker.ready);
+      const sub =
+        (await reg.pushManager.getSubscription()) ||
+        (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(st?.public_key || "") }));
+      await api(`${base}/voice/webphone/push`, { method: "POST", body: JSON.stringify(sub.toJSON()) });
+      setMsg({ ok: true, text: "Done. Calls will ring on this device even when Jibsy Phone is closed." });
+      await load();
+    } catch (e) {
+      setMsg({ ok: false, text: (e as Error).message || "This device couldn't turn ringing on." });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const turnOff = async () => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const sub = await (await registration())?.pushManager.getSubscription();
+      if (sub) {
+        await api(`${base}/voice/webphone/push`, { method: "DELETE", body: JSON.stringify({ endpoint: sub.endpoint }) });
+        await sub.unsubscribe();
+      }
+      setMsg({ ok: true, text: "Off. Calls ring here only while Jibsy Phone is open." });
+      await load();
+    } catch (e) {
+      setMsg({ ok: false, text: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const test = async () => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const r = await api<{ devices: number; reached: number }>(`${base}/voice/webphone/push/test`, { method: "POST" });
+      setMsg({
+        ok: r.reached > 0,
+        text: r.reached
+          ? `Test sent to ${r.reached} ${r.reached === 1 ? "device" : "devices"}. A notification should appear in a few seconds.`
+          : "The test couldn't reach your devices. Turn ringing off and on again on each device.",
+      });
+    } catch (e) {
+      setMsg({ ok: false, text: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  let body: ReactNode;
+  if (ios && !standalone) {
+    body = (
+      <p className="ph-note">
+        On iPhone and iPad, calls can ring when Jibsy Phone is closed once it's on your Home Screen: in Safari, tap Share,
+        then Add to Home Screen, open Jibsy Phone from there and turn this on. Until then, keep the app open to take calls.
+      </p>
+    );
+  } else if (!supported) {
+    body = <p className="ph-note">This browser can't ring when the app is closed. Keep Jibsy Phone open to take calls.</p>;
+  } else if (st && !st.available) {
+    body = <p className="ph-note">Ringing when the app is closed isn't switched on yet. Keep Jibsy Phone open to take calls.</p>;
+  } else if (st) {
+    body = (
+      <>
+        <label className="ph-check">
+          <input type="checkbox" checked={st.this_device} disabled={busy} onChange={(e) => void (e.target.checked ? turnOn() : turnOff())} />
+          Ring this device when Jibsy Phone is closed
+        </label>
+        <p className="ph-note">
+          {st.this_device
+            ? "A call shows as a notification, even with the screen locked. Tap it to open the app and answer; the caller hears ringing meanwhile."
+            : "Turn this on to get calls while the app is closed or the screen is locked."}
+          {st.devices > (st.this_device ? 1 : 0) ? ` It's on for ${st.devices} of your devices.` : ""}
+        </p>
+        {st.devices > 0 && (
+          <button className="button secondary small" type="button" disabled={busy} onClick={() => void test()}>
+            Send a test notification
+          </button>
+        )}
+      </>
+    );
+  }
+  return (
+    <div className="ph-ring-closed">
+      <h3>When the app is closed</h3>
+      {body}
+      {msg && <p className={msg.ok ? "ph-ok" : "ph-error"} role="status">{msg.text}</p>}
     </div>
   );
 }

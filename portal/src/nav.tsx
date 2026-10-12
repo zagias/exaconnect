@@ -425,6 +425,7 @@ export function opsGroups(): Group[] {
     {
       label: "Platform",
       items: [
+        { to: "/admin/boxes", label: "Boxes", icon: icons.sites, keywords: "zero-touch serial devices claim install" },
         { to: "/admin/agents", label: "Agents", icon: icons.carrier, keywords: "nodes boxes" },
         { to: "/admin/partners", label: "Partners", icon: icons.fabric },
         { to: "/admin/protection", label: "Protection", icon: icons.shield, keywords: "ddos" },

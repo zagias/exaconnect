@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { api, useApi } from "../../api";
+import { boxSetupCode } from "../../box";
 import { ErrorNote, StatusPill, ago } from "../../components";
 import { Card, PageHead, useAction } from "../../ui";
 import { NoOrganisation } from "./Setup";
@@ -144,6 +145,20 @@ export default function LocationsPage() {
                         </StatusPill>{" "}
                         <Link to={`/sites/${l.connect.id}`}>{l.connect.name}</Link>, {l.connect.links} link
                         {l.connect.links === 1 ? "" : "s"}, seen {ago(l.connect.last_seen)}
+                        {l.connect.box_console && (
+                          <>
+                            {" "}
+                            <span className="tag" title="Someone at the location can also set this box up in its local box console">
+                              Box console
+                            </span>
+                            {l.connect.box_change && (
+                              <span className="small muted">
+                                {" "}
+                                Last change on the box: {l.connect.box_change.what}, {ago(l.connect.box_change.at)}
+                              </span>
+                            )}
+                          </>
+                        )}
                       </span>
                     ) : (
                       <span>
@@ -388,14 +403,15 @@ function InstallCode({
 }: {
   install: Install & { place?: string };
   onClose: () => void; hubReady: boolean }) {
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState("");
   const url = install.public_agent_url || install.agent_url;
   const command = `EXA_ENROL_TOKEN=${install.token} bash install.sh \\\n  --controller ${url} \\\n  --ca-fingerprint ${install.ca_fingerprint} \\\n  --name ${install.site}`;
-  const copy = () =>
+  const code = boxSetupCode({ controller: url, token: install.token, ca_fingerprint: install.ca_fingerprint, site: install.site });
+  const copy = (what: string, text: string) =>
     navigator.clipboard
-      ?.writeText(command)
-      .then(() => setCopied(true))
-      .catch(() => setCopied(false));
+      ?.writeText(text)
+      .then(() => setCopied(what))
+      .catch(() => setCopied(""));
   return (
     <section className="card install" aria-labelledby="install-title">
       <div className="card-head">
@@ -407,16 +423,27 @@ function InstallCode({
       <ol className="install-steps">
         <li>Plug the box into each internet link and into the office network.</li>
         <li>
-          On the box (Debian or Ubuntu Linux), with the site kit, run this as root. The code works once and expires{" "}
+          From a computer on the office network, open the box console (the address is on the box's label) and paste
+          this box setup code when it asks. The code works once and expires{" "}
           {new Date(install.expires_at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}.
         </li>
       </ol>
-      <pre className="mono small install-command">{command}</pre>
+      <pre className="mono small install-command box-setup-code">{code}</pre>
       <p className="form-actions">
-        <button className="button small" onClick={copy}>
-          {copied ? "✓ Copied" : "Copy the command"}
+        <button className="button small" onClick={() => copy("code", code)}>
+          {copied === "code" ? "✓ Copied" : "Copy the box setup code"}
         </button>
       </p>
+      <details className="install-alt">
+        <summary>Installing on your own Linux box instead</summary>
+        <p className="small">On the box (Debian or Ubuntu Linux), with the site kit, run this as root. It uses the same one-time code.</p>
+        <pre className="mono small install-command">{command}</pre>
+        <p className="form-actions">
+          <button className="button small secondary" onClick={() => copy("command", command)}>
+            {copied === "command" ? "✓ Copied" : "Copy the command"}
+          </button>
+        </p>
+      </details>
       <p className="small muted" style={{ marginBottom: 0 }}>
         The box only needs to reach out on port 8443; nothing comes in. It makes its own keys and sends only the public
         one. This location turns green here once the box checks in.

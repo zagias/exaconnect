@@ -131,6 +131,13 @@ def _ext_of(data: dict, kind: str, target_id: str | None) -> str | None:
     return None
 
 
+def _wake(data: dict, user_ext: str) -> str:
+    """Before an extension rings: if its Jibsy Phone is closed, wake it with a push message
+    and keep the caller hearing ringing while it connects (scripts/exa_ring.lua, ADR 0045)."""
+    args = " ".join((data["tenant"], user_ext, data["domain"], data["controller_url"]))
+    return f'        <action application="lua" data={a("exa_ring.lua " + args)}/>'
+
+
 def _dial(user_ext: str, dom: str) -> str:
     return f"user/{user_ext}@{dom}"
 
@@ -329,8 +336,10 @@ def _dialplan(data: dict) -> str:
                 f'        <action application="bridge" data={a("loopback/" + fwd + "/" + ctx)}/>',
             ]
         elif fwd:
+            out.append(_wake(data, fwd))
             out.append(f'        <action application="bridge" data={a(_dial(fwd, dom))}/>')
         else:
+            out.append(_wake(data, ext))
             out.append(f'        <action application="bridge" data={a(_dial(ext, dom))}/>')
         out += [
             '        <action application="answer"/>',

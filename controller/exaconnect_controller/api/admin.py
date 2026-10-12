@@ -152,7 +152,7 @@ def list_nodes(user: ViewerDep) -> list[dict]:
         return conn.execute(
             """SELECT n.id, n.name, s.kind AS role, n.customer_id, n.enrolled_at, n.last_seen,
                       n.applied_version, n.apply_ok, n.apply_error, n.agent_version,
-                      n.cert_serial LIKE 'revoked:%%' AS revoked,
+                      n.cert_serial LIKE 'revoked:%%' AS revoked, n.box, n.box_at, n.box_managed,
                       (SELECT max(version) FROM desired_states d WHERE d.node_id = n.id) AS desired_version
                FROM nodes n JOIN sites s ON s.id = n.site_id
                WHERE %(c)s::uuid IS NULL OR n.customer_id = %(c)s
