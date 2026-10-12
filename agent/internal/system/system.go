@@ -5,11 +5,13 @@ package system
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 type Runner interface {
@@ -56,7 +58,13 @@ func (Host) WriteFile(path string, data []byte, perm os.FileMode) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmp.Name(), path)
+	err = os.Rename(tmp.Name(), path)
+	if errors.Is(err, syscall.EBUSY) {
+		// A file bind-mounted in place (resolv.conf in a container) cannot be
+		// replaced, only written to.
+		return os.WriteFile(path, data, perm)
+	}
+	return err
 }
 
 func (Host) Exists(path string) bool {
