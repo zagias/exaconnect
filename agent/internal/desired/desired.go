@@ -62,6 +62,16 @@ type Box struct {
 	// Network is the box's ports as set in the portal (ADR 0051). The box
 	// takes it only while it is managed from the cloud or both.
 	Network *BoxNetwork `json:"network,omitempty"`
+	// Software is the box software version the portal wants on the box (ADR
+	// 0054). The box installs it with its A/B update (ADR 0052).
+	Software *BoxSoftware `json:"software,omitempty"`
+}
+
+// BoxSoftware asks for a box software version, from the portal's fleet updates.
+type BoxSoftware struct {
+	Version string    `json:"version"`
+	At      time.Time `json:"at"`
+	By      string    `json:"by,omitempty"`
 }
 
 // BoxNetwork is a port set-up made in the portal, in the box console's own

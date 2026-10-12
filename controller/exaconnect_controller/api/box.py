@@ -281,3 +281,82 @@ def delete_template(template_id: str, user: UserDep) -> dict:
         conn.execute("DELETE FROM box_templates WHERE id = %s", (t["id"],))
         audit.record(conn, user.actor, "box.template.delete", t["name"], t["customer_id"], {})
     return {"ok": True}
+
+
+# Fleet software updates (ADR 0054)
+
+
+class SoftwareIn(BaseModel):
+    site_ids: list[str] = Field(min_length=1, max_length=500)
+    version: str = Field(max_length=48)
+
+
+@router.get("/box-software/versions")
+def software_versions(user: UserDep) -> dict:
+    """Box software versions there are to install, newest first."""
+    try:
+        versions = boxes.releases()
+    except Exception:  # noqa: BLE001 (GitHub unreachable or answering oddly)
+        raise HTTPException(502, "Could not get the list of box software versions from GitHub.") from None
+    return {"versions": versions, "latest": versions[0] if versions else None}
+
+
+@router.get("/box-software")
+def list_software(user: UserDep, customer_id: str | None = None) -> dict:
+    """An organisation's boxes with the software each runs and what was asked of it."""
+    with db.tx() as conn:
+        cid = _org(user, customer_id)
+        rows = conn.execute(
+            """SELECT s.id AS site_id, s.name AS site, n.box, n.box_managed, n.box_software
+               FROM sites s JOIN nodes n ON n.site_id = s.id
+               WHERE s.customer_id = %s AND (n.box->>'console')::boolean ORDER BY s.name""",
+            (cid,),
+        ).fetchall()
+    return {
+        "boxes": [
+            {
+                "site_id": str(r["site_id"]),
+                "site": r["site"],
+                "managed": boxes.managed(r)["mode"],
+                **boxes.software_state(r),
+            }
+            for r in rows
+        ]
+    }
+
+
+@router.post("/box-software")
+def send_software(body: SoftwareIn, user: UserDep, customer_id: str | None = None) -> dict:
+    """Ask boxes for a software version: a newer one to update, an earlier one to
+    go back. Each box restarts into it and keeps it only if it comes up healthy."""
+    if not boxes.VERSION.match(body.version):
+        raise HTTPException(400, "That is not a version number.")
+    with db.tx() as conn:
+        cid = _org(user, customer_id)
+        require_org_manager(user, cid)
+        results = []
+        for sid in body.site_ids:
+            res: dict = {"site_id": sid, "ok": False}
+            row = None
+            if _UUID.match(sid):
+                row = conn.execute(
+                    """SELECT n.id, n.name, n.customer_id, n.box, n.box_managed, n.box_software, s.name AS site
+                       FROM sites s LEFT JOIN nodes n ON n.site_id = s.id
+                       WHERE s.id = %s AND s.customer_id = %s FOR UPDATE OF s""",
+                    (sid, cid),
+                ).fetchone()
+            if row is None:
+                res["error"] = "No such location in this organisation."
+            else:
+                res["site"] = row["site"]
+                if row["id"] is None or not (row["box"] or {}).get("console"):
+                    res["error"] = "No ExaCarib box at this location."
+                elif boxes.managed(row)["mode"] == "site":
+                    res["error"] = "This box is managed on site. Switch Managed from to Cloud or both first."
+                else:
+                    boxes.set_software(conn, row, body.version, user.actor)
+                    res["ok"] = True
+            results.append(res)
+        if any(r["ok"] for r in results):
+            boxes.desired.refresh(conn, cid)
+    return {"results": results}

@@ -960,6 +960,8 @@ CREATE TABLE IF NOT EXISTS box_templates (
   UNIQUE (customer_id, name)
 );
 ALTER TABLE nodes ADD COLUMN IF NOT EXISTS box_template_id uuid REFERENCES box_templates(id) ON DELETE SET NULL;
+-- The box software version asked for in the portal (ADR 0054): {version, at, by}.
+ALTER TABLE nodes ADD COLUMN IF NOT EXISTS box_software jsonb;
 
 -- ExaCarib boxes by serial number, for zero-touch installation (ADR 0050). A box
 -- calls home with its serial and a key it made on first boot; the first key seen

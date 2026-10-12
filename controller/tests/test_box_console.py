@@ -317,3 +317,53 @@ def test_box_templates(client, admin_headers):
     assert {x["site"]: x["template_id"] for x in listed["boxes"]}["site-a"] is None
     assert client.delete(f"/api/v1/box-templates/{tid}", headers=admin_headers).status_code == 200
     assert "network" in _desired(client, ha)["box"]
+
+
+def test_box_software(client, admin_headers, monkeypatch):
+    """Fleet software updates (ADR 0054): the portal asks boxes for a version, it
+    goes down in desired state, and each box's report of what became of it shows."""
+    tokens = _seed()["tokens"]
+    _, ha = _enrol(client, tokens, "site-a")
+    _, hb = _enrol(client, tokens, "site-b")
+    with db.tx() as conn:
+        sites = {r["name"]: r for r in conn.execute("SELECT id, name, customer_id FROM sites").fetchall()}
+    a, b = str(sites["site-a"]["id"]), str(sites["site-b"]["id"])
+    cid = str(sites["site-a"]["customer_id"])
+    now = dt.datetime.now(dt.UTC).isoformat()
+    image = {"console": True, "software": {"ab": True, "slot": "A", "version": "1.0.20"}}
+    apt = {"console": True}
+    assert client.post("/api/v1/agent/telemetry", headers=ha, json={"at": now, "box": image}).status_code == 204
+    assert client.post("/api/v1/agent/telemetry", headers=hb, json={"at": now, "box": apt}).status_code == 204
+
+    from exaconnect_controller import box as boxes
+
+    boxes._releases.update(at=0.0, versions=None)
+    fake = [
+        {"tag_name": "box-v1.0.21", "assets": [{"name": "exacarib-box-1.0.21-amd64.root.tar.zst"}]},
+        {"tag_name": "box-v1.0.20", "assets": [{"name": "exacarib-box-1.0.20-amd64.iso"}]},
+        {"tag_name": "v9", "assets": [{"name": "x-amd64.root.tar.zst"}]},
+    ]
+    monkeypatch.setattr(boxes, "releases", lambda fetch=None, _r=boxes.releases: _r(lambda u: fake))
+    r = client.get("/api/v1/box-software/versions", headers=admin_headers)
+    assert r.json() == {"versions": ["1.0.21"], "latest": "1.0.21"}
+
+    url = f"/api/v1/box-software?customer_id={cid}"
+    listed = {x["site"]: x for x in client.get(url, headers=admin_headers).json()["boxes"]}
+    assert listed["site-a"]["ab"] and listed["site-a"]["version"] == "1.0.20" and not listed["site-b"]["ab"]
+
+    assert client.post(url, json={"site_ids": [a], "version": "1.0;rm"}, headers=admin_headers).status_code == 400
+    client.post(f"/api/v1/sites/{b}/box/managed", json={"mode": "site"}, headers=admin_headers)
+    r = client.post(url, json={"site_ids": [a, b], "version": "1.0.21"}, headers=admin_headers)
+    res = {x.get("site"): x for x in r.json()["results"]}
+    assert res["site-a"]["ok"] and "managed on site" in res["site-b"]["error"]
+    down = _desired(client, ha)["box"]["software"]
+    assert down["version"] == "1.0.21" and down["by"].startswith("Connect portal")
+    assert "software" not in (_desired(client, hb).get("box") or {})
+    assert {x["site"]: x["state"] for x in client.get(url, headers=admin_headers).json()["boxes"]}["site-a"] == "sent"
+
+    # The box reports it installed and came back on the new version.
+    rep = {"version": "1.0.21", "at": down["at"], "state": "done"}
+    image = {**image, "software": {**image["software"], "slot": "B", "version": "1.0.21"}, "software_portal": rep}
+    assert client.post("/api/v1/agent/telemetry", headers=ha, json={"at": now, "box": image}).status_code == 204
+    a_row = {x["site"]: x for x in client.get(url, headers=admin_headers).json()["boxes"]}["site-a"]
+    assert a_row["state"] == "done" and a_row["version"] == "1.0.21" and a_row["asked"]["version"] == "1.0.21"

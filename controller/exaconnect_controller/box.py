@@ -19,7 +19,10 @@ from __future__ import annotations
 import datetime as dt
 import ipaddress
 import json
+import os
 import re
+import time
+import urllib.request
 from typing import Any
 
 import psycopg
@@ -59,6 +62,9 @@ def block(node: dict) -> dict[str, Any] | None:
     bn = node.get("box_network")
     if bn:
         out["network"] = {"network": bn["network"], "at": bn["at"], "by": bn.get("by") or ""}
+    sw = node.get("box_software")
+    if sw:
+        out["software"] = {"version": sw["version"], "at": sw["at"], "by": sw.get("by") or ""}
     return out
 
 
@@ -371,3 +377,78 @@ def portal_report(conn: psycopg.Connection, node: Any, portal: dict | None) -> N
         (Jsonb(masked["network"]), node.id, bn["at"]),
     )
     desired.refresh(conn, node.customer_id)
+
+
+# Fleet software updates (ADR 0054). The portal asks boxes for a box software
+# version (``nodes.box_software`` = {version, at, by}, down in desired state as
+# ``box.software``). A box installed from the ExaCarib box image installs it with
+# its A/B update (ADR 0052): it restarts into the new software and keeps it only
+# if it comes up healthy, otherwise it goes back to the old one by itself. It
+# reports what became of the request as ``box.software_portal``. Going back to an
+# earlier version fleet-wide is asking for that version.
+
+VERSION = re.compile(r"^[0-9][0-9A-Za-z.+~-]{0,40}$")
+RELEASES_REPO = os.environ.get("EXA_BOX_RELEASES", "zagias/exaconnect")
+_releases: dict[str, Any] = {"at": 0.0, "versions": None}
+
+
+def releases(fetch=None) -> list[str]:
+    """Box software versions with an update file, newest first (GitHub releases
+    box-v<version>), cached for ten minutes."""
+    if _releases["versions"] is not None and time.monotonic() - _releases["at"] < 600:
+        return _releases["versions"]
+    url = f"https://api.github.com/repos/{RELEASES_REPO}/releases?per_page=30"
+    if fetch is None:
+
+        def fetch(u: str) -> list:
+            req = urllib.request.Request(u, headers={"Accept": "application/vnd.github+json"})
+            with urllib.request.urlopen(req, timeout=10) as r:  # noqa: S310 (fixed https address)
+                return json.loads(r.read(4 << 20))
+
+    out = []
+    for r in fetch(url):
+        v = (r.get("tag_name") or "").removeprefix("box-v")
+        if v == r.get("tag_name") or not VERSION.match(v) or r.get("draft"):
+            continue
+        if any((a.get("name") or "").endswith("-amd64.root.tar.zst") for a in r.get("assets") or []):
+            out.append(v)
+    _releases.update(at=time.monotonic(), versions=out)
+    return out
+
+
+def set_software(conn: psycopg.Connection, node: dict, version: str, actor: str) -> dict[str, Any]:
+    """Ask a box for a software version. The caller refreshes desired state."""
+    now = dt.datetime.now(dt.UTC)
+    newest = max(_at(node.get("box_software")), _at(node.get("box_managed")))
+    if newest >= now:
+        now = newest + dt.timedelta(milliseconds=1)
+    who = actor.removeprefix("user:")
+    sw = {"version": version, "at": now.isoformat(), "by": f"Connect portal ({who})"}
+    conn.execute("UPDATE nodes SET box_software = %s WHERE id = %s", (Jsonb(sw), node["id"]))
+    audit.record(conn, actor, "box.software", node["name"], node["customer_id"], {"version": version})
+    conn.execute(
+        "INSERT INTO events (time, customer_id, node_id, kind, detail) VALUES (%s, %s, %s, 'box_software', %s)",
+        (now, node["customer_id"], node["id"], Jsonb({"by": sw["by"], "version": version})),
+    )
+    return sw
+
+
+def software_state(node: dict) -> dict[str, Any]:
+    """A box's software as the portal shows it: what runs, what was asked, what became of it."""
+    box = node.get("box") or {}
+    sw = box.get("software") or {}
+    asked = node.get("box_software")
+    rep = box.get("software_portal") or {}
+    state = None
+    if asked:
+        state = rep.get("state") if rep.get("at") and _at(rep) == _at(asked) else "sent"
+    return {
+        "ab": bool(sw.get("ab")),
+        "version": sw.get("version") or "",
+        "slot": sw.get("slot") or "",
+        "trial": bool(sw.get("trial")),
+        "installing": bool(sw.get("running")),
+        "asked": {"version": asked["version"], "at": asked["at"], "by": asked.get("by")} if asked else None,
+        "state": state,
+        "detail": rep.get("detail") if state and state != "sent" else None,
+    }

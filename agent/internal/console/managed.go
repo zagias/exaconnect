@@ -102,6 +102,7 @@ func (s *Server) FromPortal(b *desired.Box) {
 	}
 	s.fromPortalManaged(b.ManagedFrom)
 	s.fromPortalNetwork(b.Network)
+	s.fromPortalSoftware(b.Software)
 }
 
 func (s *Server) fromPortalManaged(mf *desired.ManagedFrom) {

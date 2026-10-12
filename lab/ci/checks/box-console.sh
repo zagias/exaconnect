@@ -84,6 +84,12 @@ if [[ $(sql "SELECT box_network->'network'->'wan'->0->'dns'->>0 FROM nodes WHERE
 else
   bad "no portal port set-up on the node"
 fi
+sw=$(sql "SELECT (box_software->>'version') || ' ' || coalesce(box->'software_portal'->>'state', 'none') FROM nodes WHERE id = '$node'")
+if [[ $sw == *" refused" ]]; then
+  ok "the box answered the portal's software update ($sw: not the box image, updates with apt)"
+else
+  bad "software update from the portal: ${sw:-not sent}"
+fi
 if docker exec "$box" ip -4 addr show dev eth1 | grep -q "$lan_ip/24"; then ok "office port kept its address"; else bad "office port lost its address"; fi
 # Port changes reload the firewall and zero its counters: knock on the internet port once more.
 curl -sk -o /dev/null --max-time 3 "https://${wan_addr%/*}/api/state" || true
