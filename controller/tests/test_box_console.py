@@ -101,7 +101,8 @@ def test_box_managed_from(client, admin_headers):
 
     now = dt.datetime.now(dt.UTC)
     box = {"console": True, "admin_set": True, "wan": [{"iface": "eth0", "path": "carrier-a", "mode": "dhcp"}]}
-    assert client.post("/api/v1/agent/telemetry", headers=h, json={"at": now.isoformat(), "box": box}).status_code == 204
+    r = client.post("/api/v1/agent/telemetry", headers=h, json={"at": now.isoformat(), "box": box})
+    assert r.status_code == 204
     got = client.get(url, headers=admin_headers).json()
     assert got == {"console": True, "managed": {"mode": "both", "at": None, "by": None}}
 
@@ -152,4 +153,5 @@ def test_box_managed_from(client, admin_headers):
     assert client.post(url, json={"mode": "cloud"}, headers=stranger).status_code == 403
     assert client.get(url, headers=stranger).status_code == 403
     assert client.post(url, json={"mode": "elsewhere"}, headers=admin_headers).status_code == 422
-    assert client.post("/api/v1/sites/nope/box/managed", json={"mode": "cloud"}, headers=admin_headers).status_code == 404
+    r = client.post("/api/v1/sites/nope/box/managed", json={"mode": "cloud"}, headers=admin_headers)
+    assert r.status_code == 404
