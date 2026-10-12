@@ -91,21 +91,21 @@ while IFS= read -r line; do
   esac
 done <<<"$out"
 # Both phones send how the call sounded when it ends (portal quality.ts); real calls do the same.
-reports=$(sql "SELECT count(*) FROM voice_call_quality q JOIN voice_users v ON v.customer_id = q.customer_id
-  AND v.extension = q.extension WHERE v.email LIKE 'phone-app-test-%' AND q.created_at > to_timestamp($started)")
+reports=$(sql "SELECT count(*) FROM voice_call_quality q JOIN users u ON u.id::text = q.user_id
+  WHERE u.email LIKE 'phone-app-test-%' AND q.created_at > to_timestamp($started)")
 if [[ ${reports:-0} -ge 2 ]]; then ok "both phones reported the call's quality to the controller ($reports reports)"
 else bad "call quality reports missing after the test call (${reports:-0} of 2)"; fi
 note "real calls in the last 24 h, as people's phones heard them (test accounts left out):"
 sql "SELECT count(*), round(avg(concealed_pct)::numeric, 2), round(max(concealed_pct)::numeric, 2),
     round(avg(100.0 * rx_lost / greatest(rx_packets + rx_lost, 1)), 2), round(avg(jitter_ms)), max(jitter_max_ms),
     round(avg(rtt_ms)), max(rtt_max_ms), round(avg(up_lost_pct)::numeric, 2), sum(bad_stretches)
-  FROM voice_call_quality q WHERE created_at > now() - interval '24 hours' AND NOT EXISTS (SELECT 1 FROM voice_users v
-    WHERE v.customer_id = q.customer_id AND v.extension = q.extension AND v.email ~ '(test|check)')" |
+  FROM voice_call_quality q WHERE created_at > now() - interval '24 hours' AND NOT EXISTS (SELECT 1 FROM users u
+    WHERE u.id::text = q.user_id AND u.email ~ '(test|check)')" |
   awk -F'|' '{ printf "      %s call legs; made-up sound avg %s%% (worst %s%%); loss in %s%%, out %s%%; jitter avg %s ms (max %s); round trip avg %s ms (max %s); %s break-ups\n", $1, $2, $3, $4, $9, $5, $6, $7, $8, $10 }'
 sql "SELECT to_char(created_at, 'HH24:MI'), extension, direction, secs, device, network, path, concealed_pct, bad_stretches,
     100.0 * rx_lost / greatest(rx_packets + rx_lost, 1), up_lost_pct, jitter_ms, jitter_max_ms, jitter_buffer_ms, rtt_ms, rtt_max_ms
-  FROM voice_call_quality q WHERE created_at > now() - interval '24 hours' AND NOT EXISTS (SELECT 1 FROM voice_users v
-    WHERE v.customer_id = q.customer_id AND v.extension = q.extension AND v.email ~ '(test|check)')
+  FROM voice_call_quality q WHERE created_at > now() - interval '24 hours' AND NOT EXISTS (SELECT 1 FROM users u
+    WHERE u.id::text = q.user_id AND u.email ~ '(test|check)')
   ORDER BY created_at DESC LIMIT 20" |
   awk -F'|' '{ printf "      %s ext %s %s %ss %s %s via %s: made-up %s%%, %s break-ups, loss in %.1f%% out %s%%, jitter %s/%s ms, buffer %s ms, rtt %s/%s ms\n", $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16 }'
 if ! grep -q '^PASS ' <<<"$out"; then
