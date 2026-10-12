@@ -30,7 +30,7 @@ export function BoxTag({ box }: { box?: BoxInfo | null }) {
 /** One line saying the box is also managed locally, and what was last changed there. */
 export function BoxManagedNote({ box }: { box?: BoxInfo | null }) {
   if (!box?.console) return null;
-  const wan = (box.wan ?? []).map((p) => `${PATH_NAMES[p.path] ?? p.path} on ${p.iface}`).join(", ");
+  const wan = (box.wan ?? []).map((p) => `${(p.path && PATH_NAMES[p.path]) || p.path || "Internet"} on ${p.iface}`).join(", ");
   return (
     <p className="small muted box-note">
       <BoxTag box={box} /> Also managed on the box itself

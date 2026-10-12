@@ -173,6 +173,21 @@ function cloudBanner(m) {
     h("a", { href: "#/settings" }, "Take back control")));
 }
 
+const PORTAL_WORDS = {
+  trying: ["warn", "Trying ports set in the Connect portal. The box keeps them once it can still reach ExaCarib with them, and puts the earlier ports back otherwise."],
+  kept: ["good", "Ports last set in the Connect portal"],
+  undone: ["bad", "Ports set in the Connect portal were put back"],
+  refused: ["bad", "Ports set in the Connect portal were not used"],
+  replaced: ["none", "Ports set in the Connect portal were changed again on this box"],
+};
+
+function portalNote(p) {
+  if (!p || !p.at || !PORTAL_WORDS[p.state]) return null;
+  const [kind, words] = PORTAL_WORDS[p.state];
+  if (p.state === "kept" && Date.now() - Date.parse(p.at) > 86400000) return null;
+  return note(kind === "none" ? "warn" : kind, `${words}${p.by ? ` (${p.by}, ${ago(p.at)})` : ""}${p.detail ? `: ${p.detail}` : ""}.`);
+}
+
 async function overview() {
   const o = await api("overview");
   if (!o.setup.network || !o.setup.joined) {
@@ -184,9 +199,9 @@ async function overview() {
     return;
   }
   show(head("Overview", o.controller.name || o.hostname, `This box runs ExaCarib Connect at this location. It keeps forwarding on its last settings if it loses touch with ExaCarib.`),
-    cloudBanner(o.managed), pendingBanner(o.pending), ...overviewCards(o));
+    cloudBanner(o.managed), portalNote(o.portal), pendingBanner(o.pending), ...overviewCards(o));
   timer = setInterval(async () => {
-    try { const n = await api("overview"); if ((location.hash.slice(1) || "/") === "/") show(head("Overview", n.controller.name || n.hostname, "This box runs ExaCarib Connect at this location. It keeps forwarding on its last settings if it loses touch with ExaCarib."), cloudBanner(n.managed), pendingBanner(n.pending), ...overviewCards(n)); } catch { /* next time */ }
+    try { const n = await api("overview"); if ((location.hash.slice(1) || "/") === "/") show(head("Overview", n.controller.name || n.hostname, "This box runs ExaCarib Connect at this location. It keeps forwarding on its last settings if it loses touch with ExaCarib."), cloudBanner(n.managed), portalNote(n.portal), pendingBanner(n.pending), ...overviewCards(n)); } catch { /* next time */ }
   }, 5000);
 }
 

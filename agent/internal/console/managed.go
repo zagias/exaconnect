@@ -97,10 +97,18 @@ func (s *Server) setManaged(m Managed) (bool, error) {
 // every new desired state (the agent's BoxDesired hook). The newest setting
 // wins, whichever side made it.
 func (s *Server) FromPortal(b *desired.Box) {
-	if b == nil || b.ManagedFrom == nil || !validMode(b.ManagedFrom.Mode) {
+	if b == nil {
 		return
 	}
-	in := Managed{Mode: b.ManagedFrom.Mode, At: b.ManagedFrom.At.UTC(), By: b.ManagedFrom.By}
+	s.fromPortalManaged(b.ManagedFrom)
+	s.fromPortalNetwork(b.Network)
+}
+
+func (s *Server) fromPortalManaged(mf *desired.ManagedFrom) {
+	if mf == nil || !validMode(mf.Mode) {
+		return
+	}
+	in := Managed{Mode: mf.Mode, At: mf.At.UTC(), By: mf.By}
 	cur := s.managed()
 	if in.Mode == cur.Mode && !in.At.After(cur.At) {
 		return
