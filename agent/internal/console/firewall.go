@@ -74,6 +74,7 @@ func BoxNFT(n *Network) string {
 	}
 	b.WriteString("\t\ttcp dport 443 accept comment \"box console\"\n")
 	b.WriteString("\t\tudp dport 67 accept comment \"DHCP for the office\"\n")
+	b.WriteString("\t\tudp dport 161 accept comment \"SNMP from the office\"\n")
 	b.WriteString("\t\tmeta l4proto { tcp, udp } th dport 53 accept comment \"DNS for the office\"\n")
 	b.WriteString("\t\tcounter comment \"other\"\n")
 	b.WriteString("\t}\n}\n")

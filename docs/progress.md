@@ -416,3 +416,12 @@ on the office side only; flood and SYN limits like the PoP's), SYN cookies and d
 security updates. GitHub Actions builds both, boots the image and sets it up, and
 publishes them as a release; the lab boots the published image and joins it to live
 Connect.
+
+## 2026-10-12: box monitoring (ADR 0048)
+
+The box console has a Monitoring page: SNMP v2c/v3 polling (snmpd), traps for
+link changes and every agent event, syslog to the customer's collector, and
+read-only API keys. The box image test polls, receives a trap and a syslog
+message, and reads with an API key on every build. Also: the console now waits
+for the image's set-up DHCP to stop before starting its own (it failed box
+image run 12 with "Address already in use").

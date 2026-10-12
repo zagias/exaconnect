@@ -125,6 +125,9 @@ type Agent struct {
 	// Box, when set, reports what the box console set up locally (ADR 0046)
 	// with every telemetry flush.
 	Box func() any
+	// Notify, when set, hears every event as it happens (the box's SNMP traps,
+	// ADR 0048). It runs on its own goroutine and must not block for long.
+	Notify func(Event)
 
 	mu          sync.Mutex
 	current     *desired.State
@@ -447,7 +450,7 @@ func (a *Agent) controllerError(err error) {
 	if !a.silent && time.Since(a.lastContact) > a.Cfg.SilentAfter {
 		a.silent = true
 		a.Log.Warn("controller silent; holding the last good state and current paths", "since", a.lastContact.Format(time.RFC3339), "err", err)
-		a.buf.Events = append(a.buf.Events, Event{At: time.Now(), Kind: "controller_silent"})
+		a.addEvent(Event{At: time.Now(), Kind: "controller_silent"})
 	} else if !a.silent {
 		a.Log.Warn("controller unreachable", "err", err)
 	}
@@ -460,7 +463,7 @@ func (a *Agent) controllerOK() {
 	if a.silent {
 		a.silent = false
 		a.Log.Info("controller reachable again; reconciling")
-		a.buf.Events = append(a.buf.Events, Event{At: time.Now(), Kind: "controller_back"})
+		a.addEvent(Event{At: time.Now(), Kind: "controller_back"})
 	}
 }
 
@@ -638,7 +641,7 @@ func (a *Agent) checkBFD(ctx context.Context) (changed bool) {
 		tunnel := tunnelOf(a.current, p.Peer, p.Interface)
 		old, ok := a.bfd[p.Peer]
 		if ok && old.Status != p.Status {
-			a.buf.Events = append(a.buf.Events, Event{At: time.Now(), Kind: "bfd_" + p.Status,
+			a.addEvent(Event{At: time.Now(), Kind: "bfd_" + p.Status,
 				Detail: map[string]string{"peer": p.Peer, "tunnel": tunnel}})
 			a.Log.Info("bfd change", "peer", p.Peer, "tunnel", tunnel, "status", p.Status)
 		}
@@ -731,14 +734,22 @@ func (a *Agent) flush(ctx context.Context) {
 // such as the box console, keeping when it happened.
 func (a *Agent) EventAt(at time.Time, kind string, detail map[string]string) {
 	a.mu.Lock()
-	a.buf.Events = append(a.buf.Events, Event{At: at, Kind: kind, Detail: detail})
+	a.addEvent(Event{At: at, Kind: kind, Detail: detail})
 	a.mu.Unlock()
 }
 
 func (a *Agent) event(kind string, detail map[string]string) {
 	a.mu.Lock()
-	a.buf.Events = append(a.buf.Events, Event{At: time.Now(), Kind: kind, Detail: detail})
+	a.addEvent(Event{At: time.Now(), Kind: kind, Detail: detail})
 	a.mu.Unlock()
+}
+
+// addEvent queues an event for the controller. Caller holds a.mu.
+func (a *Agent) addEvent(e Event) {
+	a.buf.Events = append(a.buf.Events, e)
+	if a.Notify != nil {
+		go a.Notify(e)
+	}
 }
 
 func itoa(n int64) string { b, _ := json.Marshal(n); return string(b) }
@@ -974,7 +985,7 @@ func (a *Agent) steer(ctx context.Context, why string) {
 	a.mu.Lock()
 	a.choices = choices
 	for _, ev := range moves(prev, choices, why) {
-		a.buf.Events = append(a.buf.Events, ev)
+		a.addEvent(ev)
 		a.Log.Info("class moved", "class", ev.Detail["class"], "dst", ev.Detail["dst"], "from", ev.Detail["from"], "to", ev.Detail["to"], "why", why)
 	}
 	a.mu.Unlock()
