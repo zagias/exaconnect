@@ -79,12 +79,14 @@ if [[ $(sql "SELECT box_template_id IS NOT NULL FROM nodes WHERE id = '$node'") 
 else
   bad "the box does not follow a template"
 fi
-if [[ $(sql "SELECT box_network->'network'->>'lan_dhcp' FROM nodes WHERE id = '$node'") == true ]]; then
+if [[ $(sql "SELECT box_network->'network'->'wan'->0->'dns'->>0 FROM nodes WHERE id = '$node'") == 9.9.9.9 ]]; then
   ok "the controller has the portal's port set-up"
 else
   bad "no portal port set-up on the node"
 fi
 if docker exec "$box" ip -4 addr show dev eth1 | grep -q "$lan_ip/24"; then ok "office port kept its address"; else bad "office port lost its address"; fi
+# Port changes reload the firewall and zero its counters: knock on the internet port once more.
+curl -sk -o /dev/null --max-time 3 "https://${wan_addr%/*}/api/state" || true
 fw=$(docker exec "$box" nft list table inet exa_box 2>&1)
 if grep -q 'policy drop' <<<"$fw" && grep -Eq 'iifname "eth0" counter packets [1-9][0-9]* .*comment "inbound"' <<<"$fw"; then
   ok "the box's firewall drops what arrives on the internet port"
