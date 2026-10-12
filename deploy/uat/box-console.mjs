@@ -267,7 +267,8 @@ try {
     (await swRow.innerText()).includes("updates with apt") ? ok("Box software lists the box and how it updates") : bad("box software row: " + (await swRow.innerText()).replace(/\s+/g, " "));
     const newest = await q.getByLabel("Version").inputValue({ timeout: 10000 }).catch(() => "");
     if (!newest) {
-      bad("Box software has no versions to offer: " + (await text(q)).slice(0, 200));
+      const why = await q.evaluate(async () => { const r = await fetch("/api/v1/box-software/versions", { headers: { "X-Requested-With": "exa-portal" } }); return r.status + " " + (await r.text()); }).catch((e) => String(e));
+      bad("Box software has no versions to offer: " + why.slice(0, 200));
     } else {
       await q.getByLabel("Update " + E.SITE_NAME).check();
       await q.getByRole("button", { name: "Send to the ticked boxes" }).click();
