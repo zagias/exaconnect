@@ -144,6 +144,7 @@ type Agent struct {
 	bfdErr      string
 	lastContact time.Time
 	silent      bool
+	reached     bool   // the controller has answered since start
 	lastFailure string // version+error of the last failed apply, to avoid repeating events
 	applyErr    string // the last apply's error, for the box console; guarded by mu
 	steerMap    *steer.Map
@@ -466,6 +467,7 @@ func (a *Agent) controllerOK() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.lastContact = time.Now()
+	a.reached = true
 	if a.silent {
 		a.silent = false
 		a.Log.Info("controller reachable again; reconciling")
@@ -748,6 +750,14 @@ func (a *Agent) event(kind string, detail map[string]string) {
 	a.mu.Lock()
 	a.addEvent(Event{At: time.Now(), Kind: kind, Detail: detail})
 	a.mu.Unlock()
+}
+
+// ControllerOK says the controller has answered since the agent started and
+// is not silent now (the box's update health check, ADR 0052).
+func (a *Agent) ControllerOK() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.reached && !a.silent
 }
 
 // addEvent queues an event for the controller. Caller holds a.mu.

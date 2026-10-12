@@ -92,6 +92,7 @@ type Server struct {
 	pendingEngine string
 	monMu         sync.Mutex // one monitoring change at a time
 	keyMu         sync.Mutex // the API key file
+	upd           updater    // software updates (ADR 0052)
 }
 
 // Change is the last thing changed on the box itself.
@@ -262,10 +263,12 @@ type BoxInfo struct {
 	// set-up from the portal (ADR 0051).
 	Ports  []BoxIface    `json:"ports,omitempty"`
 	Portal *PortalChange `json:"portal,omitempty"`
+	// Software is the box image's software slots (ADR 0052).
+	Software *UpdateInfo `json:"software,omitempty"`
 }
 
-// BoxInfo is the agent's Box hook.
-func (s *Server) BoxInfo() any {
+// boxBase is BoxInfo without the software slots.
+func (s *Server) boxBase() BoxInfo {
 	c, _ := s.auth.creds()
 	ifs, _ := Ports(s.Root)
 	s.mu.Lock()
@@ -293,6 +296,16 @@ func (s *Server) BoxInfo() any {
 		b.Portal = &p
 	}
 	b.URL = s.consoleURL()
+	return b
+}
+
+// BoxInfo is the agent's Box hook.
+func (s *Server) BoxInfo() any {
+	b := s.boxBase()
+	if s.hasUpdater() {
+		st := s.updateStatus(context.Background(), false)
+		b.Software = &UpdateInfo{AB: st.AB, Slot: st.Slot, Version: st.Version, Trial: st.Trial, Running: st.Running, Last: st.Last}
+	}
 	return b
 }
 
@@ -387,6 +400,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/network/confirm", s.signedIn(s.handleConfirm))
 	mux.HandleFunc("POST /api/join", s.signedIn(s.handleJoin))
 	mux.HandleFunc("POST /api/diag", s.signedIn(s.handleDiag))
+	mux.HandleFunc("GET /api/health", s.handleHealth)
+	mux.HandleFunc("GET /api/update", s.signedIn(s.handleGetUpdate))
+	mux.HandleFunc("GET /api/update/latest", s.signedIn(s.handleLatest))
+	mux.HandleFunc("POST /api/update", s.signedIn(s.local(s.handleStartUpdate)))
+	mux.HandleFunc("POST /api/update/rollback", s.signedIn(s.handleRollback))
 	mux.HandleFunc("GET /api/managed", s.signedIn(s.handleGetManaged))
 	mux.HandleFunc("GET /api/ztp", s.signedIn(s.handleZTP))
 	mux.HandleFunc("POST /api/managed", s.signedIn(s.handleSetManaged))

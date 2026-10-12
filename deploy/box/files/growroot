@@ -1,7 +1,0 @@
-#!/bin/sh
-# First boot of the ExaCarib image: use the whole disk for the root file system.
-root=$(findmnt -no SOURCE /)
-disk=/dev/$(lsblk -no PKNAME "$root")
-part=$(cat "/sys/class/block/${root##*/}/partition")
-growpart "$disk" "$part" || true  # NOCHANGE when it already fills the disk
-resize2fs "$root"
