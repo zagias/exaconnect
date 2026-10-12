@@ -77,6 +77,7 @@ type Server struct {
 	pendingEngine string
 	monMu         sync.Mutex // one monitoring change at a time
 	keyMu         sync.Mutex // the API key file
+	upd           updater    // software updates (ADR 0049)
 }
 
 // Change is the last thing changed on the box itself.
@@ -203,17 +204,18 @@ type BoxPort struct {
 // BoxInfo goes up with telemetry, so the portal can show the box is also
 // managed locally, and on which ports.
 type BoxInfo struct {
-	Console    bool      `json:"console"`
-	URL        string    `json:"url,omitempty"`
-	AdminSet   bool      `json:"admin_set"`
-	WAN        []BoxPort `json:"wan,omitempty"`
-	LAN        *BoxPort  `json:"lan,omitempty"`
-	LANDHCP    bool      `json:"lan_dhcp,omitempty"`
-	LastChange *Change   `json:"last_change,omitempty"`
+	Console    bool        `json:"console"`
+	URL        string      `json:"url,omitempty"`
+	AdminSet   bool        `json:"admin_set"`
+	WAN        []BoxPort   `json:"wan,omitempty"`
+	LAN        *BoxPort    `json:"lan,omitempty"`
+	LANDHCP    bool        `json:"lan_dhcp,omitempty"`
+	LastChange *Change     `json:"last_change,omitempty"`
+	Software   *UpdateInfo `json:"software,omitempty"`
 }
 
-// BoxInfo is the agent's Box hook.
-func (s *Server) BoxInfo() any {
+// boxBase is BoxInfo without the software slots.
+func (s *Server) boxBase() BoxInfo {
 	c, _ := s.auth.creds()
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -228,6 +230,16 @@ func (s *Server) BoxInfo() any {
 		}
 	}
 	b.URL = s.consoleURL()
+	return b
+}
+
+// BoxInfo is the agent's Box hook.
+func (s *Server) BoxInfo() any {
+	b := s.boxBase()
+	if s.hasUpdater() {
+		st := s.updateStatus(context.Background(), false)
+		b.Software = &UpdateInfo{AB: st.AB, Slot: st.Slot, Version: st.Version, Trial: st.Trial, Running: st.Running, Last: st.Last}
+	}
 	return b
 }
 
@@ -322,6 +334,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/network/confirm", s.signedIn(s.handleConfirm))
 	mux.HandleFunc("POST /api/join", s.signedIn(s.handleJoin))
 	mux.HandleFunc("POST /api/diag", s.signedIn(s.handleDiag))
+	mux.HandleFunc("GET /api/health", s.handleHealth)
+	mux.HandleFunc("GET /api/update", s.signedIn(s.handleGetUpdate))
+	mux.HandleFunc("GET /api/update/latest", s.signedIn(s.handleLatest))
+	mux.HandleFunc("POST /api/update", s.signedIn(s.handleStartUpdate))
+	mux.HandleFunc("POST /api/update/rollback", s.signedIn(s.handleRollback))
 	mux.HandleFunc("GET /api/monitoring", s.signedIn(s.handleGetMonitoring))
 	mux.HandleFunc("POST /api/monitoring", s.signedIn(s.handleSetMonitoring))
 	mux.HandleFunc("POST /api/monitoring/test", s.signedIn(s.handleTestMonitoring))

@@ -11,12 +11,15 @@
 #
 #   deploy/box/test-image.sh start <image.qcow2> <dir>  boot; <dir>/setup-code (0600) once shown
 #   deploy/box/test-image.sh check <dir>                set-up checks through the console API
+#   deploy/box/test-image.sh update <dir> <root.tar.zst> software slots (ADR 0049): a good update
+#                                                       is kept, a broken one and a hanging one undo
+#                                                       themselves (the hardware watchdog resets the hang)
 #   deploy/box/test-image.sh stop <dir>
 # Uses KVM when /dev/kvm is there, and is slower without it. Prints PASS/FAIL lines.
 set -uo pipefail
 cmd=$1
 LAN_PORT=${LAN_PORT:-9443} WAN_PORT=${WAN_PORT:-9444}
-SNMP_PORT=${SNMP_PORT:-9161} SNMP_WAN_PORT=${SNMP_WAN_PORT:-9162} TRAP_PORT=${TRAP_PORT:-9163} SYSLOG_PORT=${SYSLOG_PORT:-9514}
+HTTP_PORT=${HTTP_PORT:-9180} SNMP_PORT=${SNMP_PORT:-9161} SNMP_WAN_PORT=${SNMP_WAN_PORT:-9162} TRAP_PORT=${TRAP_PORT:-9163} SYSLOG_PORT=${SYSLOG_PORT:-9514}
 pass() { echo "PASS $*"; }
 fail() { echo "FAIL $*"; FAILS=$((${FAILS:-0} + 1)); }
 
@@ -29,7 +32,7 @@ start)
   [[ -w /dev/kvm ]] && accel=kvm
   qemu-system-x86_64 -machine q35,accel=$accel -cpu max -m 1024 -smp 2 \
     -display none -monitor none -serial "file:$dir/serial.log" -daemonize -pidfile "$dir/qemu.pid" \
-    -drive "file=$dir/disk.qcow2,if=virtio" \
+    -drive "file=$dir/disk.qcow2,if=virtio" -device i6300esb -action watchdog=reset \
     -netdev "user,id=wan,hostfwd=tcp:127.0.0.1:$WAN_PORT-:443,hostfwd=udp:127.0.0.1:$SNMP_WAN_PORT-:161" -device virtio-net-pci,netdev=wan \
     -netdev "user,id=lan,net=192.168.50.0/24,host=192.168.50.2,dhcpstart=192.168.50.240,hostfwd=tcp:127.0.0.1:$LAN_PORT-192.168.50.1:443,hostfwd=udp:127.0.0.1:$SNMP_PORT-192.168.50.1:161" \
     -device virtio-net-pci,netdev=lan || { fail "the VM did not start"; exit 1; }
@@ -62,6 +65,7 @@ start)
 check)
   dir=$2 B="https://127.0.0.1:$LAN_PORT" W="https://127.0.0.1:$WAN_PORT"
   jar="$dir/cookies" pw=$(openssl rand -base64 18)
+  (umask 077 && echo "$pw" >"$dir/pw")
   c=(curl -sk --max-time 60 -b "$jar" -c "$jar" -H 'X-Exa-Box: 1' -H 'Content-Type: application/json')
   code=$(cat "$dir/setup-code")
   [[ $("${c[@]}" -o /dev/null -w '%{http_code}' "$W/api/state") == 200 ]] &&
@@ -138,13 +142,80 @@ PY
   unset key comm a3 p3
   exit "${FAILS:-0}"
   ;;
+update)
+  dir=$2 root=$3 B="https://127.0.0.1:$LAN_PORT" U="http://192.168.50.2:$HTTP_PORT"
+  jar="$dir/cookies"
+  c=(curl -sk --max-time 60 -b "$jar" -c "$jar" -H 'X-Exa-Box: 1' -H 'Content-Type: application/json')
+  signin() {
+    for _ in $(seq 1 "${1:-120}"); do
+      if curl -sk -o /dev/null --max-time 3 "$B/api/state"; then
+        "${c[@]}" -o /dev/null -X POST "$B/api/login" -d "{\"user\": \"admin\", \"password\": \"$(cat "$dir/pw")\"}" && return 0
+      fi
+      sleep 5
+    done
+    return 1
+  }
+  boots() { tr -d '\r' <"$dir/serial.log" | grep -c 'Command line:.*exacarib\.slot='; }
+  field() { sed -n "s/.*\"$1\": *\"\{0,1\}\([^\",}]*\).*/\1/p" | head -n1; }
+  # The update files, served to the box from the office side (this host).
+  web=$dir/web
+  mkdir -p "$web/x/usr/bin" "$web/h/etc/systemd/system/multi-user.target.wants"
+  ln -f "$root" "$web/good.tar.zst" 2>/dev/null || cp "$root" "$web/good.tar.zst"
+  printf '#!/bin/sh\nexit 1\n' >"$web/x/usr/bin/exa-agent" && chmod 755 "$web/x/usr/bin/exa-agent"
+  printf '[Service]\nType=oneshot\nExecStart=/bin/sh -c "sleep 20; sysctl -w kernel.panic=0; echo c >/proc/sysrq-trigger"\n' \
+    >"$web/h/etc/systemd/system/exacarib-test-hang.service"
+  ln -s ../exacarib-test-hang.service "$web/h/etc/systemd/system/multi-user.target.wants/exacarib-test-hang.service"
+  { cat "$root"; tar --owner=0 --group=0 -C "$web/x" -c usr/bin/exa-agent | zstd -q; } >"$web/broken.tar.zst"
+  { cat "$root"; tar --owner=0 --group=0 -C "$web/h" -c etc/systemd/system/exacarib-test-hang.service \
+    etc/systemd/system/multi-user.target.wants/exacarib-test-hang.service | zstd -q; } >"$web/hang.tar.zst"
+  (cd "$web" && exec python3 -m http.server -b 127.0.0.1 "$HTTP_PORT" >/dev/null 2>&1) &
+  web_pid=$!
+  trap 'kill $web_pid 2>/dev/null' EXIT
+  sleep 1
+  r=$("${c[@]}" "$B/api/update")
+  grep -q '"ab": *true' <<<"$r" && grep -q '"slot": *"A"' <<<"$r" && pass "the image boots from software slot A" || fail "update status: ${r:0:300}"
+  grep -q '"state": *"active"' <<<"$r" && pass "the hardware watchdog is on ($(field device <<<"$r"))" || fail "watchdog: $(grep -o '"watchdog": *{[^}]*}' <<<"$r")"
+  # try <variant> <want slot> <want result> <what>: install, restart, check the outcome.
+  try() {
+    local n0 sum r
+    n0=$(boots)
+    sum=$(sha256sum "$web/$1.tar.zst" | cut -c1-64)
+    r=$("${c[@]}" -X POST "$B/api/update" -d "{\"url\": \"$U/$1.tar.zst\", \"sha256\": \"$sum\", \"version\": \"test-$1\"}")
+    grep -q 'Installing' <<<"$r" || { fail "$4: ${r:0:200}"; return; }
+    for _ in $(seq 1 240); do [[ $(boots) -gt $n0 ]] && break; sleep 5; done
+    [[ $(boots) -gt $n0 ]] || { fail "$4: the box never restarted: $("${c[@]}" "$B/api/update" | head -c 300)"; return; }
+    # Wait until the box settles on a kept slot.
+    for _ in $(seq 1 150); do
+      if signin 6 && r=$("${c[@]}" "$B/api/update") && grep -q '"trial": *false' <<<"$r" && ! grep -q '"result": *"trying"' <<<"$r"; then break; fi
+      sleep 5
+    done
+    if grep -q "\"slot\": *\"$2\"" <<<"$r" && grep -q "\"result\": *\"$3\"" <<<"$r"; then
+      pass "$4 ($(sed -n 's/.*"why": *"\([^"]*\)".*/\1/p' <<<"$r"))"
+    else
+      fail "$4: $(grep -o '"slot": *"[AB]"' <<<"$r" | head -n1) $(grep -o '"last": *{[^}]*}' <<<"$r")"
+    fi
+  }
+  try good B ok "a good update is installed in slot B and kept"
+  r=$("${c[@]}" "$B/api/monitoring")
+  grep -q '"community_set": *true' <<<"$r" && grep -q '"name": *"Test NMS"' <<<"$r" && pass "monitoring settings and API keys came over" || fail "settings after the update: ${r:0:200}"
+  r=$("${c[@]}" "$B/api/network")
+  grep -q '192.168.50.1/24' <<<"$r" && pass "the port settings came over" || fail "ports after the update: ${r:0:200}"
+  try broken B rolled_back "a broken update (the agent will not start) goes back on its own"
+  n=$(boots)
+  try hang B rolled_back "an update that hangs the box is reset by the watchdog and goes back"
+  tr -d '\r' <"$dir/serial.log" | grep -q 'Kernel panic' && [[ $(boots) -ge $((n + 2)) ]] &&
+    pass "the hung box restarted without anyone (kernel stopped, watchdog reset)" || fail "no watchdog reset seen in the box's console log"
+  kill $web_pid 2>/dev/null
+  rm -rf "$web"
+  exit "${FAILS:-0}"
+  ;;
 stop)
   dir=$2
   [[ -s $dir/qemu.pid ]] && kill "$(cat "$dir/qemu.pid")" 2>/dev/null
-  rm -f "$dir/disk.qcow2" "$dir/cookies" "$dir/setup-code" "$dir/traps" "$dir/syslog"
+  rm -rf "$dir/disk.qcow2" "$dir/cookies" "$dir/setup-code" "$dir/pw" "$dir/traps" "$dir/syslog" "$dir/web"
   ;;
 *)
-  sed -n '2,17p' "$0"
+  sed -n '2,20p' "$0"
   exit 2
   ;;
 esac

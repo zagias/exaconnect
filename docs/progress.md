@@ -425,3 +425,13 @@ read-only API keys. The box image test polls, receives a trap and a syslog
 message, and reads with an API key on every build. Also: the console now waits
 for the image's set-up DHCP to stop before starting its own (it failed box
 image run 12 with "Address already in use").
+
+## 2026-10-12: box software slots and watchdogs (ADR 0049)
+
+The box image has two root slots. Settings > Software in the box console
+installs a release into the other slot; the box restarts into it and keeps it
+only after 2 minutes of good health, otherwise it goes back on its own. The
+hardware watchdog resets a hung box and systemd restarts a hung agent. The
+image test proves a good update is kept with its settings, and that a broken
+and a hanging update both undo themselves.
+

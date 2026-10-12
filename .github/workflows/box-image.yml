@@ -75,15 +75,18 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm.rules >/dev/null
           sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
           sudo apt-get update -qq
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq libguestfs-tools qemu-utils qemu-system-x86 snmp >/dev/null
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq libguestfs-tools qemu-utils qemu-system-x86 snmp zstd >/dev/null
           sudo chmod 0644 /boot/vmlinuz-*
       - name: build the image
         run: deploy/box/build-image.sh debs/exacarib-box_${BOX_VERSION}_amd64.deb out "$BOX_VERSION"
-      - name: boot it and set it up
+      - name: boot it, set it up and update it
         run: |
           dir=$RUNNER_TEMP/vm
           deploy/box/test-image.sh start out/exacarib-box-${BOX_VERSION}-amd64.qcow2 "$dir"
-          deploy/box/test-image.sh check "$dir"; rc=$?
+          rc=0
+          deploy/box/test-image.sh check "$dir" || rc=1
+          # Software slots (ADR 0049): a good update kept, a broken and a hanging one undone.
+          deploy/box/test-image.sh update "$dir" "out/exacarib-box-${BOX_VERSION}-amd64.root.tar.zst" || rc=1
           echo "--- box screen (last lines)"; tr -d '\r' <"$dir/serial.log" | grep -v 'Setup code' | tail -n 25
           deploy/box/test-image.sh stop "$dir"
           exit $rc
@@ -98,6 +101,7 @@ jobs:
 
           - **exacarib-box-${BOX_VERSION}-amd64.img.xz**: write it to a USB stick or the box's disk (for example with balenaEtcher), then boot the box from it. Debian 12 with FRR 10, WireGuard and nftables.
           - **exacarib-box-${BOX_VERSION}-amd64.qcow2**: the same, for a virtual machine.
+          - **exacarib-box-${BOX_VERSION}-amd64.root.tar.zst**: the software for boxes already running the image; the box console installs it (Settings > Software) and goes back on its own if the box does not come up healthy.
           - **exacarib-box_${BOX_VERSION}_amd64.deb / _arm64.deb**: for a box that already runs Debian 12 or Ubuntu 22.04 or later: \`sudo apt install ./exacarib-box_*.deb\`.
 
           The first port (eth0) takes its internet address by DHCP. On a box with two or more ports the last one is the office port, 192.168.50.1, and hands out addresses: plug a laptop into it and open https://192.168.50.1. The box's screen shows the setup code. Then get a box setup code for the location in the portal (Organisation > Locations) and paste it into the console.
@@ -105,4 +109,4 @@ jobs:
           Commit: ${GITHUB_SHA}
           EOF
           gh release create "box-v${BOX_VERSION}" --target "$GITHUB_SHA" --title "ExaCarib box ${BOX_VERSION}" --notes-file notes.md \
-            out/*.img.xz out/*.qcow2 out/*.deb out/*.sha256
+            out/*.img.xz out/*.qcow2 out/*.root.tar.zst out/*.deb out/*.sha256

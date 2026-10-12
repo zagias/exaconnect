@@ -1,0 +1,178 @@
+#!/bin/bash
+# ExaCarib box software slots (ADR 0049). The ExaCarib box image has two root
+# file systems, exaroot-A and exaroot-B, and GRUB on the EFI partition (EXABOOT)
+# boots the one named by `slot` in its grubenv. An update goes into the other
+# slot and is tried once (`try`, which GRUB clears as it boots it): only when
+# the box comes up healthy does it become the slot. A new system that fails its
+# health check, panics or hangs (the watchdog resets it) boots the old one again.
+#
+#   exacarib-update status                   JSON for the box console
+#   exacarib-update install <url> <sha256> [version]
+#                                            write a root file system (.tar.zst) into
+#                                            the other slot and try it at the next boot
+#   exacarib-update confirm                  at boot: keep a tried slot once healthy,
+#                                            or go back; record what happened
+#   exacarib-update rollback                 try the other slot (the previous software)
+set -euo pipefail
+export LC_ALL=C
+esp=/boot/efi
+env=$esp/grub/grubenv
+rec=$esp/exacarib/last-update.json
+run=/run/exacarib-update
+health_timeout=${EXA_UPDATE_HEALTH_TIMEOUT:-420} # to become healthy and stay so
+stable=${EXA_UPDATE_STABLE:-120}                 # healthy this long without a break
+mkdir -p "$run"
+
+slot() { sed -n 's/.*exacarib\.slot=\([AB]\).*/\1/p' /proc/cmdline; }
+other() { [[ $1 == A ]] && echo B || echo A; }
+genv() { grub-editenv "$env" list 2>/dev/null | sed -n "s/^$1=//p"; }
+now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+json() { printf '"%s"' "$(printf '%s' "$1" | tr -d '\000-\037' | sed 's/\\/\\\\/g; s/"/\\"/g')"; }
+progress() { printf '%s\n' "$1" >"$run/progress"; }
+record() { # record <result> <version> <from> <why>
+  mkdir -p "${rec%/*}"
+  printf '{"result": %s, "version": %s, "from": %s, "why": %s, "at": "%s"}\n' \
+    "$(json "$1")" "$(json "$2")" "$(json "$3")" "$(json "$4")" "$(now)" >"$rec.tmp"
+  mv "$rec.tmp" "$rec"
+}
+field() { sed -n "s/.*\"$1\": \"\([^\"]*\)\".*/\1/p" "$rec" 2>/dev/null; }
+version_of() { # the exacarib-box version in a root file system
+  cat "$1/etc/exacarib/release" 2>/dev/null || dpkg-query --admindir="$1/var/lib/dpkg" -W -f='${Version}' exacarib-box 2>/dev/null || true
+}
+
+mount_other() { # read-only, for its version
+  local s dev
+  s=$(other "$(slot)")
+  dev=$(blkid -L "exaroot-$s" 2>/dev/null) || return 1
+  mkdir -p "$run/other"
+  mountpoint -q "$run/other" || mount -o ro "$dev" "$run/other" 2>/dev/null || return 1
+}
+
+cmd=${1:-status}
+cur=$(slot)
+if [[ -z $cur && $cmd != status ]]; then
+  echo "this box was not installed from the ExaCarib box image: update it with apt" >&2
+  exit 3
+fi
+
+case $cmd in
+status)
+  if [[ -z $cur ]]; then
+    printf '{"ab": false, "version": %s}\n' "$(json "$(version_of /)")"
+    exit 0
+  fi
+  o=$(other "$cur") ov=""
+  if mount_other; then ov=$(version_of "$run/other"); umount "$run/other" 2>/dev/null || true; fi
+  saved=$(genv slot)
+  last=null
+  [[ -s $rec ]] && last=$(cat "$rec")
+  wd=$(cat /sys/class/watchdog/watchdog0/identity 2>/dev/null || true)
+  wds=$(cat /sys/class/watchdog/watchdog0/state 2>/dev/null || true)
+  printf '{"ab": true, "slot": "%s", "version": %s, "trial": %s, "other": {"slot": "%s", "version": %s}, "progress": %s, "last": %s, "watchdog": {"device": %s, "state": %s}}\n' \
+    "$cur" "$(json "$(version_of /)")" "$([[ ${saved:-A} != "$cur" ]] && echo true || echo false)" "$o" "$(json "$ov")" \
+    "$(json "$(cat "$run/progress" 2>/dev/null || true)")" "$last" "$(json "$wd")" "$(json "$wds")"
+  ;;
+
+install)
+  url=${2:?url} sum=${3:?sha256} ver=${4:-}
+  [[ $sum =~ ^[0-9a-f]{64}$ ]] || { echo "sha256 must be 64 hex digits" >&2; exit 2; }
+  [[ $url =~ ^https?:// ]] || { echo "url must be http(s)" >&2; exit 2; }
+  exec 9>"$run/lock"
+  flock -n 9 || { echo "an update is already running" >&2; exit 4; }
+  [[ $(genv slot) == "$cur" ]] || { echo "this software is still on trial; wait until it is kept" >&2; exit 4; }
+  o=$(other "$cur")
+  dev=$(blkid -L "exaroot-$o") || { echo "no exaroot-$o partition" >&2; exit 3; }
+  mnt=$run/new
+  mkdir -p "$mnt"
+  umount "$run/other" 2>/dev/null || true
+  trap 'umount "$mnt" 2>/dev/null || true; rm -f "$run/progress"' EXIT
+  progress "Preparing slot $o"
+  mkfs.ext4 -q -F -L "exaroot-$o" "$dev"
+  mount "$dev" "$mnt"
+  progress "Downloading and writing the new software"
+  rm -f "$run/sum"
+  curl -fsSL --retry 3 --connect-timeout 20 "$url" | tee >(sha256sum | cut -c1-64 >"$run/sum") |
+    zstd -dcq | tar -x --ignore-zeros --numeric-owner --xattrs --xattrs-include='*' --acls -C "$mnt"
+  for _ in $(seq 1 50); do [[ -s $run/sum ]] && break; sleep 0.2; done
+  if [[ $(cat "$run/sum" 2>/dev/null) != "$sum" ]]; then
+    umount "$mnt"
+    mkfs.ext4 -q -F -L "exaroot-$o" "$dev"
+    echo "the download does not match its sha256; nothing changed" >&2
+    exit 5
+  fi
+  nv=$(version_of "$mnt")
+  [[ -x $mnt/usr/bin/exa-agent && -e $mnt/vmlinuz ]] || { echo "that is not an ExaCarib box root file system" >&2; exit 5; }
+  progress "Carrying this box's settings over"
+  # What makes this box this box: its identity, ports, keys and monitoring.
+  for p in var/lib/exaconnect etc/netplan etc/ppp/peers etc/ppp/chap-secrets etc/ppp/pap-secrets \
+    etc/dnsmasq.d/exacarib-lan.conf etc/snmp/exacarib-snmpd.conf var/lib/snmp etc/rsyslog.d/90-exacarib-forward.conf \
+    etc/frr/frr.conf etc/wireguard etc/machine-id etc/hostname etc/hosts etc/exacarib/setup-dhcp.conf; do
+    [[ -e /$p ]] || continue
+    mkdir -p "$mnt/$(dirname "$p")"
+    rm -rf "${mnt:?}/$p"
+    cp -a "/$p" "$mnt/$p"
+  done
+  if systemctl is-enabled --quiet snmpd 2>/dev/null; then
+    ln -sf /lib/systemd/system/snmpd.service "$mnt/etc/systemd/system/multi-user.target.wants/snmpd.service"
+  fi
+  cat >"$mnt/etc/fstab" <<F
+LABEL=exaroot-$o / ext4 rw,discard,errors=remount-ro 0 1
+LABEL=EXABOOT /boot/efi vfat umask=0077,nofail 0 2
+F
+  umount "$mnt"
+  trap - EXIT
+  grub-editenv "$env" set "try=$o"
+  record trying "${nv:-$ver}" "$(version_of /)" "Installed in slot $o; trying it at the next start"
+  progress "Ready: restart to try it"
+  echo "installed ${nv:-$ver} in slot $o; restart to try it"
+  ;;
+
+confirm)
+  saved=$(genv slot)
+  saved=${saved:-A}
+  if [[ $saved == "$cur" ]]; then
+    # Back on the kept slot. If an update was being tried, it never came up.
+    if [[ $(field result) == trying ]]; then
+      record rolled_back "$(field version)" "$(field from)" "The new software did not start (it stopped, crashed or hung), so the box went back to $(version_of /)"
+    fi
+    exit 0
+  fi
+  # On trial: keep it only once the box has stayed healthy for a while.
+  why="the box console did not answer" good=0
+  for _ in $(seq 1 $((health_timeout / 5))); do
+    h=$(curl -sk --max-time 4 https://127.0.0.1/api/health || true)
+    if [[ $h == *'"ok":true'* ]]; then
+      good=$((good + 1))
+      if [[ $good -ge $((stable / 5)) ]]; then
+        grub-editenv "$env" set "slot=$cur"
+        record ok "$(version_of /)" "$(field from)" "Kept: the box stayed healthy for $((stable / 60)) minutes in slot $cur"
+        exit 0
+      fi
+    else
+      good=0
+      [[ -n $h ]] && why=$(sed -n 's/.*"why":"\([^"]*\)".*/\1/p' <<<"$h")
+    fi
+    sleep 5
+  done
+  record rolled_back "$(version_of /)" "$(field from)" "Not healthy within $((health_timeout / 60)) minutes (${why:-unknown}), so the box went back"
+  sync
+  systemctl reboot
+  ;;
+
+rollback)
+  o=$(other "$cur")
+  [[ $(genv slot) == "$cur" ]] || { echo "this software is on trial; restart to go back" >&2; exit 4; }
+  mount_other || { echo "slot $o has no software" >&2; exit 3; }
+  ov=$(version_of "$run/other")
+  umount "$run/other" 2>/dev/null || true
+  [[ -n $ov ]] || { echo "slot $o has no software" >&2; exit 3; }
+  grub-editenv "$env" set "try=$o"
+  record trying "$ov" "$(version_of /)" "Going back to $ov in slot $o"
+  echo "restart to go back to $ov"
+  ;;
+
+*)
+  sed -n '2,16p' "$0"
+  exit 2
+  ;;
+esac

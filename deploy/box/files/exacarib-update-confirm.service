@@ -1,0 +1,15 @@
+# ExaCarib box (ADR 0049): keep newly tried software once the box is healthy,
+# or go back to the software it had; record what happened either way.
+[Unit]
+Description=ExaCarib box: keep or undo a software update
+After=exa-box.service network-online.target
+Wants=network-online.target
+ConditionKernelCommandLine=exacarib.slot
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/exacarib/exacarib-update confirm
+TimeoutStartSec=15min
+
+[Install]
+WantedBy=multi-user.target

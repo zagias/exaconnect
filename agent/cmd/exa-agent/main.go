@@ -13,13 +13,17 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
+	"net"
+	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -160,12 +164,52 @@ func startConsole(ctx context.Context, ks keys.Store, addr string, log *slog.Log
 			log.Error("box console stopped", "err", err)
 		}
 	}()
+	go watchdog(ctx, addr)
 	select {
 	case <-con.Joined():
 		return con, nil
 	case <-ctx.Done():
 		return nil, nil
 	}
+}
+
+// watchdog tells systemd the agent is alive while its console answers
+// (exa-box.service WatchdogSec, ADR 0049). Without systemd it does nothing.
+func watchdog(ctx context.Context, addr string) {
+	sock := os.Getenv("NOTIFY_SOCKET")
+	if sock == "" {
+		return
+	}
+	_, port, _ := net.SplitHostPort(addr)
+	url := "https://" + net.JoinHostPort("127.0.0.1", port) + "/api/health"
+	hc := &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}} //nolint:gosec // its own console on loopback
+	t := time.NewTicker(20 * time.Second)
+	defer t.Stop()
+	for {
+		if r, err := hc.Get(url); err == nil {
+			r.Body.Close()
+			if r.StatusCode == http.StatusOK {
+				sdNotify(sock, "WATCHDOG=1")
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
+}
+
+func sdNotify(sock, state string) {
+	if strings.HasPrefix(sock, "@") {
+		sock = "\x00" + sock[1:]
+	}
+	c, err := net.DialUnix("unixgram", nil, &net.UnixAddr{Name: sock, Net: "unixgram"})
+	if err != nil {
+		return
+	}
+	defer c.Close()
+	_, _ = c.Write([]byte(state))
 }
 
 func run(ctx context.Context, ks keys.Store, consoleAddr string, log *slog.Logger) error {

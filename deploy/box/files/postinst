@@ -11,7 +11,7 @@ if [ "$1" = configure ]; then
     systemctl daemon-reload
     systemctl enable frr >/dev/null 2>&1 || true
     systemctl restart frr >/dev/null 2>&1 || true
-    systemctl enable exacarib-box-ports.service exacarib-setup-dhcp.service exacarib-box-banner.timer >/dev/null
+    systemctl enable exacarib-box-ports.service exacarib-setup-dhcp.service exacarib-box-banner.timer exacarib-update-confirm.service >/dev/null
     # SNMP stays off until someone sets it up in the box console (ADR 0048).
     if [ ! -f /var/lib/exaconnect/console-monitoring.json ]; then
       systemctl disable --now snmpd >/dev/null 2>&1 || true
