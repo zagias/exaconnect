@@ -12,7 +12,7 @@ from fastapi.responses import PlainTextResponse
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field, IPvAnyAddress
 
-from .. import audit, db, desired, fabric, internet, pki
+from .. import audit, db, desired, fabric, internet, pki, ztp
 from .. import box as boxes
 from ..routing import maps
 from ..security import token_hash
@@ -327,6 +327,8 @@ class BoxIn(BaseModel):
     last_change: BoxChangeIn | None = None
     # Where the box's settings may be changed, as the box has it (ADR 0049).
     managed: BoxManagedIn | None = None
+    # The box's serial number, for the zero-touch device list (ADR 0050).
+    serial: str = Field(default="", max_length=64)
     network_at: dt.datetime | None = None
 
 
@@ -455,6 +457,8 @@ def _box(conn, node, box: BoxIn, at: dt.datetime) -> None:
         desired.refresh(conn, node.customer_id)
     if box.managed is not None:
         boxes.from_box(conn, node, box.managed.model_dump())
+    if box.serial:
+        ztp.seen_in_telemetry(conn, node, box.serial)
 
 
 def _event(conn, customer_id, node_id, kind: str, detail: dict, at: dt.datetime | None = None) -> None:

@@ -152,6 +152,21 @@ function pendingBanner(p, after) {
     h("button", { class: "button small", onclick: async () => { await api("network/confirm", {}); (after || route)(); } }, "Keep the change")));
 }
 
+const ZTP_WORDS = {
+  calling: "Calling ExaCarib…",
+  waiting: "Waiting for ExaCarib to assign this box to a location. Nothing to do here: it joins by itself once assigned.",
+  assigned: "Assigned to a location; joining Connect now.",
+  joined: "Joined Connect by zero-touch.",
+};
+
+// Zero-touch (ADR 0050): what the box hears when it calls home.
+function ztpNote(z) {
+  if (!z || !z.on || z.state === "joined") return null;
+  const line = z.state === "error" ? `Zero-touch: ${z.detail || "no answer from ExaCarib yet"}. The box keeps trying; you can also set it up below.`
+    : `Zero-touch: ${ZTP_WORDS[z.state] || z.state}`;
+  return note(z.state === "error" ? "warn" : "good", h("span", {}, line, " ", h("span", { class: "mono small" }, `Serial ${z.serial}`)));
+}
+
 function cloudBanner(m) {
   if (!m || m.mode !== "cloud") return null;
   return note("warn", h("span", {}, "This box is managed from the Connect portal, so its settings are read-only here. ",
@@ -162,6 +177,7 @@ async function overview() {
   const o = await api("overview");
   if (!o.setup.network || !o.setup.joined) {
     show(head("Set-up", "Finish setting up this box", "Two short steps: choose which port goes where, then join the box to Connect with the setup code from the ExaCarib portal."),
+      ztpNote(o.ztp),
       steps(o.setup.network ? (o.setup.joined ? 3 : 2) : 1, o.setup),
       h("div", { class: "actions" }, h("a", { class: "button", href: "#/setup" }, o.setup.network ? "Join Connect" : "Choose the ports")));
     if (o.setup.network || o.setup.joined) main.append(h("div", { class: "mt24" }), ...overviewCards(o).filter(Boolean));
@@ -482,6 +498,8 @@ async function settingsView() {
     h("section", { class: "card" }, h("h2", {}, "About this box"), h("table", {}, h("tbody", {},
       h("tr", {}, h("th", { scope: "row" }, "Host name"), h("td", { class: "mono" }, o.hostname)),
       h("tr", {}, h("th", { scope: "row" }, "Software"), h("td", { class: "mono" }, o.version)),
+      o.ztp && o.ztp.serial ? h("tr", {}, h("th", { scope: "row" }, "Serial number"), h("td", { class: "mono" }, o.ztp.serial,
+        o.ztp.key_id ? h("span", { class: "sub" }, `Zero-touch key ${o.ztp.key_id}: ExaCarib's device list shows the same.`) : null)) : null,
       h("tr", {}, h("th", { scope: "row" }, "Console address"), h("td", { class: "mono" }, o.console_url || location.origin)),
       h("tr", {}, h("th", { scope: "row" }, "Console certificate"), h("td", { class: "mono small break" }, o.cert_sha256 || "–",
         h("span", { class: "sub" }, "SHA-256. Your browser warns about this certificate once because the box made it itself; check it matches what exa-agent console-code prints on the box."))),

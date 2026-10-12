@@ -426,3 +426,9 @@ way at any time, and the box keeps its set-up. The two copies meet in the middle
 newest switch wins, whichever side made it. Every lab run switches a fresh box both
 ways in a browser. Next: every box setting from the portal, templates, fleet
 firmware, and a staff device list with zero-touch claim.
+
+**Zero-touch box installation** (ADR 0050, 2026-10-12). A box needs nobody on site
+now: plugged into any internet line it calls home with its serial number, shows up
+in Operations › Boxes, and once staff assign it to a customer's location it joins
+Connect and pulls its set-up by itself. The box console still works alongside. Every
+lab run plugs in a fresh box and assigns it in a browser against live.

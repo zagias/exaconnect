@@ -55,6 +55,11 @@ type Server struct {
 	RevertAfter time.Duration
 	// Root prefixes /sys paths (tests).
 	Root string
+	// ZTPURL is where the box calls home for zero-touch (ADR 0050); empty
+	// means EXA_ZTP_URL, /etc/exacarib/ztp-url, then DefaultZTPURL. "off" turns it off.
+	ZTPURL    string
+	ZTPClient *http.Client  // for calling home (tests)
+	ZTPEvery  time.Duration // between calls; default 30 s
 
 	auth       *auth
 	mu         sync.Mutex
@@ -74,6 +79,8 @@ type Server struct {
 	started    time.Time
 	mgd        Managed    // where the box's settings may be changed (ADR 0049)
 	mgdMu      sync.Mutex // one managed-from change at a time
+	ztp        ZTPStatus
+	joinMu     sync.Mutex // one join at a time: the console's or zero-touch's
 }
 
 // Change is the last thing changed on the box itself.
@@ -119,6 +126,7 @@ func (s *Server) Init() error {
 		return fmt.Errorf("box console managed-from file: %w", err)
 	}
 	s.mgd = m
+	s.ztp = ZTPStatus{Serial: Serial(s.Root), State: "off"}
 	if c, _ := s.auth.creds(); c == nil {
 		if _, err := SetupCode(s.Dir); err != nil {
 			return err
@@ -204,6 +212,8 @@ type BoxInfo struct {
 	LANDHCP    bool      `json:"lan_dhcp,omitempty"`
 	LastChange *Change   `json:"last_change,omitempty"`
 	Managed    Managed   `json:"managed"`
+	// Serial is the box's serial number, for the zero-touch device list (ADR 0050).
+	Serial string `json:"serial,omitempty"`
 	// NetworkAt is when the ports were last set on the box.
 	NetworkAt *time.Time `json:"network_at,omitempty"`
 }
@@ -213,7 +223,7 @@ func (s *Server) BoxInfo() any {
 	c, _ := s.auth.creds()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	b := BoxInfo{Console: true, AdminSet: c != nil, LastChange: s.lastChange, Managed: s.mgd}
+	b := BoxInfo{Console: true, AdminSet: c != nil, LastChange: s.lastChange, Managed: s.mgd, Serial: s.ztp.Serial}
 	if s.net != nil {
 		if !s.net.UpdatedAt.IsZero() {
 			at := s.net.UpdatedAt
@@ -323,6 +333,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/join", s.signedIn(s.handleJoin))
 	mux.HandleFunc("POST /api/diag", s.signedIn(s.handleDiag))
 	mux.HandleFunc("GET /api/managed", s.signedIn(s.handleGetManaged))
+	mux.HandleFunc("GET /api/ztp", s.signedIn(s.handleZTP))
 	mux.HandleFunc("POST /api/managed", s.signedIn(s.handleSetManaged))
 	return s.guard(mux)
 }
@@ -623,7 +634,7 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 	out := map[string]any{"hostname": host, "version": s.Version, "uptime_s": uptime(s.Root),
 		"setup": map[string]bool{"network": n != nil, "joined": joined}, "ports": ps,
 		"tunnels": []agent.TunnelView{}, "bgp": []bgpRow{}, "steering": []any{}, "pending": pend, "last_change": last,
-		"console_url": "", "cert_sha256": s.certFP, "managed": s.managed()}
+		"console_url": "", "cert_sha256": s.certFP, "managed": s.managed(), "ztp": s.ztpStatus()}
 	s.mu.Lock()
 	out["console_url"] = s.consoleURL()
 	s.mu.Unlock()
@@ -873,20 +884,38 @@ func (s *Server) handleJoin(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if s.Join == nil {
-		fail(w, http.StatusInternalServerError, "joining is not available")
-		return
-	}
 	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
 	defer cancel()
-	if err := s.Join(ctx, j); err != nil {
+	if err := s.join(ctx, j, userOf(r), "Joined Connect as "+j.Name+" at "+j.Controller); err != nil {
+		if errors.Is(err, errJoined) {
+			fail(w, http.StatusConflict, "This box has already joined Connect.")
+			return
+		}
 		s.Log.Warn("box console join failed", "err", err)
 		fail(w, http.StatusBadRequest, "Could not join: "+joinError(err))
 		return
 	}
-	s.change(userOf(r), "Joined Connect as "+j.Name+" at "+j.Controller)
-	s.joinOnce.Do(func() { close(s.joined) })
 	writeJSON(w, http.StatusOK, map[string]any{"joined": true, "name": j.Name, "controller": j.Controller})
+}
+
+var errJoined = errors.New("this box has already joined Connect")
+
+// join enrols the box, once, whether the console or zero-touch asks.
+func (s *Server) join(ctx context.Context, j JoinInfo, by, what string) error {
+	s.joinMu.Lock()
+	defer s.joinMu.Unlock()
+	if _, _, ok := s.identity(); ok {
+		return errJoined
+	}
+	if s.Join == nil {
+		return errors.New("joining is not available")
+	}
+	if err := s.Join(ctx, j); err != nil {
+		return err
+	}
+	s.change(by, what)
+	s.joinOnce.Do(func() { close(s.joined) })
+	return nil
 }
 
 // joinError keeps the controller's own message, which says what was wrong.
