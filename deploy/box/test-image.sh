@@ -180,7 +180,7 @@ update)
     local n0 sum r
     n0=$(boots)
     sum=$(sha256sum "$web/$1.tar.zst" | cut -c1-64)
-    r=$("${c[@]}" -X POST "$B/api/update" -d "{\"url\": \"$U/$1.tar.zst\", \"sha256\": \"$sum\", \"version\": \"test-$1\"}")
+    r=$("${c[@]}" -X POST "$B/api/update" -d "{\"url\": \"$U/$1.tar.zst\", \"sha256\": \"$sum\", \"version\": \"9.0.0+$1\"}")
     grep -q 'Installing' <<<"$r" || { fail "$4: ${r:0:200}"; return; }
     for _ in $(seq 1 240); do [[ $(boots) -gt $n0 ]] && break; sleep 5; done
     [[ $(boots) -gt $n0 ]] || { fail "$4: the box never restarted: $("${c[@]}" "$B/api/update" | head -c 300)"; return; }
