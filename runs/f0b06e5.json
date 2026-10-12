@@ -1,7 +1,0 @@
-{
-  "commit": "f0b06e5e4024b67a6e31c2b44719e9d2c2972875",
-  "started": "2026-10-04T01:20:20Z",
-  "finished": "2026-10-04T01:51:50Z",
-  "exit": 2,
-  "summary": "FAIL=1 SKIP=1 ok=103 "
-}
