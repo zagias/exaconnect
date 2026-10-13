@@ -25,11 +25,14 @@ from .commai_connector_kit import (  # noqa: F401
 )
 from .commai_helpers import base, business
 
-TOMORROW = (dt.datetime.now(dt.UTC) + dt.timedelta(days=1)).date()
+
+def tomorrow() -> dt.date:
+    # Worked out when used, not when tests are collected: a run can cross midnight UTC.
+    return (dt.datetime.now(dt.UTC) + dt.timedelta(days=1)).date()
 
 
 def slot(hour: int) -> str:
-    return dt.datetime.combine(TOMORROW, dt.time(hour), tzinfo=dt.UTC).isoformat()
+    return dt.datetime.combine(tomorrow(), dt.time(hour), tzinfo=dt.UTC).isoformat()
 
 
 # ---- the standards themselves ----------------------------------------------------------
@@ -129,7 +132,7 @@ def test_caldav_runs_on_stand_in_until_switched_on(client):
     )
     assert again["booking_id"] == uid and again.get("replayed")
     # The booked time is no longer offered; another booking there is refused.
-    free = execute_direct(b["id"], "caldav", "find_slots", {"date": TOMORROW.isoformat()}, "k-free")
+    free = execute_direct(b["id"], "caldav", "find_slots", {"date": tomorrow().isoformat()}, "k-free")
     assert not _slot_in(free["slots"], 10) and _slot_in(free["slots"], 11)
     clash = propose_and_run(b["id"], "caldav", "book", {"start": slot(10), "name": "Bo", "contact": "b@x.org"}, "k-2")
     assert clash["status"] == "failed" and "(input)" in clash["error"]
@@ -231,12 +234,12 @@ def test_caldav_real_path_basic_auth_discovery_and_retries(client, real_env, fak
         return next(h for m, p, h in original if m == "REPORT")(call)
 
     fake.on("REPORT", r"https://dav\.example\.com/", limited)
-    free = execute_direct(b["id"], "caldav", "find_slots", {"date": TOMORROW.isoformat()}, "rl")
+    free = execute_direct(b["id"], "caldav", "find_slots", {"date": tomorrow().isoformat()}, "rl")
     assert state["n"] == 2 and not _slot_in(free["slots"], 11)
     # A long Retry-After becomes a provider error (the job retries later).
     fake.on("REPORT", r"https://dav\.example\.com/", (429, "", {"Retry-After": "600"}))
     try:
-        execute_direct(b["id"], "caldav", "find_slots", {"date": TOMORROW.isoformat()}, "rl2")
+        execute_direct(b["id"], "caldav", "find_slots", {"date": tomorrow().isoformat()}, "rl2")
         raise AssertionError("expected a provider error")
     except connectors.ConnectorError as e:
         assert e.cause == "provider" and "600" in str(e)
@@ -309,7 +312,7 @@ def test_dav_tenant_isolation(client):
     assert run["status"] == "succeeded"
     connect_simulated(z["id"], "caldav", ["find_slots"])
     _utc(z["id"])
-    free = execute_direct(z["id"], "caldav", "find_slots", {"date": TOMORROW.isoformat()}, "z")
+    free = execute_direct(z["id"], "caldav", "find_slots", {"date": tomorrow().isoformat()}, "z")
     assert _slot_in(free["slots"], 9)  # Zeta's stand-in calendar never sees Alpha's booking
     with db.tx() as conn:
         try:
