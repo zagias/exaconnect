@@ -177,7 +177,8 @@ try {
     await pressed(q, "Cloud").click();
     (await until(async () => (await pressed(q, "Cloud").getAttribute("aria-pressed")) === "true", 5, 1000)) ? ok("the portal hands the box to the cloud") : bad("portal switch to Cloud did not stick");
     await p.getByRole("link", { name: "Settings" }).click();
-    const boxCloud = await until(async () => { await p.reload(); return p.getByRole("heading", { name: "Managed from: Cloud" }).isVisible({ timeout: 4000 }); });
+    // isVisible does not wait, and on a slow box Settings is still loading right after a reload.
+    const boxCloud = await until(async () => { await p.reload(); return p.getByRole("heading", { name: "Managed from: Cloud" }).waitFor({ timeout: 8000 }).then(() => true); });
     boxCloud ? ok("the box picks up Cloud from the portal") : bad("box console never showed Managed from: Cloud: " + (await text(p)).slice(0, 160));
     await shot(p, "11_box_managed_cloud");
     await p.getByRole("link", { name: "Ports" }).click();
@@ -205,7 +206,10 @@ try {
     await q.reload();
     const ports = q.getByRole("region", { name: "Box ports" });
     await ports.getByRole("button", { name: "Change the ports" }).click();
-    (await q.getByLabel("Address and size for " + (E.LAN_IFACE || "eth1")).inputValue({ timeout: 5000 })) === E.LAN_ADDR
+    // An office port left as it is on the box (no LAN_ADDR) shows as "Leave as it is", with no address field.
+    (E.LAN_ADDR
+      ? (await q.getByLabel("Address and size for " + (E.LAN_IFACE || "eth1")).inputValue({ timeout: 10000 })) === E.LAN_ADDR
+      : (await q.getByLabel("Address of " + (E.LAN_IFACE || "eth1")).inputValue({ timeout: 10000 })) === "keep")
       ? ok("the portal's port form starts from the box's own ports") : bad("portal port form did not show the office address");
     await ports.getByLabel("DNS servers for " + (E.WAN_IFACE || "eth0")).fill("9.9.9.9, 1.1.1.1");
     await shot(q, "13_portal_box_ports");
