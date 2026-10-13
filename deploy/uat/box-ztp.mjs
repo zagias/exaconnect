@@ -17,9 +17,10 @@ const bad = (m) => { fails++; console.log("FAIL", m); };
 const br = await chromium.launch(E.CHROMIUM_PATH ? { executablePath: E.CHROMIUM_PATH } : {});
 const shot = (p, n) => (OUT ? p.screenshot({ path: `${OUT}/${n}.png`, fullPage: true }) : null);
 
+let q;
 try {
   const ctx = await br.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1280, height: 900 } });
-  const q = await ctx.newPage();
+  q = await ctx.newPage();
   q.on("pageerror", (e) => bad("page error: " + String(e).slice(0, 160)));
   await q.goto(P + "/");
   await q.getByLabel("Work email").fill(E.PORTAL_EMAIL); await q.getByRole("button", { name: "Continue" }).click();
@@ -48,6 +49,8 @@ try {
   await agent.getByText("Box console").waitFor({ timeout: 30000 }).then(() => ok("Agents lists the zero-touch box"), () => bad("not on Agents"));
 } catch (e) {
   bad("stopped: " + String(e).split("\n")[0].slice(0, 300));
+  // What the page showed when it stopped, for the lab log.
+  if (q) console.log("      page " + q.url() + ": " + (await q.locator("body").innerText({ timeout: 3000 }).catch(() => "")).replace(/\s+/g, " ").slice(0, 300));
 }
 await br.close();
 console.log(`${passes} passed, ${fails} failed`);
