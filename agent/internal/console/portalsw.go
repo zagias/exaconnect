@@ -49,14 +49,15 @@ func (s *Server) swRequest() SoftwareRequest {
 }
 
 func (s *Server) setSWRequest(r SoftwareRequest) {
-	s.mu.Lock()
-	s.swReq = r
-	s.mu.Unlock()
+	// Saved before it shows, so whoever sees the new state finds it on disk too.
 	b, _ := json.Marshal(r)
 	tmp := filepath.Join(s.Dir, portalSWFile+".tmp")
 	if err := os.WriteFile(tmp, b, 0o600); err == nil {
 		_ = os.Rename(tmp, filepath.Join(s.Dir, portalSWFile))
 	}
+	s.mu.Lock()
+	s.swReq = r
+	s.mu.Unlock()
 }
 
 // runningVersion is the box software version running now.

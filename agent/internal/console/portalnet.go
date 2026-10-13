@@ -44,14 +44,15 @@ func loadPortal(path string) (PortalChange, error) {
 }
 
 func (s *Server) setPortal(p PortalChange) {
-	s.mu.Lock()
-	s.portal = p
-	s.mu.Unlock()
+	// Saved before it shows, so whoever sees the new state finds it on disk too.
 	b, _ := json.Marshal(p)
 	tmp := filepath.Join(s.Dir, portalFile+".tmp")
 	if err := os.WriteFile(tmp, b, 0o600); err == nil {
 		_ = os.Rename(tmp, filepath.Join(s.Dir, portalFile))
 	}
+	s.mu.Lock()
+	s.portal = p
+	s.mu.Unlock()
 }
 
 // reach checks the box can still get to ExaCarib: a connection to the
