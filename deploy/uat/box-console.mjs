@@ -252,10 +252,11 @@ try {
     using ? ok("the box follows the template and keeps its ports") : bad("box never showed as using the template");
     await shot(q, "17_portal_box_template_kept");
 
-    // 12. Box software (ADR 0054): the newest version sent from the portal. This lab
-    // box runs from a container, not the box image, so it has no spare software slot:
-    // it must say so and the portal must show why. (A real install and automatic
-    // rollback are tested on the box image in its own CI.)
+    // 12. Box software (ADR 0054). A container box has no spare software slot: it
+    // must refuse and the portal must show why (updates with apt). A box from the
+    // box image has A/B slots: it is sent the version it already runs, so the round
+    // trip is tested without installing anything (a real install and automatic
+    // rollback are tested on the box image in its own CI).
     await q.goto(P + "/box-software");
     if (E.ORG_NAME) {
       const pick = q.locator("label.picker select:visible").first();
@@ -264,21 +265,35 @@ try {
     }
     const swRow = q.locator(`tr[data-site="${E.SITE_NAME}"]`);
     await swRow.waitFor({ timeout: 15000 });
-    (await swRow.innerText()).includes("updates with apt") ? ok("Box software lists the box and how it updates") : bad("box software row: " + (await swRow.innerText()).replace(/\s+/g, " "));
-    const newest = await q.getByLabel("Version").inputValue({ timeout: 10000 }).catch(() => "");
-    if (!newest) {
+    const rowText = (await swRow.innerText()).replace(/\s+/g, " ");
+    const slotted = (await swRow.getAttribute("data-ab")) === "true";
+    const running = (await swRow.getAttribute("data-version")) || "";
+    if (slotted ? running && rowText.includes(running) : rowText.includes("updates with apt"))
+      ok("Box software lists the box and how it updates" + (slotted ? " (" + running + ", A/B slots)" : ""));
+    else bad("box software row: " + rowText);
+    // The versions list loads after the page: wait for it.
+    const picker = q.getByRole("combobox", { name: "Version" });
+    let versions = [];
+    await until(async () => (versions = (await picker.locator("option").evaluateAll((o) => o.map((x) => x.value))).filter(Boolean)).length > 0, 10, 1000);
+    const send = slotted ? running : versions[0];
+    if (!versions.length) {
       const why = await q.evaluate(async () => { const r = await fetch("/api/v1/box-software/versions", { headers: { "X-Requested-With": "exa-portal" } }); return r.status + " " + (await r.text()); }).catch((e) => String(e));
       bad("Box software has no versions to offer: " + why.slice(0, 200));
+    } else if (!versions.includes(send)) {
+      ok("Box software offers " + versions.join(", ") + "; the box runs " + (send || "an unreleased version") + ", so nothing is sent (it would install)");
     } else {
+      await picker.selectOption(send);
       await q.getByLabel("Update " + E.SITE_NAME).check();
       await q.getByRole("button", { name: "Send to the ticked boxes" }).click();
-      await q.getByText(E.SITE_NAME + ": sent to the box").waitFor({ timeout: 10000 }).then(() => ok("Box software sends version " + newest + " to the box"), async () => bad("software not sent: " + (await text(q)).slice(0, 200)));
+      await q.getByText(E.SITE_NAME + ": sent to the box").waitFor({ timeout: 10000 }).then(() => ok("Box software sends version " + send + " to the box"), async () => bad("software not sent: " + (await text(q)).slice(0, 200)));
+      const expect = slotted ? "Already on this version" : "Box did not take it";
       const said = await until(async () => {
         await q.reload();
-        return (await q.locator(`tr[data-site="${E.SITE_NAME}"]`).innerText({ timeout: 5000 })).includes("Box did not take it");
+        return (await q.locator(`tr[data-site="${E.SITE_NAME}"]`).innerText({ timeout: 5000 })).includes(expect);
       }, 20);
       const row = (await q.locator(`tr[data-site="${E.SITE_NAME}"]`).innerText().catch(() => "")).replace(/\s+/g, " ");
-      said && row.includes("apt") ? ok("the box answers the update and the portal shows why it updates with apt") : bad("box never answered the software update: " + row.slice(0, 300));
+      if (slotted) said ? ok("the box answers the update: already on " + send) : bad("box never answered the software update: " + row.slice(0, 300));
+      else said && row.includes("apt") ? ok("the box answers the update and the portal shows why it updates with apt") : bad("box never answered the software update: " + row.slice(0, 300));
       await shot(q, "18_portal_box_software");
     }
   }

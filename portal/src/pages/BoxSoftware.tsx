@@ -114,7 +114,12 @@ export function BoxSoftware() {
               </thead>
               <tbody>
                 {boxes.map((b) => (
-                  <tr key={b.site_id} data-site={b.site}>
+                  <tr
+                    key={b.site_id}
+                    data-site={b.site}
+                    data-ab={String(b.ab)}
+                    data-version={b.version}
+                  >
                     {canManage && (
                       <td>
                         <input
@@ -138,6 +143,12 @@ export function BoxSoftware() {
                       {b.ab ? (
                         <>
                           <span className="mono">{b.version || "–"}</span>
+                          {b.slot && (
+                            <span className="muted">
+                              {" "}
+                              slot {b.slot.toUpperCase()}
+                            </span>
+                          )}
                           {b.installing && " (installing)"}
                           {b.trial && " (trying it)"}
                         </>
