@@ -1,21 +1,27 @@
 """Accounts for the quote-to-invoice live test (lab/ci/checks/commercial.sh, ADR 0055).
 
-Removes the organisation and people an earlier run made, then makes a fresh test
+Removes the organisation and people an earlier run made (and, with CLEAN_ONLY=1, stops
+there: the check runs it again when it ends), then makes a fresh test
 organisation (marked example) with an owner, and gives the ExaCarib staff test account a
 fresh random password. Run inside the controller container: python - < commercial_users.py.
 Prints one line of JSON for the test's environment, on stdout only; never logged.
 """
 
 import json
+import os
 import secrets
 
 import psycopg
+
 from exaconnect_controller import db
 from exaconnect_controller.security import hash_password
 from exaconnect_controller.settings import get_settings
 
 STAFF = "commercial-test-staff@exacarib.local"
-ORG_PREFIX = "Commercial check "
+# Sorts after "Demo Organisation", so lab checks and staff screens that take the first
+# organisation by name never land on it. Earlier runs used "Commercial check ".
+ORG_PREFIX = "Sales check "
+OLD_PREFIXES = ("Commercial check ",)
 PEOPLE = "%@commercial-check.example"
 
 
@@ -53,7 +59,12 @@ def _remove(conn, where: list[tuple[str, str, object]]) -> None:
 settings = get_settings()
 db.init(settings.database_url)
 with db.tx() as conn:
-    orgs = [r["id"] for r in conn.execute("SELECT id FROM customers WHERE name LIKE %s", (ORG_PREFIX + "%",))]
+    orgs = [
+        r["id"]
+        for r in conn.execute(
+            "SELECT id FROM customers WHERE name LIKE ANY(%s)", ([p + "%" for p in (ORG_PREFIX, *OLD_PREFIXES)],)
+        )
+    ]
     users = [r["id"] for r in conn.execute("SELECT id FROM users WHERE email LIKE %s", (PEOPLE,))]
     if orgs or users:
         sites = [r["id"] for r in conn.execute("SELECT id FROM sites WHERE customer_id = ANY(%s)", (orgs,))]
@@ -65,6 +76,11 @@ with db.tx() as conn:
         where += [(t, "customer_id", orgs) for t in _tables(conn, "customer_id") if t != "users"]
         where += [("users", "id", users), ("users", "customer_id", orgs), ("customers", "id", orgs)]
         _remove(conn, where)
+if os.environ.get("CLEAN_ONLY"):
+    # After the test: leave nothing behind on live (the removal above is committed).
+    print(json.dumps({"removed": len(orgs)}))
+    raise SystemExit(0)
+with db.tx() as conn:
     tag = secrets.token_hex(3)
     org = conn.execute(
         "INSERT INTO customers (name, example) VALUES (%s, true) RETURNING id, name", (ORG_PREFIX + tag,)
