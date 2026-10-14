@@ -42,6 +42,13 @@ out=$(timeout 600 docker run --rm --network host --add-host "$host:127.0.0.1" --
   -v "$REPO/deploy/uat/commercial.mjs:/uat/commercial.mjs:ro" -w /uat "$image" \
   node commercial.mjs 2>&1)
 rm -rf "$secrets"
+# Remove the test organisation straight away, so no later check or staff screen meets it.
+if "${COMPOSE[@]}" exec -T -e CLEAN_ONLY=1 controller python - <"$REPO/deploy/uat/commercial_users.py" 2>/dev/null |
+  tail -1 | jq -e '.removed >= 1' >/dev/null; then
+  ok "test organisation removed after the run"
+else
+  bad "could not remove the test organisation after the run"
+fi
 while IFS= read -r line; do
   case $line in
     "PASS "*) ok "quote to invoice: ${line#PASS }" ;;

@@ -68,4 +68,8 @@ api_detail() {
   echo "${out##*$'\n'}: $(jq -r '.detail // .' <<<"${out%$'\n'*}" 2>/dev/null | cut -c1-300)"
 }
 
-customer_id() { sql "SELECT id FROM customers ORDER BY name LIMIT 1"; }
+# The lab organisation (the seed's Demo Organisation); test organisations made by other
+# checks must never be picked up here, whatever their names.
+customer_id() {
+  sql "SELECT id FROM customers ORDER BY name <> 'Demo Organisation', name LIMIT 1"
+}
