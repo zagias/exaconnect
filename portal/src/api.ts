@@ -1776,3 +1776,238 @@ export interface LinkRow {
 export const postNotice = (body: NoticeIn) => api<Notice>("/carrier/notices", { method: "POST", body: JSON.stringify(body) });
 export const updateNotice = (id: number, body: Partial<NoticeIn> & { status?: Notice["status"] }) =>
   api<Notice>(`/carrier/notices/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+
+// ---- Catalogue, quotes, orders and contracts (ADR 0055) ----
+
+export type ChargeType = "recurring" | "one_off" | "usage";
+export type Fulfilment = "immediate" | "manual" | "subscription" | "site" | "link";
+export type PriceModel = "per_unit" | "flat" | "tiered" | "volume";
+
+export interface Tier {
+  up_to: string | number | null;
+  unit_price: string | number;
+}
+
+export interface CataloguePrice {
+  id?: string;
+  version?: number;
+  currency?: string;
+  effective_from?: string;
+  model: PriceModel;
+  unit_price: string;
+  tiers: Tier[];
+  included_qty: string;
+  minimum: string;
+  term_discounts: { min_months: number; pct: string }[];
+  example?: boolean;
+}
+
+export interface CatalogueItem {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  product: Product;
+  family: string;
+  charge_type: ChargeType;
+  unit: string;
+  meter: string | null;
+  price_source: "catalogue" | "plan_fee" | "site_monthly" | "commit_per_mbps";
+  fulfilment: Fulfilment;
+  max_discount_pct: string;
+  active: boolean;
+  example: boolean;
+  plan_priced: boolean;
+  price: CataloguePrice | null;
+  price_text: string;
+  prices?: CataloguePrice[];
+}
+
+export type QuoteState = "draft" | "pending_approval" | "approved" | "sent" | "accepted" | "declined" | "cancelled" | "expired";
+
+export interface QuoteLineIn {
+  item: string;
+  quantity: string;
+  discount_pct?: number;
+  config?: Record<string, unknown>;
+  description?: string;
+}
+
+export interface QuoteLine {
+  id?: string;
+  item_id: string;
+  code: string;
+  name: string;
+  product: Product;
+  charge_type: ChargeType;
+  fulfilment: Fulfilment | null;
+  unit: string;
+  quantity: string;
+  config: Record<string, unknown>;
+  description: string;
+  list_amount: string;
+  term_discount_pct: string;
+  discount_pct: string;
+  amount: string;
+  needs_approval: boolean;
+  max_discount_pct: string | null;
+  price_text?: string;
+  rating: { bands: { from: string; to: string | null; quantity: string; unit_price: string | null; amount: string }[]; included: string; billable: string; minimum_applied: boolean };
+}
+
+export interface QuoteTotals {
+  one_off_total: string;
+  monthly_total: string;
+  usage_estimate: string;
+  contract_total: string;
+  needs_approval: boolean;
+  example: boolean;
+}
+
+export interface Quote extends QuoteTotals {
+  id: string;
+  number: string;
+  customer_id: string;
+  customer: string;
+  title: string;
+  status: Exclude<QuoteState, "expired">;
+  state: QuoteState;
+  state_label: string;
+  currency: string;
+  term_months: number;
+  valid_until: string;
+  notes: string;
+  created_by: string;
+  created_at: string;
+  approved_by: string | null;
+  approval_note: string | null;
+  sent_at: string | null;
+  accepted_name: string | null;
+  accepted_at: string | null;
+  declined_at: string | null;
+  decline_reason: string | null;
+  lines: QuoteLine[];
+  order: { id: string; number: string; status: SalesOrderStatus } | null;
+}
+
+export interface QuoteRow extends Omit<Quote, "lines" | "order"> {
+  order_id: string | null;
+  order_number: string | null;
+  line_count: number;
+}
+
+export type SalesOrderStatus = "acknowledged" | "in_progress" | "completed" | "partial" | "cancelled";
+
+export interface OrderItem {
+  id: string;
+  position: number;
+  code: string;
+  name: string;
+  product: Product;
+  charge_type: ChargeType;
+  fulfilment: Fulfilment;
+  quantity: string;
+  config: Record<string, unknown>;
+  description: string;
+  amount: string;
+  status: "pending" | "done" | "failed" | "cancelled";
+  result: Record<string, unknown>;
+  error: string | null;
+  done_by: string | null;
+  done_at: string | null;
+  automatic: boolean;
+}
+
+export interface SalesOrder {
+  id: string;
+  number: string;
+  customer_id: string;
+  customer: string;
+  status: SalesOrderStatus;
+  status_label: string;
+  currency: string;
+  term_months: number;
+  created_by: string;
+  created_at: string;
+  completed_at: string | null;
+  cancel_reason: string | null;
+  quote: { id: string; number: string; title: string } | null;
+  items: OrderItem[];
+}
+
+export interface OrderRow extends Omit<SalesOrder, "items" | "quote"> {
+  quote_number: string | null;
+  item_count: number;
+  done_count: number;
+  failed_count: number;
+  waiting_count: number;
+}
+
+export interface ContractItem {
+  id: string;
+  product: Product;
+  code: string;
+  description: string;
+  charge_type: "recurring" | "usage";
+  quantity: string;
+  unit: string;
+  monthly_amount: string;
+  meter: string | null;
+  currency: string;
+  site: string | null;
+  starts_on: string;
+  term_months: number;
+  term_ends_on: string;
+  ends_on: string | null;
+  status: "active" | "ended";
+  order_number: string | null;
+  order_id: string | null;
+  price_text: string;
+}
+
+export interface Contract {
+  period: string;
+  items: ContractItem[];
+  one_off_charges: { id: string; description: string; amount: string; currency: string; charge_on: string; order_number: string | null; product: Product }[];
+  usage: { contract_item_id: string; description: string; meter: string; unit: string; quantity: string; included: string; billable: string; amount_so_far: string; price_text: string }[];
+  monthly_total: string;
+}
+
+export const commercialPaths = {
+  items: "/catalogue/items",
+  item: (ref: string) => `/catalogue/items/${encodeURIComponent(ref)}`,
+  quotes: "/quotes",
+  quote: (id: string) => `/quotes/${id}`,
+  orders: "/sales-orders",
+  order: (id: string) => `/sales-orders/${id}`,
+  contract: (cid: string) => `/customers/${cid}/contract`,
+};
+
+export const createCatalogueItem = (body: Record<string, unknown>) => post<CatalogueItem>(commercialPaths.items, body);
+export const updateCatalogueItem = (ref: string, body: Record<string, unknown>) =>
+  api<CatalogueItem>(commercialPaths.item(ref), { method: "PATCH", body: JSON.stringify(body) });
+export const addCataloguePrice = (ref: string, body: Record<string, unknown>) => post<CataloguePrice>(`${commercialPaths.item(ref)}/prices`, body);
+
+export interface QuoteIn {
+  customer_id?: string;
+  title?: string;
+  currency?: string;
+  term_months?: number;
+  valid_until?: string;
+  notes?: string;
+  lines: QuoteLineIn[];
+}
+export const previewQuote = (body: QuoteIn) => post<QuoteTotals & { lines: QuoteLine[] }>("/quotes/preview", body);
+export const createQuote = (body: QuoteIn) => post<Quote>(commercialPaths.quotes, body);
+export const updateQuote = (id: string, body: QuoteIn) => api<Quote>(commercialPaths.quote(id), { method: "PUT", body: JSON.stringify(body) });
+export const quoteAction = (id: string, action: "submit" | "send" | "cancel" | "copy") => post<Quote>(`${commercialPaths.quote(id)}/${action}`, {});
+export const approveQuote = (id: string, approve: boolean, note: string) => post<Quote>(`${commercialPaths.quote(id)}/approve`, { approve, note });
+export const acceptQuote = (id: string, name: string) => post<{ quote: Quote; order: SalesOrder }>(`${commercialPaths.quote(id)}/accept`, { name });
+export const declineQuote = (id: string, reason: string) => post<Quote>(`${commercialPaths.quote(id)}/decline`, { reason });
+export const quoteDocumentUrl = (id: string) => `/api/v1${commercialPaths.quote(id)}/document`;
+
+export const orderItemDone = (id: string, note: string) => post<SalesOrder>(`/sales-orders/items/${id}/done`, { note });
+export const orderItemRetry = (id: string, config?: Record<string, unknown>) => post<SalesOrder>(`/sales-orders/items/${id}/retry`, { config });
+export const orderItemCancel = (id: string, reason: string) => post<SalesOrder>(`/sales-orders/items/${id}/cancel`, { reason });
+export const cancelSalesOrder = (id: string, reason: string) => post<SalesOrder>(`/sales-orders/${id}/cancel`, { reason });
+export const endContractItem = (cid: string, id: string) => post<ContractItem>(`/customers/${cid}/contract/${id}/end`, {});

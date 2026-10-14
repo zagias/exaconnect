@@ -41,8 +41,10 @@ def _remove(conn, where: list[tuple[str, str, object]]) -> None:
         for table, column, value in where:
             try:
                 with conn.transaction():
+                    # As text: a few tables keep ids in text columns.
                     conn.execute(
-                        f'DELETE FROM "{table}" WHERE "{column}" = ANY(%s)', (value,)
+                        f'DELETE FROM "{table}" WHERE "{column}"::text = ANY(%s)',
+                        ([str(v) for v in value],),
                     )
             except psycopg.errors.ForeignKeyViolation:  # still referred to; next pass
                 left = True

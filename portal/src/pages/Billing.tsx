@@ -21,6 +21,7 @@ import { useAuth } from "../auth";
 import { ErrorNote, Eyebrow, ExampleTag, when } from "../components";
 import { useCustomer } from "../customer";
 import { Card, PageHead, RowActions, useAction } from "../ui";
+import { ContractCard } from "./Commercial";
 import "./billing.css";
 
 /** Billing (ADR 0022): each plan's running charges this month, invoices, and one
@@ -119,6 +120,7 @@ function BillingHome() {
         )}
       </Card>
       {c?.plans.map((p) => <PlanBlock key={p.subscription_id} p={p} />)}
+      {cid && <ContractCard cid={cid} />}
 
       <Card title="Invoices">
         <InvoiceTable

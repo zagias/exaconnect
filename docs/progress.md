@@ -475,3 +475,15 @@ if healthy, and the page shows Updated, Went back to its earlier software, Did
 not install or why the box did not take it. Choosing an earlier version takes
 boxes back. The live test sends the newest version to the lab box, which is not
 the box image, and checks it answers that it updates with apt.
+
+## 2026-10-14: catalogue, quotes, orders and rating (ADR 0055)
+
+Operations › Sales has a Catalogue (versioned prices: per unit, flat, tiered,
+volume, included units, minimums, term discounts), Quotes (a builder priced live
+by the rating engine, approval for discounts above an item's limit, a printable
+quote) and Orders. An organisation's owner accepts a quote under Organisation ›
+Quotes and orders; the order starts the plan, adds the sites and links by itself,
+and waits for staff on the box and installation. What was bought is billed on the
+plan invoice: monthly items pro rata, discount credits, one-off charges and usage
+rated on the agreed price. All prices are example prices. The live check runs
+quote to draft invoice in a browser on every deploy.

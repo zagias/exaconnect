@@ -12,6 +12,10 @@ describe("apps (ADR 0041)", () => {
     expect(areaFor("/sites/1")).toBe("connect");
     expect(areaFor("/commai")).toBe("commai");
     expect(areaFor("/commai/voice/me")).toBe("commai");
+    // Quotes and orders belong to the organisation; staff work them under Operations (ADR 0055).
+    expect(areaFor("/quotes/new")).toBe("account");
+    expect(areaFor("/orders/1")).toBe("account");
+    expect(areaFor("/admin/quotes/1")).toBe("ops");
     expect(areaFor("/account/people")).toBe("account");
     expect(areaFor("/billing/invoices")).toBe("account");
   });

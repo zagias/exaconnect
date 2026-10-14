@@ -11,6 +11,7 @@ from . import (
     billing,
     box,
     circuits,
+    commercial,
     deps,
     directory,
     internet,
@@ -58,6 +59,8 @@ router.include_router(metering.router, dependencies=_connect)
 # Billing covers every plan, so it needs none of them.
 router.include_router(billing.router)
 router.include_router(billing.customers_router)
+# Catalogue, quotes, orders and contracts sell both plans (ADR 0055).
+router.include_router(commercial.router)
 router.include_router(ai.router, dependencies=_connect)
 router.include_router(traffic.router, dependencies=_connect)
 router.include_router(circuits.router, dependencies=_connect)

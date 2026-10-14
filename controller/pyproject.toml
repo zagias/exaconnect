@@ -28,7 +28,7 @@ include = ["exaconnect_controller*"]
 
 [tool.setuptools.package-data]
 exaconnect_controller = ["schema.sql", "organisation.sql", "voice_trunks.sql", "voice_push.sql", "commai/sql/*.sql", "commai/static/*", "commai/i18n/*.json", "ai/fixtures/*.json", "ai/fixtures/*.xml",
-                         "integrations/*.sql", "integrations/yang/*.yang", "integrations/static/*"]
+                         "integrations/*.sql", "commercial/*.sql", "integrations/yang/*.yang", "integrations/static/*"]
 
 [tool.ruff]
 line-length = 120

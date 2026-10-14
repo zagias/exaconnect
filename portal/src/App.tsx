@@ -23,6 +23,7 @@ import Integrations from "./pages/Integrations";
 import Notices from "./pages/Notices";
 import Metering from "./pages/Metering";
 import OrderPage from "./pages/Order";
+import QuotesAndOrders, { Orders } from "./pages/Commercial";
 import Overview from "./pages/Overview";
 import { SiteList, SitePage } from "./pages/Sites";
 import Traffic from "./pages/Traffic";
@@ -104,6 +105,8 @@ function Layout() {
           <Route path="/order" element={<OrderPage />} />
           <Route path="/metering" element={<Metering />} />
           <Route path="/billing/*" element={<Billing />} />
+          <Route path="/quotes/*" element={<QuotesAndOrders />} />
+          <Route path="/orders/*" element={<Orders />} />
           <Route path="/insights" element={<Insights />} />
           <Route path="/notices" element={<Notices />} />
           <Route path="/integrations" element={<Integrations />} />
