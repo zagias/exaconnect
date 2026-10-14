@@ -487,3 +487,14 @@ and waits for staff on the box and installation. What was bought is billed on th
 plan invoice: monthly items pro rata, discount credits, one-off charges and usage
 rated on the agreed price. All prices are example prices. The live check runs
 quote to draft invoice in a browser on every deploy.
+
+## 2026-10-14: Teams, Zoom and other calling platforms (ADR 0056)
+
+Jibsy › Phone › Teams and Zoom joins an organisation's Microsoft Teams, Zoom Phone,
+Webex Calling, Google Voice, Genesys Cloud, NICE CXone or Talkdesk. Each link gets
+its own SIP address, people get a Jibsy number and an extension, and calls flow
+both ways between the app, Jibsy extensions and the outside world, billed per
+minute. Teams gets ready-to-paste PowerShell. Links start simulated (an echo);
+test calls run both ways. Real calls need the DNS, a public certificate and the
+platform accounts listed in the ADR. The live check runs a real browser call to a
+Teams person on every deploy.

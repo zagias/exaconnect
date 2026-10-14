@@ -22,7 +22,18 @@
 .voice-credit { width: 90px; }
 .voice-say { display: flex; gap: 8px; }
 .voice-say input { flex: 1; min-width: 0; }
+/* Calling platforms (ADR 0056). */
+.platform-list { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 8px; }
+.platform-list li { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; }
+.platform-kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 8px 0 12px; }
+.platform-kv dt { color: var(--ink-muted); }
+.platform-kv dd { margin: 0; word-break: break-all; }
+.platform-warn { color: var(--warning); }
+.platform-guide { margin: 16px 0; }
+.platform-guide pre { white-space: pre-wrap; word-break: break-all; background: var(--page); border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
 @media (max-width: 640px) {
+  .platform-kv { grid-template-columns: 1fr; }
+  .platform-list li { flex-direction: column; align-items: flex-start; }
   .voice-order-row { grid-template-columns: 1fr 1fr; }
   .voice-say { flex-direction: column; }
 }

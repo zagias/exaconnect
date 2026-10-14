@@ -40,7 +40,7 @@ import psycopg
 from psycopg.types.json import Jsonb
 
 from .. import jobs
-from . import emergency, pbx
+from . import emergency, pbx, platforms
 from .billing import EMERGENCY, fraud_limits
 from .common import domain as tenant_domain
 from .common import now
@@ -111,6 +111,8 @@ def gather(conn: psycopg.Connection, cid: Any) -> dict:
         # emergency calls, which never wait for it, every carrier switched on.
         "controller_url": controller_url(),
         "emergency_sets": pbx.emergency_sets(conn, cid),
+        # Teams, Zoom and other calling platforms (ADR 0056).
+        **platforms.dial_data(conn, cid),
     }
 
 
@@ -122,6 +124,8 @@ def controller_url() -> str:
 def _ext_of(data: dict, kind: str, target_id: str | None) -> str | None:
     if kind == "ai":
         return "exa-ai"
+    if kind == "platform_user":
+        return _plat_name(target_id) if any(u["id"] == target_id for u in data.get("platform_users", ())) else None
     coll = {"user": "users", "ring_group": "ring_groups", "queue": "queues", "menu": "menus"}.get(kind)
     if not coll:
         return None
@@ -129,6 +133,14 @@ def _ext_of(data: dict, kind: str, target_id: str | None) -> str | None:
         if item["id"] == target_id:
             return item["extension"]
     return None
+
+
+def _gateway(number: str) -> str:
+    return f"sofia/gateway/{GATEWAY}/{number}"
+
+
+def _plat_name(user_id: str) -> str:
+    return "exa-plat-" + user_id.replace("-", "")[:12]
 
 
 def _wake(data: dict, user_ext: str) -> str:
@@ -348,6 +360,8 @@ def _dialplan(data: dict) -> str:
             "    </extension>",
         ]
 
+    out += _platform_users(data)
+
     for g in data["ring_groups"]:
         members = [users[m]["extension"] for m in g["members"] if m in users]
         sep = "," if g["strategy"] == "simultaneous" else "|"
@@ -430,15 +444,95 @@ def _dialplan(data: dict) -> str:
             "    </extension>",
         ]
 
+    out += _from_platform(data)
     out += _outbound(data)
     out += ["  </context>", "</include>", ""]
     return "\n".join(out)
 
 
+def _platform_users(data: dict) -> list[str]:
+    """People on Teams, Zoom and other calling platforms (ADR 0056): their number and extension
+    ring them in the platform's app through Kamailio, on the link's dispatcher set. A simulated
+    link answers in Jibsy with an echo, so a test call hears itself."""
+    links = {lk["key"]: lk for lk in data.get("platform_links", ())}
+    out: list[str] = []
+    for u in data.get("platform_users", ()):
+        lk = links.get(u["link"])
+        name = _plat_name(u["id"])
+        out += [
+            f"    <extension name={a(name)}>",
+            f'      <condition field="destination_number" expression={a("^" + name + "$")}>',
+            '        <action application="set" data="call_timeout=30"/>',
+            '        <action application="set" data="continue_on_fail=true"/>',
+            '        <action application="set" data="hangup_after_bridge=true"/>',
+        ]
+        if lk and lk["enabled"] and u["enabled"]:
+            if lk["live"]:
+                srtp = "{rtp_secure_media=mandatory:AES_CM_128_HMAC_SHA1_80}" if lk["srtp"] else ""
+                out += [
+                    f'        <action application="set" data={a("sip_h_X-Exa-Route=" + str(lk["set_id"]))}/>',
+                    f'        <action application="bridge" data={a(srtp + _gateway(u["e164"]))}/>',
+                ]
+            elif not lk["sim_fail"]:
+                out += [
+                    '        <action application="answer"/>',
+                    '        <action application="sleep" data="300"/>',
+                    '        <action application="echo"/>',
+                ]
+        out += [
+            '        <action application="playback" data="ivr/ivr-call_cannot_be_completed_as_dialed.wav"/>',
+            '        <action application="hangup"/>',
+            "      </condition>",
+            "    </extension>",
+        ]
+        if u["extension"]:
+            out += [
+                f"    <extension name={a('plat-ext-' + u['extension'])}>",
+                f'      <condition field="destination_number" expression={a("^" + u["extension"] + "$")}>',
+                f'        <action application="transfer" data={a(name + " XML " + data["tenant"])}/>',
+                "      </condition>",
+                "    </extension>",
+            ]
+    return out
+
+
+def _from_platform(data: dict) -> list[str]:
+    """Calls made in a calling platform's app arrive as exa-plat-in-<number> (public.xml):
+    extensions and emergency numbers ring here, the organisation's numbers ring their target,
+    and anything else is an outside call the controller authorises (ADR 0056)."""
+    if not data.get("platform_links"):
+        return []
+    ctx = data["tenant"]
+    own = "|".join(sorted(n["e164"].lstrip("+") for n in data["numbers"]))
+    cond = f'      <condition field="${{exa_platform_link}}" expression={a(PLATFORM_LINK)}/>'
+    out = [
+        "    <!-- Calls from Teams, Zoom and other calling platforms (ADR 0056). -->",
+        '    <extension name="platform-short">',
+        cond,
+        '      <condition field="destination_number" expression="^exa-plat-in-(\\d{2,6})$">',
+        f'        <action application="transfer" data={a("$1 XML " + ctx)}/>',
+        "      </condition>",
+        "    </extension>",
+    ]
+    if own:
+        out += [
+            '    <extension name="platform-own-number">',
+            cond,
+            f'      <condition field="destination_number" expression={a("^exa-plat-in-(" + own + ")$")}>',
+            f'        <action application="transfer" data={a("exa-in-$1 XML " + ctx)}/>',
+            "      </condition>",
+            "    </extension>",
+        ]
+    return out + _outbound(data, platform=True)
+
+
 OUTSIDE = "^\\+?(\\d{7,15})$"
+FROM_PLATFORM_OUTSIDE = "^exa-plat-in-(\\d{7,15})$"
+PLATFORM_DIALLED = "^\\+?(\\d{2,15})$"
+PLATFORM_LINK = "^org-[0-9a-f]{8}-[0-9a-f]{8}$"
 
 
-def _outbound(data: dict) -> list[str]:
+def _outbound(data: dict, platform: bool = False) -> list[str]:
     """Outside calls: ask the controller first (voice/pbx.py), then bridge.
 
     The check runs inline while the dial plan is hunted, so the extensions after
@@ -448,28 +542,38 @@ def _outbound(data: dict) -> list[str]:
     The PBX's secret never appears here: ${exa_pbx_secret} is FreeSWITCH's own
     global variable, from EXA_PBX_SECRET in its environment (vars.xml)."""
     t = data["tenant"]
-    fields = f"{t}:${{user_name}}:${{exa_forwarded_by}}:$1:${{uuid}}"
+    if platform:
+        # A call from someone on Teams, Zoom or the like (ADR 0056): the link and their number,
+        # both set in public.xml from what Kamailio checked, stand for the extension.
+        dest, prefix, path = FROM_PLATFORM_OUTSIDE, "platform-", "authorise-platform"
+        fields = f"{t}:${{exa_platform_link}}:${{exa_from}}:$1:${{uuid}}"
+        query = f"tenant={t}&link=${{exa_platform_link}}&from=${{exa_from}}&to=$1&call=${{uuid}}"
+    else:
+        dest, prefix, path = OUTSIDE, "", "authorise"
+        fields = f"{t}:${{user_name}}:${{exa_forwarded_by}}:$1:${{uuid}}"
+        query = f"tenant={t}&ext=${{user_name}}&fwd=${{exa_forwarded_by}}&to=$1&call=${{uuid}}"
     digest = f"${{md5(${{exa_pbx_secret}}:{fields}:${{exa_pbx_secret}})}}"
-    url = (
-        f"{data['controller_url']}/api/v1/commai/internal/voice/authorise"
-        f"?tenant={t}&ext=${{user_name}}&fwd=${{exa_forwarded_by}}&to=$1&call=${{uuid}}"
-    )
+    url = f"{data['controller_url']}/api/v1/commai/internal/voice/{path}?{query}"
     ask = f"exa_auth=${{curl({url} connect-timeout 2 timeout 4 append_headers {pbx.HEADER}:{digest} get)}}"
 
     def ext(name: str, auth_expr: str | None, actions: list[str], cont: bool = False) -> list[str]:
-        lines = [f"    <extension name={a(name)}{' continue=' + a('true') if cont else ''}>"]
+        lines = [f"    <extension name={a(prefix + name)}{' continue=' + a('true') if cont else ''}>"]
+        if platform:
+            lines.append(f'      <condition field="${{exa_platform_link}}" expression={a(PLATFORM_LINK)}/>')
         if auth_expr is None:
-            lines.append(f'      <condition field="destination_number" expression={a(OUTSIDE)}>')
+            lines.append(f'      <condition field="destination_number" expression={a(dest)}>')
         else:
             lines += [
-                f'      <condition field="destination_number" expression={a(OUTSIDE)}/>',
+                f'      <condition field="destination_number" expression={a(dest)}/>',
                 f'      <condition field="${{exa_auth}}" expression={a(auth_expr)}>',
             ]
         return lines + [f"        {x}" for x in actions] + ["      </condition>", "    </extension>"]
 
     refuse = '<action application="playback" data="ivr/ivr-call_cannot_be_completed_as_dialed.wav"/>'
     return [
-        "    <!-- Outside calls: the controller authorises each one (voice/pbx.py). -->",
+        "    <!-- Outside calls"
+        + (" from a calling platform" if platform else "")
+        + ": the controller authorises each one (voice/pbx.py). -->",
         *ext(
             "outbound-authorise",
             None,
@@ -522,6 +626,24 @@ def _outbound(data: dict) -> list[str]:
 
 def _public(data: dict) -> str:
     out = ["<include>"]
+    # Calls from a calling platform (ADR 0056): Kamailio names the link in X-Exa-Link once it has
+    # checked the call came from the platform to this organisation's SIP address.
+    for lk in data.get("platform_links", ()):
+        if not (lk["live"] and lk["enabled"]):
+            continue
+        out += [
+            f"  <extension name={a('plat-' + lk['key'])}>",
+            f'    <condition field="${{sip_h_X-Exa-Link}}" expression={a("^" + lk["key"] + "$")}/>',
+            f'    <condition field="destination_number" expression={a(PLATFORM_DIALLED)}>',
+            f'      <action application="set" data={a("domain_name=" + data["domain"])}/>',
+            f'      <action application="set" data={a("exa_platform_link=" + lk["key"])}/>',
+            '      <action application="set" data="exa_from=${regex(${caller_id_number}|^\\+?(\\d{7,15})$|%1)}"/>',
+            '      <action application="set" data="exa_emergency_callback=${caller_id_number}"/>',
+            '      <action application="set" data="rtp_secure_media=optional"/>',
+            f'      <action application="transfer" data={a("exa-plat-in-$1 XML " + data["tenant"])}/>',
+            "    </condition>",
+            "  </extension>",
+        ]
     for n in data["numbers"]:
         digits = n["e164"].lstrip("+")
         out += [

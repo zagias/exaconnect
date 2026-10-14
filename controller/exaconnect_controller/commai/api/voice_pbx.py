@@ -38,6 +38,24 @@ def pbx_authorise(
         return pbx.authorise(conn, tenant, ext, fwd, to, call)
 
 
+@public.get("/authorise-platform", response_class=PlainTextResponse)
+def pbx_authorise_platform(
+    tenant: str = Query("", max_length=40),
+    link: str = Query("", max_length=40),
+    frm: str = Query("", alias="from", max_length=20),
+    to: str = Query("", max_length=40),
+    call: str = Query("", max_length=80),
+    x_exa_pbx_auth: str | None = Header(default=None),
+) -> str:
+    """May this outside call from Teams, Zoom or the like go ahead (ADR 0056)? Same answer as /authorise."""
+    try:
+        pbx.check(x_exa_pbx_auth, tenant, link, frm, to, call)
+    except VoiceError as e:
+        raise HTTPException(e.code, str(e)) from e
+    with db.tx() as conn:
+        return pbx.authorise_platform(conn, tenant, link, frm, to, call)
+
+
 @public.get("/ring", response_class=PlainTextResponse)
 def pbx_ring(
     tenant: str = Query("", max_length=40),

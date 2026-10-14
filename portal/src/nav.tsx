@@ -518,6 +518,7 @@ export const TABS: Record<string, [string, string, string?][]> = {
     ["/commai/voice/numbers", "Numbers", "dids"],
     ["/commai/voice/ports", "Ports", "porting bring numbers"],
     ["/commai/voice/trunks", "SIP trunks", "own carrier trunk primary secondary location failover"],
+    ["/commai/voice/platforms", "Teams and Zoom", "microsoft teams direct routing zoom phone byoc webex calling google voice genesys nice cxone talkdesk calling platforms"],
     ["/commai/voice/emergency", "Emergency addresses", "911 999"],
     ["/commai/voice/fraud", "Fraud", "limits"],
     ["/commai/voice/billing", "Billing", "call charges"],

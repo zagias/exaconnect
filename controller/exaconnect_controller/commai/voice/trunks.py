@@ -60,7 +60,9 @@ def _trunk(conn, cid: Any, trunk_id: Any, *, allow_none: bool = False) -> dict |
         uuid.UUID(str(trunk_id))
     except ValueError as e:
         raise VoiceError("That trunk was not found.", 404) from e
-    row = conn.execute("SELECT * FROM voice_carriers WHERE id = %s AND customer_id = %s", (trunk_id, cid)).fetchone()
+    row = conn.execute(
+        "SELECT * FROM voice_carriers WHERE id = %s AND customer_id = %s AND platform IS NULL", (trunk_id, cid)
+    ).fetchone()
     if row is None:
         raise VoiceError("That trunk was not found.", 404)
     return row
@@ -166,7 +168,9 @@ def _health_for(t: dict, sim_fail: str) -> tuple[str, int]:
 
 
 def list_trunks(conn: psycopg.Connection, cid: Any) -> list[dict]:
-    rows = conn.execute("SELECT * FROM voice_carriers WHERE customer_id = %s ORDER BY lower(name)", (cid,)).fetchall()
+    rows = conn.execute(
+        "SELECT * FROM voice_carriers WHERE customer_id = %s AND platform IS NULL ORDER BY lower(name)", (cid,)
+    ).fetchall()
     return [_out(t) for t in rows]
 
 
@@ -174,7 +178,8 @@ def save_trunk(conn: psycopg.Connection, cid: Any, body: dict, actor: str, trunk
     old = _trunk(conn, cid, trunk_id) if trunk_id else None
     v = _clean(body, old)
     clash = conn.execute(
-        "SELECT 1 FROM voice_carriers WHERE customer_id = %s AND lower(name) = lower(%s) AND id <> %s",
+        "SELECT 1 FROM voice_carriers WHERE customer_id = %s AND platform IS NULL AND lower(name) = lower(%s)"
+        " AND id <> %s",
         (cid, v["name"], old["id"] if old else uuid.uuid4()),
     ).fetchone()
     if clash:
@@ -351,7 +356,9 @@ def caller_location(conn, cid: Any, voice_user_id: Any) -> dict | None:
 def route(conn: psycopg.Connection, cid: Any, number: str, voice_user_id: Any = None) -> dict | None:
     """The trunks to try for this caller and number, in order, with why each is
     used or skipped. None when the organisation has no trunks of its own."""
-    if not conn.execute("SELECT 1 FROM voice_carriers WHERE customer_id = %s LIMIT 1", (cid,)).fetchone():
+    if not conn.execute(
+        "SELECT 1 FROM voice_carriers WHERE customer_id = %s AND platform IS NULL LIMIT 1", (cid,)
+    ).fetchone():
         return None
     from ... import organisation
 

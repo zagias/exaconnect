@@ -221,6 +221,7 @@ def _check_ext(conn, cid, ext: str, exclude: Any = None) -> str:
         ("voice_ring_groups", "true"),
         ("voice_queues", "true"),
         ("voice_menus", "true"),
+        ("voice_platform_users", "true"),  # people on Teams, Zoom and the like (ADR 0056)
     ):
         if conn.execute(
             f"SELECT 1 FROM {table} WHERE customer_id = %s AND extension = %s AND {cond} AND id::text <> %s",
