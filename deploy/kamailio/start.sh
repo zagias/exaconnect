@@ -12,7 +12,7 @@ load_platforms() {
   kamcmd htable.flush platforms >/dev/null || return 1
   [ -f "$DIR/platforms.list" ] || return 0
   grep -v '^#' "$DIR/platforms.list" | while read -r host link; do
-    [ -n "$host" ] && [ -n "$link" ] || continue
+    if [ -z "$host" ] || [ -z "$link" ]; then continue; fi
     kamcmd htable.sets platforms "$host" "$link" >/dev/null || exit 1
   done
 }
