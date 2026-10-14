@@ -8,6 +8,7 @@ import { Carriers, Emergency, EmergencyNotice, Fraud, Numbers, Ports, VoiceNotic
 import Dialer from "./voice/Dialer";
 import MySettings from "./voice/MySettings";
 import Orders from "./voice/Orders";
+import Platforms from "./voice/Platforms";
 import Trunks from "./voice/Trunks";
 import { Access, Changes, PeopleAndNumbers, PendingChange, Routing, usePending } from "./voice/PhoneSystem";
 import type { VoiceOverview } from "./voice/types";
@@ -20,6 +21,7 @@ const OTHER_TABS = [
   "/commai/voice/numbers",
   "/commai/voice/ports",
   "/commai/voice/trunks",
+  "/commai/voice/platforms",
   "/commai/voice/emergency",
   "/commai/voice/fraud",
   "/commai/voice/carriers",
@@ -67,6 +69,7 @@ export default function Voice() {
         <NavLink to="/commai/voice/numbers">Numbers</NavLink>
         <NavLink to="/commai/voice/ports">Ports</NavLink>
         <NavLink to="/commai/voice/trunks">SIP trunks</NavLink>
+        <NavLink to="/commai/voice/platforms">Teams and Zoom</NavLink>
         <NavLink to="/commai/voice/emergency">Emergency</NavLink>
         <NavLink to="/commai/voice/fraud">Fraud</NavLink>
         <NavLink to="/commai/voice/billing">Billing</NavLink>
@@ -101,6 +104,7 @@ export default function Voice() {
           <Route path="/numbers" element={<Numbers base={base} v={v} />} />
           <Route path="/ports" element={<Ports base={base} v={v} />} />
           <Route path="/trunks" element={<Trunks base={base} v={v} />} />
+          <Route path="/platforms" element={<Platforms base={base} v={v} />} />
           <Route path="/emergency" element={<Emergency base={base} />} />
           <Route path="/fraud" element={<Fraud base={base} v={v} />} />
           {v.is_exacarib && <Route path="/carriers" element={<Carriers customerId={base.split("/").pop() ?? ""} />} />}

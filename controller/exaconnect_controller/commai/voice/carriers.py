@@ -510,6 +510,17 @@ def dispatcher_list(conn: psycopg.Connection) -> str:
     ]
     for c in conn.execute("SELECT * FROM voice_carriers WHERE enabled ORDER BY set_id").fetchall():
         o = c["outbound"] or {}
+        if c["platform"]:
+            # A calling platform (ADR 0056): every one of its SIP addresses (platforms.list gives Kamailio
+            # the organisation's SIP address for the set). Simulated links never reach Kamailio.
+            if c["adapter"] != "sip":
+                continue
+            for pri, host in enumerate(o.get("hosts") or []):
+                lines.append(
+                    f"{c['set_id']} sip:{host}:{o.get('port', 5061)};transport=tls 0 {pri} "
+                    f"carrier={c['key']};maxload={o.get('max_channels', 30)}"
+                )
+            continue
         if not o.get("host"):
             continue
         lines.append(
@@ -524,10 +535,19 @@ def address_list(conn: psycopg.Connection) -> str:
     (group 1), and FreeSWITCH (group 2): the networks in EXA_KAMAILIO_PBX_NETS,
     which `make voice-up` sets to the compose network both run on."""
     lines = ["# Rendered by the ExaCarib controller. group ip mask port tag"]
+    seen = set()
     for c in conn.execute("SELECT * FROM voice_carriers WHERE enabled ORDER BY key").fetchall():
+        if c["platform"] and c["adapter"] != "sip":
+            continue  # a simulated calling platform sends nothing
         for net in (c["inbound"] or {}).get("allow_ips", []):
             n = ipaddress.ip_network(net, strict=False)
-            lines.append(f"1 {n.network_address} {n.prefixlen} 0 {c['key']}")
+            # A calling platform's addresses carry the platform's name (ADR 0056): Kamailio checks a call
+            # to an organisation's platform SIP address came from that platform. Shared, so listed once.
+            tag = c["platform"] or c["key"]
+            if (n, tag) in seen:
+                continue
+            seen.add((n, tag))
+            lines.append(f"1 {n.network_address} {n.prefixlen} 0 {tag}")
     for net in os.environ.get("EXA_KAMAILIO_PBX_NETS", "").split(","):
         if net.strip():
             n = ipaddress.ip_network(net.strip(), strict=False)
@@ -543,7 +563,13 @@ def carrier_sets(conn: psycopg.Connection) -> dict[str, int]:
 
 
 def render_kamailio(conn: psycopg.Connection) -> dict:
-    files = {"dispatcher.list": dispatcher_list(conn), "address.list": address_list(conn)}
+    from . import platforms
+
+    files = {
+        "dispatcher.list": dispatcher_list(conn),
+        "address.list": address_list(conn),
+        "platforms.list": platforms.kamailio_list(conn),
+    }
     root = os.environ.get("EXA_KAMAILIO_DIR", "")
     if root:
         Path(root).mkdir(parents=True, exist_ok=True)

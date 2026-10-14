@@ -189,6 +189,63 @@ def authorise(conn: psycopg.Connection, tenant: str, ext: str, fwd: str, to: str
     return f"OK {','.join(map(str, sets)) or 'none'} {cli or 'none'}"
 
 
+def authorise_platform(conn: psycopg.Connection, tenant: str, link: str, frm: str, to: str, call: str) -> str:
+    """The answer line for an outside call made in a calling platform's app (ADR 0056).
+
+    The dial plan sends the link Kamailio named (it checked the call came from the platform to
+    the organisation's own SIP address) and the caller's number; the caller must be someone
+    the organisation put on that link, with that number. Otherwise the same checks, carrier
+    order and per-minute billing as a call from a Jibsy extension."""
+    from .. import entitlements
+    from . import platforms
+
+    if not (TENANT.match(tenant) and FIELD["to"].match(to) and CALL.match(call)):
+        return "NO bad_request"
+    to = digits(to)
+    cid = business_for_tenant(conn, tenant)
+    if cid is None:
+        return "NO unknown_caller"
+    number = "+" + to
+    who = platforms.caller(conn, cid, link, frm) if re.fullmatch(r"\+?\d{7,15}", frm or "") else None
+    if who is None or not entitlements.enabled(conn, cid, "voice"):
+        verdict = billing.refused("unknown_caller" if who is None else "voice_off", "Refused by the PBX check.")
+        cli = ""
+    else:
+        cli = who["e164"]
+        verdict = billing.authorise(conn, cid, number, from_number=cli)
+    sets: list[int] = []
+    if verdict["allowed"] and verdict.get("route"):
+        by_key = carriers.carrier_sets(conn)
+        sets = [by_key[k] for k in verdict["route"] if k in by_key]
+        if not sets:
+            verdict = billing.refused("no_carrier", "No carrier in the edge proxy's list can take the call.")
+    _record(conn, cid, call, None, number, verdict, sets, cli)
+    if not verdict["allowed"]:
+        at = now()
+        billing.record_call(
+            conn,
+            cid,
+            {
+                "call_id": call,
+                "direction": "outbound",
+                "from_number": cli or digits(frm or ""),
+                "to_number": number,
+                "voice_user_id": None,
+                "started_at": at,
+                "ended_at": at,
+                "seconds": 0,
+                "status": "blocked",
+                "block_reason": verdict.get("reason", ""),
+                "provider_ref": call,
+            },
+        )
+        code = verdict.get("code") or "refused"
+        audit.record(conn, "system:pbx", "commai.voice.pbx_refused", call, cid, {"code": code, "link": link})
+        return f"NO {code if code in CODES else 'refused'}"
+    audit.record(conn, "system:pbx", "commai.voice.pbx_authorised", call, cid, {"sets": sets, "link": link})
+    return f"OK {','.join(map(str, sets)) or 'none'} {cli or 'none'}"
+
+
 def emergency_sets(conn: psycopg.Connection, cid: Any) -> list[int]:
     """Every carrier switched on for this business, for emergency calls (no controller check)."""
     from .. import golive

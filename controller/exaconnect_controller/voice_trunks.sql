@@ -7,8 +7,7 @@
 -- the organisation's own) and carry no ExaCarib rate sheet.
 ALTER TABLE voice_carriers ADD COLUMN IF NOT EXISTS customer_id uuid REFERENCES customers(id) ON DELETE CASCADE;
 CREATE INDEX IF NOT EXISTS voice_carriers_customer ON voice_carriers (customer_id) WHERE customer_id IS NOT NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS voice_carriers_customer_name ON voice_carriers (customer_id, lower(name))
-  WHERE customer_id IS NOT NULL;
+-- Trunk names are unique per organisation: voice_carriers_trunk_name (voice_platforms.sql).
 
 -- The organisation's default trunk, and whether ExaCarib's carriers take calls
 -- when none of its own trunks can.

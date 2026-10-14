@@ -34,6 +34,7 @@ ROUTER_MODULES = {
     "voice": "voice",
     "voice_global": "voice",
     "voice_trunks": "voice",
+    "voice_platforms": "voice",
     "ai": "ai_agents",
     "automation": "automation",
     "connectors_more": "automation",
