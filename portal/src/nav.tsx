@@ -425,6 +425,14 @@ export function opsGroups(): Group[] {
       ],
     },
     {
+      label: "Sales",
+      items: [
+        { to: "/admin/catalogue", label: "Catalogue", icon: icons.apps, keywords: "products prices rating cpq" },
+        { to: "/admin/quotes", label: "Quotes", icon: icons.receipt, keywords: "cpq proposal discount approve" },
+        { to: "/admin/orders", label: "Orders", icon: icons.order, keywords: "sales orders fulfilment provisioning" },
+      ],
+    },
+    {
       label: "Platform",
       items: [
         { to: "/admin/boxes", label: "Boxes", icon: icons.sites, keywords: "zero-touch serial devices claim install" },
@@ -470,6 +478,7 @@ export function accountGroups(opts: { carrier: boolean; jibsy: boolean; manager?
       items: [
         { to: "/account/apps", label: "Apps and plans", icon: icons.apps, keywords: "plan subscription add jibsy connect" },
         { to: "/billing", label: "Billing", icon: icons.billing, keywords: "invoices payments" },
+        { to: "/quotes", label: "Quotes and orders", icon: icons.receipt, keywords: "quote order buy catalogue prices" },
       ],
     },
     {

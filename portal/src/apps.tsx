@@ -25,7 +25,7 @@ export const APP_INFO: Record<AppId, { name: string; full: string; blurb: string
 export const APP_ORDER: AppId[] = ["connect", "commai"];
 
 /** Shared pages that belong to no single app. */
-const ACCOUNT_PATHS = ["/org", "/account", "/billing"];
+const ACCOUNT_PATHS = ["/org", "/account", "/billing", "/quotes", "/orders"];
 /** ExaCarib staff screens. */
 const OPS_PATHS = ["/ops", "/admin", "/commai/golive", "/commai/support"];
 

@@ -7,6 +7,7 @@ import { BoxTag, ManagedTag, boxSetupCode } from "../box";
 import { useCustomer, who } from "../customer";
 import { Card, PageHead, RowActions, useAction } from "../ui";
 import { BillingAdmin } from "./BillingAdmin";
+import QuotesAndOrders, { CatalogueAdmin, Orders } from "./Commercial";
 import { BoxesAdmin } from "./Boxes";
 import { Classes } from "./Classes";
 import { IntegrationsAdmin } from "./IntegrationsAdmin";
@@ -40,6 +41,9 @@ const SECTIONS: Record<string, [string, string]> = {
   classes: ["Classes and SLA", "Application classes and the SLA each one is held to."],
   partners: ["Partners", "White-label partners and the apps they offer."],
   billing: ["Billing", "Plans, price lists and invoices."],
+  catalogue: ["Catalogue", "What ExaCarib sells and its prices, for quotes."],
+  quotes: ["Quotes", "Build, discount, approve and send quotes. An accepted quote becomes an order."],
+  orders: ["Orders", "Accepted quotes being set up. Mark manual items done; their charges start that day."],
   protection: ["Protection", "DDoS protection on the PoPs."],
   integrations: ["Integrations", "Monitoring and ticketing connections."],
   users: ["Accounts", "ExaCarib staff and carrier logins. Customers invite their own people under Organisation › People and access."],
@@ -64,6 +68,9 @@ export default function Admin() {
         <Route path="classes" element={<Classes />} />
         <Route path="partners" element={<PartnersAdmin />} />
         <Route path="billing" element={<BillingAdmin />} />
+        <Route path="catalogue" element={<CatalogueAdmin />} />
+        <Route path="quotes/*" element={<QuotesAndOrders />} />
+        <Route path="orders/*" element={<Orders />} />
         <Route path="protection" element={<ProtectionAdmin />} />
         <Route path="integrations" element={<IntegrationsAdmin />} />
         <Route path="users" element={<UsersAdmin />} />

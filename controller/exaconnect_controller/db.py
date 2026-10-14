@@ -47,6 +47,8 @@ def apply_schema(conn: psycopg.Connection) -> None:
         conn.execute(resources.files(__package__).joinpath("voice_trunks.sql").read_text())
         # Jibsy Phone rings when closed (ADR 0045): Web Push subscriptions per device.
         conn.execute(resources.files(__package__).joinpath("voice_push.sql").read_text())
+        # Catalogue, rating, quotes, sales orders and contracts (ADR 0055): after plans.
+        conn.execute(resources.files(__package__).joinpath("commercial", "schema.sql").read_text())
         # Go-live registry (ADR 0028): declared capabilities start off.
         from .commai import golive
 

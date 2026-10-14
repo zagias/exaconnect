@@ -299,6 +299,10 @@ def compute_subscription(conn: psycopg.Connection, sub: dict, start: dt.date, no
         lines += _connect_lines(conn, sub["customer_id"], pl, start, end, frm, to, complete)
     else:
         lines += _commai_lines(conn, sub["customer_id"], pl, frm, to)
+    # What was bought through quotes (ADR 0055): contract items, one-offs and rated usage.
+    from ..commercial import contract
+
+    lines += contract.billing_lines(conn, sub["customer_id"], plan["product"], pl["currency"], start, frm, to)
     for i, x in enumerate(lines, 1):
         x["position"] = i
         x["product"] = plan["product"]
@@ -1077,15 +1081,20 @@ SERVICES = {
     "credit": "credits",
     "usage": "commai_usage",
     "voice": "voice",
+    "recurring": "services",
+    "rated": "services",
+    "one_off": "one_off",
 }
 SERVICE_LABELS = {
     "plan_fees": "Plan fees",
     "sites": "Site fees",
     "connectivity": "Carrier links (commit, burst at the 95th percentile, satellite data)",
     "fabric": "Fabric virtual circuits (hourly)",
-    "credits": "SLA credits",
+    "credits": "SLA credits and contract discounts",
     "commai_usage": "Jibsy usage",
     "voice": "Jibsy Voice",
+    "services": "Contracted services and rated usage (quotes)",
+    "one_off": "One-off charges (hardware, installation, onboarding)",
 }
 
 
