@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from .. import audit, db, inventory, organisation
 from ..identity import orgs
-from .deps import PRODUCTS, AdminDep, UserDep, check_customer, require_org_manager
+from .deps import PRODUCTS, AdminDep, UserDep, check_customer, check_product, require_org_manager
 
 router = APIRouter(tags=["organisations"])
 
@@ -126,6 +126,14 @@ class ConnectIn(BaseModel):
     lan_prefixes: list[str] = Field(default_factory=list, max_length=16)
 
 
+def _require_connect_manager(user, customer_id: str) -> None:
+    """Shared organisation access does not grant permission to provision a network."""
+    require_org_manager(user, customer_id)
+    check_product(user, "connect")
+    if user.scopes is not None and "connect" not in user.scopes:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Connect provisioning requires Connect write access.")
+
+
 def _install(request: Request, site: str, token: str, expires) -> dict:
     s = request.app.state.settings
     return {
@@ -141,7 +149,7 @@ def _install(request: Request, site: str, token: str, expires) -> dict:
 @router.post("/orgs/{customer_id}/locations/{location_id}/connect", status_code=201)
 def connect_location(customer_id: str, location_id: str, body: ConnectIn, user: UserDep, request: Request) -> dict:
     """Make the Connect site for a location and return a one-time install code for its box."""
-    require_org_manager(user, customer_id)
+    _require_connect_manager(user, customer_id)
     cid = _uuid(customer_id)
     with db.tx() as conn:
         site = _run(
@@ -161,7 +169,7 @@ def connect_location(customer_id: str, location_id: str, body: ConnectIn, user: 
 @router.post("/orgs/{customer_id}/sites/{site_id}/install-code", status_code=201)
 def install_code(customer_id: str, site_id: str, user: UserDep, request: Request) -> dict:
     """A new one-time install code for a location's box (the old one stops working when this is used)."""
-    require_org_manager(user, customer_id)
+    _require_connect_manager(user, customer_id)
     cid = _uuid(customer_id)
     with db.tx() as conn:
         site = conn.execute(

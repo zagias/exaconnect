@@ -24,6 +24,9 @@ import {
 import { ErrorNote, ExampleTag } from "../components";
 import { useCustomer, who } from "../customer";
 import { Card, PageHead, useAction } from "../ui";
+import { useConnectCapabilities } from "../ConnectCapabilities";
+import { useAuth } from "../auth";
+import { canOperateConnect } from "../permissions";
 
 // Partner directory and plain-English ordering (ADR 0011, docs/ordering-contract.md).
 // A person describes what they need, or picks a partner from the directory; the
@@ -102,6 +105,7 @@ export default function OrderPage() {
 }
 
 function OrderScreen({ customerId, customerName, sites }: { customerId: string; customerName: string; sites: StormSite[] }) {
+  const canOperate = canOperateConnect(useAuth().user);
   const orders = useApi<Order[]>(orderPaths.list(customerId), 10_000);
   const [draft, setDraft] = useState<Order | null>(null);
   const top = useRef<HTMLDivElement>(null);
@@ -113,11 +117,12 @@ function OrderScreen({ customerId, customerName, sites }: { customerId: string; 
   return (
     <>
       <PageHead eyebrow="Orders" title="Order connections">
-        Ask for circuits, bandwidth and internet access in plain English, or pick a partner from the directory. Nothing
-        changes until you confirm the draft.
+        {canOperate
+          ? "Ask for circuits, bandwidth and internet access in plain English, or pick a partner from the directory. Nothing changes until you confirm the draft."
+          : "Review your organisation’s connection orders and draft requests."}
       </PageHead>
       <div ref={top} style={{ scrollMarginTop: 16 }}>
-        <Describe
+        {canOperate ? <Describe
           customerId={customerId}
           sites={sites}
           draft={draft}
@@ -130,7 +135,7 @@ function OrderScreen({ customerId, customerName, sites }: { customerId: string; 
             orders.reload();
           }}
           onClose={() => setDraft(null)}
-        />
+        /> : draft && <DraftView customerId={customerId} order={draft} onUpdate={show} onClose={() => setDraft(null)} />}
       </div>
       <Directory customerId={customerId} sites={sites} onDrafted={show} />
       <Orders customerName={customerName} orders={orders.data} error={orders.error} onOpen={show} />
@@ -252,18 +257,24 @@ function DraftView({
   onUpdate: (o: Order) => void;
   onClose: () => void;
 }) {
+  const capabilities = useConnectCapabilities();
+  const canOperate = canOperateConnect(useAuth().user);
   const [values, setValues] = useState<Record<string, string>>(() =>
     Object.fromEntries(order.needs.map((n) => [needKey(n), n.default == null ? "" : String(n.default)])),
   );
   const act = useAction();
   const isDraft = order.status === "draft";
   const missing = order.needs.some((n) => !isOptional(n) && !(values[needKey(n)] ?? "").trim());
-  const blocked = order.problems.length > 0 || order.actions.length === 0;
+  const unavailableOnramp = order.actions.some((action) =>
+    action.action === "onramp" && !capabilities.onramps.some((adapter) => adapter.key === action.provider),
+  );
+  const blocked = order.problems.length > 0 || order.actions.length === 0 || unavailableOnramp;
   const estimate = estimateText(order.monthly_estimate);
   const grouped = order.actions.length > 1;
 
   const confirm = (e: FormEvent) => {
     e.preventDefault();
+    if (!canOperate || unavailableOnramp) return;
     act.run(async () => {
       const done = await confirmOrder(customerId, order.id, buildInputs(order, values));
       // Secrets go straight to the circuit; don't keep them in the page.
@@ -323,8 +334,15 @@ function DraftView({
         </ul>
       )}
       {estimate && <p className="estimate">{estimate}</p>}
+      {isDraft && unavailableOnramp && (
+        <p className="callout warn" role="status">
+          {capabilities.loading
+            ? "Checking availability for the dedicated cloud connection in this order…"
+            : "The dedicated cloud connection in this draft is not available to order. Contact ExaCarib before continuing."}
+        </p>
+      )}
 
-      {isDraft ? (
+      {isDraft && canOperate ? (
         <form className="form" onSubmit={confirm}>
           {grouped
             ? order.actions.map((_, i) => {
@@ -353,8 +371,7 @@ function DraftView({
         </form>
       ) : (
         <>
-          <OutcomeNote order={order} />
-          <Results order={order} />
+          {isDraft ? <p className="small muted">You have view-only access to this draft.</p> : <><OutcomeNote order={order} /><Results order={order} /></>}
           <div className="actions" style={{ marginTop: 12 }}>
             <button type="button" className="button secondary small" onClick={onClose}>
               Close
@@ -410,6 +427,8 @@ function Results({ order }: { order: Order }) {
 // ---- (b) Partner directory ----
 
 function Directory({ customerId, sites, onDrafted }: { customerId: string; sites: StormSite[]; onDrafted: (o: Order) => void }) {
+  const { user } = useAuth();
+  const { current } = useCustomer();
   const [category, setCategory] = useState<PartnerCategory | "">("");
   const [q, setQ] = useState("");
   const [query, setQuery] = useState("");
@@ -419,7 +438,8 @@ function Directory({ customerId, sites, onDrafted }: { customerId: string; sites
   }, [q]);
   const list = useApi<Partner[]>(orderPaths.partners(category, query), 0);
   const [connecting, setConnecting] = useState<number | null>(null);
-  const partners = list.data ?? [];
+  const examples = user?.role === "admin" || current?.example === true;
+  const partners = (list.data ?? []).filter((partner) => !partner.example || examples);
   return (
     <Card title="Partner directory">
       <p className="small muted" style={{ marginTop: 0 }}>
@@ -476,6 +496,7 @@ function PartnerCard({
   onToggle: () => void;
   onDrafted: (o: Order) => void;
 }) {
+  const canOperate = canOperateConnect(useAuth().user);
   const site = safeUrl(p.website);
   return (
     <article className="card-inset partner">
@@ -504,16 +525,16 @@ function PartnerCard({
         <span className="mono">{usd(p.price_per_mbps_month)}</span> per Mbps a month
       </div>
       <div className="form-actions" style={{ alignItems: "center", marginTop: "auto", paddingTop: 4 }}>
-        <button className="button small" aria-expanded={open} onClick={onToggle}>
+        {canOperate && <button className="button small" aria-expanded={open} onClick={onToggle}>
           Connect
-        </button>
+        </button>}
         {site && (
           <a href={site} target="_blank" rel="noopener noreferrer" className="small">
             Website
           </a>
         )}
       </div>
-      {open && <ConnectForm p={p} customerId={customerId} sites={sites} onDrafted={onDrafted} onCancel={onToggle} />}
+      {canOperate && open && <ConnectForm p={p} customerId={customerId} sites={sites} onDrafted={onDrafted} onCancel={onToggle} />}
     </article>
   );
 }
@@ -620,6 +641,7 @@ function Orders({
   error: string | null;
   onOpen: (o: Order) => void;
 }) {
+  const canOperate = canOperateConnect(useAuth().user);
   const [all, setAll] = useState(false);
   const list = orders ?? [];
   const shown = all ? list : list.slice(0, SHOW);
@@ -671,7 +693,7 @@ function Orders({
                   <td className="actions">
                     {o.status === "draft" && (
                       <button className="button secondary small" onClick={() => onOpen(o)}>
-                        Open
+                        {canOperate ? "Open" : "View"}
                       </button>
                     )}
                   </td>

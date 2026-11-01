@@ -8,6 +8,8 @@ import { ErrorNote, ago } from "../components";
 import { useCustomer } from "../customer";
 import { Card, PageHead, useAction } from "../ui";
 import { useCanManage } from "./org/common";
+import { useAuth } from "../auth";
+import { canOperateConnect } from "../permissions";
 
 interface BoxRow {
   site_id: string;
@@ -46,7 +48,8 @@ const MANAGED_NAMES = {
 
 export function BoxSoftware() {
   const { current } = useCustomer();
-  const canManage = useCanManage();
+  const { user } = useAuth();
+  const canManage = useCanManage() && canOperateConnect(user);
   const q = current ? `?customer_id=${current.id}` : "";
   const data = useApi<{ boxes: BoxRow[] }>(
     current ? `/box-software${q}` : null,

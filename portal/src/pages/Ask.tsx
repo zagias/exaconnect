@@ -4,6 +4,8 @@ import { api, useApi, type AiStatus } from "../api";
 import { ErrorNote } from "../components";
 import { PageHead } from "../ui";
 import { useCustomer } from "../customer";
+import { useAuth } from "../auth";
+import { canOperateConnect } from "../permissions";
 
 interface PlanResult {
   action: number;
@@ -37,6 +39,7 @@ const SUGGESTIONS = [
   "Voice keeps breaking up in Kingston. Fix it",
   "Are we heading for burst charges this month?",
 ];
+const QUESTIONS = [SUGGESTIONS[0], SUGGESTIONS[3]];
 
 const STATUS: Record<Plan["status"], string> = {
   draft: "Waiting for you",
@@ -47,6 +50,7 @@ const STATUS: Record<Plan["status"], string> = {
 
 /** One proposed set of changes: nothing happens until someone applies it, and applied changes can be undone. */
 function PlanCard({ plan, onChange }: { plan: Plan; onChange: (p: Plan) => void }) {
+  const canOperate = canOperateConnect(useAuth().user);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const step = async (what: "apply" | "undo" | "cancel") => {
@@ -66,9 +70,9 @@ function PlanCard({ plan, onChange }: { plan: Plan; onChange: (p: Plan) => void 
     <div className="card plan" aria-label="Proposed changes">
       <div className="plan-head">
         <span className="eyebrow">Proposed changes</span>
-        <span className={plan.status === "applied" ? "pill ok" : draft ? "pill warn" : "pill"}>{STATUS[plan.status]}</span>
+        <span className={plan.status === "applied" ? "pill ok" : draft ? "pill warn" : "pill"}>{draft && !canOperate ? "View only" : STATUS[plan.status]}</span>
       </div>
-      {draft && <div className="small muted">If you apply them, Connect will:</div>}
+      {draft && <div className="small muted">{canOperate ? "If you apply them, Connect will:" : "This proposal would:"}</div>}
       <ul className="lines">
         {(draft ? plan.summary : plan.results.map((r) => r.message)).map((line, i) => (
           <li key={i}>{line}</li>
@@ -94,7 +98,7 @@ function PlanCard({ plan, onChange }: { plan: Plan; onChange: (p: Plan) => void 
       )}
       <ErrorNote error={error} />
       <div className="actions">
-        {draft && (
+        {canOperate && draft && (
           <>
             <button className="button" disabled={busy || plan.problems.length > 0} onClick={() => step("apply")}>
               Apply changes
@@ -104,7 +108,7 @@ function PlanCard({ plan, onChange }: { plan: Plan; onChange: (p: Plan) => void 
             </button>
           </>
         )}
-        {plan.status === "applied" && (
+        {canOperate && plan.status === "applied" && (
           <button className="button secondary" disabled={busy} onClick={() => step("undo")}>
             Undo
           </button>
@@ -115,7 +119,7 @@ function PlanCard({ plan, onChange }: { plan: Plan; onChange: (p: Plan) => void 
           </Link>
         )}
       </div>
-      {draft && <p className="small muted">Every change is checked first, applied together or not at all, and logged.</p>}
+      {draft && <p className="small muted">{canOperate ? "Every change is checked first, applied together or not at all, and logged." : "You can review this proposal. Your account cannot apply, dismiss or undo changes."}</p>}
     </div>
   );
 }
@@ -123,6 +127,7 @@ function PlanCard({ plan, onChange }: { plan: Plan; onChange: (p: Plan) => void 
 /** Ask your network: questions answered, and changes proposed, from this organisation's own data. */
 export default function Ask() {
   const { current } = useCustomer();
+  const canOperate = canOperateConnect(useAuth().user);
   const status = useApi<AiStatus>("/ai/status", 0);
   const recent = useApi<Plan[]>(current ? `/customers/${current.id}/assistant/plans?limit=10` : null, 0);
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -167,9 +172,9 @@ export default function Ask() {
   const earlier = (recent.data ?? []).filter((p) => !shown.has(p.id) && p.status !== "cancelled");
   return (
     <>
-      <PageHead eyebrow="Ask your network" title="Ask, or tell it what to change">
+      <PageHead eyebrow="Ask your network" title={canOperate ? "Ask, or tell it what to change" : "Ask about your network"}>
         Answers come from {current ? `${current.name}'s` : "your"} own sites, paths, decisions, events and metering. Ask
-        it to add a rule, switch Storm Mode or fix a problem, and it proposes the changes for you to apply.
+        {canOperate ? " it to add a rule, switch Storm Mode or fix a problem, and it proposes the changes for you to apply." : " about performance, routing decisions or usage."}
       </PageHead>
       <ErrorNote error={status.error} />
       <section className="card chat" style={{ maxWidth: 820 }}>
@@ -178,7 +183,7 @@ export default function Ask() {
         )}
         {turns.length === 0 && enabled && (
           <div className="suggestions">
-            {SUGGESTIONS.map((s) => (
+            {(canOperate ? SUGGESTIONS : QUESTIONS).map((s) => (
               <button key={s} className="button secondary small" onClick={() => send(s)}>
                 {s}
               </button>
@@ -207,7 +212,7 @@ export default function Ask() {
             placeholder="Why did voice move to Carrier B at 2 pm?"
             maxLength={500}
             disabled={!enabled}
-            aria-label="Your question or request"
+            aria-label={canOperate ? "Your question or request" : "Your question"}
           />
           <button className="button" disabled={!enabled || busy || !question.trim()}>
             Send
@@ -215,8 +220,7 @@ export default function Ask() {
         </form>
         {status.data?.model && (
           <p className="muted small">
-            Answered by {status.data.model}. Nothing changes until you apply it. Questions and changes are in the audit
-            log.
+            Answered by {status.data.model}. {canOperate ? "Nothing changes until you apply it. Questions and changes are in the audit log." : "Questions are in the audit log."}
           </p>
         )}
       </section>

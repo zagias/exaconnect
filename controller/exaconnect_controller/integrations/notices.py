@@ -257,8 +257,8 @@ def public(n: dict, own_link_ids: set[str] | None = None) -> dict:
     }
 
 
-def list_for(conn, user, notice_id: int | None = None, limit: int = 200) -> list[dict]:
-    """Notices the user may see: admins all, carriers their own, customers those touching their links."""
+def list_for(conn, user, notice_id: int | None = None, limit: int = 200, customer_id: Any = None) -> list[dict]:
+    """Staff may narrow to one organisation; customers and carriers keep their own boundary."""
     q = """SELECT n.*, c.name AS carrier FROM connect_notices n LEFT JOIN carriers c ON c.id = n.carrier_id
            WHERE n.kind <> 'trouble' AND (%(id)s::bigint IS NULL OR n.id = %(id)s)"""
     args: dict[str, Any] = {"id": notice_id, "l": limit}
@@ -266,8 +266,9 @@ def list_for(conn, user, notice_id: int | None = None, limit: int = 200) -> list
     if user.role == "carrier":
         q += " AND n.carrier_id = %(k)s"
         args["k"] = user.carrier_id
-    elif user.role == "customer":
-        own = {str(r["id"]) for r in conn.execute("SELECT id FROM links WHERE customer_id = %s", (user.customer_id,))}
+    elif user.role == "customer" or (user.role == "admin" and customer_id is not None):
+        selected = user.customer_id if user.role == "customer" else customer_id
+        own = {str(r["id"]) for r in conn.execute("SELECT id FROM links WHERE customer_id = %s", (selected,))}
         q += " AND n.link_ids && %(own)s::uuid[]"
         args["own"] = list(own)
     rows = conn.execute(q + " ORDER BY n.id DESC LIMIT %(l)s", args).fetchall()

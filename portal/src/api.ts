@@ -1080,6 +1080,7 @@ export type OrderAction =
       cloud_prefixes?: string[];
     }
   | { action: "bandwidth"; circuit: string; bandwidth_mbps: number }
+  | { action: "onramp"; provider: string; name?: string; site?: string | null; bandwidth_mbps?: number; [field: string]: unknown }
   | { action: "internet_mode"; site: string; mode: BreakoutMode };
 
 export interface OrderNeed {
@@ -1628,12 +1629,17 @@ export interface OnrampAdapterInfo {
   docs: string;
   api: string;
   live_needs: string;
+  configured: boolean;
+  mode: "live" | "simulated";
+  speeds_mbps: number[];
+  fields: { name: string; label: string }[];
 }
 
 export interface IntegrationCatalogue {
   events: EventKind[];
   providers: ProviderInfo[];
   onramp_adapters: OnrampAdapterInfo[];
+  live: boolean;
 }
 
 export interface Integration {

@@ -1,28 +1,31 @@
-/* ExaCarib brand tokens and base styles, matched to www.exacarib.com
-   (4 Oct 2026; ADR 0014). Colours come only from these tokens. Brand blue is
-   the accent for buttons, links and marks. Coral is for Storm Mode and the
-   satellite (backup) path only; status colours always come with a word. */
+/* ExaCarib identity, 1 November 2026: charcoal, red and white. Legacy blue
+   variable names remain aliases for shared components and partner overrides.
+   Status and network-path colours retain their operational meanings. */
 :root {
-  --navy: #07182e;
-  --navy-deep: #061326;
-  --blue: #155eef;
-  --blue-strong: #155eef;
-  --blue-hover: #084bd0;
-  --blue-tint: #e9f0ff;
-  --sky: #8dcfff;
-  --page: #f3f6fb;
+  --accent: #d7192d;
+  --accent-hover: #b81225;
+  --accent-tint: #fff0f2;
+  --charcoal: #0c1018;
+  --navy: #181e29;
+  --navy-deep: #0c1018;
+  --blue: var(--accent);
+  --blue-strong: #ba172b;
+  --blue-hover: var(--accent-hover);
+  --blue-tint: var(--accent-tint);
+  --sky: #ffadb8;
+  --page: #f5f6f8;
   --card: #ffffff;
-  --ink: #10213d;
-  --ink-muted: #52647a;
-  --line: #dfe6ee;
-  --line-strong: #cbd6e4;
+  --ink: #192021;
+  --ink-muted: #5d6572;
+  --line: #e0e3e8;
+  --line-strong: #c6cbd3;
   --on-navy: #ffffff;
   --on-blue: #ffffff;
   --coral: #ff7a59;
   --success: #18704b;
   --warning: #9a5b00;
   --danger: #b42318;
-  --focus: #155eef;
+  --focus: #b81225;
 
   --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
   --space-6: 24px; --space-8: 32px; --space-12: 48px;
@@ -38,18 +41,18 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --navy-deep: #040e1d; --blue: #3d7bff; --blue-strong: #8dcfff; --blue-hover: #5a8fff; --blue-tint: #10295a;
-    --page: #061326; --card: #0b1f3a; --ink: #eaf0fa; --ink-muted: #a3b2c7;
-    --line: #1d3354; --line-strong: #2a4469; --success: #5ccb98; --warning: #f2b33d; --danger: #ff8a7a;
-    --focus: #8dcfff; --shadow: none;
+    --navy-deep: #090c12; --blue: #d7192d; --blue-strong: #ff98a7; --blue-hover: #b81225; --blue-tint: #381c27;
+    --page: #0c1018; --card: #171d28; --ink: #f0f2f6; --ink-muted: #b2b9c7;
+    --line: #303947; --line-strong: #495568; --success: #5ccb98; --warning: #f2b33d; --danger: #ff8a7a;
+    --focus: #ff98a7; --shadow: none;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --navy-deep: #040e1d; --blue: #3d7bff; --blue-strong: #8dcfff; --blue-hover: #5a8fff; --blue-tint: #10295a;
-  --page: #061326; --card: #0b1f3a; --ink: #eaf0fa; --ink-muted: #a3b2c7;
-  --line: #1d3354; --line-strong: #2a4469; --success: #5ccb98; --warning: #f2b33d; --danger: #ff8a7a;
-  --focus: #8dcfff; --shadow: none;
+  --navy-deep: #090c12; --blue: #d7192d; --blue-strong: #ff98a7; --blue-hover: #b81225; --blue-tint: #381c27;
+  --page: #0c1018; --card: #171d28; --ink: #f0f2f6; --ink-muted: #b2b9c7;
+  --line: #303947; --line-strong: #495568; --success: #5ccb98; --warning: #f2b33d; --danger: #ff8a7a;
+  --focus: #ff98a7; --shadow: none;
   color-scheme: dark;
 }
 
@@ -156,7 +159,7 @@ button.link { background: none; border: none; padding: 0; font: inherit; color: 
 .segmented button[aria-pressed="true"] { background: var(--blue-tint); color: var(--blue-strong); }
 
 /* Path colours: Carrier A navy, Carrier B blue, Satellite coral dashed (backup). */
-:root { --path-a: var(--navy); --path-b: var(--blue); }
+:root { --path-a: #354658; --path-b: #737fa5; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --path-a: #9fc3ff; } }
 :root[data-theme="dark"] { --path-a: #9fc3ff; }
 .charts { display: grid; gap: var(--space-6); grid-template-columns: repeat(3, 1fr); margin-top: var(--space-4); }
@@ -320,3 +323,5 @@ pre.code {
 .secret .callout { background: var(--card); margin: 0 0 8px; }
 .secret .secret-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+.example-banner { margin: 0 0 20px; padding: 10px 14px; border: 1px solid var(--line); border-left: 3px solid var(--blue); border-radius: 6px; background: var(--blue-tint); color: var(--ink); font-size: 13px; }

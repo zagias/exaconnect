@@ -244,3 +244,5 @@
   .move-path { white-space: normal; }
 }
 .ov-first h2 { margin: 0 0 6px; } .ov-first p { max-width: 70ch; }
+
+.sla-sites{max-height:220px;overflow:auto;white-space:normal}.sla-sites summary{cursor:pointer;text-decoration:underline;text-underline-offset:3px}.sla-sites>span{display:block;padding:2px 0}

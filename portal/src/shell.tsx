@@ -5,6 +5,8 @@ import { useAuth } from "./auth";
 import type { OrgApps, User } from "./api";
 import { APP_INFO, APP_ORDER, AREA_NAME, AppMark, areaFor, myApps, type AppId, type Area } from "./apps";
 import { CustomerPicker, OrganisationSwitcher, StormBanner, StormSwitch, useCustomer } from "./customer";
+import { canOperateConnect } from "./permissions";
+import { useConnectCapabilities } from "./ConnectCapabilities";
 import { JumpTo } from "./jump";
 import { accountGroups, icons, matches, navGroups, opsGroups, type Group } from "./nav";
 import { useBrand } from "./pages/commai/partner/brand";
@@ -26,7 +28,7 @@ function initials(email: string | undefined): string {
   return s.toUpperCase();
 }
 
-const ROLE_NAMES: Record<string, string> = { admin: "ExaCarib admin", customer: "Customer", carrier: "Carrier (read-only)" };
+const ROLE_NAMES: Record<string, string> = { admin: "ExaCarib admin", customer: "Customer", carrier: "Carrier" };
 const ORG_ROLE_NAMES: Record<string, string> = { owner: "Owner", admin: "Admin", member: "Member", viewer: "Viewer (read-only)" };
 
 /** "Admin, Example Bank" for organisation members; the account role otherwise. */
@@ -44,12 +46,14 @@ const MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator
 /** The portal frame: navy sidebar (icon rail on tablets, drawer on phones), a slim top bar, the Storm banner and the page. */
 export function Shell({ children }: { children: ReactNode }) {
   const { user, signOut } = useAuth();
+  const { current } = useCustomer();
   const carrier = user?.role === "carrier";
   // The apps this person may open (ADR 0041); the sidebar shows one at a time.
   const mine = myApps(user);
   const connect = mine.includes("connect");
   const jibsy = mine.includes("commai");
-  const all = navGroups(user?.role, useModules(!carrier && jibsy), carrier ? null : mine);
+  const capabilities = useConnectCapabilities();
+  const all = navGroups(user?.role, useModules(!carrier && jibsy), carrier ? null : mine, capabilities);
   const staff = user?.role === "admin";
   const manager = staff || (user?.role === "customer" && (user.org_role === "owner" || user.org_role === "admin"));
   const account = accountGroups({ carrier, jibsy, manager });
@@ -128,10 +132,10 @@ export function Shell({ children }: { children: ReactNode }) {
             {brand?.logo_url ? (
               <img className="shell-wordmark shell-partner-logo" src={brand.logo_url} alt={brand.product_name} />
             ) : (
-              <img className="shell-wordmark" src="/brand/exacarib-wordmark-reversed.png" alt="ExaCarib" width={140} height={25} />
+              <img className="shell-wordmark" src="/brand/exacarib-wordmark-red-reversed.svg" alt="ExaCarib" width={140} height={25} />
             )}
             <span className="shell-symbol" aria-hidden="true">
-              <img src="/brand/exacarib-wordmark-reversed.png" alt="" width={141} height={25} />
+              <img src="/brand/exacarib-symbol-red.svg" alt="" width={25} height={25} />
             </span>
           </NavLink>
           {brand && <span className="shell-product">{brand.product_name}</span>}
@@ -222,7 +226,7 @@ export function Shell({ children }: { children: ReactNode }) {
             {brand?.logo_url ? (
               <img className="shell-partner-logo" src={brand.logo_url} alt={brand.product_name} height={20} />
             ) : (
-              <img src="/brand/exacarib-wordmark-reversed.png" alt="ExaCarib" width={112} height={20} />
+              <img src="/brand/exacarib-wordmark-red-reversed.svg" alt="ExaCarib" width={112} height={20} />
             )}
           </NavLink>
           <div className="shell-context" aria-hidden={ctx ? undefined : true}>
@@ -255,13 +259,14 @@ export function Shell({ children }: { children: ReactNode }) {
               </div>
             )}
             {/* Storm Mode switch: on every Connect screen, never for carriers. */}
-            {!carrier && connect && area === "connect" && <StormSwitch />}
+            {connect && area === "connect" && canOperateConnect(user) && <StormSwitch />}
             <UserMenu />
           </div>
         </header>
         {!carrier && connect && <StormBanner />}
         {manager && area !== "ops" && <SetupBanner path={location.pathname} />}
         <main className="page" id="main" tabIndex={-1}>
+          {current?.example && <p className="example-banner" role="note">Example data · This organisation is for testing, not a live customer network.</p>}
           {children}
         </main>
       </div>

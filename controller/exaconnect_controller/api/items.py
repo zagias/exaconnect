@@ -7,6 +7,7 @@ items, a carrier only its own links, and admin-only lists stay admin-only.
 
 from __future__ import annotations
 
+import uuid
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
@@ -101,21 +102,21 @@ LINK_SQL = """SELECT l.id, l.customer_id, l.site_id, s.name AS site, l.path, p.l
               WHERE (%(c)s::uuid IS NULL OR l.customer_id = %(c)s) AND (%(k)s::uuid IS NULL OR l.carrier_id = %(k)s)"""
 
 
-def _link_scope(user) -> dict:
+def _link_scope(user, customer_id: uuid.UUID | None = None) -> dict:
     if user.role == "admin":
-        return {"c": None, "k": None}
+        return {"c": customer_id, "k": None}
     if user.role == "customer":
-        return {"c": user.customer_id, "k": None}
+        return {"c": customer_scope(user), "k": None}
     if user.role == "carrier" and user.carrier_id:
         return {"c": None, "k": user.carrier_id}
     raise HTTPException(403, "Not available for this account.")
 
 
 @router.get("/links")
-def list_links(user: UserDep) -> list[dict]:
+def list_links(user: UserDep, customer_id: uuid.UUID | None = None) -> list[dict]:
     """Carrier links: admins all, customers their own, carriers theirs (for posting notices)."""
     with db.tx() as conn:
-        return conn.execute(LINK_SQL + " ORDER BY s.name, p.ordinal", _link_scope(user)).fetchall()
+        return conn.execute(LINK_SQL + " ORDER BY s.name, p.ordinal", _link_scope(user, customer_id)).fetchall()
 
 
 @router.get("/sites/{site_id}/links")
@@ -206,7 +207,8 @@ def get_insight(insight_id: int, user: UserDep) -> dict:
                LEFT JOIN carriers ca ON ca.id = i.carrier_id
                WHERE i.id = %(id)s AND (%(c)s::uuid IS NULL OR i.customer_id = %(c)s)
                  AND (%(k)s::text IS NULL OR i.kind = %(k)s)
-                 AND (%(carrier)s::uuid IS NULL OR i.carrier_id = %(carrier)s)""",
+                 AND (%(carrier)s::uuid IS NULL OR
+                      (i.carrier_id = %(carrier)s AND l.carrier_id = %(carrier)s))""",
             args,
         ).fetchone()
     if row is None:

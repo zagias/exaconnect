@@ -1,9 +1,11 @@
-import { lazy, Suspense, useEffect } from "react";
+import { Fragment, lazy, Suspense, useEffect, useRef } from "react";
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { PRODUCT_NAMES } from "./api";
 import { APP_INFO, areaFor, myApps, type AppId } from "./apps";
 import { AuthGate, useAuth } from "./auth";
-import { CustomerProvider } from "./customer";
+import { CustomerProvider, useCustomer } from "./customer";
+import { ConnectCapabilitiesProvider, useConnectCapabilities } from "./ConnectCapabilities";
+import { ConnectWorkspaceTabs } from "./ConnectWorkspaceTabs";
 import Account from "./pages/Account";
 import AppsAndPlans from "./pages/AppsAndPlans";
 import Ask from "./pages/Ask";
@@ -48,15 +50,40 @@ export default function App() {
   if (reset) return reset.kind === "forgot" ? <ForgotPage /> : <ResetPage token={reset.token} />;
   return (
     <AuthGate>
-      <CustomerProvider>
-        <Layout />
-      </CustomerProvider>
+      <SignedInPortal />
     </AuthGate>
+  );
+}
+
+function SignedInPortal() {
+  const { user } = useAuth();
+  const enabled = user?.role === "admin" || user?.role === "carrier" || myApps(user).includes("connect");
+  return (
+    <CustomerProvider>
+      <ConnectCapabilitiesProvider enabled={enabled}>
+        <Layout />
+      </ConnectCapabilitiesProvider>
+    </CustomerProvider>
+  );
+}
+
+function AvailableAsk() {
+  const capabilities = useConnectCapabilities();
+  if (capabilities.ask) return <Ask />;
+  return (
+    <>
+      <PageHead title={capabilities.loading ? "Checking assistant availability…" : "The assistant is unavailable"}>
+        {capabilities.loading ? "Checking the services available to your organisation." : "Your network monitoring and history are still available. Contact ExaCarib if you need help."}
+      </PageHead>
+      <Link className="button secondary" to="/">Back to overview</Link>
+    </>
   );
 }
 
 function Layout() {
   const { user } = useAuth();
+  const { current } = useCustomer();
+  const selectedOrg = useRef<string | null>(null);
   const carrier = user?.role === "carrier";
   const admin = user?.role === "admin";
   const navigate = useNavigate();
@@ -73,6 +100,13 @@ function Layout() {
   }, [navigate]);
   // Someone with Jibsy but not Connect starts in Jibsy (ADR 0041).
   const path = useLocation().pathname;
+  useEffect(() => {
+    if (selectedOrg.current && current?.id && selectedOrg.current !== current.id) {
+      if (path.startsWith("/sites/")) navigate("/sites", { replace: true });
+      if (path === "/decisions") navigate("/decisions", { replace: true });
+    }
+    selectedOrg.current = current?.id ?? null;
+  }, [current?.id, navigate, path]);
   const mine = myApps(user);
   const connect = mine.includes("connect");
   const area = areaFor(path);
@@ -81,6 +115,8 @@ function Layout() {
     !carrier && !admin && area !== "account" && area !== "ops" && !mine.includes(area) && !(path === "/" && mine.length > 0);
   return (
     <Shell>
+      <Fragment key={current?.id ?? "no-organisation"}>
+      {!carrier && area === "connect" && !blocked && <ConnectWorkspaceTabs path={path} />}
       {blocked ? (
         <NoAccess app={area as AppId} mine={mine} />
       ) : carrier ? (
@@ -94,6 +130,7 @@ function Layout() {
         <Routes>
           <Route path="/" element={connect ? <Overview /> : <Navigate to="/commai" replace />} />
           <Route path="/sites" element={<SiteList />} />
+          <Route path="/locations" element={<LocationsPage />} />
           <Route path="/sites/:id" element={<SitePage />} />
           <Route path="/traffic/*" element={<Traffic />} />
           <Route path="/decisions" element={<Decisions />} />
@@ -110,7 +147,7 @@ function Layout() {
           <Route path="/insights" element={<Insights />} />
           <Route path="/notices" element={<Notices />} />
           <Route path="/integrations" element={<Integrations />} />
-          <Route path="/ask" element={<Ask />} />
+          <Route path="/ask" element={<AvailableAsk />} />
           <Route path="/carrier" element={<Metering carrierView />} />
           <Route path="/account" element={<Account />} />
           <Route path="/account/people" element={<People />} />
@@ -134,6 +171,7 @@ function Layout() {
           <Route path="*" element={<NotFound />} />
         </Routes>
       )}
+      </Fragment>
     </Shell>
   );
 }

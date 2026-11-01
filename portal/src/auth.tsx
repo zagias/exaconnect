@@ -102,7 +102,46 @@ export function AuthGate({
       </AuthContext.Provider>
     );
 
-  if (checking || !user)
+  if (checking || !user) {
+    const entry = checking ? (
+      <p className="signin-checking" role="status">
+        Checking your session…
+      </p>
+    ) : offline ? (
+      <p className="signin-checking" role="status">
+        You're offline. {product} will carry on when you're back online.{" "}
+        <button className="link" onClick={() => window.dispatchEvent(new Event("exa-auth"))}>
+          Try again
+        </button>
+      </p>
+    ) : (
+      <SignIn intro={product === "Connect" ? "Use your work email to continue." : intro} />
+    );
+
+    if (product === "Connect")
+      return (
+        <main className="signin-page signin-page-connect" id="main">
+          <aside className="connect-signin-story" aria-label="ExaCarib Connect">
+            <a className="connect-signin-wordmark" href="https://exacarib.com/" aria-label="ExaCarib home">
+              <img src="/brand/exacarib-wordmark-red-reversed.svg" alt="ExaCarib" width={188} height={33} />
+            </a>
+            <div className="connect-signin-proposition">
+              <span className="connect-signin-label">ExaCarib Connect</span>
+              <h2>Your network.<br /><span>In view.</span></h2>
+              <p>Review site performance, set traffic priorities and see the reasons behind routing decisions.</p>
+            </div>
+            <a className="connect-signin-public-link" href="https://exacarib.com/">Visit ExaCarib</a>
+          </aside>
+          <div className="connect-signin-panel">
+            <div className="connect-signin-form">
+              <span className="connect-signin-label">Your Connect account</span>
+              {entry}
+            </div>
+            <a className="connect-signin-help" href="https://exacarib.com/contact/">Contact ExaCarib</a>
+          </div>
+        </main>
+      );
+
     return (
       <main className="signin-page" id="main">
         <div className="signin-box">
@@ -111,23 +150,11 @@ export function AuthGate({
             <img className="wm-dark" src="/brand/exacarib-wordmark-reversed.png" alt="ExaCarib" width={168} height={29} />
             <span className="signin-product">{product}</span>
           </div>
-          {checking ? (
-            <p className="signin-checking" role="status">
-              Checking your session…
-            </p>
-          ) : offline ? (
-            <p className="signin-checking" role="status">
-              You're offline. {product} will carry on when you're back online.{" "}
-              <button className="link" onClick={() => window.dispatchEvent(new Event("exa-auth"))}>
-                Try again
-              </button>
-            </p>
-          ) : (
-            <SignIn intro={intro} />
-          )}
+          {entry}
         </div>
       </main>
     );
+  }
   return <AuthContext.Provider value={{ user, signOut }}>{children}</AuthContext.Provider>;
 }
 

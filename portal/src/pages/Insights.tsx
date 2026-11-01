@@ -4,6 +4,8 @@ import { api, useApi, type Insight } from "../api";
 import { useAuth } from "../auth";
 import { ErrorNote, ExampleTag, Eyebrow, StatusPill, ago } from "../components";
 import { useCustomer, useStormToggle, who } from "../customer";
+import { canOperateConnect } from "../permissions";
+import { useConnectCapabilities } from "../ConnectCapabilities";
 
 const KIND_LABEL: Record<Insight["kind"], string> = {
   storm_warning: "Hurricane watch",
@@ -49,6 +51,9 @@ export function InsightList({
   reload: () => void;
   readOnly?: boolean;
 }) {
+  const { user } = useAuth();
+  const capabilities = useConnectCapabilities();
+  const canOperate = !readOnly && canOperateConnect(user);
   const { current, busy, error, toggle } = useStormToggle();
   const [ackError, setAckError] = useState<string | null>(null);
   const ack = async (i: Insight) => {
@@ -91,7 +96,7 @@ export function InsightList({
               <strong>{i.title.replace(/^Example data: /, "")}</strong>
               <p>{i.detail}</p>
               <div className="form-actions">
-                {!readOnly &&
+                {canOperate &&
                   !i.resolved_at &&
                   toSwitch.map((site) => (
                     <button
@@ -130,18 +135,17 @@ export function InsightList({
                     Metering
                   </Link>
                 )}
-                {!readOnly && !i.resolved_at && (
+                {capabilities.ask && !readOnly && !i.resolved_at && (
                   <Link className="small" to={`/ask?q=${encodeURIComponent(`What should we do about this: ${i.title}`)}`}>
                     Ask what to do
                   </Link>
                 )}
-                {!readOnly &&
-                  !i.resolved_at &&
+                {!i.resolved_at &&
                   (i.acknowledged_by ? (
                     <span className="muted small">
                       Acknowledged by {who(i.acknowledged_by)}
                     </span>
-                  ) : (
+                  ) : canOperate && (
                     <button
                       className="button secondary small"
                       onClick={() => ack(i)}
@@ -165,19 +169,9 @@ export default function Insights() {
   const q = new URLSearchParams();
   if (user?.role === "admin" && current) q.set("customer_id", current.id);
   if (history) q.set("include_resolved", "true");
-  const list = useApi<Insight[]>(`/insights?${q}`, 30_000);
-  const [busy, setBusy] = useState(false);
-  const example = async (on: boolean) => {
-    setBusy(true);
-    try {
-      await api(`/ai/storm-watch/example?on=${on}`, { method: "POST" });
-      list.reload();
-    } finally {
-      setBusy(false);
-    }
-  };
+  const ready = user?.role !== "admin" || !!current;
+  const list = useApi<Insight[]>(ready ? `/insights?${q}` : null, 30_000);
   const items = list.data ?? [];
-  const hasExample = items.some((i) => i.example && !i.resolved_at);
   return (
     <>
       <div className="page-head">
@@ -206,15 +200,6 @@ export default function Insights() {
               />{" "}
               Include cleared
             </label>
-            {user?.role === "admin" && (
-              <button
-                className="button secondary small"
-                disabled={busy}
-                onClick={() => example(!hasExample)}
-              >
-                {hasExample ? "Clear example alerts" : "Show example alerts"}
-              </button>
-            )}
           </div>
         </div>
         <InsightList items={items} reload={list.reload} />
@@ -248,13 +233,17 @@ export function InsightSummary({
   reload,
   max = 3,
   siteIds = {},
+  readOnly = false,
 }: {
   items: Insight[];
   reload: () => void;
   max?: number;
   /** Site name to id, so an anomaly row can link to its site. */
   siteIds?: Record<string, string>;
+  readOnly?: boolean;
 }) {
+  const { user } = useAuth();
+  const canOperate = !readOnly && canOperateConnect(user);
   const { current, busy, error, toggle } = useStormToggle();
   const [open, setOpen] = useState<number | null>(null);
   const [ackError, setAckError] = useState<string | null>(null);
@@ -301,7 +290,7 @@ export function InsightSummary({
               </span>
             </div>
             <div className="attn-actions">
-              {toSwitch.map((site) => (
+              {canOperate && toSwitch.map((site) => (
                 <button
                   key={site.id}
                   className="button small storm-on"
@@ -333,7 +322,7 @@ export function InsightSummary({
                 <span className="attn-ack">
                   Acknowledged by {who(i.acknowledged_by)}
                 </span>
-              ) : (
+              ) : canOperate && (
                 <button className="button small secondary" onClick={() => ack(i)}>
                   Acknowledge
                 </button>

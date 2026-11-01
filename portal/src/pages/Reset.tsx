@@ -18,14 +18,14 @@ function Frame({ title, children }: { title: string; children: ReactNode }) {
         <div className="signin-brand">
           <img
             className="wm-light"
-            src="/brand/exacarib-wordmark.png"
+            src="/brand/exacarib-wordmark-red.svg"
             alt="ExaCarib"
             width={168}
             height={29}
           />
           <img
             className="wm-dark"
-            src="/brand/exacarib-wordmark-reversed.png"
+            src="/brand/exacarib-wordmark-red-reversed.svg"
             alt="ExaCarib"
             width={168}
             height={29}

@@ -11,6 +11,7 @@ from __future__ import annotations
 import csv
 import datetime as dt
 import io
+import uuid
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
@@ -19,7 +20,7 @@ from fastapi.responses import Response
 from .. import db
 from ..metering import rollup
 from ..metering.core import Sample, discarded, month_bounds, percentile95, settle
-from .deps import UserDep
+from .deps import UserDep, customer_scope
 
 router = APIRouter(prefix="/metering", tags=["metering"])
 
@@ -39,13 +40,12 @@ def _period(start: dt.datetime | None, end: dt.datetime | None, hours: int | Non
     return start, end
 
 
-def _scope(user) -> dict[str, Any]:
-    if user.role == "admin":
-        return {"c": None, "k": None}
-    if user.role == "customer":
-        return {"c": user.customer_id, "k": None}
+def _scope(user, customer_id: uuid.UUID | None = None) -> dict[str, Any]:
+    if user.role in ("admin", "customer"):
+        own = customer_scope(user)
+        return {"c": customer_id if own is None else own, "k": None}
     if user.role == "carrier" and user.carrier_id:
-        return {"c": None, "k": user.carrier_id}
+        return {"c": customer_id, "k": user.carrier_id}
     raise HTTPException(403, "Not available for this account.")
 
 
@@ -88,17 +88,20 @@ def links(
     start: dt.datetime | None = None,
     end: dt.datetime | None = None,
     hours: int | None = Query(default=None, ge=1, le=24 * 93),
+    customer_id: uuid.UUID | None = None,
 ) -> dict:
     """Settlement per link for a period (default: this calendar month, UTC)."""
     start, end = _period(start, end, hours)
     with db.tx() as conn:
-        rows = conn.execute(LINKS_SQL + " ORDER BY c.name, s.kind DESC, s.name, p.ordinal", _scope(user)).fetchall()
+        rows = conn.execute(
+            LINKS_SQL + " ORDER BY c.name, s.kind DESC, s.name, p.ordinal", _scope(user, customer_id)
+        ).fetchall()
         out = [_settlement_row(r, _samples(conn, r["id"], start, end)) for r in rows]
     return {"start": start, "end": end, "links": out}
 
 
-def _link(conn, user, link_id: str) -> dict:
-    row = conn.execute(LINKS_SQL + " AND l.id = %(id)s", {**_scope(user), "id": link_id}).fetchone()
+def _link(conn, user, link_id: str, customer_id: uuid.UUID | None = None) -> dict:
+    row = conn.execute(LINKS_SQL + " AND l.id = %(id)s", {**_scope(user, customer_id), "id": link_id}).fetchone()
     if row is None:
         raise HTTPException(404, "Link not found.")
     return row
@@ -111,10 +114,11 @@ def link_samples(
     start: dt.datetime | None = None,
     end: dt.datetime | None = None,
     hours: int | None = Query(default=None, ge=1, le=24 * 93),
+    customer_id: uuid.UUID | None = None,
 ) -> dict:
     start, end = _period(start, end, hours)
     with db.tx() as conn:
-        link = _link(conn, user, link_id)
+        link = _link(conn, user, link_id, customer_id)
         samples = _samples(conn, link_id, start, end)
     row = _settlement_row(link, samples)
     # Which samples the 95th percentile discarded, per direction.
@@ -185,13 +189,14 @@ def settlement_csv(
     end: dt.datetime | None = None,
     hours: int | None = Query(default=None, ge=1, le=24 * 93),
     link_id: str | None = None,
+    customer_id: uuid.UUID | None = None,
 ) -> Response:
     """Every 5-minute sample behind the settlement, then one summary row per link."""
     start, end = _period(start, end, hours)
     with db.tx() as conn:
         links = conn.execute(
             LINKS_SQL + " AND (%(id)s::uuid IS NULL OR l.id = %(id)s) ORDER BY c.name, s.name, p.ordinal",
-            {**_scope(user), "id": link_id},
+            {**_scope(user, customer_id), "id": link_id},
         ).fetchall()
         rows, summary = [], []
         for link in links:
@@ -220,13 +225,14 @@ def usage(
     start: dt.datetime | None = None,
     end: dt.datetime | None = None,
     hours: int | None = Query(default=None, ge=1, le=24 * 93),
+    customer_id: uuid.UUID | None = None,
 ) -> dict:
     """Customer view: data per site and path, the share above commit and on
     satellite, and the routing decisions that put traffic there."""
     if user.role == "carrier":
         raise HTTPException(403, "Not available for this account.")
     start, end = _period(start, end, hours)
-    scope = _scope(user)
+    scope = _scope(user, customer_id)
     with db.tx() as conn:
         rows = conn.execute(
             LINKS_SQL + " AND s.kind = 'site' ORDER BY s.name, p.ordinal",

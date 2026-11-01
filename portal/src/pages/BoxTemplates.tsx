@@ -9,6 +9,8 @@ import { useCustomer } from "../customer";
 import { PortsForm, rowsFrom, toNetwork, type Row } from "../boxports";
 import { Card, PageHead, useAction } from "../ui";
 import { useCanManage } from "./org/common";
+import { useAuth } from "../auth";
+import { canOperateConnect } from "../permissions";
 
 interface Template {
   id: string;
@@ -72,7 +74,8 @@ function summary(n: Template["network"]): string {
 
 export function BoxTemplates() {
   const { current } = useCustomer();
-  const canManage = useCanManage();
+  const { user } = useAuth();
+  const canManage = useCanManage() && canOperateConnect(user);
   const q = current ? `?customer_id=${current.id}` : "";
   const data = useApi<{ templates: Template[]; boxes: BoxRow[] }>(
     current ? `/box-templates${q}` : null,
@@ -179,7 +182,7 @@ export function BoxTemplates() {
           </ul>
         </Card>
       )}
-      {editing && rows && (
+      {canManage && editing && rows && (
         <Card
           title={editing === "new" ? "New template" : `Change ${editing.name}`}
         >

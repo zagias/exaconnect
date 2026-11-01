@@ -5,6 +5,8 @@ import { ErrorNote, StatusPill, ago } from "../components";
 import { useCustomer, who } from "../customer";
 import { Card, PageHead, RowActions, Tabs, useAction } from "../ui";
 import { Classes, PRIORITY_LABEL, type Priority } from "./Classes";
+import { useAuth } from "../auth";
+import { canOperateConnect } from "../permissions";
 
 // Traffic: what the network has seen leaving each site, the customer's own
 // rules for what goes in which class, and the classes themselves (ADR 0007).
@@ -51,6 +53,8 @@ interface Detection {
 }
 
 function Detections() {
+  const { user } = useAuth();
+  const canOperate = canOperateConnect(user);
   const { current, reload: reloadCustomer } = useCustomer();
   const [closed, setClosed] = useState(false);
   const q = closed ? "?include_closed=true" : "";
@@ -80,17 +84,17 @@ function Detections() {
             <input type="checkbox" checked={closed} onChange={(e) => setClosed(e.target.checked)} /> Include applied and
             dismissed
           </label>
-          <button className="button secondary small" disabled={act.busy} onClick={() => post(`/customers/${current.id}/applications/detect`)}>
+          {canOperate && <button className="button secondary small" disabled={act.busy} onClick={() => post(`/customers/${current.id}/applications/detect`)}>
             Check now
-          </button>
+          </button>}
         </div>
       }
     >
       <div className="card-inset" style={{ marginBottom: 16 }}>
-        <label className="check">
+        {canOperate ? <label className="check">
           <input type="checkbox" checked={!!current.auto_prioritise} disabled={act.busy} onChange={(e) => auto(e.target.checked)} />{" "}
           <strong>Prioritise known applications automatically.</strong>
-        </label>
+        </label> : <strong>Automatic application priorities: {current.auto_prioritise ? "On" : "Off"}</strong>}
         <p className="small muted" style={{ margin: "4px 0 0" }}>
           Applications the network recognises with confidence, such as Teams, Zoom or Citrix, get a rule without asking.
           Anything less certain waits for you here. The network looks at addresses, ports and packet rates only, never at
@@ -123,12 +127,12 @@ function Detections() {
               <p>{d.reason}</p>
               {d.status === "suggested" && (
                 <div className="form-actions">
-                  <button className="button small" disabled={act.busy} onClick={() => post(`/applications/${d.id}/apply`)}>
+                  {canOperate && <><button className="button small" disabled={act.busy} onClick={() => post(`/applications/${d.id}/apply`)}>
                     Put it in {d.suggested_class}
                   </button>
                   <button className="button secondary small" disabled={act.busy} onClick={() => post(`/applications/${d.id}/dismiss`)}>
                     Dismiss
-                  </button>
+                  </button></>}
                   <span className="small muted">Confidence {Math.round(d.confidence * 100)}%</span>
                 </div>
               )}
@@ -174,6 +178,8 @@ interface ClassLite {
 }
 
 function Rules() {
+  const { user } = useAuth();
+  const canOperate = canOperateConnect(user);
   const { current } = useCustomer();
   const list = useApi<Rule[]>(current ? `/customers/${current.id}/rules` : null, 0);
   const catalogue = useApi<CatalogueApp[]>("/applications/catalogue", 0);
@@ -199,7 +205,7 @@ function Rules() {
     <Card
       title="Your rules"
       note={
-        <button className="button small" onClick={() => setEditing("new")}>
+        canOperate && <button className="button small" onClick={() => setEditing("new")}>
           Add a rule
         </button>
       }
@@ -209,7 +215,7 @@ function Rules() {
         within 10 seconds.
       </p>
       <ErrorNote error={list.error ?? act.error} />
-      {editing && (
+      {canOperate && editing && (
         <RuleForm
           customerId={current.id}
           rule={editing === "new" ? null : editing}
@@ -224,8 +230,8 @@ function Rules() {
       )}
       {(list.data ?? []).length === 0 ? (
         <div className="empty">
-          <p>No rules yet. Add one, or apply a suggestion from Seen on your network.</p>
-          {editing !== "new" && (
+          <p>{canOperate ? "No rules yet. Add one, or apply a suggestion from Seen on your network." : "No traffic rules have been added yet."}</p>
+          {canOperate && editing !== "new" && (
             <button className="button small" onClick={() => setEditing("new")}>
               Add a rule
             </button>
@@ -240,9 +246,9 @@ function Rules() {
                 <th scope="col">Traffic</th>
                 <th scope="col">Class</th>
                 <th scope="col">Sites</th>
-                <th scope="col" className="actions">
+                {canOperate && <th scope="col" className="actions">
                   <span className="sr-only">Actions</span>
-                </th>
+                </th>}
               </tr>
             </thead>
             <tbody>
@@ -269,7 +275,7 @@ function Rules() {
                   <td data-label="Sites" className="small">
                     {r.site_ids.length ? r.site_ids.map(siteName).join(", ") : "All sites"}
                   </td>
-                  <td className="actions">
+                  {canOperate && <td className="actions">
                     <RowActions
                       label={r.name}
                       disabled={act.busy}
@@ -283,7 +289,7 @@ function Rules() {
                         { label: "Delete rule", danger: true, onSelect: () => remove(r) },
                       ]}
                     />
-                  </td>
+                  </td>}
                 </tr>
               ))}
             </tbody>

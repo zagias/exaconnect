@@ -84,8 +84,8 @@ export default function InvitePage({ token }: { token: string }) {
     <main className="signin-page" id="main">
       <div className="signin-box">
         <div className="signin-brand">
-          <img className="wm-light" src="/brand/exacarib-wordmark.png" alt="ExaCarib" width={168} height={29} />
-          <img className="wm-dark" src="/brand/exacarib-wordmark-reversed.png" alt="ExaCarib" width={168} height={29} />
+          <img className="wm-light" src="/brand/exacarib-wordmark-red.svg" alt="ExaCarib" width={168} height={29} />
+          <img className="wm-dark" src="/brand/exacarib-wordmark-red-reversed.svg" alt="ExaCarib" width={168} height={29} />
           <span className="signin-product">Connect</span>
         </div>
         <section className="card signin" aria-labelledby="invite-title">

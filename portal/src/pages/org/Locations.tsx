@@ -1,12 +1,15 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { api, useApi } from "../../api";
+import { useAuth } from "../../auth";
+import { canOperateConnect } from "../../permissions";
 import { boxSetupCode } from "../../box";
 import { ErrorNote, StatusPill, ago } from "../../components";
 import { Card, PageHead, useAction } from "../../ui";
 import { NoOrganisation } from "./Setup";
 import { useCanManage, useOrgId, ZONES, type Install, type OrgLocation } from "./common";
 import "./org.css";
+import "../../network-sites.css";
 
 interface Locations {
   locations: OrgLocation[];
@@ -40,16 +43,29 @@ const EMERGENCY: Record<string, [string, "ok" | "warn" | "bad"]> = {
 /** Locations (ADR 0043): each branch or office entered once, used by Connect, phones and opening hours. */
 export default function LocationsPage() {
   const cid = useOrgId();
+  const { user } = useAuth();
+  const operate = canOperateConnect(user);
   const manage = useCanManage();
   const data = useApi<Locations>(cid ? `/orgs/${cid}/locations` : null, 15_000);
   const [editing, setEditing] = useState<OrgLocation | "new" | null>(null);
   const [connecting, setConnecting] = useState<OrgLocation | null>(null);
   const [install, setInstall] = useState<(Install & { place?: string }) | null>(null);
   const act = useAction();
+  const [query, setQuery] = useState("");
+  const [connection, setConnection] = useState("all");
+  const [page, setPage] = useState(0);
   if (!cid) return <NoOrganisation />;
   const d = data.data;
   const connect = d?.products.includes("connect") ?? false;
   const jibsy = d?.products.includes("commai") ?? false;
+  const locations = (d?.locations ?? []).filter((location) => {
+    const text = [location.name, location.city, location.island, location.country].join(" ").toLocaleLowerCase();
+    const status = !location.connect ? "not_connected" : location.connect.node_id ? "connected" : "waiting";
+    return text.includes(query.trim().toLocaleLowerCase()) && (connection === "all" || connection === status);
+  }).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  const pages = Math.max(1, Math.ceil(locations.length / 10));
+  const currentPage = Math.min(page, pages - 1);
+  const shown = locations.slice(currentPage * 10, (currentPage + 1) * 10);
 
   const remove = (l: OrgLocation) => {
     if (!window.confirm(`Delete ${l.name}? Its opening hours in Jibsy go too.`)) return;
@@ -68,7 +84,7 @@ export default function LocationsPage() {
   return (
     <>
       <PageHead title="Locations">
-        Each branch or office, entered once. Connect, phones and Jibsy&apos;s opening hours all use this list.
+        {jibsy ? "Manage the locations used by Connect, phones and opening hours." : "Add your business locations, then connect each one to your network."}
       </PageHead>
       <ErrorNote error={data.error ?? act.error} />
 
@@ -108,8 +124,14 @@ export default function LocationsPage() {
           No locations yet. Add your head office first, then each branch.
         </div>
       )}
+      {!!d?.locations.length && (
+        <div className="network-filters" aria-label="Filter locations">
+          <label className="network-search">Search locations<input type="search" value={query} placeholder="Name, city or country" onChange={(e) => { setQuery(e.target.value); setPage(0); }} /></label>
+          {connect && <label>Connection status<select value={connection} onChange={(e) => { setConnection(e.target.value); setPage(0); }}><option value="all">All locations</option><option value="not_connected">Not connected</option><option value="waiting">Waiting for installation</option><option value="connected">Box installed</option></select></label>}
+        </div>
+      )}
       <div className="loc-list">
-        {d?.locations.map((l) => (
+        {shown.map((l) => (
           <section key={l.id} className="card loc" aria-labelledby={`loc-${l.id}`}>
             <div className="loc-head">
               <div>
@@ -163,14 +185,14 @@ export default function LocationsPage() {
                     ) : (
                       <span>
                         <StatusPill health="warn">Waiting for the box to be installed</StatusPill>{" "}
-                        {manage && (
+                        {manage && operate && (
                           <button className="link" onClick={() => newCode(l)} disabled={act.busy}>
                             Get a new install code
                           </button>
                         )}
                       </span>
                     )
-                  ) : manage ? (
+                  ) : manage && operate ? (
                     <span>
                       Not connected.{" "}
                       <button className="button small" onClick={() => setConnecting(l)} disabled={act.busy}>
@@ -220,6 +242,11 @@ export default function LocationsPage() {
           </section>
         ))}
       </div>
+      {!!d?.locations.length && <div className="network-pagination">
+        <span className="small muted" role="status">{locations.length ? `${currentPage * 10 + 1}–${Math.min((currentPage + 1) * 10, locations.length)} of ${locations.length} ${locations.length === 1 ? "location" : "locations"}` : "No locations match these filters."}</span>
+        <button className="button secondary small" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>Previous</button>
+        <button className="button secondary small" disabled={currentPage + 1 >= pages} onClick={() => setPage(currentPage + 1)}>Next</button>
+      </div>}
     </>
   );
 }

@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../auth";
 import { download, num, useApi, type Insight, type LinkSettlement, type UsagePoint, type UsageRow } from "../api";
 import { ErrorNote, Eyebrow, LineChart, rangeLabel, when } from "../components";
+import { useCustomer } from "../customer";
 
 const PERIODS = [
   { key: "hours=6", label: "Last 6 hours" },
@@ -25,13 +26,18 @@ function periodLabel(start: string, end: string): string {
  *  Carrier accounts get the same screen, limited to their own links and read only. */
 export default function Metering({ carrierView = false }: { carrierView?: boolean }) {
   const { user } = useAuth();
-  const [period, setPeriod] = useState(PERIODS[1].key);
+  const { current: organisation } = useCustomer();
+  const [period, setPeriod] = useState(PERIODS[2].key);
   const [selected, setSelected] = useState<string | null>(null);
   const [dlError, setDlError] = useState<string | null>(null);
-  const q = period ? `?${period}` : "";
-  const { data, error } = useApi<{ start: string; end: string; links: LinkSettlement[] }>(`/metering/links${q}`, 60_000);
+  const customerId = user?.role === "admin" ? organisation?.id : undefined;
+  const ready = user?.role !== "admin" || !!customerId;
+  const params = new URLSearchParams(period);
+  if (customerId) params.set("customer_id", customerId);
+  const q = params.toString() ? `?${params}` : "";
+  const { data, error } = useApi<{ start: string; end: string; links: LinkSettlement[] }>(ready ? `/metering/links${q}` : null, 60_000);
   const usage = useApi<{ totals: { gb: number; over_commit_gb: number; satellite_gb: number }; paths: UsageRow[] }>(
-    !carrierView && user?.role !== "carrier" ? `/metering/usage${q}` : null,
+    ready && !carrierView && user?.role !== "carrier" ? `/metering/usage${q}` : null,
     60_000,
   );
   const links = data?.links ?? [];
@@ -40,9 +46,10 @@ export default function Metering({ carrierView = false }: { carrierView?: boolea
   const csv = async (linkId?: string) => {
     setDlError(null);
     const params = new URLSearchParams(period);
+    if (customerId) params.set("customer_id", customerId);
     if (linkId) params.set("link_id", linkId);
     try {
-      await download(`/metering/settlement.csv?${params}`, `exaconnect-settlement${linkId ? "-link" : ""}.csv`);
+      await download(`/metering/settlement.csv?${params}`, `exacarib-connect-usage${linkId ? "-link" : ""}.csv`);
     } catch (e) {
       setDlError((e as Error).message);
     }
@@ -56,17 +63,20 @@ export default function Metering({ carrierView = false }: { carrierView?: boolea
     <>
       <div className="page-head">
         <Eyebrow>{carrierView ? "Carrier view" : "Usage"}</Eyebrow>
-        <h1>{carrierView ? "Your links and the samples behind every charge" : "Usage, 95th percentile and burst"}</h1>
+        <h1>{carrierView ? "Your links and settlement estimates" : "Network usage and cost estimates"}</h1>
         <p className="muted">
-          Bytes are sampled every minute and rolled up to 5-minute averages. For the period, the top 5% of samples are
-          discarded and the highest remaining is the billable rate, using the higher of in and out. Burst is the
-          billable rate above commit, charged at the burst price.
+          See how much each connection is used and what may add to its cost. Open a connection to review the measurements behind the estimate.
           {carrierView && " This view is read only."}
         </p>
-        <ErrorNote error={error ?? dlError} />
+        <p className="muted small">
+          The amounts below are settlement estimates using your configured link rates. The fixed commit charge is included
+          in full, even in a 6- or 24-hour view.
+          {!carrierView && user?.role !== "carrier" && <> For issued invoices, <Link to="/billing">open Billing</Link>.</>}
+        </p>
+        <ErrorNote error={error ?? usage.error ?? dlError} />
       </div>
       <div className="grid">
-        {carrierView && <CarrierAnomalies />}
+        {carrierView && <CarrierAnomalies customerId={customerId} />}
         <section className="card span-12">
           <div className="card-head">
             <div className="segmented" role="group" aria-label="Period">
@@ -120,7 +130,7 @@ export default function Metering({ carrierView = false }: { carrierView?: boolea
                     Burst <span className="unit">US$</span>
                   </th>
                   <th scope="col" className="num">
-                    Total <span className="unit">US$</span>
+                    Estimated total <span className="unit">US$</span>
                   </th>
                 </tr>
               </thead>
@@ -161,15 +171,17 @@ export default function Metering({ carrierView = false }: { carrierView?: boolea
           )}
           {data && links.length === 0 && <p className="muted">No links to show.</p>}
         </section>
-        {current && <LinkChart link={current} period={period} onCsv={() => csv(current.id)} />}
+        {current && <LinkChart link={current} period={period} customerId={customerId} onCsv={() => csv(current.id)} />}
         {usage.data && <UsageCard data={usage.data} />}
       </div>
     </>
   );
 }
 
-function LinkChart({ link, period, onCsv }: { link: LinkSettlement; period: string; onCsv: () => void }) {
-  const q = period ? `?${period}` : "";
+function LinkChart({ link, period, customerId, onCsv }: { link: LinkSettlement; period: string; customerId?: string; onCsv: () => void }) {
+  const params = new URLSearchParams(period);
+  if (customerId) params.set("customer_id", customerId);
+  const q = params.toString() ? `?${params}` : "";
   const { data, error } = useApi<{ start: string; end: string; points: UsagePoint[] }>(
     `/metering/links/${link.id}/samples${q}`,
     60_000,
@@ -275,8 +287,8 @@ function UsageCard({ data }: { data: { totals: { gb: number; over_commit_gb: num
 }
 
 /** Carrier anomalies on the links this view covers (read only). */
-function CarrierAnomalies() {
-  const list = useApi<Insight[]>("/insights?kind=anomaly", 60_000);
+function CarrierAnomalies({ customerId }: { customerId?: string }) {
+  const list = useApi<Insight[]>(`/insights?kind=anomaly${customerId ? `&customer_id=${customerId}` : ""}`, 60_000);
   return (
     <section className="card span-12">
       <div className="card-head">

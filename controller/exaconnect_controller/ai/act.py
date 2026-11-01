@@ -46,6 +46,9 @@ screen to check. Never invent figures, times or events.
 three sentences what you propose and why, citing the evidence for a fix. The person sees the changes and confirms \
 them; never say a change is done. If the snapshot shows the change is already in place, say so and add no action.
 - Plain British English ("organisation", "centre"), under 200 words.
+- Respect configuration.assistant_permissions: if can_apply_changes is false, only answer questions; \
+if can_change_shadow_mode is false, explain that an organisation owner or admin must change shadow mode \
+and do not propose that action.
 
 Actions (use only these, with names and ids from the snapshot; null for anything not given):
 {"action":"traffic_rule","name":"<short name>","class":"<class>","sites":["<site>"] or [] for all sites,
@@ -700,11 +703,20 @@ def _undo_one(conn: psycopg.Connection, cid: Any, undo: dict[str, Any], actor: s
 # ---- plans ---------------------------------------------------------------
 
 
-def create(conn: psycopg.Connection, cid: Any, question: str, answer: str, raw: list[dict], actor: str) -> dict | None:
+def create(
+    conn: psycopg.Connection,
+    cid: Any,
+    question: str,
+    answer: str,
+    raw: list[dict],
+    actor: str,
+    *,
+    dry_run: bool = True,
+) -> dict | None:
     """Store the model's proposal as a draft plan, or nothing if it proposed nothing."""
     if not raw:
         return None
-    r = review(conn, cid, raw)
+    r = review(conn, cid, raw, dry_run=dry_run)
     pid = conn.execute(
         """INSERT INTO assistant_plans (customer_id, question, answer, actions, created_by)
            VALUES (%s, %s, %s, %s, %s) RETURNING id""",
@@ -713,7 +725,7 @@ def create(conn: psycopg.Connection, cid: Any, question: str, answer: str, raw: 
     audit.record(
         conn, actor, "assistant.propose", f"plan {pid}", cid, {"actions": r["actions"], "problems": r["problems"]}
     )
-    return view(conn, get(conn, pid))
+    return view(conn, get(conn, pid), dry_run=dry_run)
 
 
 def get(conn: psycopg.Connection, plan_id: int, lock: bool = False) -> dict | None:

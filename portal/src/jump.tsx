@@ -48,7 +48,7 @@ export function JumpTo({ groups, open, setOpen }: { groups: Group[]; open: boole
   const all = useMemo(() => {
     const seen = new Set<string>();
     // One entry per screen and name (a tab that is also the screen's first page keeps its tab name).
-    return destinations(groups, ACCOUNT).filter((d) => {
+    return destinations(groups, ACCOUNT.filter((item) => !item.to.startsWith("/commai") || groups.some((group) => group.app === "commai"))).filter((d) => {
       const k = `${d.to}|${d.label}`;
       if (seen.has(k)) return false;
       seen.add(k);

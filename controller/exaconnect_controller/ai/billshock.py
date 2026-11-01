@@ -1,8 +1,8 @@
 """Bill-shock alerts: forecast each link's month-end 95th percentile.
 
 The billable rate is the highest 5-minute sample left after discarding the
-top 5% of the month's samples (CLAUDE.md §4.5). Two figures come from the
-samples so far:
+top 5% of the month's samples in each direction, then taking the higher
+direction (CLAUDE.md §4.5). Two figures come from the samples so far:
 
 - Locked in: the month's discard budget is fixed (5% of every 5-minute slot
   in the month). If more samples than that are already above some rate, the
@@ -20,11 +20,11 @@ from __future__ import annotations
 import datetime as dt
 import math
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal
 from typing import Any
 
-from ..metering.core import BUCKET_S, discarded, money, month_bounds
+from ..metering.core import BUCKET_S, Sample, discarded, money, month_bounds, percentile95
 from .insights import raise_insight, resolve_others
 
 MIN_SAMPLES = 12  # an hour of data before saying anything
@@ -35,12 +35,13 @@ class Forecast:
     samples: int
     month_slots: int
     budget: int  # samples the 95th percentile will discard this month
-    over_commit: int  # samples so far above commit (each uses one of the budget)
+    over_commit: int  # samples above commit in the busiest direction; budgets are separate
     floor_mbps: float  # the bill can't come in below this
     observed_p95: float
     trend: float  # multiplier from the recent trend, 1.0 = flat
     forecast_mbps: float
     confidence: str  # low (< 1 day of data), medium (< 7 days), high
+    direction: str | None = None  # the direction setting a link's forecast
 
 
 def quantile(values: Sequence[float], q: float) -> float:
@@ -77,7 +78,7 @@ def trend_factor(points: Sequence[tuple[float, float]], until_s: float) -> float
 def forecast(
     samples: Sequence[tuple[dt.datetime, float]], commit_mbps: float, period: tuple[dt.datetime, dt.datetime]
 ) -> Forecast | None:
-    """samples: (bucket start, max(in, out) Mbps) for the month so far."""
+    """Forecast one direction from (bucket start, Mbps) samples for the month so far."""
     if len(samples) < MIN_SAMPLES:
         return None
     start, end = period
@@ -86,7 +87,9 @@ def forecast(
     values = [v for _, v in samples]
     desc = sorted(values, reverse=True)
     floor = desc[budget] if len(desc) > budget else 0.0
-    observed = quantile(values, 0.95)
+    # Match settlement's discrete discard rule, including at the 5% boundary.
+    observed = percentile95(values)
+    assert observed is not None
     # Recent trend: the last 7 days, in hours since the start of the month.
     last_t = samples[-1][0]
     recent = [((t - start).total_seconds() / 3600, v) for t, v in samples if t > last_t - dt.timedelta(days=7)]
@@ -103,6 +106,28 @@ def forecast(
         trend=trend,
         forecast_mbps=fc,
         confidence="low" if days < 1 else "medium" if days < 7 else "high",
+    )
+
+
+def forecast_link(
+    samples: Sequence[Sample], commit_mbps: float, period: tuple[dt.datetime, dt.datetime]
+) -> Forecast | None:
+    """Apply the billing rule: compute each direction first, then take the higher.
+
+    Combining in/out before taking the percentile incorrectly spends one
+    shared discard budget on bursts that settlement discards separately.
+    """
+    inbound = forecast([(s.bucket, s.in_mbps) for s in samples], commit_mbps, period)
+    outbound = forecast([(s.bucket, s.out_mbps) for s in samples], commit_mbps, period)
+    if inbound is None or outbound is None:
+        return None
+    direction, dominant = max((("inbound", inbound), ("outbound", outbound)), key=lambda x: x[1].forecast_mbps)
+    return replace(
+        dominant,
+        floor_mbps=max(inbound.floor_mbps, outbound.floor_mbps),
+        observed_p95=max(inbound.observed_p95, outbound.observed_p95),
+        over_commit=max(inbound.over_commit, outbound.over_commit),
+        direction=direction,
     )
 
 
@@ -128,10 +153,12 @@ def assess(f: Forecast, label: str, commit: float, burst_price: float) -> dict |
         head = f"{label} has used {budget_used:.0%} of this month's burst allowance"
     detail = (
         f"{head}. {f.over_commit} of the {f.budget} five-minute samples the 95th percentile ignores this month are "
-        f"already above commit."
+        f"already above commit{(' in the busiest direction' if f.direction else '')}."
     )
     if f.forecast_mbps > commit:
         detail += f" Forecast burst charge: about {cost} (rate {f.forecast_mbps:.1f} Mbps"
+        if f.direction:
+            detail += f", {f.direction}"
         detail += f", trend ×{f.trend:.2f})." if abs(f.trend - 1) > 0.01 else ")."
     if f.floor_mbps > commit:
         detail += " The excess is locked in: more samples are already above commit than the month can discard."
@@ -151,6 +178,7 @@ def assess(f: Forecast, label: str, commit: float, burst_price: float) -> dict |
             "budget": f.budget,
             "samples": f.samples,
             "confidence": f.confidence,
+            "forecast_direction": f.direction,
         },
     }
 
@@ -166,14 +194,18 @@ def run_once(conn, now: dt.datetime | None = None) -> int:
     seen: dict[Any, set[str]] = {lk["customer_id"]: set() for lk in links}
     for lk in links:
         rows = conn.execute(
-            """SELECT bucket, greatest(in_mbps, out_mbps) AS v FROM usage_5m
+            """SELECT bucket, in_mbps, out_mbps, seconds FROM usage_5m
                WHERE link_id = %s AND bucket >= %s AND bucket < %s ORDER BY bucket""",
             (lk["id"], period[0], period[1]),
         ).fetchall()
         commit = float(lk["commit_mbps"] or 0)
         if commit <= 0:
             continue
-        f = forecast([(r["bucket"], r["v"]) for r in rows], commit, period)
+        f = forecast_link(
+            [Sample(r["bucket"], float(r["in_mbps"]), float(r["out_mbps"]), r["seconds"]) for r in rows],
+            commit,
+            period,
+        )
         if f is None:
             continue
         a = assess(f, f"{lk['carrier']} at {lk['site']}", commit, float(lk["burst_price"] or 0))

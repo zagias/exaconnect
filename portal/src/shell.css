@@ -38,7 +38,7 @@
 .shell-wordmark { display: block; width: 140px; height: auto; }
 /* The rail shows only the X of the reversed wordmark. */
 .shell-symbol { display: none; width: 34px; height: 25px; overflow: hidden; }
-.shell-symbol img { display: block; width: 141px; height: 25px; max-width: none; }
+.shell-symbol img { display: block; width: 25px; height: 25px; max-width: none; }
 .shell-product {
   font: 500 11px/16px var(--font-body); letter-spacing: 0.14em; text-transform: uppercase;
   color: var(--shell-side-muted); padding-left: 1px;

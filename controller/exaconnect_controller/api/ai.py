@@ -12,9 +12,36 @@ from pydantic import BaseModel, Field
 from .. import audit, db
 from ..ai import act, hazards, runner, storms
 from ..ai import ask as ask_mod
-from .deps import AdminDep, UserDep, check_customer
+from .deps import VIEWER_ONLY, AdminDep, UserDep, can_manage_org, check_customer, require_org_manager
 
 router = APIRouter(tags=["ai"])
+
+
+def _check_action_permissions(user, customer_id, actions: list[dict]) -> None:
+    """Assistant changes need the same rights as their regular API endpoints."""
+    check_customer(user, customer_id)
+    if actions and user.org_role == "viewer":
+        raise HTTPException(403, VIEWER_ONLY)
+    # Changing shadow mode is an organisation setting, unlike traffic rules,
+    # SLAs and Storm Mode, which any non-viewer member may manage.
+    if any(a.get("action") == "shadow_mode" for a in actions):
+        require_org_manager(user, customer_id)
+
+
+def _permission_problem(user, customer_id, actions: list[dict]) -> str | None:
+    try:
+        _check_action_permissions(user, customer_id, actions)
+    except HTTPException as e:
+        return str(e.detail)
+    return None
+
+
+def _view_plan(conn, plan: dict, user, dry_run: bool = True) -> dict:
+    problem = _permission_problem(user, plan["customer_id"], plan["actions"])
+    out = act.view(conn, plan, dry_run=dry_run and problem is None)
+    if problem and plan["status"] in ("draft", "applied"):
+        out["problems"].append(problem)
+    return out
 
 
 @router.get("/ai/status")
@@ -51,6 +78,8 @@ def list_insights(
             raise HTTPException(403, "Not available for this account.")
         params.update(c=None, k="anomaly", carrier=user.carrier_id)
     with db.tx() as conn:
+        # A link can change carrier before the next anomaly pass. Hide its
+        # previous insight from both carriers until the data is refreshed.
         return conn.execute(
             """SELECT i.id, i.customer_id, i.kind, i.severity, i.title, i.detail, i.data, i.example,
                       i.first_seen, i.last_seen, i.resolved_at, i.acknowledged_by, i.acknowledged_at,
@@ -59,7 +88,8 @@ def list_insights(
                LEFT JOIN carriers ca ON ca.id = i.carrier_id
                WHERE (%(c)s::uuid IS NULL OR i.customer_id = %(c)s)
                  AND (%(k)s::text IS NULL OR i.kind = %(k)s)
-                 AND (%(carrier)s::uuid IS NULL OR i.carrier_id = %(carrier)s)
+                 AND (%(carrier)s::uuid IS NULL OR
+                      (i.carrier_id = %(carrier)s AND l.carrier_id = %(carrier)s))
                  AND (%(r)s OR i.resolved_at IS NULL)
                ORDER BY i.resolved_at IS NOT NULL,
                         CASE i.severity WHEN 'critical' THEN 0 WHEN 'warning' THEN 1 ELSE 2 END, i.last_seen DESC
@@ -144,6 +174,10 @@ async def ask(body: AskIn, user: UserDep, request: Request) -> dict:
             return ask_mod.build_context(conn, customer_id), act.config(conn, customer_id)
 
     context, config = await asyncio.to_thread(prepare)
+    config["assistant_permissions"] = {
+        "can_apply_changes": user.org_role != "viewer",
+        "can_change_shadow_mode": can_manage_org(user),
+    }
     try:
         text = await asyncio.to_thread(
             ask_mod.chat,
@@ -161,7 +195,11 @@ async def ask(body: AskIn, user: UserDep, request: Request) -> dict:
 
     def propose():
         with db.tx() as conn:
-            return act.create(conn, customer_id, body.question, answer, actions, user.actor)
+            problem = _permission_problem(user, customer_id, actions)
+            plan = act.create(conn, customer_id, body.question, answer, actions, user.actor, dry_run=problem is None)
+            if plan and problem:
+                plan["problems"].append(problem)
+            return plan
 
     plan = await asyncio.to_thread(propose) if actions else None
     return {
@@ -186,7 +224,7 @@ def list_plans(customer_id: str, user: UserDep, limit: int = 20) -> list[dict]:
             "SELECT * FROM assistant_plans WHERE customer_id = %s ORDER BY id DESC LIMIT %s",
             (customer_id, max(1, min(limit, 100))),
         ).fetchall()
-        return [act.view(conn, r, dry_run=False) for r in rows]
+        return [_view_plan(conn, r, user, dry_run=False) for r in rows]
 
 
 def _plan(conn, plan_id: int, user) -> dict:
@@ -200,6 +238,8 @@ def _plan(conn, plan_id: int, user) -> dict:
 def _plan_step(plan_id: int, user, step) -> dict:
     with db.tx() as conn:
         plan = _plan(conn, plan_id, user)
+        if step in (act.apply, act.undo):
+            _check_action_permissions(user, plan["customer_id"], plan["actions"])
         try:
             with conn.transaction():
                 step(conn, plan, user.actor)
@@ -208,14 +248,14 @@ def _plan_step(plan_id: int, user, step) -> dict:
         else:
             failed = None
         if failed is None:
-            return act.view(conn, act.get(conn, plan_id))
+            return _view_plan(conn, act.get(conn, plan_id), user)
     raise HTTPException(400, failed)
 
 
 @router.get("/ai/plans/{plan_id}")
 def get_plan(plan_id: int, user: UserDep) -> dict:
     with db.tx() as conn:
-        return act.view(conn, _plan(conn, plan_id, user))
+        return _view_plan(conn, _plan(conn, plan_id, user), user)
 
 
 @router.post("/ai/plans/{plan_id}/apply")

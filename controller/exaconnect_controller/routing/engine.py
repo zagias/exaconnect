@@ -106,9 +106,11 @@ class PathEval:
     over_commit: bool
     up: bool
     down_reason: str | None
-    known: bool  # enough recent data to judge it
+    known: bool  # recent probe data exists; metrics_complete checks forecast readiness
     metrics: dict[str, MetricView] = field(default_factory=dict)
     maintenance: bool = False
+    # A fresh report may not yet provide enough history for every SLA metric.
+    metrics_complete: bool = True
 
     @property
     def score_now(self) -> float:
@@ -128,7 +130,12 @@ class PathEval:
         """Usable, within SLA now and forecast to stay within it. The confidence
         margin is for deciding to leave a path, not for choosing where to go:
         a noisy but good path is still a better place than one in breach."""
-        return self.up and self.known and all(m.score_now > 0 and m.score_ahead > 0 for m in self.metrics.values())
+        return (
+            self.up
+            and self.known
+            and self.metrics_complete
+            and all(m.score_now > 0 and m.score_ahead > 0 for m in self.metrics.values())
+        )
 
     def worst(self) -> tuple[str, MetricView] | None:
         if not self.metrics:
@@ -142,6 +149,7 @@ class PathEval:
         return {
             "up": self.up,
             "known": self.known,
+            "metrics_complete": self.metrics_complete,
             "over_commit": self.over_commit,
             "score_now": round(self.score_now, 3),
             "score_ahead": round(self.score_ahead, 3),
@@ -238,6 +246,7 @@ def evaluate(
         known=known,
         metrics=metrics,
         maintenance=bool(p.maintenance),
+        metrics_complete=all(sla.limit(metric) is None or metric in metrics for metric in METRICS),
     )
 
 
@@ -371,7 +380,7 @@ def decide(
     # 4. Move back to a preferred path once it has scored well for a while.
     def scores_well(p: PathEval) -> bool:
         bar = policy.keep_score if p.name == state.return_path else policy.good_score
-        return p.up and p.known and p.score_now >= bar and p.score_ahead >= bar
+        return p.up and p.known and p.metrics_complete and p.score_now >= bar and p.score_ahead >= bar
 
     better = [p for p in by_pref if preference(p) < preference(cur) and scores_well(p)]
     target = better[0] if better else None

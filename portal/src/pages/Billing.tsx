@@ -517,7 +517,7 @@ export function InvoiceDocument({ inv }: { inv: Invoice }) {
     <article className="card bill-doc">
       <header className="bill-doc-head">
         <div>
-          <img src="/brand/exacarib-wordmark.png" alt="ExaCarib" width={160} height={29} className="bill-logo" />
+          <img src="/brand/exacarib-wordmark-red.svg" alt="ExaCarib" width={160} height={29} className="bill-logo" />
           <div className="muted small">{inv.plan}</div>
         </div>
         <div className="bill-doc-meta">

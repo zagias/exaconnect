@@ -1,0 +1,9 @@
+.site-status-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; margin-top: 12px; }
+.site-disclosure summary { cursor: pointer; color: var(--ink); font-size: 17px; line-height: 25px; font-weight: 650; }
+.site-disclosure summary::marker { color: var(--ink-muted); }
+.site-disclosure summary > span { display: block; margin: 4px 0 0 20px; font-weight: 400; }
+.site-disclosure[open] > summary { padding-bottom: 18px; margin-bottom: 20px; border-bottom: 1px solid var(--line); }
+.site-box-settings > .card { padding: 0; margin-top: 24px; border: 0; background: transparent; box-shadow: none; }
+.site-network-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 18px 24px; margin: 0 0 28px; }
+.site-network-facts dt { color: var(--ink-muted); font-size: 13px; line-height: 20px; }
+.site-network-facts dd { margin: 5px 0 0; font-size: 14px; line-height: 22px; white-space: normal; overflow-wrap: anywhere; }

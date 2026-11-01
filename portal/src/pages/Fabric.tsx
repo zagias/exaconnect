@@ -20,6 +20,8 @@ import {
 import { ErrorNote, LineChart, fmt } from "../components";
 import { useCustomer, who } from "../customer";
 import { Card, PageHead, RowActions, useAction } from "../ui";
+import { useAuth } from "../auth";
+import { canOperateConnect } from "../permissions";
 
 // ExaConnect Fabric: virtual circuits to clouds and between sites (ADR 0009,
 // docs/fabric-contract.md). Bandwidth can change at any time and is billed by
@@ -61,6 +63,7 @@ const tunnelsOf = (c: Circuit): CircuitTunnel[] =>
     : [{ which: "primary", peer_address: c.peer_address, ike: c.ike, bgp: c.bgp, prefixes_received: c.prefixes_received, status: c.status }];
 
 export default function Fabric() {
+  const canOperate = canOperateConnect(useAuth().user);
   const { current } = useCustomer();
   const list = useApi<Circuit[]>(current ? circuitPaths.list(current.id) : null, 10_000);
   const providers = useApi<CloudProviders>("/circuits/providers", 0);
@@ -95,11 +98,11 @@ export default function Fabric() {
         Private circuits to your clouds and between your sites, through ExaCarib's PoP. Change the bandwidth at any time;
         you pay by the hour.
       </PageHead>
-      <CloudRouter customerId={current.id} />
+      <CloudRouter customerId={current.id} canOperate={canOperate} />
       <Card
         title={`Circuits for ${current.name}`}
         note={
-          <div className="form-actions">
+          canOperate && <div className="form-actions">
             <button className="button small" aria-pressed={form === "cloud"} onClick={() => setForm(form === "cloud" ? null : "cloud")}>
               Connect a cloud
             </button>
@@ -114,7 +117,7 @@ export default function Fabric() {
         }
       >
         <ErrorNote error={list.error ?? rowAct.error} />
-        {form === "cloud" && (
+        {canOperate && form === "cloud" && (
           <CloudForm
             customerId={current.id}
             providers={providers.data ?? {}}
@@ -125,11 +128,11 @@ export default function Fabric() {
             onCancel={() => setForm(null)}
           />
         )}
-        {form === "site" && <SiteForm customerId={current.id} sites={current.sites} onDone={done} onCancel={() => setForm(null)} />}
+        {canOperate && form === "site" && <SiteForm customerId={current.id} sites={current.sites} onDone={done} onCancel={() => setForm(null)} />}
         {list.data && circuits.length === 0 ? (
           <div className="empty">
-            <p>No circuits yet. Connect a cloud, or join two of your sites at layer 2.</p>
-            {form === null && (
+            <p>{canOperate ? "No circuits yet. Connect a cloud, or join two of your sites at layer 2." : "No private circuits have been configured yet."}</p>
+            {canOperate && form === null && (
               <button className="button small" onClick={() => setForm("cloud")}>
                 Connect a cloud
               </button>
@@ -162,11 +165,12 @@ export default function Fabric() {
                       busy={rowAct.busy}
                       onSwitch={() => switchCircuit(c)}
                       onDelete={() => removeCircuit(c)}
+                      canOperate={canOperate}
                     />
                     {open === c.id && (
                       <tr className="detail-row">
                         <td colSpan={7}>
-                          <CircuitDetail customerId={current.id} c={c} reload={list.reload} onDeleted={() => setOpen(null)} />
+                          <CircuitDetail customerId={current.id} c={c} reload={list.reload} onDeleted={() => setOpen(null)} canOperate={canOperate} />
                         </td>
                       </tr>
                     )}
@@ -183,7 +187,7 @@ export default function Fabric() {
 
 // ---- Cloud router (cloud_to_cloud) ----
 
-function CloudRouter({ customerId }: { customerId: string }) {
+function CloudRouter({ customerId, canOperate }: { customerId: string; canOperate: boolean }) {
   const settings = useApi<CustomerSettings>(circuitPaths.settings(customerId), 0);
   const { reload } = useCustomer();
   const act = useAction();
@@ -196,10 +200,10 @@ function CloudRouter({ customerId }: { customerId: string }) {
     });
   return (
     <div className="card" style={{ marginBottom: 24, padding: "16px 24px" }}>
-      <label className="check">
+      {canOperate ? <label className="check">
         <input type="checkbox" checked={on} disabled={act.busy || !settings.data} onChange={(e) => flip(e.target.checked)} />{" "}
         <strong>Cloud router</strong>
-      </label>
+      </label> : <strong>Cloud router: {settings.data ? on ? "On" : "Off" : "Loading…"}</strong>}
       <p className="small muted" style={{ margin: "4px 0 0" }}>
         When on, your clouds can reach each other through ExaCarib's PoP, without going back to an office.
       </p>
@@ -250,6 +254,7 @@ function CircuitRow({
   busy,
   onSwitch,
   onDelete,
+  canOperate,
 }: {
   c: Circuit;
   providers: CloudProviders;
@@ -258,6 +263,7 @@ function CircuitRow({
   busy: boolean;
   onSwitch: () => void;
   onDelete: () => void;
+  canOperate: boolean;
 }) {
   const st = STATUS[c.status] ?? STATUS.provisioning;
   return (
@@ -306,14 +312,14 @@ function CircuitRow({
           label={c.name}
           disabled={busy}
           primary={
-            <button className="button secondary small" aria-expanded={open} aria-label={`${open ? "Close" : "Manage"} ${c.name}`} onClick={onToggle}>
-              {open ? "Close" : "Manage"}
+            <button className="button secondary small" aria-expanded={open} aria-label={`${open ? "Close" : canOperate ? "Manage" : "View"} ${c.name}`} onClick={onToggle}>
+              {open ? "Close" : canOperate ? "Manage" : "View"}
             </button>
           }
-          items={[
+          items={canOperate ? [
             { label: c.enabled ? "Switch off" : "Switch on", onSelect: onSwitch },
             { label: "Delete circuit", danger: true, onSelect: onDelete },
-          ]}
+          ] : []}
         />
       </td>
     </tr>
@@ -335,11 +341,13 @@ function CircuitDetail({
   c,
   reload,
   onDeleted,
+  canOperate,
 }: {
   customerId: string;
   c: Circuit;
   reload: () => void;
   onDeleted: () => void;
+  canOperate: boolean;
 }) {
   const [bw, setBw] = useState(String(c.bandwidth_mbps));
   const [psk, setPsk] = useState("");
@@ -378,6 +386,7 @@ function CircuitDetail({
     <div className="card-inset">
       <div className="grid">
         <div className="span-6">
+          {canOperate && <>
           <form className="form" onSubmit={saveBw}>
             <label>
               Bandwidth (Mbps)
@@ -433,6 +442,7 @@ function CircuitDetail({
             </p>
           )}
           <ErrorNote error={act.error} />
+          </>}
           <Facts c={c} />
         </div>
         <div className="span-6">

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { postNotice, updateNotice, useApi, type LinkRow, type Notice, type NoticeIn } from "../api";
 import { useAuth } from "../auth";
+import { useCustomer } from "../customer";
 import { ErrorNote, when } from "../components";
 import { Card, PageHead, RowActions, useAction } from "../ui";
 
@@ -33,8 +34,11 @@ export default function Notices() {
   const { user } = useAuth();
   const carrier = user?.role === "carrier";
   const admin = user?.role === "admin";
-  const list = useApi<Notice[]>(carrier || admin ? "/carrier/notices" : "/notices", 15_000);
-  const links = useApi<LinkRow[]>("/links", 0);
+  const { current } = useCustomer();
+  const ready = !admin || !!current;
+  const scope = admin && current ? `?customer_id=${current.id}` : "";
+  const list = useApi<Notice[]>(ready ? carrier ? "/carrier/notices" : `/notices${scope}` : null, 15_000);
+  const links = useApi<LinkRow[]>(ready ? `/links${scope}` : null, 0);
   const act = useAction();
   const linkName = (id: string) => {
     const l = links.data?.find((x) => x.id === id);

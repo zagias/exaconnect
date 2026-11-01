@@ -24,6 +24,8 @@ import {
 import { ErrorNote, ago } from "../components";
 import { useCustomer } from "../customer";
 import { Card, PageHead, RowActions, useAction } from "../ui";
+import { useAuth } from "../auth";
+import { canOperateConnect } from "../permissions";
 
 // Internet breakout, NAT gateway and firewall (ADR 0010, docs/internet-contract.md).
 // Each site sends its internet traffic through the PoP, straight out of its own
@@ -146,6 +148,7 @@ function SiteBreakout({
   forwards: PortForward[];
   reload: () => void;
 }) {
+  const canOperate = canOperateConnect(useAuth().user);
   const act = useAction();
   const [saved, setSaved] = useState<string | null>(null);
   const choose = (mode: BreakoutMode) => {
@@ -164,7 +167,7 @@ function SiteBreakout({
   };
   return (
     <div className="card-inset">
-      <fieldset style={{ border: "none", padding: 0, margin: 0, minWidth: 0 }} disabled={act.busy}>
+      {canOperate ? <fieldset style={{ border: "none", padding: 0, margin: 0, minWidth: 0 }} disabled={act.busy}>
         <legend style={{ padding: 0 }}>
           <strong>{site.name}</strong>
         </legend>
@@ -176,7 +179,7 @@ function SiteBreakout({
             </label>
           ))}
         </div>
-      </fieldset>
+      </fieldset> : <p style={{ margin: "0 0 6px" }}><strong>{site.name}</strong>{" · "}{MODES.find((mode) => mode.mode === site.mode)?.label ?? site.mode}</p>}
       <div className="small">
         <span className="muted">Leaves now through: </span>
         {exitText(site)}
@@ -197,6 +200,7 @@ function SiteBreakout({
 // ---- Firewall rules ----
 
 function Firewall({ customerId, data, reload }: SectionProps) {
+  const canOperate = canOperateConnect(useAuth().user);
   const [editing, setEditing] = useState<FirewallRule | "new" | null>(null);
   const act = useAction();
   const rules = [...data.rules].sort((a, b) => a.position - b.position);
@@ -225,7 +229,7 @@ function Firewall({ customerId, data, reload }: SectionProps) {
     <Card
       title="Firewall rules"
       note={
-        <button className="button small" aria-pressed={editing === "new"} onClick={() => setEditing(editing === "new" ? null : "new")}>
+        canOperate && <button className="button small" aria-pressed={editing === "new"} onClick={() => setEditing(editing === "new" ? null : "new")}>
           Add a rule
         </button>
       }
@@ -234,7 +238,7 @@ function Firewall({ customerId, data, reload }: SectionProps) {
         Checked in order where traffic leaves for the internet; the first match wins. Anything no rule matches is allowed.
       </p>
       <ErrorNote error={act.error} />
-      {editing && (
+      {canOperate && editing && (
         <RuleForm
           key={editing === "new" ? "new" : editing.id}
           customerId={customerId}
@@ -251,7 +255,7 @@ function Firewall({ customerId, data, reload }: SectionProps) {
       {rules.length === 0 ? (
         <div className="empty">
           <p>No rules yet, so all outbound internet traffic is allowed.</p>
-          {editing !== "new" && (
+          {canOperate && editing !== "new" && (
             <button className="button small" onClick={() => setEditing("new")}>
               Add a rule
             </button>
@@ -270,9 +274,9 @@ function Firewall({ customerId, data, reload }: SectionProps) {
                 <th scope="col">Protocol</th>
                 <th scope="col">Description</th>
                 <th scope="col" className="num">Packets</th>
-                <th scope="col" className="actions">
+                {canOperate && <th scope="col" className="actions">
                   <span className="sr-only">Actions</span>
-                </th>
+                </th>}
               </tr>
             </thead>
             <tbody>
@@ -307,7 +311,7 @@ function Firewall({ customerId, data, reload }: SectionProps) {
                       {count(r.packets)}
                       <span className="sub">{bytes(r.bytes)}</span>
                     </td>
-                    <td className="actions">
+                    {canOperate && <td className="actions">
                       <RowActions
                         label={`rule ${i + 1}`}
                         disabled={act.busy}
@@ -323,7 +327,7 @@ function Firewall({ customerId, data, reload }: SectionProps) {
                           { label: "Delete rule", danger: true, onSelect: () => remove(r) },
                         ]}
                       />
-                    </td>
+                    </td>}
                   </tr>
                 );
               })}
@@ -548,6 +552,7 @@ function inactive(site: InternetSite | undefined): string | null {
 }
 
 function Forwards({ customerId, data, reload }: SectionProps) {
+  const canOperate = canOperateConnect(useAuth().user);
   const [editing, setEditing] = useState<PortForward | "new" | null>(null);
   const act = useAction();
   const siteOf = (id: string) => data.sites.find((s) => s.id === id);
@@ -570,7 +575,7 @@ function Forwards({ customerId, data, reload }: SectionProps) {
     <Card
       title="Port forwards"
       note={
-        <button className="button small" aria-pressed={editing === "new"} onClick={() => setEditing(editing === "new" ? null : "new")}>
+        canOperate && <button className="button small" aria-pressed={editing === "new"} onClick={() => setEditing(editing === "new" ? null : "new")}>
           Add a forward
         </button>
       }
@@ -583,7 +588,7 @@ function Forwards({ customerId, data, reload }: SectionProps) {
         Unsolicited inbound connections blocked: <span className="mono">{count(data.inbound_dropped ?? 0)}</span>
       </p>
       <ErrorNote error={act.error} />
-      {editing && (
+      {canOperate && editing && (
         <ForwardForm
           key={editing === "new" ? "new" : editing.id}
           customerId={customerId}
@@ -599,7 +604,7 @@ function Forwards({ customerId, data, reload }: SectionProps) {
       {data.forwards.length === 0 ? (
         <div className="empty">
           <p>No port forwards. Nothing on the internet can start a connection to your sites.</p>
-          {editing !== "new" && (
+          {canOperate && editing !== "new" && (
             <button className="button small" onClick={() => setEditing("new")}>
               Add a forward
             </button>
@@ -615,9 +620,9 @@ function Forwards({ customerId, data, reload }: SectionProps) {
                 <th scope="col">To</th>
                 <th scope="col">Allowed from</th>
                 <th scope="col" className="num">Packets</th>
-                <th scope="col" className="actions">
+                {canOperate && <th scope="col" className="actions">
                   <span className="sr-only">Actions</span>
-                </th>
+                </th>}
               </tr>
             </thead>
             <tbody>
@@ -659,7 +664,7 @@ function Forwards({ customerId, data, reload }: SectionProps) {
                       {count(p.packets)}
                       <span className="sub">{bytes(p.bytes)}</span>
                     </td>
-                    <td className="actions">
+                    {canOperate && <td className="actions">
                       <RowActions
                         label={name}
                         disabled={act.busy}
@@ -673,7 +678,7 @@ function Forwards({ customerId, data, reload }: SectionProps) {
                           { label: "Delete forward", danger: true, onSelect: () => remove(p) },
                         ]}
                       />
-                    </td>
+                    </td>}
                   </tr>
                 );
               })}

@@ -4,6 +4,7 @@ hooks, metrics, RESTCONF, carrier notices and cloud on-ramps."""
 from __future__ import annotations
 
 import datetime as dt
+import uuid
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request, Response
@@ -801,10 +802,12 @@ def patch_notice(notice_id: int, body: NoticePatch, user: UserDep) -> dict:
 
 
 @router.get("/notices")
-def customer_notices(user: UserDep, limit: int = Query(default=100, ge=1, le=500)) -> list[dict]:
+def customer_notices(
+    user: UserDep, limit: int = Query(default=100, ge=1, le=500), customer_id: uuid.UUID | None = None
+) -> list[dict]:
     """Carrier notices that touch your links (only your links are listed in each)."""
     with db.tx() as conn:
-        return notices.list_for(conn, user, limit=limit)
+        return notices.list_for(conn, user, limit=limit, customer_id=customer_id)
 
 
 @router.get("/notices/{notice_id}")
