@@ -88,10 +88,13 @@ def search_numbers(
     access.check(user, customer_id, "commai:read")
     with db.tx() as conn, errors():
         _admin(conn, user, customer_id)
+        readiness = providers.status()
+        if not readiness["number_ordering_ready"]:
+            return {"country": country.upper(), "numbers": [], "example": False, "provider": readiness}
         c = countries.require(conn, country, customer_id)
         prov = providers.get()
         found = prov.search_numbers(conn, c.code, area, contains, limit)
-    return {"country": c.code, "numbers": found, "example": not prov.live}
+    return {"country": c.code, "numbers": found, "example": not prov.live, "provider": readiness}
 
 
 # ---- emergency addresses ------------------------------------------------------------------

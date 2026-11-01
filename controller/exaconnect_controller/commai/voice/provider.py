@@ -11,8 +11,9 @@ Its long-running answers are rows in `voice_sim_provider_requests` with a
 
 `HttpSipProvider` is the skeleton of the real adapter. It reads its settings
 from EXA_SIP_PROVIDER_URL, EXA_SIP_PROVIDER_KEY and EXA_SIP_PROVIDER_ACCOUNT
-and refuses to do anything until all three are set. The paths it calls are
-placeholders to match to the chosen provider's API.
+and remains unavailable even when all three are set. Its request paths are
+placeholders that must be implemented and validated for the chosen supplier.
+Simulation is disabled unless EXA_VOICE_TEST_MODE=1 is explicitly set.
 
 Every call that creates something takes an idempotency key. Asked twice with
 the same key, a provider must return the same result, never a second number:
@@ -25,11 +26,9 @@ import csv
 import datetime as dt
 import hashlib
 import io
-import json
 import os
-import urllib.error
-import urllib.request
 from decimal import Decimal
+from functools import wraps
 from typing import Any
 
 import psycopg
@@ -55,6 +54,55 @@ class ProviderError(VoiceError):
 
 class NotConfigured(ProviderError):
     pass
+
+
+def test_mode() -> bool:
+    """Simulation is an explicit operator choice, never inferred from EXA_ENV."""
+    return os.environ.get("EXA_VOICE_TEST_MODE") == "1"
+
+
+def status() -> dict:
+    """Capability readiness; credentials alone cannot complete a placeholder adapter."""
+    name = os.environ.get("EXA_SIP_PROVIDER", "simulated")
+    testing = test_mode()
+    configured = name == "sip" and not HttpSipProvider().missing()
+    ready = name == "simulated" and testing
+    if ready:
+        reason = "Test mode: fictional numbers and simulated calls. No live telephone service."
+    elif name == "simulated":
+        reason = "Number ordering is unavailable. A live telephone provider has not been connected."
+    elif name == "sip":
+        reason = "Number ordering is unavailable. The telephone provider adapter is not implemented or validated."
+    else:
+        reason = "Number ordering is unavailable. The telephone provider setting is invalid."
+    return {
+        "name": name,
+        "live": False,
+        "configured": configured,
+        "test_mode": testing,
+        "number_ordering_ready": ready,
+        "reason": reason,
+    }
+
+
+def require_number_ordering() -> None:
+    readiness = status()
+    if not readiness["number_ordering_ready"]:
+        raise NotConfigured(readiness["reason"], 503)
+
+
+def require_test_mode() -> None:
+    if not test_mode():
+        raise NotConfigured("Simulated telephone operations require explicit voice test mode.", 503)
+
+
+def _simulation_only(method):
+    @wraps(method)
+    def checked(*args, **kwargs):
+        require_test_mode()
+        return method(*args, **kwargs)
+
+    return checked
 
 
 def add_business_days(day: dt.date, n: int) -> dt.date:
@@ -199,6 +247,7 @@ class SimulatedProvider(SipProvider):
             r["e164"] for r in conn.execute("SELECT e164 FROM voice_sim_provider_numbers WHERE NOT released").fetchall()
         } | {r["e164"] for r in conn.execute("SELECT e164 FROM voice_numbers WHERE status <> 'removed'").fetchall()}
 
+    @_simulation_only
     def search_numbers(self, conn, country, area="", contains="", limit=10):
         c = countries.get(country)
         area = countries.check_area(c, area)
@@ -213,6 +262,7 @@ class SimulatedProvider(SipProvider):
                 break
         return out
 
+    @_simulation_only
     def order_number(self, conn, customer_id, key, area="868", country=None, e164=None):
         row = conn.execute("SELECT e164 FROM voice_sim_provider_numbers WHERE idempotency_key = %s", (key,)).fetchone()
         if row:
@@ -247,10 +297,12 @@ class SimulatedProvider(SipProvider):
             return {"e164": n, "ref": f"sim:{n}"}
         raise ProviderError(f"The simulated number range for {c.name} is used up.")
 
+    @_simulation_only
     def release_number(self, conn, e164):
         conn.execute("UPDATE voice_sim_provider_numbers SET released = true WHERE e164 = %s", (e164,))
 
     # ---- porting ----
+    @_simulation_only
     def submit_port(self, conn, customer_id, e164, losing_carrier, key, details=None):
         _fault("submit_port")
         ref = f"simport:{key}"
@@ -280,6 +332,7 @@ class SimulatedProvider(SipProvider):
             (status, Jsonb(outcome), ref),
         )
 
+    @_simulation_only
     def port_status(self, conn, ref):
         r = self._req(conn, ref, "port")
         if r["status"] != "submitted" or not r["ready"]:
@@ -307,6 +360,7 @@ class SimulatedProvider(SipProvider):
         self._set(conn, ref, "accepted", out)
         return {"status": "accepted", **out}
 
+    @_simulation_only
     def send_port_documents(self, conn, ref, documents):
         r = self._req(conn, ref, "port")
         if r["status"] in ("cancelled", "activated", "rejected"):
@@ -321,6 +375,7 @@ class SimulatedProvider(SipProvider):
         )
         return {"status": "submitted" if r["status"] == "documents_needed" else r["status"]}
 
+    @_simulation_only
     def reschedule_port(self, conn, ref, day):
         r = self._req(conn, ref, "port")
         if r["status"] not in ("accepted", "rolled_back"):
@@ -336,12 +391,14 @@ class SimulatedProvider(SipProvider):
         self._set(conn, ref, "accepted", out)
         return {"status": "accepted", **out}
 
+    @_simulation_only
     def cancel_port(self, conn, ref):
         r = self._req(conn, ref, "port")
         if r["status"] == "activated":
             raise ProviderError("The number has already moved over.", 409)
         self._set(conn, ref, "cancelled", r["outcome"])
 
+    @_simulation_only
     def activate_port(self, conn, ref):
         r = self._req(conn, ref, "port")
         if r["status"] == "activated":
@@ -352,12 +409,14 @@ class SimulatedProvider(SipProvider):
         self._set(conn, ref, "activated", r["outcome"])
         return {"status": "activated"}
 
+    @_simulation_only
     def rollback_port(self, conn, ref):
         r = self._req(conn, ref, "port")
         self._set(conn, ref, "rolled_back", {**r["outcome"], "rolled_back_at": dt.datetime.now(dt.UTC).isoformat()})
         return {"status": "rolled_back"}
 
     # ---- calls ----
+    @_simulation_only
     def test_call(self, conn, e164):
         try:
             _fault("test_call")
@@ -366,9 +425,11 @@ class SimulatedProvider(SipProvider):
         return {"ok": True, "detail": "Simulated test call answered and audio heard both ways."}
 
     # ---- emergency addresses ----
+    @_simulation_only
     def register_emergency_address(self, conn, e164, address):
         return "pending"
 
+    @_simulation_only
     def validate_emergency_address(self, conn, address, key):
         ref = f"simaddr:{key}"
         conn.execute(
@@ -380,6 +441,7 @@ class SimulatedProvider(SipProvider):
         )
         return {"ref": ref, "status": "pending"}
 
+    @_simulation_only
     def emergency_address_status(self, conn, ref):
         r = self._req(conn, ref, "emergency")
         if r["status"] != "pending" or not r["ready"]:
@@ -411,6 +473,7 @@ class SimulatedProvider(SipProvider):
         return {"status": "registered", **out}
 
     # ---- carriers ----
+    @_simulation_only
     def options_ping(self, conn, carrier):
         key = carrier["key"]
         # An organisation's simulated trunk can be set to fail, to try failover (trunks.py).
@@ -419,11 +482,13 @@ class SimulatedProvider(SipProvider):
         rtt = 15 + int(hashlib.sha256(key.encode()).hexdigest()[:4], 16) % 60
         return {"ok": True, "rtt_ms": rtt, "code": 200}
 
+    @_simulation_only
     def place_call(self, conn, carrier, to):
         if _faulted(f"call:{carrier['key']}") or (carrier.get("outbound") or {}).get("sim_fail") in ("refuse", "down"):
             return {"ok": False, "detail": f"{carrier['name']} answered 503 Service Unavailable."}
         return {"ok": True, "detail": f"Connected through {carrier['name']} (simulated)."}
 
+    @_simulation_only
     def fetch_cdrs(self, conn, carrier, start, end):
         rows = conn.execute(
             """SELECT coalesce(nullif(provider_ref, ''), call_id) AS ref, started_at, to_number, seconds,
@@ -449,14 +514,12 @@ class SimulatedProvider(SipProvider):
 
 
 class HttpSipProvider(SipProvider):
-    """The real SIP provider's adapter (a skeleton). It refuses to run until
-    EXA_SIP_PROVIDER_URL, EXA_SIP_PROVIDER_KEY and EXA_SIP_PROVIDER_ACCOUNT are
-    set for an account Dudley has opened. The request paths below are
-    placeholders: match them to the chosen provider's API, and test each one
-    against its sandbox, before switching EXA_SIP_PROVIDER to "sip"."""
+    """Unavailable supplier adapter skeleton. The paths below must be replaced
+    and sandbox-tested against the actual supplier before it can become live.
+    Credentials alone do not make this implementation ready."""
 
     name = "sip"
-    live = True
+    live = False
     SETTINGS = ("EXA_SIP_PROVIDER_URL", "EXA_SIP_PROVIDER_KEY", "EXA_SIP_PROVIDER_ACCOUNT")
 
     def __init__(self) -> None:
@@ -471,24 +534,9 @@ class HttpSipProvider(SipProvider):
         missing = self.missing()
         if missing:
             raise NotConfigured(f"The SIP provider is not set up yet ({', '.join(missing)} missing).")
-        req = urllib.request.Request(
-            f"{self.url}/accounts/{self.account}{path}",
-            data=json.dumps(body).encode() if body is not None else None,
-            method=method,
-            headers={
-                "Authorization": f"Bearer {self.key}",
-                "Content-Type": "application/json",
-                **({"Idempotency-Key": key} if key else {}),
-            },
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=20) as r:  # noqa: S310 - URL comes from the operator's settings
-                data = r.read()
-        except urllib.error.HTTPError as e:
-            raise ProviderError(f"The SIP provider answered {e.code}.", 502 if e.code >= 500 else 422) from e
-        except (urllib.error.URLError, TimeoutError) as e:
-            raise ProviderError("The SIP provider could not be reached.") from e
-        return json.loads(data) if data else {}
+        # These paths are examples, not an integration with an actual supplier.
+        # Do not make paid or emergency-service requests by adding credentials.
+        raise NotConfigured("The telephone provider adapter is not implemented or validated.", 503)
 
     def search_numbers(self, conn, country, area="", contains="", limit=10):
         q = f"?country={country}&area={digits(area)}&contains={digits(contains)}&limit={int(limit)}"
@@ -553,5 +601,10 @@ class HttpSipProvider(SipProvider):
 
 
 def get() -> SipProvider:
-    """EXA_SIP_PROVIDER picks the provider: "simulated" (the default) or "sip"."""
-    return HttpSipProvider() if os.environ.get("EXA_SIP_PROVIDER", "simulated") == "sip" else SimulatedProvider()
+    """Select an adapter without silently converting invalid settings into simulation."""
+    name = os.environ.get("EXA_SIP_PROVIDER", "simulated")
+    if name == "sip":
+        return HttpSipProvider()
+    if name == "simulated":
+        return SimulatedProvider()
+    raise NotConfigured("The telephone provider setting is invalid.", 503)

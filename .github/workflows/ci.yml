@@ -133,7 +133,10 @@ jobs:
           controller/tests/test_action_execution_permissions.py
           controller/tests/test_commai_call_reliability.py
           controller/tests/test_voice_sbc_robustness.py
+          controller/tests/test_voice_provider_readiness.py
           controller/tests/test_commai_presence_calls.py
+          controller/tests/test_commai_governance.py::test_daily_action_limits_per_role
+          controller/tests/test_portal_read_scope.py
           controller/tests/test_commai_voice_global.py::test_livekit_controller_contract_requires_a_ready_phone_worker
 
   firewall-packets:
@@ -152,6 +155,7 @@ jobs:
       - name: Install Linux namespace test tools
         run: sudo apt-get update && sudo apt-get install -y nftables iproute2 conntrack
       - name: Export production firewall rules and build routing regression
+        id: kernel_build
         working-directory: agent
         run: |
           EXA_FIREWALL_FIXTURE_DIR="$RUNNER_TEMP/firewall-rules" go test ./internal/render -run '^TestExportFirewallPacketFixtures$' -count=1 -v
@@ -159,6 +163,7 @@ jobs:
       - name: Firewall isolation, NAT, established traffic and Internet Off
         run: sudo env EXA_FIREWALL_PACKET_TESTS=1 python3 lab/ci/checks/firewall_packets.py check --fixtures "$RUNNER_TEMP/firewall-rules"
       - name: Steering retry and BFD recovery against isolated kernel routes
+        if: ${{ !cancelled() && steps.kernel_build.outcome == 'success' }}
         run: sudo env EXA_ROUTING_KERNEL_TESTS=1 "$RUNNER_TEMP/routing-kernel.test" -test.run '^TestRoutingRecoveryInIsolatedKernel$' -test.v
 
   lab:

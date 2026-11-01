@@ -133,6 +133,7 @@ def _set(conn, p: dict, status: str, **cols) -> dict:
 
 def create(conn: psycopg.Connection, cid: Any, body: dict, actor: str) -> dict:
     """A port order in draft. The number is reserved on our side as 'porting'."""
+    providers.require_number_ordering()
     from . import config
 
     try:
@@ -549,6 +550,7 @@ def _test_calls(conn, prov, p) -> tuple[bool, str]:
 
 def go_live(conn, p: dict, actor: str) -> dict:
     """The number is with ExaCarib and answered its test call: make it live."""
+    providers.require_number_ordering()
     cid = p["customer_id"]
     conn.execute(
         """UPDATE voice_numbers SET status = 'active', billing_from = coalesce(billing_from, now()), provider = %s,

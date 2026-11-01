@@ -160,6 +160,17 @@ class PacketLab:
             run("ip", "netns", "add", name)
             self.created.append(name)
         for name in self.names:
+            # Hosted runners may disable IPv6 or enable DAD in their defaults.
+            # Set deterministic defaults inside each new namespace only.
+            self.ns(
+                name,
+                "sysctl",
+                "-qw",
+                "net.ipv6.conf.all.disable_ipv6=0",
+                "net.ipv6.conf.default.disable_ipv6=0",
+                "net.ipv6.conf.all.accept_dad=0",
+                "net.ipv6.conf.default.accept_dad=0",
+            )
             self.ip(name, "link", "set", "lo", "up")
         for peer, interface, v4, v6 in (
             ("site_a", "lan-a", "10.70.1", "fd70:1"),
@@ -297,6 +308,29 @@ class PacketLab:
         if failures:
             raise RuntimeError("namespace cleanup failed: " + "; ".join(failures))
 
+    def diagnose(self):
+        for namespace, name in self.names.items():
+            if name not in self.created:
+                continue
+            print(f"--- isolated packet diagnostics: {namespace} ---", flush=True)
+            for command in (
+                ("ip", "-brief", "address"),
+                ("ip", "route", "show", "table", "all"),
+                ("ip", "-6", "route", "show", "table", "all"),
+                ("ip", "-6", "neighbour", "show"),
+                (
+                    "sysctl",
+                    "net.ipv4.ip_forward",
+                    "net.ipv6.conf.all.forwarding",
+                    "net.ipv6.conf.all.disable_ipv6",
+                ),
+                ("nft", "list", "ruleset"),
+            ):
+                try:
+                    print(self.ns(namespace, *command), flush=True)
+                except RuntimeError as error:
+                    print(str(error), flush=True)
+
     def __enter__(self):
         try:
             self.setup()
@@ -305,8 +339,12 @@ class PacketLab:
             self.close()
             raise
 
-    def __exit__(self, *_):
-        self.close()
+    def __exit__(self, error_type, *_):
+        try:
+            if error_type is not None:
+                self.diagnose()
+        finally:
+            self.close()
 
 
 def packets(fixtures: Path):
@@ -439,7 +477,9 @@ def endpoint_server(host: str, port: int):
 def endpoint_client(host: str, port: int, source: str):
     family = socket.AF_INET6 if ":" in host else socket.AF_INET
     with socket.socket(family, socket.SOCK_STREAM) as connection:
-        connection.settimeout(0.8)
+        # Cold IPv6 neighbour discovery may retransmit after one second.
+        # Keep connection setup distinct from the bounded packet-reply check.
+        connection.settimeout(3)
         try:
             if source:
                 connection.bind((source, 0))
@@ -447,6 +487,7 @@ def endpoint_client(host: str, port: int, source: str):
         except OSError as error:
             print(json.dumps({"ok": False, "error": str(error)}), flush=True)
             return
+        connection.settimeout(0.8)
         print(json.dumps({"ok": True}), flush=True)
         for line in sys.stdin:
             payload = json.loads(line)["payload"]

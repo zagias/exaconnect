@@ -131,8 +131,7 @@ function Sites({ v, propose }: { v: VoiceOverview; propose: Propose }) {
   return (
     <Card title="Sites and emergency addresses">
       <p className="muted small">
-        Emergency calls give the site's address. Each person's address follows their site, and moves with them. Registering
-        addresses with the provider, island by island, starts with real numbers (phase 3).
+        Keep each person's phone site and emergency address current. Address delivery depends on the provider and country.
       </p>
       <p className="small">
         Each location in <Link to="/org/locations">Organisation › Locations</Link> with a street address has its phone
@@ -271,7 +270,7 @@ function Users({ v, propose }: { v: VoiceOverview; propose: Propose }) {
                   {u.portal_email ?? <span className="muted">None</span>}
                 </td>
                 <td data-label="Status">
-                  {u.dnd ? <span className="pill small warn">Do not disturb</span> : u.forward_to ? <span className="pill small warn">Forwarded</span> : <span className="pill small ok">Ringing</span>}
+                  {u.dnd ? <span className="pill small warn">Do not disturb</span> : u.forward_to ? <span className="pill small warn">Forwarded</span> : <span className="pill small">Do not disturb off</span>}
                 </td>
                 <td className="actions">
                   <RowActions
@@ -415,7 +414,7 @@ function Numbers({ v, propose }: { v: VoiceOverview; propose: Propose }) {
   return (
     <Card
       title="Numbers"
-      note={!v.provider.live && <span className="tag">Simulated provider: test numbers +1 868 555 01xx</span>}
+      note={v.provider.test_mode ? <span className="tag">Test mode · no real numbers</span> : !v.provider.number_ordering_ready && <span className="tag">Number ordering unavailable</span>}
     >
       <div className="table-wrap">
         <table className="paths dt stack">
@@ -438,7 +437,7 @@ function Numbers({ v, propose }: { v: VoiceOverview; propose: Propose }) {
                   {n.source === "ported" && <span className="sub">Ported</span>}
                 </td>
                 <td data-label="Status">
-                  <span className={`pill small ${n.status === "active" ? "ok" : "warn"}`}>{n.status === "active" ? "Active" : n.status === "porting" ? "Porting" : "Pending"}</span>
+                  <span className={`pill small ${n.simulated ? "off" : n.status === "active" ? "ok" : "warn"}`}>{n.simulated ? "Test only" : n.status === "active" ? "Active" : n.status === "porting" ? "Porting" : "Pending"}</span>
                 </td>
                 <td data-label="Rings">{targetName(v, n.target_type, n.target_id)}</td>
                 <td data-label="Emergency address" className="cell-wrap">
@@ -476,6 +475,7 @@ function Numbers({ v, propose }: { v: VoiceOverview; propose: Propose }) {
           </div>
         </form>
       )}
+      {v.provider.number_ordering_ready && <>
       <h3 className="voice-sub">Add a number</h3>
       <form
         className="form"
@@ -490,6 +490,10 @@ function Numbers({ v, propose }: { v: VoiceOverview; propose: Propose }) {
         </div>
       </form>
       <p className="muted small">To bring numbers from your current provider, place an order with a port (Orders).</p>
+      </>}
+      {!v.provider.number_ordering_ready && <p className="muted small">
+        New numbers and number transfers need a supported provider connection. You can <Link to="/commai/voice/trunks">connect your own SIP trunk</Link> for existing phone service.
+      </p>}
     </Card>
   );
 }

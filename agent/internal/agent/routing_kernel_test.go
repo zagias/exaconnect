@@ -131,7 +131,12 @@ func TestRoutingRecoveryInIsolatedKernel(t *testing.T) {
 	if a.steerErr == "" || a.steerAppliedVersion != 5 {
 		t.Fatal("expected an unacknowledged failed steering attempt")
 	}
-	assertRoute("wg-sat") // the deliberately partial failure is real
+	if out, err := sys.Host.Run(ctx, "ip", "-4", "route", "get", "198.51.100.10", "mark", "0x101"); err == nil {
+		t.Fatalf("partial rule failure escaped onto an excluded BGP path: %s", out)
+	}
+	// Lose the steerer cache as a process restart would; guards must be read
+	// back from the kernel, retained during repair, then removed on success.
+	a.Steerer = &steer.Steerer{Sys: sys, StateDir: a.Steerer.StateDir}
 	a.pollSteering(ctx)
 	if a.steerErr != "" || a.pathOf("voice") != "carrier-a" {
 		t.Fatalf("cached-map retry did not recover: %q", a.steerErr)

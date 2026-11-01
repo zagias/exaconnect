@@ -56,6 +56,7 @@ def _counts(items: dict) -> dict:
 
 
 def _check_items(conn, cid, items: dict) -> dict:
+    _require_provider(items)
     users = items.get("users") or []
     nums = items.get("numbers") or {}
     if not users and not int(nums.get("new", 0)) and not nums.get("ported"):
@@ -91,6 +92,11 @@ def _check_items(conn, cid, items: dict) -> dict:
         raise VoiceError("Order 0 to 100 extra numbers.", 422)
     _check_countries(conn, cid, items)
     return items
+
+
+def _require_provider(items: dict) -> None:
+    if _counts(items)["numbers"]:
+        providers.require_number_ordering()
 
 
 def _check_countries(conn, cid, items: dict) -> None:
@@ -165,6 +171,7 @@ def approve(conn, cid, order_id, actor: str, *, can_spend: bool, accepted_price:
         raise VoiceError("Order not found.", 404)
     if o["status"] != "draft":
         raise VoiceError("This order has already been approved or cancelled.", 409)
+    _require_provider(o["items"])
     price = billing.price_impact(billing.card_at(conn, cid), _counts(o["items"]))
     if (price["monthly_delta"], price["one_time"]) != (o["price"]["monthly_delta"], o["price"]["one_time"]):
         conn.execute("UPDATE voice_orders SET price = %s, updated_at = now() WHERE id = %s", (Jsonb(price), order_id))
@@ -201,6 +208,7 @@ def retry(conn, cid, order_id, actor: str) -> dict:
         raise VoiceError("Order not found.", 404)
     if o["status"] != "failed":
         raise VoiceError("Only a failed order can be retried.", 409)
+    _require_provider(o["items"])
     n = o["retries"] + 1
     conn.execute("UPDATE voice_orders SET retries = %s, updated_at = now() WHERE id = %s", (n, order_id))
     jobs.enqueue(
@@ -454,6 +462,7 @@ def _confirm(conn, o, prov, calls: list) -> dict:
 
 
 def _billing(conn, o, prov, calls: list) -> dict:
+    _require_provider(o["items"])
     cid = o["customer_id"]
     users = conn.execute(
         "UPDATE voice_users SET billing_from = now() WHERE order_ref LIKE %s AND billing_from IS NULL"
@@ -492,6 +501,7 @@ def run(conn: psycopg.Connection, job: dict):
     o = conn.execute("SELECT * FROM voice_orders WHERE id = %s FOR UPDATE", (job["payload"]["order_id"],)).fetchone()
     if o is None or o["status"] not in ("approved", "provisioning", "failed"):
         return None
+    _require_provider(o["items"])
     cid = o["customer_id"]
     conn.execute(
         "UPDATE voice_orders SET status = 'provisioning', failed_step = '', error = '', updated_at = now()"

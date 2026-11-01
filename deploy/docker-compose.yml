@@ -43,6 +43,7 @@ services:
       # Jibsy voice (ADR 0021): rendered FreeSWITCH config, read by the freeswitch service.
       EXA_FREESWITCH_DIR: /data/freeswitch
       EXA_SIP_PROVIDER: ${EXA_SIP_PROVIDER:-simulated}
+      EXA_VOICE_TEST_MODE: ${EXA_VOICE_TEST_MODE:-0}
       # Voice stage 5 (ADR 0033): the real provider's API, Kamailio's carrier lists, LiveKit.
       EXA_SIP_PROVIDER_URL: ${EXA_SIP_PROVIDER_URL:-}
       EXA_SIP_PROVIDER_KEY: ${EXA_SIP_PROVIDER_KEY:-}

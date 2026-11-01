@@ -132,7 +132,8 @@ def test_real_provider_refuses_until_configured(monkeypatch):
         p.search_numbers(None, "TT")
     assert "EXA_SIP_PROVIDER_URL" in str(e.value)
     monkeypatch.setenv("EXA_SIP_PROVIDER", "sip")
-    assert providers.get().live
+    assert not providers.get().live
+    assert not providers.status()["number_ordering_ready"]
 
 
 # ---- emergency addresses ------------------------------------------------------------------------

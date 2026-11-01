@@ -446,6 +446,10 @@ class _Run:
 
     # numbers
     def add_number(self, op):
+        try:
+            providers.require_number_ordering()
+        except providers.NotConfigured as e:
+            raise OpError(str(e)) from e
         target_type = op.get("target_type") or "none"
         target_id = _target(self.conn, self.cid, target_type, op.get("target"))
         site = _site(self.conn, self.cid, op.get("site"), required=False)
@@ -935,6 +939,7 @@ def _after_checks(conn, cid, run: _Run) -> None:
     prov = providers.get()
     for item in run.after:
         if item[0] == "order_number":
+            providers.require_number_ordering()
             _, number_id, key, area, country, chosen = item
             got = (
                 prov.order_number(conn, cid, key, area, country=country, e164=chosen)

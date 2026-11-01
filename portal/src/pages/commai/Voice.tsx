@@ -57,7 +57,7 @@ export default function Voice() {
       <PageHead title="Phone">
         Your phone system: people, numbers, call routing, orders and billing.{" "}
         {v && !v.provider.live && (
-          <span className="tag">No phone carrier yet: calls between extensions work, outside numbers don't</span>
+            <span className="tag">No managed phone carrier connected. Connect your own SIP trunk to set up outside calls.</span>
         )}
       </PageHead>
       <Tabs label="Voice sections">

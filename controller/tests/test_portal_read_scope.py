@@ -100,7 +100,8 @@ def test_customer_query_parameter_cannot_read_another_organisation(client, admin
             (hash_password("read scope password"), first),
         ).fetchone()["id"]
         conn.execute(
-            "INSERT INTO org_memberships (customer_id, user_id, role) VALUES (%s, %s, 'viewer')",
+            "INSERT INTO org_memberships (customer_id, user_id, role) VALUES (%s, %s, 'viewer')"
+            " ON CONFLICT (customer_id, user_id) DO UPDATE SET role = EXCLUDED.role",
             (first, user),
         )
     login = client.post(

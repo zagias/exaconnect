@@ -45,6 +45,16 @@ satellite exclusions and InternetOff map scope. Network namespace/lab tests
 remain necessary to establish packet-loss and convergence bounds on Linux;
 unit tests do not establish the production three-second failover target.
 
+Because ip-rule batches are not atomic, a changed map first fences both
+existing and new class marks with temporary blackhole rules at reserved
+preference999. It reconciles every owned kernel rule (including duplicate
+preferences), then removes the guards only after the classifier, path
+tables and replacement class rules succeed. Failed guard installation does
+not start the update; failed apply or guard cleanup leaves traffic paused
+until retry. Guards survive process restarts and are read from the kernel.
+An unchanged healthy map remains a no-op. This chooses a brief pause during
+updates over accidentally falling through to a disallowed BGP path.
+
 An explicit Linux CI test (`EXA_ROUTING_KERNEL_TESTS=1`,
 `TestRoutingRecoveryInIsolatedKernel`) now checks the actual nft/ip-rule
 dataplane in a fresh network namespace. It refuses to run commands in the

@@ -155,6 +155,17 @@ def submit_site(conn: psycopg.Connection, cid: Any, site_id: Any, actor: str = "
     site = conn.execute("SELECT * FROM voice_sites WHERE id = %s AND customer_id = %s", (site_id, cid)).fetchone()
     if site is None:
         raise VoiceError("Site not found.", 404)
+    readiness = providers.status()
+    if not readiness["number_ordering_ready"]:
+        # Saving a site is useful for a customer's own trunks. It must not
+        # manufacture a successful emergency-service registration.
+        conn.execute(
+            """UPDATE voice_sites SET emergency_status = 'not_registered', emergency_ref = '',
+                 emergency_reason = %s WHERE id = %s""",
+            (readiness["reason"], site_id),
+        )
+        refresh_numbers(conn, cid, site_id=site_id)
+        return {"status": "not_registered", "reason": readiness["reason"]}
     addr = _address(site)
     prov = providers.get()
     sub = prov.validate_emergency_address(conn, addr, f"{cid}:site:{site_id}:{_addr_key(addr)}")
@@ -191,17 +202,30 @@ def set_user_address(conn: psycopg.Connection, cid: Any, voice_user_id: Any, add
     addr["country"] = (addr["country"] or "TT").upper()[:2]
     if not addr["address_line1"]:
         raise VoiceError("Give the street address.", 422)
-    prov = providers.get()
-    sub = prov.validate_emergency_address(conn, addr, f"{cid}:user:{vu['id']}:{_addr_key(addr)}")
-    conn.execute(
-        """UPDATE voice_users SET emergency_own = true, emergency_address = %s, emergency_status = 'pending',
-             emergency_ref = %s, emergency_reason = '' WHERE id = %s""",
-        (Jsonb({**addr, "own": True}), sub["ref"], vu["id"]),
+    readiness = providers.status()
+    sub = (
+        providers.get().validate_emergency_address(conn, addr, f"{cid}:user:{vu['id']}:{_addr_key(addr)}")
+        if readiness["number_ordering_ready"]
+        else {"status": "not_registered", "ref": ""}
     )
-    _queue_check(conn, cid, "user", vu["id"], sub["ref"])
-    events.emit(conn, cid, "voice.emergency_submitted", {"voice_user_id": str(vu["id"]), "by": actor}, str(vu["id"]))
+    conn.execute(
+        """UPDATE voice_users SET emergency_own = true, emergency_address = %s, emergency_status = %s,
+             emergency_ref = %s, emergency_reason = %s WHERE id = %s""",
+        (
+            Jsonb({**addr, "own": True}),
+            sub["status"],
+            sub["ref"],
+            "" if sub["ref"] else readiness["reason"],
+            vu["id"],
+        ),
+    )
+    if sub["ref"]:
+        _queue_check(conn, cid, "user", vu["id"], sub["ref"])
+        events.emit(
+            conn, cid, "voice.emergency_submitted", {"voice_user_id": str(vu["id"]), "by": actor}, str(vu["id"])
+        )
     refresh_numbers(conn, cid, voice_user_id=vu["id"])
-    return {"status": "pending", "ref": sub["ref"]}
+    return {"status": sub["status"], "ref": sub["ref"]}
 
 
 def _queue_check(conn, cid, kind: str, rid: Any, ref: str) -> None:
@@ -293,6 +317,8 @@ def address_for_number(conn: psycopg.Connection, n: dict) -> dict:
 
 
 def outbound_verdict(conn: psycopg.Connection, n: dict) -> tuple[bool, str]:
+    if n.get("provider") == "simulated" and not providers.test_mode():
+        return False, "This is a fictional test number, not a live telephone service."
     if n["status"] != "active":
         return False, "The number is not active yet."
     a = address_for_number(conn, n)

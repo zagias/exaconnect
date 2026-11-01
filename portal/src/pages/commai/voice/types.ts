@@ -65,6 +65,8 @@ export interface VoiceNumber {
   e164: string;
   source: "new" | "ported";
   status: "pending" | "porting" | "active" | "removed";
+  provider?: string;
+  simulated?: boolean;
   target_type: string;
   target_id: string | null;
   site: string | null;
@@ -160,7 +162,7 @@ export interface VoiceOverview {
   can_spend: boolean;
   is_exacarib: boolean;
   policy: { recording_access: "none" | "own" | "admins" };
-  provider: { name: string; live: boolean };
+  provider: { name: string; live: boolean; number_ordering_ready?: boolean; test_mode?: boolean };
   ai_phone_ready?: boolean;
   me: Me | null;
   sites?: Site[];

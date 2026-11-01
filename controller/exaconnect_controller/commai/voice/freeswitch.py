@@ -41,6 +41,7 @@ from psycopg.types.json import Jsonb
 
 from .. import jobs
 from . import emergency, livekit, pbx, platforms
+from . import provider as providers
 from .billing import EMERGENCY, fraud_limits
 from .common import domain as tenant_domain
 from .common import now
@@ -85,7 +86,8 @@ def gather(conn: psycopg.Connection, cid: Any) -> dict:
         ],
         "numbers": rows(
             """SELECT id::text AS id, e164, target_type, target_id::text AS target_id FROM voice_numbers
-               WHERE customer_id = %s AND status = 'active' ORDER BY e164"""
+               WHERE customer_id = %s AND status = 'active' AND (%s OR provider <> 'simulated') ORDER BY e164""",
+            providers.test_mode(),
         ),
         "ring_groups": rows(
             """SELECT id::text AS id, name, extension, strategy, members::text[] AS members, ring_seconds

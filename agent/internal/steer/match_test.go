@@ -406,8 +406,8 @@ func TestSteererQoSFailureDoesNotStopSteering(t *testing.T) {
 	if err := s.Apply(ctx, m, Choose(m, func(p string) bool { return up[p] })); err != nil {
 		t.Fatal(err)
 	}
-	if len(sys.cmds) != n+1 || count(sys.cmds[n:], "tc ") != 0 {
-		t.Fatalf("swap should be one ip -batch call, got %q", sys.cmds[n:])
+	if count(sys.cmds[n:], "tc ") != 0 {
+		t.Fatalf("BFD rule swap retried an unchanged failing qdisc: %q", sys.cmds[n:])
 	}
 
 	// RetryQoS makes the next apply try again.

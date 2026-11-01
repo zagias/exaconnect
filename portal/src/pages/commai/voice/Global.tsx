@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { api, useApi } from "../../../api";
 import { ErrorNote, ExampleTag } from "../../../components";
 import { Card, useAction } from "../../../ui";
@@ -223,6 +224,11 @@ export function Numbers({ base, v }: { base: string; v: VoiceOverview }) {
       setPicked([]);
     });
 
+  if (!v.provider.number_ordering_ready) return <Card title="Phone numbers">
+    <p>New numbers and number transfers are unavailable until a supported provider is connected.</p>
+    <p className="small"><Link to="/commai/voice/trunks">Connect your own SIP trunk</Link> to use existing phone service.</p>
+  </Card>;
+
   return (
     <>
       <Card title="Countries" note={<span className="muted small">ExaCarib switches each country on after its written go-live checks pass.</span>}>
@@ -320,7 +326,9 @@ export function Ports({ base, v }: { base: string; v: VoiceOverview }) {
   const [open, setOpen] = useState<string | null>(null);
   return (
     <>
-      <NewPort base={base} onMade={(id) => (list.reload(), setOpen(id))} />
+      {v.provider.number_ordering_ready
+        ? <NewPort base={base} onMade={(id) => (list.reload(), setOpen(id))} />
+        : <p className="muted">New number transfers are unavailable until a supported provider is connected.</p>}
       <Card title="Port orders">
         <ErrorNote error={list.error} />
         {list.data && list.data.length === 0 && <p className="muted">No port orders yet.</p>}
@@ -532,7 +540,7 @@ export function Emergency({ base }: { base: string }) {
               </li>
             ))}
           </ul>
-          <p className="small muted">Emergency calls always work.</p>
+          <p className="small muted">These account restrictions do not block emergency dialling. Completing a call still depends on a working connection and carrier.</p>
         </div>
       )}
       <Card title="Sites" note={<span className="muted small">Each address is checked with the provider. The rules differ by island.</span>}>
