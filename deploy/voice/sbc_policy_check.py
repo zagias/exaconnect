@@ -68,6 +68,10 @@ class Carrier:
                         self.reply(message, peer, self.code)
                     else:
                         self.pending[call] = message, peer
+                        # A ringing branch has acknowledged the INVITE. With
+                        # Kamailio's RFC-conforming cancel_b_method=1, CANCEL
+                        # waits for this provisional reply before forwarding.
+                        self.reply(message, peer, 180)
                 elif method == "CANCEL":
                     self.reply(message, peer, 200)
                     if call in self.pending:

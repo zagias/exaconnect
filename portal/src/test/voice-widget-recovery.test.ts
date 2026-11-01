@@ -102,3 +102,22 @@ it("ends a call created after the visitor cancelled connection", async () => {
   expect(root.textContent).toContain("Call ended.");
   expect(speech.speak).not.toHaveBeenCalled();
 });
+
+it("times out a response body that stalls after its headers arrive", async () => {
+  fireEvent.click(button("Talk to our assistant"));
+  await waitFor(() => expect(root.textContent).toContain("How can I help?"));
+  vi.useFakeTimers();
+  try {
+    vi.mocked(fetch).mockImplementationOnce(async (_url, init) => ({
+      ok: true,
+      json: () => new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new Error("Response aborted")));
+      }),
+    } as Response));
+    send("Question with a stalled answer");
+    await vi.advanceTimersByTimeAsync(30000);
+    expect(root.textContent).toContain("The service took too long to respond.");
+  } finally {
+    vi.useRealTimers();
+  }
+});

@@ -179,7 +179,7 @@ export default function Ask() {
       <ErrorNote error={status.error} />
       <section className="card chat" style={{ maxWidth: 820 }}>
         {status.data && !enabled && (
-          <p className="muted">Ask your network is switched off on this controller: no AI service key is configured.</p>
+          <p className="muted">{status.data.ask_unavailable_reason ?? "The network assistant is not available on this account."}</p>
         )}
         {turns.length === 0 && enabled && (
           <div className="suggestions">

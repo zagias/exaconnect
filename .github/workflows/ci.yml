@@ -136,6 +136,31 @@ jobs:
           controller/tests/test_commai_presence_calls.py
           controller/tests/test_commai_voice_global.py::test_livekit_controller_contract_requires_a_ready_phone_worker
 
+  firewall-packets:
+    # Explicit privileged checks on disposable namespaces. No host interfaces,
+    # routes, firewall or sysctls are changed; missing privileges fail this job.
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: agent/go.mod
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Linux namespace test tools
+        run: sudo apt-get update && sudo apt-get install -y nftables iproute2 conntrack
+      - name: Export production firewall rules and build routing regression
+        working-directory: agent
+        run: |
+          EXA_FIREWALL_FIXTURE_DIR="$RUNNER_TEMP/firewall-rules" go test ./internal/render -run '^TestExportFirewallPacketFixtures$' -count=1 -v
+          go test -c ./internal/agent -o "$RUNNER_TEMP/routing-kernel.test"
+      - name: Firewall isolation, NAT, established traffic and Internet Off
+        run: sudo env EXA_FIREWALL_PACKET_TESTS=1 python3 lab/ci/checks/firewall_packets.py check --fixtures "$RUNNER_TEMP/firewall-rules"
+      - name: Steering retry and BFD recovery against isolated kernel routes
+        run: sudo env EXA_ROUTING_KERNEL_TESTS=1 "$RUNNER_TEMP/routing-kernel.test" -test.run '^TestRoutingRecoveryInIsolatedKernel$' -test.v
+
   lab:
     runs-on: ubuntu-24.04
     steps:

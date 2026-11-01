@@ -760,17 +760,31 @@ function TryCall({ base }: { base: string }) {
   const [listening, setListening] = useState(false);
   const [speak, setSpeak] = useState(true);
   const rec = useRef<Recognition | null>(null);
+  const currentCall = useRef<{ id: string; base: string } | null>(null);
+  const callEpoch = useRef(0);
+  const mounted = useRef(true);
+  const turnRequest = useRef<AbortController | null>(null);
   const SR = recognitionClass();
   const canSpeak = typeof window !== "undefined" && "speechSynthesis" in window;
   const lang = BCP47[prof.data?.business_language ?? "en"] ?? "en-GB";
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    mounted.current = true;
+    setCallId(null);
+    setLines([]);
+    setEnded(false);
+    setHandedOver(false);
+    return () => {
+      mounted.current = false;
+      ++callEpoch.current;
+      turnRequest.current?.abort();
       rec.current?.stop();
       if (canSpeak) window.speechSynthesis.cancel();
-    },
-    [canSpeak],
-  );
+      const call = currentCall.current;
+      currentCall.current = null;
+      if (call) void api(`${call.base}/ai/calls/${call.id}/end`, { method: "POST" }).catch(() => undefined);
+    };
+  }, [base, canSpeak]);
 
   const say = (text: string) => {
     if (!speak || !canSpeak || !text) return;
@@ -781,10 +795,16 @@ function TryCall({ base }: { base: string }) {
 
   const start = () =>
     act.run(async () => {
+      const epoch = ++callEpoch.current;
       const r = await api<{ conversation_id: string; greeting: string; handler: string }>(`${base}/ai/calls`, {
         method: "POST",
         body: JSON.stringify({ caller: "Test call from the portal" }),
       });
+      if (!mounted.current || callEpoch.current !== epoch) {
+        await api(`${base}/ai/calls/${r.conversation_id}/end`, { method: "POST" }).catch(() => undefined);
+        return;
+      }
+      currentCall.current = { id: r.conversation_id, base };
       setCallId(r.conversation_id);
       setEnded(false);
       setHandedOver(r.handler !== "ai");
@@ -794,13 +814,24 @@ function TryCall({ base }: { base: string }) {
 
   const send = (text: string) => {
     const t = text.trim();
-    if (!t || !callId) return;
+    const call = currentCall.current;
+    const epoch = callEpoch.current;
+    if (!t || !call || act.busy || handedOver) return;
     setLines((l) => [...l, { from: "caller", text: t }]);
     act.run(async () => {
-      const r = await api<{ reply: string; handed_over: boolean; messages: { author_kind: string; body: string }[] }>(
-        `${base}/ai/calls/${callId}/turns`,
-        { method: "POST", body: JSON.stringify({ text: t }) },
-      );
+      const controller = new AbortController();
+      turnRequest.current = controller;
+      let r: { reply: string; handed_over: boolean; messages: { author_kind: string; body: string }[] };
+      try {
+        r = await api(`${call.base}/ai/calls/${call.id}/turns`,
+          { method: "POST", body: JSON.stringify({ text: t }), signal: controller.signal });
+      } catch (error) {
+        if (!mounted.current || callEpoch.current !== epoch) return;
+        throw error;
+      } finally {
+        if (turnRequest.current === controller) turnRequest.current = null;
+      }
+      if (!mounted.current || callEpoch.current !== epoch || currentCall.current !== call) return;
       setLines((l) => [...l, ...r.messages.map((m) => ({ from: (m.author_kind === "ai" ? "ai" : "business") as Line["from"], text: m.body }))]);
       setHandedOver(r.handed_over);
       say(r.reply);
@@ -815,10 +846,12 @@ function TryCall({ base }: { base: string }) {
     }
     if (canSpeak) window.speechSynthesis.cancel();
     const r = new SR();
+    const epoch = callEpoch.current;
     r.lang = lang;
     r.interimResults = false;
     r.continuous = false;
     r.onresult = (e) => {
+      if (epoch !== callEpoch.current || !currentCall.current) return;
       const res = e.results[e.results.length - 1];
       if (res && res.isFinal) send(res[0].transcript);
     };
@@ -826,16 +859,27 @@ function TryCall({ base }: { base: string }) {
     r.onend = () => setListening(false);
     rec.current = r;
     setListening(true);
-    r.start();
+    try {
+      r.start();
+    } catch {
+      setListening(false);
+      rec.current = null;
+      act.setError("Your microphone could not start. You can type below instead.");
+    }
   };
 
-  const end = () =>
-    act.run(async () => {
-      rec.current?.stop();
-      if (canSpeak) window.speechSynthesis.cancel();
-      await api(`${base}/ai/calls/${callId}/end`, { method: "POST" });
-      setEnded(true);
+  const end = () => {
+    const call = currentCall.current;
+    currentCall.current = null;
+    const epoch = ++callEpoch.current;
+    turnRequest.current?.abort();
+    rec.current?.stop();
+    if (canSpeak) window.speechSynthesis.cancel();
+    setEnded(true);
+    if (call) void api(`${call.base}/ai/calls/${call.id}/end`, { method: "POST" }).catch(() => {
+      if (mounted.current && callEpoch.current === epoch) act.setError("The call stopped here, but the server could not confirm it ended. Please retry when the connection returns.");
     });
+  };
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -862,7 +906,7 @@ function TryCall({ base }: { base: string }) {
       ) : (
         <div className="ai-actions">
           {SR ? (
-            <button type="button" className="button" aria-pressed={listening} onClick={listen} disabled={act.busy && !listening}>
+            <button type="button" className="button" aria-pressed={listening} onClick={listen} disabled={handedOver || (act.busy && !listening)}>
               {listening ? "Listening… press to stop" : "Press to speak"}
             </button>
           ) : (
@@ -873,7 +917,7 @@ function TryCall({ base }: { base: string }) {
               <input type="checkbox" checked={speak} onChange={(e) => setSpeak(e.target.checked)} /> Speak replies aloud
             </label>
           )}
-          <button type="button" className="button danger-text" onClick={end} disabled={act.busy}>
+          <button type="button" className="button danger-text" onClick={end}>
             End call
           </button>
         </div>
@@ -889,7 +933,7 @@ function TryCall({ base }: { base: string }) {
           ))}
         </ol>
       )}
-      {live && (
+      {live && !handedOver && (
         <form className="form" onSubmit={submit}>
           <label className="wide">
             Or type what the caller says

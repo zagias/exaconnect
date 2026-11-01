@@ -669,6 +669,7 @@ export interface Insight {
 
 export interface AiStatus {
   ask_enabled: boolean;
+  ask_unavailable_reason?: string | null;
   model: string | null;
   storm_watch: boolean;
 }

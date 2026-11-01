@@ -44,3 +44,14 @@ aggregation. Routing tests cover controller gaps, emergency failover,
 satellite exclusions and InternetOff map scope. Network namespace/lab tests
 remain necessary to establish packet-loss and convergence bounds on Linux;
 unit tests do not establish the production three-second failover target.
+
+An explicit Linux CI test (`EXA_ROUTING_KERNEL_TESTS=1`,
+`TestRoutingRecoveryInIsolatedKernel`) now checks the actual nft/ip-rule
+dataplane in a fresh network namespace. It refuses to run commands in the
+parent namespace and fails if the requested Linux tools/privileges are
+missing. It verifies partial rule-batch repair on an unchanged controller
+map, down/up and replaced BFD peer handling, and a kernel blackhole instead
+of BGP fallthrough onto an excluded satellite. Dummy interfaces and
+deterministic FRR JSON keep this bounded and reproducible. This is kernel
+actuation validation; it does not replace the lab's real FRR/WireGuard
+faults, packet-loss measurement or hold-time acceptance tests.

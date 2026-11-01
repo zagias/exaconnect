@@ -28,7 +28,9 @@ def test_firewall_and_forward_writes_respect_real_authentication(client, admin_h
                 (f"{name}@firewall.example", hash_password("firewall boundary password"), cid, scope),
             ).fetchone()["id"]
             conn.execute(
-                "INSERT INTO org_memberships (customer_id, user_id, role) VALUES (%s, %s, %s)", (cid, user, role)
+                "INSERT INTO org_memberships (customer_id, user_id, role) VALUES (%s, %s, %s)"
+                " ON CONFLICT (customer_id, user_id) DO UPDATE SET role = EXCLUDED.role",
+                (cid, user, role),
             )
     for name in ("viewer", "monitor"):
         client.cookies.clear()

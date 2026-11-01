@@ -47,8 +47,15 @@ def _view_plan(conn, plan: dict, user, dry_run: bool = True) -> dict:
 @router.get("/ai/status")
 def status(request: Request, user: UserDep) -> dict:
     s = request.app.state.settings
+    may_ask = user.role != "carrier" and (user.scopes is None or "connect" in user.scopes)
+    unavailable = None
+    if not may_ask:
+        unavailable = "Asking the network assistant is not available with this account's access."
+    elif not s.llm_api_key:
+        unavailable = "The network assistant is not connected to an AI service yet."
     return {
-        "ask_enabled": bool(s.llm_api_key) and user.role != "carrier",
+        "ask_enabled": bool(s.llm_api_key) and may_ask,
+        "ask_unavailable_reason": unavailable,
         "model": s.llm_model if s.llm_api_key else None,
         "storm_watch": bool(s.nhc_url),
         "hazard_watch": runner.hazard_watch_on(s),
