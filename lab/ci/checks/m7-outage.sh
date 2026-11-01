@@ -69,7 +69,7 @@ else
 fi
 lab/faults/restore.sh >/dev/null
 # The point of cutting the agents off instead of stopping the controller.
-if curl -fsS --max-time 5 -o /dev/null http://127.0.0.1:8000/healthz; then
+if controller_health; then
   ok "the live controller stayed up throughout"
 else
   bad "the live controller did not answer during the test"

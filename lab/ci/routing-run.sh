@@ -10,6 +10,7 @@ cd "$(dirname "$0")/../.."
 }
 
 export LAB_NAME=exa-routing-ci COMPOSE_PROJECT_NAME=exa-routing-ci CLAB_VERSION_CHECK=disable
+export EXA_LAB_API_CONTAINER=1
 marker=lab/.state/routing-ci-owned
 topology=lab/.state/routing-ci.clab.yml
 override=lab/.state/routing-ci.compose.yml
