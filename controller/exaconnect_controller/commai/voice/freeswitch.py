@@ -32,6 +32,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from typing import Any
 from xml.etree import ElementTree
 from xml.sax.saxutils import escape, quoteattr
@@ -115,7 +116,7 @@ def gather(conn: psycopg.Connection, cid: Any) -> dict:
         # emergency calls, which never wait for it, every carrier switched on.
         "controller_url": controller_url(),
         "emergency_sets": pbx.emergency_sets(conn, cid),
-        "ai_phone_ready": livekit.phone_ready(),
+        "ai_phone_ready": livekit.phone_ready(cid, conn=conn),
         # Teams, Zoom and other calling platforms (ADR 0056).
         **platforms.dial_data(conn, cid),
     }
@@ -320,21 +321,92 @@ def _dialplan(data: dict) -> str:
         "    </extension>",
     ]
 
-    # An answered SIP room can still have no speech worker. Until the complete
-    # telephone service is ready, use the configured fallback directly.
+    # A REFER stays inside the established caller's tenant context. Never add
+    # this destination to public.xml: a new inbound call cannot select an
+    # organisation by guessing its tenant prefix. The server, not the worker,
+    # exports the rule's bounded fallback before entering the AI bridge.
+    handover = "exa-ai-handover-" + ctx
+    for dest in sorted(
+        {
+            "exa-voicemail-main",
+            *[g["extension"] for g in data["ring_groups"]],
+            *[q["extension"] for q in data["queues"]],
+        }
+    ):
+        out += [
+            f"    <extension name={a(handover + '-' + dest)}>",
+            f'      <condition field="${{destination_number}}:${{exa_ai_handover_allowed}}:${{exa_ai_fallback}}"'
+            f" expression={a('^' + handover + ':true:' + dest + '$')}>",
+            '        <action application="set" data="exa_ai_handover_allowed=false"/>',
+            f'        <action application="transfer" data={a(dest + " XML " + ctx)}/>',
+            "      </condition>",
+            "    </extension>",
+        ]
+
+    # Keep the original owned DID and its selected rule on every path into
+    # the worker, including after-hours and no-answer. A tenant prefix alone
+    # is not an inbound telephone number and cannot authenticate a SIP caller.
+    for number in data["numbers"]:
+        rule = next((r for r in data["ai_rules"] if r.get("number_id") in (None, number["id"])), None)
+        if not rule:
+            continue
+        fallback = _fallback_target(data, rule["fallback"])
+        pattern = "^exa-ai:" + re.escape(number["e164"]) + "$"
+        bridge = "sofia/gateway/" + AI_GATEWAY + "/" + number["e164"]
+        if data.get("ai_phone_ready", False):
+            # Readiness expires independently of rendered XML. Check again
+            # before bridging each call; a stale lease goes straight to the
+            # literal configured fallback, without LiveKit answering first.
+            digits = number["e164"].lstrip("+")
+            fields = f"{ctx}:::{digits}:${{uuid}}"
+            digest = f"${{md5(${{exa_pbx_secret}}:{fields}:${{exa_pbx_secret}})}}"
+            query = f"tenant={ctx}&to={digits}&call=${{uuid}}"
+            url = f"{data['controller_url']}/api/v1/commai/internal/voice/phone-authorise?{query}"
+            ask = f"exa_ai_auth=${{curl({url} connect-timeout 2 timeout 4 append_headers {pbx.HEADER}:{digest} get)}}"
+            out += [
+                f'    <extension name={a("exa-ai-check-" + digits)} continue="true">',
+                f'      <condition field="${{destination_number}}:${{exa_ai_dialled}}" expression={a(pattern)}>',
+                f'        <action application="set" data={a(ask)} inline="true"/>',
+                "      </condition>",
+                "    </extension>",
+            ]
+        out += [
+            f"    <extension name={a('exa-ai-number-' + number['e164'].lstrip('+'))}>",
+            f'      <condition field="${{destination_number}}:${{exa_ai_dialled}}" expression={a(pattern)}>',
+        ]
+        if data.get("ai_phone_ready", False):
+            out[-1] = (
+                '      <condition field="${destination_number}:${exa_ai_dialled}:${exa_ai_auth}"'
+                f" expression={a(pattern[:-1] + ':OK$')}>"
+            )
+            out += [
+                f'        <action application="export" data={a("force_transfer_context=" + ctx)}/>',
+                '        <action application="export" data="exa_ai_handover_allowed=true"/>',
+                f'        <action application="export" data={a("exa_ai_fallback=" + fallback)}/>',
+                '        <action application="set" data="continue_on_fail=true"/>',
+                '        <action application="set" data="hangup_after_bridge=true"/>',
+                '        <action application="set" data="call_timeout=8"/>',
+                f'        <action application="bridge" data={a(bridge)}/>',
+            ]
+        out += [
+            f'        <action application="transfer" data={a(fallback + " XML " + ctx)}/>',
+            "      </condition>",
+            "    </extension>",
+        ]
+        if data.get("ai_phone_ready", False):
+            out += [
+                f"    <extension name={a('exa-ai-unavailable-' + number['e164'].lstrip('+'))}>",
+                f'      <condition field="${{destination_number}}:${{exa_ai_dialled}}" expression={a(pattern)}>',
+                f'        <action application="transfer" data={a(fallback + " XML " + ctx)}/>',
+                "      </condition>",
+                "    </extension>",
+            ]
+
+    # Menus/extensions with no original owned DID never enter the worker.
     ai_fallback = _fallback_target(data, data["ai_rules"][0]["fallback"]) if data["ai_rules"] else "exa-voicemail-main"
     out += [
         '    <extension name="exa-ai">',
         '      <condition field="destination_number" expression="^exa-ai$">',
-    ]
-    if data.get("ai_phone_ready", False):
-        out += [
-            '        <action application="set" data="continue_on_fail=true"/>',
-            '        <action application="set" data="hangup_after_bridge=true"/>',
-            '        <action application="set" data="call_timeout=8"/>',
-            f'        <action application="bridge" data={a("sofia/gateway/" + AI_GATEWAY + "/" + data["tenant"])}/>',
-        ]
-    out += [
         f'        <action application="transfer" data={a(ai_fallback + " XML " + ctx)}/>',
         "      </condition>",
         "    </extension>",
@@ -660,10 +732,14 @@ def _public(data: dict) -> str:
         ]
     for n in data["numbers"]:
         digits = n["e164"].lstrip("+")
+        rule = next((r for r in data.get("ai_rules", ()) if r.get("number_id") in (None, n["id"])), None)
+        fallback = _fallback_target(data, rule["fallback"]) if rule else "exa-voicemail-main"
         out += [
             f"  <extension name={a('in-' + digits)}>",
             f'    <condition field="destination_number" expression={a(PLUS + digits + "$")}>',
             f'      <action application="set" data={a("domain_name=" + data["domain"])}/>',
+            f'      <action application="export" data={a("exa_ai_dialled=" + n["e164"])}/>',
+            f'      <action application="export" data={a("exa_ai_fallback=" + fallback)}/>',
             f'      <action application="transfer" data={a("exa-in-" + digits + " XML " + data["tenant"])}/>',
             "    </condition>",
             "  </extension>",

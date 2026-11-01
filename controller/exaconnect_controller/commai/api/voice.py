@@ -70,7 +70,7 @@ def overview(customer_id: str, user: UserDep) -> dict:
             "is_exacarib": user.role == "admin",
             "policy": policy(conn, customer_id),
             "provider": providers.status(),
-            "ai_phone_ready": livekit.phone_ready(),
+            "ai_phone_ready": livekit.phone_ready(customer_id, conn=conn),
         }
         try:
             out["me"] = selfservice.mine(conn, customer_id, user.id)

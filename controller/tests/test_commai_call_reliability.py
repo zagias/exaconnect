@@ -6,6 +6,7 @@ that a text-only controller exchange proves a working telephone call.
 
 import asyncio
 import importlib.util
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Barrier, Event
@@ -40,10 +41,14 @@ def test_phone_worker_requires_bearer_authentication(monkeypatch, header):
     assert exc.value.code == 401
 
 
-def test_unfinished_worker_refuses_before_registration_or_call_side_effects():
+def test_unconfigured_worker_refuses_before_registration_or_call_side_effects(monkeypatch):
     path = Path(__file__).resolve().parents[2] / "deploy/livekit/agent/agent.py"
+    monkeypatch.syspath_prepend(str(path.parent))
+    for name in ("STT_URL", "STT_KEY", "STT_MODEL", "TTS_URL", "TTS_KEY", "TTS_MODEL", "TTS_VOICE"):
+        monkeypatch.delenv(f"EXA_PHONE_{name}", raising=False)
     spec = importlib.util.spec_from_file_location("telephone_worker_under_test", path)
     worker = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, spec.name, worker)
     spec.loader.exec_module(worker)
     # No LiveKit SDK or connection is required to refuse an unready worker.
     # Passing an object without connect also proves it cannot join a room.

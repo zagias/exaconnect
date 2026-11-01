@@ -6,9 +6,10 @@ function routes(role: string, capabilities: { ask?: boolean; integrations?: bool
 }
 
 describe("Connect navigation follows runtime readiness", () => {
-  it("omits unavailable Ask and integrations while preserving working network services", () => {
+  it("keeps the shared assistant and omits unavailable integrations while preserving network services", () => {
     const visible = routes("customer", { ask: false, integrations: false });
     expect(visible).not.toContain("/ask");
+    expect(visible).toContain("/assistant");
     expect(visible).not.toContain("/integrations");
     const primary = navGroups("customer", null, ["connect"], { ask: false, integrations: false })[0];
     expect(primary.items.map((item) => item.label)).toEqual(["Overview", "Sites", "Traffic", "Activity", "Usage"]);
@@ -18,7 +19,7 @@ describe("Connect navigation follows runtime readiness", () => {
   });
 
   it("adds only the capabilities that are available", () => {
-    expect(routes("customer", { ask: true, integrations: false })).toContain("/ask");
+    expect(routes("customer", { ask: true, integrations: false })).toContain("/assistant");
     expect(routes("customer", { ask: true, integrations: false })).not.toContain("/integrations");
     expect(routes("customer", { ask: false, integrations: true })).not.toContain("/ask");
     expect(routes("customer", { ask: false, integrations: true })).toContain("/integrations");

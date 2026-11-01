@@ -25,7 +25,11 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from typing import Any
 
 import psycopg
@@ -35,30 +39,63 @@ from .common import VoiceError, digits
 SETTINGS = ("EXA_LIVEKIT_URL", "EXA_LIVEKIT_API_KEY", "EXA_LIVEKIT_API_SECRET", "EXA_LIVEKIT_AGENT_SECRET")
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.URLError("Control-plane redirects are refused")
+
+
 def missing() -> list[str]:
     return [n for n in SETTINGS if not os.environ.get(n)]
 
 
 def status() -> dict:
     m = missing()
+    ready = phone_ready()
     return {
         "configured": not m,
         "missing": m,
         "url": os.environ.get("EXA_LIVEKIT_URL", "") if not m else "",
-        "phone_ready": phone_ready(),
-        "phone_reason": "Telephone AI is unavailable until speech and call handover are implemented and validated.",
+        "phone_ready": ready,
+        "phone_reason": (
+            "Telephone AI has fresh speech, patched PBX and SIP handover evidence."
+            if ready
+            else "Telephone AI requires fresh speech, patched PBX and verified SIP handover evidence."
+        ),
     }
 
 
-def phone_ready() -> bool:
-    """Configuration alone does not make telephone AI operational.
+def phone_ready(customer_id: Any = None, *, conn: psycopg.Connection | None = None) -> bool:
+    """Only measured, expiring operational evidence can enable telephone AI.
 
-    The worker's speech providers and an answered-call handover are not yet
-    implemented. Keep calls on their ordinary PBX fallback until those paths
-    have real audio, interruption, disconnect and recovery tests. There is no
-    environment override that can turn this unfinished worker on.
+    Evidence is recorded by the authenticated worker protocol after a speech
+    loopback and a successful real SIP transfer. No environment readiness flag
+    exists. A missing database, stale check or missing configuration fails shut.
     """
-    return False
+    if missing():
+        return False
+    from ... import db
+
+    def ready(connection) -> bool:
+        return (
+            connection.execute(
+                """SELECT 1 FROM voice_ai_phone_runtime WHERE NOT lab_only AND expires_at > now()
+                   AND speech_verified_at > now() - interval '90 seconds'
+                   AND transfer_verified_at > now() - interval '24 hours'
+                   AND (%s::uuid IS NULL OR customer_id = %s)
+                   AND EXISTS (SELECT 1 FROM voice_ai_phone_pbx_runtime WHERE instance_id = 'main'
+                               AND version_secure AND transfer_enabled AND expires_at > now()) LIMIT 1""",
+                (customer_id, customer_id),
+            ).fetchone()
+            is not None
+        )
+
+    try:
+        if conn is not None:
+            return ready(conn)
+        with db.tx() as connection:
+            return ready(connection)
+    except (psycopg.Error, RuntimeError, AssertionError):
+        return False
 
 
 def _b64(data: bytes) -> str:
@@ -102,6 +139,123 @@ def check_agent(authorization: str | None) -> None:
     got = got.strip()
     if not hmac.compare_digest(got.encode(), secret.encode()):
         raise VoiceError("Not allowed.", 401)
+
+
+def service_request(service: str, method: str, body: dict, *, room: str = "", timeout_s: float = 5) -> dict:
+    """Bounded LiveKit Twirp request, with a narrowly granted service token.
+
+    Keep this adapter small: tests replace transport here, while lifecycle,
+    authentication, tenant scoping and transfer state remain real.
+    """
+    if service not in ("RoomService", "SIP") or method not in (
+        "GetParticipant",
+        "RemoveParticipant",
+        "TransferSIPParticipant",
+    ):
+        raise ValueError("Unsupported LiveKit operation")
+    if missing():
+        raise VoiceError("LiveKit is not configured.", 503)
+    url = urllib.parse.urlsplit(os.environ["EXA_LIVEKIT_URL"])
+    if url.scheme not in ("http", "https", "ws", "wss") or not url.hostname or url.username or url.password:
+        raise VoiceError("LiveKit URL is invalid.", 503)
+    scheme = "https" if url.scheme in ("https", "wss") else "http"
+    base = urllib.parse.urlunsplit((scheme, url.netloc, "", "", ""))
+    now = int(time.time())
+    grants = {"sip": {"call": True}} if service == "SIP" else {"video": {"room": room, "roomAdmin": True}}
+    claims = {
+        "iss": os.environ["EXA_LIVEKIT_API_KEY"],
+        "sub": "exacarib-phone-controller",
+        "nbf": now - 5,
+        "exp": now + 60,
+        **grants,
+    }
+    head = _b64(b'{"alg":"HS256","typ":"JWT"}')
+    payload = _b64(json.dumps(claims, separators=(",", ":")).encode())
+    signature = _b64(
+        hmac.new(os.environ["EXA_LIVEKIT_API_SECRET"].encode(), f"{head}.{payload}".encode(), hashlib.sha256).digest()
+    )
+    request = urllib.request.Request(
+        f"{base}/twirp/livekit.{service}/{method}",
+        data=json.dumps(body).encode(),
+        method="POST",
+        headers={"Authorization": f"Bearer {head}.{payload}.{signature}", "Content-Type": "application/json"},
+    )
+    try:
+        opener = urllib.request.build_opener(_NoRedirect)
+        with opener.open(request, timeout=timeout_s) as response:  # noqa: S310 (operator endpoint)
+            raw = response.read(65_537)
+        if len(raw) > 65_536:
+            raise ValueError("Oversized response")
+        result = json.loads(raw)
+        if not isinstance(result, dict):
+            raise ValueError("Invalid response")
+        return result
+    except urllib.error.HTTPError as error:
+        if error.code == 404 and service == "RoomService" and method in ("GetParticipant", "RemoveParticipant"):
+            try:
+                body = error.read(65_537)
+                result = json.loads(body) if len(body) <= 65_536 else None
+                if isinstance(result, dict) and result.get("code") == "not_found":
+                    raise VoiceError("The SIP participant was not found.", 404) from None
+            except (ValueError, OSError):
+                pass
+        raise VoiceError("The phone control service did not confirm the operation.", 502) from None
+    except (urllib.error.URLError, OSError, ValueError):
+        # Provider replies may contain credentials or caller identifiers.
+        raise VoiceError("The phone control service did not confirm the operation.", 502) from None
+
+
+def sip_participant(room: str, identity: str, call_id: str) -> dict:
+    info = service_request("RoomService", "GetParticipant", {"room": room, "identity": identity}, room=room)
+    attrs = info.get("attributes") or {}
+    if info.get("kind") not in (3, "SIP") or attrs.get("sip.callID") != call_id:
+        raise VoiceError("The caller is not the active SIP participant for this call.", 403)
+    return attrs
+
+
+def transfer(room: str, identity: str, call_id: str, target: str) -> dict:
+    """Transfer the actual participant. API acceptance is not a human receipt.
+
+    Successful REFER completion depends on the SIP peer's NOTIFY behaviour;
+    do not label it 'human answered' without an independent PBX receipt.
+    """
+    sip_participant(room, identity, call_id)
+    service_request(
+        "SIP",
+        "TransferSIPParticipant",
+        {"room_name": room, "participant_identity": identity, "transfer_to": target, "play_dialtone": True},
+        timeout_s=35,
+    )
+    return {"state": "accepted", "human_answered": False}
+
+
+def hangup(room: str, identity: str, call_id: str) -> None:
+    try:
+        sip_participant(room, identity, call_id)
+        service_request("RoomService", "RemoveParticipant", {"room": room, "identity": identity}, room=room)
+    except VoiceError as error:
+        if error.code != 404:
+            raise
+
+
+def handover_target(conn: psycopg.Connection, customer_id: Any) -> str:
+    """Resolve the operator's internal REFER ingress for this tenant.
+
+    The dedicated PBX route must select that tenant's current fallback; the
+    worker and model never supply an arbitrary destination or external number.
+    """
+    host = os.environ.get("EXA_PHONE_HANDOVER_HOST", "")
+    if not re.fullmatch(r"[A-Za-z0-9.-]+(?::[0-9]{1,5})?", host):
+        raise VoiceError("The internal phone handover route is not configured.", 503)
+    rule = conn.execute(
+        "SELECT 1 FROM voice_ai_rules WHERE customer_id = %s AND enabled LIMIT 1", (customer_id,)
+    ).fetchone()
+    if rule is None:
+        raise VoiceError("This business has no configured AI call fallback.", 503)
+    from .common import domain
+
+    tenant = domain(customer_id).split(".")[0]
+    return f"sip:exa-ai-handover-{tenant}@{host}"
 
 
 def business_for(conn: psycopg.Connection, dialled: str) -> dict:

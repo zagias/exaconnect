@@ -290,6 +290,12 @@ export interface Group {
   collapsible?: boolean;
 }
 
+/** The same signed-in assistant is reachable from both apps and account pages. */
+const ASSISTANT: Item = {
+  to: "/assistant", label: "XaKore assistant", icon: icons.ask,
+  also: ["/ask", "/commai/assistant"], keywords: "ask help support configuration proposals plans",
+};
+
 /** Whether `path` is this entry's screen (or one of its tabs or detail pages). */
 export function matches(i: Item, path: string): boolean {
   const one = (to: string, exact: boolean) => (exact || to === "/" ? path === to : path === to || path.startsWith(to + "/"));
@@ -359,11 +365,11 @@ export function navGroups(
         ...(admin ? [{ to: "/carrier", label: "Carrier view", icon: icons.carrier }] : []),
       ],
     },
-    ...(capabilities.ask === false ? [] : [{
+    {
       app: "connect" as const,
       label: "Help",
-      items: [{ to: "/ask", label: "Ask Connect", icon: icons.ask }],
-    }]),
+      items: [ASSISTANT],
+    },
   ];
   const groups: Group[] = plan("connect") ? connect : [];
   // Jibsy (ADR 0016), grouped by task: daily work first, set-up folded away.
@@ -384,7 +390,6 @@ export function navGroups(
         { to: "/commai/workflows", label: "Workflows", icon: icons.traffic, module: "automation", keywords: "automations" },
         { to: "/commai/approvals", label: "Approvals", icon: icons.check, keywords: "waiting sensitive actions" },
         { to: "/commai/integrations", label: "Apps", icon: icons.apps, module: "automation", also: ["/commai/catalogue"], keywords: "integrations catalogue connectors api" },
-        { to: "/commai/assistant", label: "Assistant", icon: icons.ask, keywords: "help support cases" },
       ],
     },
     {
@@ -408,6 +413,7 @@ export function navGroups(
         { to: "/commai/partner", label: admin ? "Partners" : "Partners and apps", icon: icons.carrier, keywords: "white-label oauth" },
       ],
     },
+    { label: "Help", items: [ASSISTANT] },
   ];
   if (plan("commai"))
     groups.push(
@@ -493,11 +499,13 @@ export function accountGroups(opts: { carrier: boolean; jibsy: boolean; manager?
         ...(opts.jibsy ? [{ to: "/commai/me", label: "My settings", icon: icons.admin, keywords: "notifications phone" }] : []),
       ],
     },
+    { label: "Help", items: [ASSISTANT] },
   ];
 }
 
 /** The menu group a path belongs to ("Conversations", "Set up"...), for page eyebrows. */
 export function groupOf(path: string): string | null {
+  if (matches(ASSISTANT, path)) return "XaKore Hub";
   if (path === "/commai/me" || path.startsWith("/commai/me/")) return "You";
   for (const g of [...opsGroups(), ...navGroups("admin"), ...accountGroups({ carrier: false, jibsy: true })])
     for (const i of g.items) if (matches(i, path)) return g.label;
@@ -585,8 +593,9 @@ export function destinations(groups: Group[], extra: Destination[] = []): Destin
   const out: Destination[] = [];
   for (const g of groups)
     for (const i of g.items) {
+      if (i.to === "/assistant" && out.some((destination) => destination.to === "/assistant")) continue;
       const where = [g.app ? APP_INFO[g.app].name : null, g.label].filter(Boolean).join(" · ");
-      out.push({ to: i.to, label: i.label, where, keywords: i.keywords ?? "" });
+      out.push({ to: i.to, label: i.label, where: i.to === "/assistant" ? "XaKore Hub" : where, keywords: i.keywords ?? "" });
       for (const [to, label, kw] of TABS[i.to] ?? []) out.push({ to, label, where: i.label, keywords: kw ?? "" });
     }
   return [...out, ...extra];

@@ -55,6 +55,9 @@ services:
       # FreeSWITCH signs its check before each outside call with this (voice/pbx.py).
       EXA_PBX_SECRET: ${EXA_PBX_SECRET:-}
       EXA_LIVEKIT_URL: ${EXA_LIVEKIT_URL:-}
+      # Controller-owned tenant handover URI; only the established PBX dialog
+      # may reach it. No model or worker supplied transfer destination is used.
+      EXA_PHONE_HANDOVER_HOST: freeswitch:5080
       # The browser phone (ADR 0039): off until set, e.g. wss://connect.exacarib.com/verto.
       EXA_VERTO_URL: ${EXA_VERTO_URL:-}
       # Jibsy Phone rings when closed (ADR 0045): the VAPID key made by lab/scripts/init-env.sh.
@@ -202,6 +205,7 @@ services:
     volumes:
       - controller-data:/exacarib:ro
       - ./freeswitch/start.sh:/exacarib-start.sh:ro
+      - ./freeswitch/phone-runtime.sh:/exacarib-phone-runtime.sh:ro
       # Wakes a closed Jibsy Phone with a push message before its extension rings (ADR 0045).
       - ./freeswitch/scripts:/usr/share/freeswitch/scripts:ro
       # Recorded prompts and hold music, downloaded and checked by deploy/voice/sounds.sh.
@@ -297,6 +301,17 @@ services:
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
       EXA_CONTROLLER_URL: http://controller:8000
       EXA_LIVEKIT_AGENT_SECRET: ${EXA_LIVEKIT_AGENT_SECRET:-}
+      EXA_PHONE_WORKER_ID: ${EXA_PHONE_WORKER_ID:-xakore-phone}
+      # Explicit independently reviewed speech endpoints. Unset values keep
+      # the worker unavailable; these are never copied from website settings.
+      EXA_PHONE_STT_URL: ${EXA_PHONE_STT_URL:-}
+      EXA_PHONE_STT_KEY: ${EXA_PHONE_STT_KEY:-}
+      EXA_PHONE_STT_MODEL: ${EXA_PHONE_STT_MODEL:-}
+      EXA_PHONE_TTS_URL: ${EXA_PHONE_TTS_URL:-}
+      EXA_PHONE_TTS_KEY: ${EXA_PHONE_TTS_KEY:-}
+      EXA_PHONE_TTS_MODEL: ${EXA_PHONE_TTS_MODEL:-}
+      EXA_PHONE_TTS_VOICE: ${EXA_PHONE_TTS_VOICE:-}
+      EXA_PHONE_LANGUAGE: ${EXA_PHONE_LANGUAGE:-en}
     depends_on:
       - livekit
       - controller

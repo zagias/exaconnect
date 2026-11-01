@@ -79,6 +79,8 @@ def assistant(monkeypatch):
     monkeypatch.setattr(ai.act, "view", view)
     monkeypatch.setattr(ai.act, "create", create)
     monkeypatch.setattr(ai.act, "apply", apply)
+    monkeypatch.setattr(ai.act, "approve", lambda *_: None)
+    monkeypatch.setattr(ai.act, "execute", lambda conn, plan, actor, *_: apply(conn, plan, actor))
     monkeypatch.setattr(ai.act, "undo", undo)
     app = FastAPI()
     app.state.settings = SimpleNamespace(
@@ -86,10 +88,25 @@ def assistant(monkeypatch):
     )
     app.dependency_overrides[current_user] = lambda: state.user
     app.include_router(ai.router, prefix="/api/v1")
+    app.include_router(ai.shared, prefix="/api/v1")
     app.include_router(settings_api.router, prefix="/api/v1")
     with TestClient(app) as client:
         state.client = client
         yield state
+
+
+def _apply(assistant):
+    revision = "a" * 64
+    approved = assistant.client.post("/api/v1/assistant/plans/1/approve", json={"revision": revision})
+    if approved.status_code != 200:
+        return approved
+    return assistant.client.post(
+        "/api/v1/ai/plans/1/apply",
+        json={
+            "revision": revision,
+            "idempotency_key": "d1207bf9-c87c-4d9e-9e73-e0356445889a",
+        },
+    )
 
 
 @pytest.mark.parametrize("step,status", [("apply", "draft"), ("undo", "applied")])
@@ -107,21 +124,21 @@ def test_member_cannot_change_shadow_mode_through_a_plan(assistant, step, status
 def test_managers_and_staff_can_apply_and_undo_shadow_mode(assistant, role, org_role):
     assistant.user.role = role
     assistant.user.org_role = org_role
-    assert assistant.client.post("/api/v1/ai/plans/1/apply").status_code == 200
+    assert _apply(assistant).status_code == 200
     assert assistant.client.post("/api/v1/ai/plans/1/undo").status_code == 200
     assert assistant.writes == ["apply", "undo"]
 
 
 def test_member_keeps_ordinary_network_action_permissions(assistant):
     assistant.plan["actions"] = [{"action": "storm_mode", "on": True, "sites": ["site-a"]}]
-    assert assistant.client.post("/api/v1/ai/plans/1/apply").status_code == 200
+    assert _apply(assistant).status_code == 200
     assert assistant.client.post("/api/v1/ai/plans/1/undo").status_code == 200
     assert assistant.writes == ["apply", "undo"]
 
 
 def test_permissions_are_rechecked_after_a_role_change(assistant):
     assistant.user.org_role = "owner"
-    assert assistant.client.post("/api/v1/ai/plans/1/apply").status_code == 200
+    assert _apply(assistant).status_code == 200
     assistant.user.org_role = "member"
     assert assistant.client.post("/api/v1/ai/plans/1/undo").status_code == 403
     assert assistant.writes == ["apply"]
@@ -160,4 +177,34 @@ def test_a_manager_still_cannot_act_on_another_organisation(assistant):
     assistant.user.org_role = "owner"
     assistant.plan["customer_id"] = "other-org"
     assert assistant.client.post("/api/v1/ai/plans/1/apply").status_code == 403
+    assert assistant.writes == []
+
+
+@pytest.mark.parametrize("change", ["products", "scope", "viewer", "key"])
+def test_shared_execution_rechecks_current_access_and_requires_a_person(assistant, change):
+    assistant.user.org_role = "owner"
+    if change == "products":
+        assistant.user.products = ("commai",)
+    elif change == "scope":
+        assistant.user.scopes = ("connect:read",)
+    elif change == "viewer":
+        assistant.user.org_role = "viewer"
+    else:
+        assistant.user.via = "key"
+    r = _apply(assistant)
+    assert r.status_code == 403
+    assert assistant.writes == []
+
+
+def test_legacy_bare_apply_cannot_bypass_review_and_approval(assistant):
+    assistant.user.org_role = "owner"
+    assert assistant.client.post("/api/v1/ai/plans/1/apply").status_code == 409
+    assert assistant.writes == []
+
+
+def test_api_key_cannot_reverse_a_persons_approved_configuration(assistant):
+    assistant.user.org_role = "owner"
+    assistant.user.via = "key"
+    assistant.plan["status"] = "applied"
+    assert assistant.client.post("/api/v1/assistant/plans/1/undo").status_code == 403
     assert assistant.writes == []

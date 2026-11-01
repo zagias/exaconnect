@@ -146,7 +146,32 @@ jobs:
           controller/tests/test_portal_read_scope.py
           controller/tests/test_account_email_delivery.py
           controller/tests/test_platform_mailer.py
+          controller/tests/test_assistant.py
+          controller/tests/test_assistant_permissions.py
+          controller/tests/test_assistant_readiness.py
+          controller/tests/test_hub_assistant.py
+          controller/tests/test_assistant_locking.py
+          controller/tests/test_assistant_undo_guard.py
+          controller/tests/test_assistant_secret_input.py
+          controller/tests/test_phone_dialplan_handover.py
+          controller/tests/test_phone_call_gate.py
+          controller/tests/test_phone_worker_runtime.py
+          controller/tests/test_phone_worker_transport.py
+          controller/tests/test_phone_sip_provisioning.py
+          controller/tests/test_phone_pbx_runtime_script.py
           controller/tests/test_commai_voice_global.py::test_livekit_controller_contract_requires_a_ready_phone_worker
+
+  phone-worker-sdk:
+    # SDK and audio lifecycle checks run on disposable Linux, without live
+    # speech credentials, public calls or a readiness flag in production.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build pinned phone worker and bundled VAD
+        run: docker build --tag exa-phone-sdk:ci deploy/livekit/agent
+      - name: Verify actual SDK and provider adapter signatures offline
+        run: docker run --rm --network none --entrypoint python exa-phone-sdk:ci check_sdk.py
 
   firewall-packets:
     # Explicit privileged checks on disposable namespaces. No host interfaces,
@@ -194,7 +219,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: shellcheck
-        run: shellcheck -x deploy/voice/*.sh deploy/kamailio/start.sh lab/ci/checks/voice-sbc.sh lab/ci/checks/voice-phone-app.sh lab/ci/checks/org-setup.sh lab/ci/checks/voice-trunks.sh lab/ci/checks/voice-push.sh lab/ci/checks/voice-platforms.sh
+        run: shellcheck -x deploy/voice/*.sh deploy/kamailio/start.sh deploy/freeswitch/start.sh deploy/freeswitch/phone-runtime.sh lab/ci/checks/voice-sbc.sh lab/ci/checks/voice-phone-app.sh lab/ci/checks/org-setup.sh lab/ci/checks/voice-trunks.sh lab/ci/checks/voice-push.sh lab/ci/checks/voice-platforms.sh
       - name: Kamailio and FreeSWITCH start with this config
         run: make voice-check
 

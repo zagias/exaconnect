@@ -57,7 +57,8 @@ Path(sys.argv[2]).write_text(isolated_vars(Path(sys.argv[1]).read_text()))
 PY
 docker run -d --name "$rtp_fs" --network "$rtp_net" --network-alias freeswitch \
   --tmpfs /etc/freeswitch/directory/default --entrypoint /bin/sh \
-  -v "$PWD/freeswitch/start.sh:/exacarib-start.sh:ro" -v "$rtp_tmp/exacarib:/exacarib:ro" \
+  -v "$PWD/freeswitch/start.sh:/exacarib-start.sh:ro" \
+  -v "$PWD/freeswitch/phone-runtime.sh:/exacarib-phone-runtime.sh:ro" -v "$rtp_tmp/exacarib:/exacarib:ro" \
   -v "$PWD/freeswitch/directory/exacarib.xml:/etc/freeswitch/directory/exacarib.xml:ro" \
   -v "$PWD/freeswitch/dialplan/exacarib.xml:/etc/freeswitch/dialplan/exacarib.xml:ro" \
   -v "$PWD/freeswitch/dialplan/public/exacarib.xml:/etc/freeswitch/dialplan/public/exacarib.xml:ro" \

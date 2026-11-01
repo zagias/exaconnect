@@ -67,7 +67,7 @@ NO_ORG = "You are not a member of an organisation. Ask an owner to invite you."
 # leaving an organisation, and asking a question (any plan an answer suggests
 # still needs a write to apply).
 _ALWAYS = ("/api/v1/auth/", "/api/v1/invites/")
-_ALWAYS_EXACT = ("/api/v1/ai/ask",)
+_ALWAYS_EXACT = ("/api/v1/ai/ask", "/api/v1/assistant/ask")
 _LEAVE = re.compile(r"^/api/v1/orgs/[^/]+/leave$")
 
 
@@ -164,7 +164,7 @@ def current_user(request: Request, authorization: Annotated[str | None, Header()
         # A metrics-only key may scrape the Prometheus endpoint (ADR 0026).
         allowed = allowed or ("metrics" in user.scopes and path == "/api/v1/metrics")
         if not allowed and user.via != "key":
-            allowed = path.startswith(("/api/v1/auth/", "/api/v1/invites/", "/api/v1/orgs/"))
+            allowed = path.startswith(("/api/v1/auth/", "/api/v1/invites/", "/api/v1/orgs/", "/api/v1/assistant/"))
         if not allowed:
             what = "API key" if user.via == "key" else "account"
             raise HTTPException(status.HTTP_403_FORBIDDEN, f"This {what} is not allowed to use this part of the API.")

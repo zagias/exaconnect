@@ -4,11 +4,12 @@ import { PRODUCT_NAMES } from "./api";
 import { APP_INFO, areaFor, myApps, type AppId } from "./apps";
 import { AuthGate, useAuth } from "./auth";
 import { CustomerProvider, useCustomer } from "./customer";
-import { ConnectCapabilitiesProvider, useConnectCapabilities } from "./ConnectCapabilities";
+import { ConnectCapabilitiesProvider } from "./ConnectCapabilities";
 import { ConnectWorkspaceTabs } from "./ConnectWorkspaceTabs";
 import Account from "./pages/Account";
 import AppsAndPlans from "./pages/AppsAndPlans";
 import Ask from "./pages/Ask";
+import { assistantAddress, isAssistantPath } from "./pages/assistant/types";
 import Insights from "./pages/Insights";
 import InvitePage, { inviteToken, PENDING_INVITE } from "./pages/Invite";
 import People from "./pages/People";
@@ -67,17 +68,8 @@ function SignedInPortal() {
   );
 }
 
-function AvailableAsk() {
-  const capabilities = useConnectCapabilities();
-  if (capabilities.ask) return <Ask />;
-  return (
-    <>
-      <PageHead title={capabilities.loading ? "Checking assistant availability…" : "The assistant is unavailable"}>
-        {capabilities.loading ? "Checking the services available to your organisation." : "Your network monitoring and history are still available. Contact XaKore if you need help."}
-      </PageHead>
-      <Link className="button secondary" to="/">Back to overview</Link>
-    </>
-  );
+function AssistantAlias({ scope }: { scope: "connect" | "jibsy" }) {
+  return <Navigate to={assistantAddress(useLocation().search, scope)} replace />;
 }
 
 function Layout() {
@@ -112,7 +104,7 @@ function Layout() {
   const area = areaFor(path);
   // A screen of an app the person can't open says why, instead of failing call by call.
   const blocked =
-    !carrier && !admin && area !== "account" && area !== "ops" && !mine.includes(area) && !(path === "/" && mine.length > 0);
+    !carrier && !admin && !isAssistantPath(path) && area !== "account" && area !== "ops" && !mine.includes(area) && !(path === "/" && mine.length > 0);
   return (
     <Shell>
       <Fragment key={current?.id ?? "no-organisation"}>
@@ -147,7 +139,9 @@ function Layout() {
           <Route path="/insights" element={<Insights />} />
           <Route path="/notices" element={<Notices />} />
           <Route path="/integrations" element={<Integrations />} />
-          <Route path="/ask" element={<AvailableAsk />} />
+          <Route path="/assistant" element={<Ask />} />
+          <Route path="/ask" element={<AssistantAlias scope="connect" />} />
+          <Route path="/commai/assistant/*" element={<AssistantAlias scope="jibsy" />} />
           <Route path="/carrier" element={<Metering carrierView />} />
           <Route path="/account" element={<Account />} />
           <Route path="/account/people" element={<People />} />

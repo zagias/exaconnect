@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import threading
+import uuid
 from dataclasses import replace
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -61,6 +62,19 @@ def _ask(client, headers, cid, question, history=None):
     )
     assert r.status_code == 200, r.text
     return r.json()
+
+
+def _apply(client, headers, plan):
+    r = client.post(
+        f"/api/v1/assistant/plans/{plan['id']}/approve", headers=headers, json={"revision": plan["revision"]}
+    )
+    if r.status_code != 200:
+        return r
+    return client.post(
+        f"/api/v1/ai/plans/{plan['id']}/apply",
+        headers=headers,
+        json={"revision": plan["revision"], "idempotency_key": str(uuid.uuid4())},
+    )
 
 
 def _state(cid):
@@ -145,14 +159,14 @@ def test_propose_apply_and_undo(client, admin_headers, model):
     # Proposing changes nothing.
     assert _state(cid) == before
 
-    r = client.post(f"/api/v1/ai/plans/{plan['id']}/apply", headers=admin_headers)
+    r = _apply(client, admin_headers, plan)
     assert r.status_code == 200, r.text
     assert r.json()["status"] == "applied"
     after = _state(cid)
     assert after["rules"] == ["All calls"] and after["voice_loss"] == 0.5 and after["storm"]["site-a"] is True
     assert after["firewall"] == 1 and after["forwards"] == 1 and after["orders"] == ["draft"]
     # Applied once only.
-    assert client.post(f"/api/v1/ai/plans/{plan['id']}/apply", headers=admin_headers).status_code == 400
+    assert client.post(f"/api/v1/ai/plans/{plan['id']}/apply", headers=admin_headers).status_code == 409
 
     r = client.post(f"/api/v1/ai/plans/{plan['id']}/undo", headers=admin_headers)
     assert r.status_code == 200, r.text
@@ -178,8 +192,8 @@ def test_problems_are_shown_before_anything_applies(client, admin_headers, model
     assert "There is no class called gold." in plan["problems"]
     assert "Storm Mode is already off at site-a, site-b." in plan["problems"]
     assert "The assistant can't do 'reboot_router' yet." in plan["problems"]
-    r = client.post(f"/api/v1/ai/plans/{plan['id']}/apply", headers=admin_headers)
-    assert r.status_code == 400
+    r = _apply(client, admin_headers, plan)
+    assert r.status_code == 409
 
     # A problem only applying would find (an address outside the site) shows in the draft, and nothing applies.
     model(
@@ -191,7 +205,7 @@ def test_problems_are_shown_before_anything_applies(client, admin_headers, model
     )
     plan = _ask(client, admin_headers, cid, "Open SSH")["plan"]
     assert plan["problems"] and "is not inside site-a's networks" in plan["problems"][0]
-    assert client.post(f"/api/v1/ai/plans/{plan['id']}/apply", headers=admin_headers).status_code == 400
+    assert _apply(client, admin_headers, plan).status_code == 409
     assert _state(cid)["voice_loss"] == 1.0
     r = client.post(f"/api/v1/ai/plans/{plan['id']}/cancel", headers=admin_headers)
     assert r.json()["status"] == "cancelled"
@@ -211,24 +225,25 @@ def test_suggestions_and_deletes_undo_cleanly(client, admin_headers, model):
     model("Proposed.", [{"action": "apply_suggestion", "id": det, "class": None}])
     plan = _ask(client, admin_headers, cid, "Apply the Zoom suggestion")["plan"]
     assert plan["summary"] == ["Apply the suggestion for Zoom meetings at site-a: put it in voice."]
-    assert client.post(f"/api/v1/ai/plans/{plan['id']}/apply", headers=admin_headers).status_code == 200
+    assert _apply(client, admin_headers, plan).status_code == 200
     assert _state(cid)["rules"] == ["Zoom meetings at site-a"]
 
     # Deleting that rule through the assistant, then undoing, brings it back.
     model("Proposed.", [{"action": "delete_traffic_rule", "rule": "Zoom meetings at site-a"}])
     plan2 = _ask(client, admin_headers, cid, "Remove it")["plan"]
-    assert client.post(f"/api/v1/ai/plans/{plan2['id']}/apply", headers=admin_headers).status_code == 200
+    assert _apply(client, admin_headers, plan2).status_code == 200
     assert _state(cid)["rules"] == []
     assert client.post(f"/api/v1/ai/plans/{plan2['id']}/undo", headers=admin_headers).status_code == 200
     assert _state(cid)["rules"] == ["Zoom meetings at site-a"]
 
-    # Undoing the first plan removes the rule and reopens the suggestion.
-    assert client.post(f"/api/v1/ai/plans/{plan['id']}/undo", headers=admin_headers).status_code == 200
+    # The restored rule has a new identity. The first plan must not delete
+    # that replacement with its old inverse; an operator reviews it manually.
+    response = client.post(f"/api/v1/ai/plans/{plan['id']}/undo", headers=admin_headers)
+    assert response.status_code == 409
+    assert "Configuration changed" in response.json()["detail"]
     with db.tx() as conn:
-        assert (
-            conn.execute("SELECT status FROM app_detections WHERE id = %s", (det,)).fetchone()["status"] == "suggested"
-        )
-    assert _state(cid)["rules"] == []
+        assert conn.execute("SELECT status FROM app_detections WHERE id = %s", (det,)).fetchone()["status"] == "applied"
+    assert _state(cid)["rules"] == ["Zoom meetings at site-a"]
 
 
 def test_the_conversation_carries_on_and_others_cannot_act(client, admin_headers, model):
@@ -254,4 +269,4 @@ def test_the_conversation_carries_on_and_others_cannot_act(client, admin_headers
     other_h = {"Authorization": f"Bearer {r.json()['token']}"}
     assert client.post(f"/api/v1/ai/plans/{plan['id']}/apply", headers=other_h).status_code == 403
     assert client.get(f"/api/v1/customers/{cid}/assistant/plans", headers=other_h).status_code == 403
-    assert client.post(f"/api/v1/ai/plans/{plan['id']}/apply", headers=admin_headers).json()["status"] == "applied"
+    assert _apply(client, admin_headers, plan).json()["status"] == "applied"

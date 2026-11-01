@@ -11,6 +11,7 @@ import { JumpTo } from "./jump";
 import { accountGroups, icons, matches, navGroups, opsGroups, type Group } from "./nav";
 import { useBrand } from "./pages/commai/partner/brand";
 import { useCommaiBase } from "./pages/commai/lib";
+import { isAssistantPath } from "./pages/assistant/types";
 import "./shell.css";
 
 /** The current screen's group and name, for the context line in the top bar. */
@@ -61,7 +62,8 @@ export function Shell({ children }: { children: ReactNode }) {
   // A partner's white-label brand (ADR 0031); null keeps ExaCarib's own look.
   const brand = useBrand();
   const location = useLocation();
-  const asked = areaFor(location.pathname);
+  const assistant = isAssistantPath(location.pathname);
+  const asked = assistant ? "account" : areaFor(location.pathname);
   // On a screen of an app the person can't open, the menu stays on one they can.
   const area: Area = carrier
     ? "connect"
@@ -75,8 +77,8 @@ export function Shell({ children }: { children: ReactNode }) {
   // The tab says which app you are in.
   useEffect(() => {
     if (brand) return;
-    document.title = `${area === "account" || area === "ops" ? AREA_NAME[area] : APP_INFO[area].name} · XaKore`;
-  }, [area, brand]);
+    document.title = `${assistant ? "Assistant" : area === "account" || area === "ops" ? AREA_NAME[area] : APP_INFO[area].name} · XaKore`;
+  }, [area, assistant, brand]);
   const [drawer, setDrawer] = useState(false);
   const [jump, setJump] = useState(false);
   const menuButton = useRef<HTMLButtonElement>(null);
@@ -234,6 +236,7 @@ export function Shell({ children }: { children: ReactNode }) {
             {ctx && <span className="shell-context-page">{ctx.label}</span>}
           </div>
           <div className="shell-actions">
+            {!carrier && <NavLink to="/assistant" className="shell-assistant-link" aria-label="XaKore assistant">{icons.ask}<span>Assistant</span></NavLink>}
             <button
               className="shell-jump-button"
               onClick={() => setJump(true)}

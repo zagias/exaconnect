@@ -168,7 +168,7 @@ def start_call(
         customer_id,
         identity,
         "voice",
-        subject="Browser call",
+        subject="Telephone call" if started_by == "livekit" else "Browser call",
         language=prof["business_language"],
         actor=started_by,
     )
@@ -240,7 +240,8 @@ def end_call(conn: psycopg.Connection, customer_id: Any, conversation_id: Any, a
     # requests must not change the duration or emit two end events.
     call = conn.execute(
         "UPDATE ai_calls SET ended_at = CASE WHEN widget_key_id IS NOT NULL"
-        " THEN least(now(), started_at + make_interval(mins => %s)) ELSE now() END"
+        " THEN least(now(), started_at + make_interval(mins => %s))"
+        " WHEN started_by = 'livekit' THEN least(now(), started_at + interval '30 minutes') ELSE now() END"
         " WHERE conversation_id = %s AND customer_id = %s AND ended_at IS NULL"
         " RETURNING *, extract(epoch FROM ended_at - started_at) AS seconds",
         (MAX_CALL_MINUTES, conversation_id, customer_id),
@@ -248,7 +249,14 @@ def end_call(conn: psycopg.Connection, customer_id: Any, conversation_id: Any, a
     if call is None:
         return get_call(conn, customer_id, conversation_id)
     minutes = max(1, math.ceil(float(call["seconds"]) / 60))
-    usage.record(conn, customer_id, "ai_voice_minute", minutes, ref=f"call:{call['id']}", detail={"speech": "browser"})
+    usage.record(
+        conn,
+        customer_id,
+        "ai_voice_minute",
+        minutes,
+        ref=f"call:{call['id']}",
+        detail={"speech": "telephone" if call["started_by"] == "livekit" else "browser"},
+    )
     events.emit(
         conn,
         customer_id,

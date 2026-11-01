@@ -44,6 +44,7 @@ cp freeswitch/sip_profiles/external/*.example "$tmp/external/"
 cp freeswitch/sip_profiles/external/exacarib_sip.kamailio.xml.example "$tmp/external/exacarib_sip.xml"
 docker run -d --name exa-sbc-fs --tmpfs /etc/freeswitch/directory/default \
   --entrypoint /bin/sh -v "$PWD/freeswitch/start.sh:/exacarib-start.sh:ro" \
+  -v "$PWD/freeswitch/phone-runtime.sh:/exacarib-phone-runtime.sh:ro" \
   -v "$tmp/exacarib:/exacarib:ro" \
   -v "$PWD/freeswitch/directory/exacarib.xml:/etc/freeswitch/directory/exacarib.xml:ro" \
   -v "$PWD/freeswitch/dialplan/exacarib.xml:/etc/freeswitch/dialplan/exacarib.xml:ro" \
