@@ -27,7 +27,8 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   headers.set(PORTAL_HEADER.name, PORTAL_HEADER.value);
   if (init.body) headers.set("Content-Type", "application/json");
   const r = await fetch(`/api/v1${path}`, { ...init, headers, credentials: "same-origin" });
-  if (r.status === 401 && !path.startsWith("/auth/")) signedOut();
+  const cancelledRead = (init.method ?? "GET").toUpperCase() === "GET" && init.signal?.aborted;
+  if (r.status === 401 && !path.startsWith("/auth/") && !cancelledRead) signedOut();
   if (!r.ok) {
     let msg = `The controller answered ${r.status}.`;
     try {
@@ -47,34 +48,77 @@ export interface Loaded<T> {
   reload: () => void;
 }
 
-/** Fetches a path and refreshes it on an interval (0 = once). */
-export function useApi<T>(path: string | null, intervalMs = 10_000): Loaded<T> {
-  const [data, setData] = useState<T | null>(null);
-  const [error, setError] = useState<string | null>(null);
+const READ_TIMEOUT_MS = 15_000;
+const READ_TIMEOUT_ERROR = "Connect did not respond in time. Try again.";
+
+/** One read at a time, with a deadline covering both the response and its body. */
+function useBoundedRead<T>(
+  path: string | null,
+  intervalMs: number,
+  read: (path: string, signal: AbortSignal) => Promise<T>,
+): Loaded<T> {
+  const [result, setResult] = useState<{ path: string | null; data: T | null; error: string | null }>({ path, data: null, error: null });
   const [tick, setTick] = useState(0);
   const reload = useCallback(() => setTick((t) => t + 1), []);
   useEffect(() => {
     if (!path) return;
     let cancelled = false;
-    const load = () =>
-      api<T>(path)
+    let active: { controller: AbortController; timeout: ReturnType<typeof setTimeout> } | null = null;
+    const fail = (message: string) => setResult((previous) => ({
+      path,
+      data: previous.path === path ? previous.data : null,
+      error: message,
+    }));
+    const load = () => {
+      if (cancelled || active) return;
+      const controller = new AbortController();
+      const request = {
+        controller,
+        timeout: setTimeout(() => {
+          if (cancelled || active !== request) return;
+          active = null;
+          controller.abort();
+          fail(READ_TIMEOUT_ERROR);
+        }, READ_TIMEOUT_MS),
+      };
+      active = request;
+      read(path, controller.signal)
         .then((d) => {
-          if (!cancelled) {
-            setData(d);
-            setError(null);
-          }
+          if (cancelled || active !== request) return;
+          clearTimeout(request.timeout);
+          active = null;
+          setResult({ path, data: d, error: null });
         })
         .catch((e: Error) => {
-          if (!cancelled) setError(e.message);
+          if (cancelled || active !== request) return;
+          clearTimeout(request.timeout);
+          active = null;
+          fail(e.message);
         });
+    };
     load();
     const id = intervalMs > 0 ? setInterval(load, intervalMs) : undefined;
     return () => {
       cancelled = true;
       if (id) clearInterval(id);
+      if (active) {
+        clearTimeout(active.timeout);
+        active.controller.abort();
+        active = null;
+      }
     };
-  }, [path, intervalMs, tick]);
-  return { data, error, reload };
+  }, [path, intervalMs, tick, read]);
+  // A new filter or organisation must never inherit another path's readings.
+  return { data: result.path === path ? result.data : null, error: result.path === path ? result.error : null, reload };
+}
+
+function readPortal<T>(path: string, signal: AbortSignal): Promise<T> {
+  return api<T>(path, { signal });
+}
+
+/** Fetches a path and refreshes it on an interval (0 = once). Writes use api directly. */
+export function useApi<T>(path: string | null, intervalMs = 10_000): Loaded<T> {
+  return useBoundedRead<T>(path, intervalMs, readPortal<T>);
 }
 
 export interface ControllerStatus {
@@ -82,28 +126,16 @@ export interface ControllerStatus {
   version?: string;
 }
 
-/** Polls the controller's version endpoint so the header shows whether it is reachable. */
+async function readPublicVersion(path: string, signal: AbortSignal): Promise<{ version?: string } | null> {
+  const response = await fetch(path, { signal });
+  if (!response.ok) throw new ApiError(response.status, "Monitoring service unavailable.");
+  return response.json();
+}
+
+/** Polls the public version endpoint without authenticated API headers. */
 export function useControllerStatus(intervalMs = 10_000): ControllerStatus {
-  const [status, setStatus] = useState<ControllerStatus>({ ok: false });
-  useEffect(() => {
-    let cancelled = false;
-    const check = async () => {
-      try {
-        const r = await fetch("/api/v1/version");
-        const body = r.ok ? await r.json() : null;
-        if (!cancelled) setStatus(body ? { ok: true, version: body.version } : { ok: false });
-      } catch {
-        if (!cancelled) setStatus({ ok: false });
-      }
-    };
-    check();
-    const id = setInterval(check, intervalMs);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-    };
-  }, [intervalMs]);
-  return status;
+  const status = useBoundedRead("/api/v1/version", intervalMs, readPublicVersion);
+  return status.data && !status.error ? { ok: true, version: status.data.version } : { ok: false };
 }
 
 /** Numeric fields can arrive as strings (Postgres numeric); null stays null. */
