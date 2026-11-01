@@ -111,8 +111,8 @@ function FirstRun({ waiting }: { waiting: number }) {
       <h2 id="ov-first-h">{waiting > 0 ? `Waiting for ${plural(waiting, "box", "boxes")} to check in` : "Connect your first location"}</h2>
       <p className="muted">
         {waiting > 0
-          ? "Your locations are set up in Connect. Once the ExaCarib box at each one is installed and checks in, its links, SLA and routing moves show here."
-          : "Connect starts working once a location has its ExaCarib box. Add your locations, list each one's internet links, and install the box with the code you are given."}
+          ? "Your locations are set up in Connect. Once the XaKore box at each one is installed and checks in, its links, SLA and routing moves show here."
+          : "Connect starts working once a location has its XaKore box. Add your locations, list each one's internet links, and install the box with the code you are given."}
       </p>
       {manager ? (
         <p className="form-actions">

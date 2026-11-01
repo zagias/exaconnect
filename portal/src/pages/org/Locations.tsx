@@ -442,7 +442,7 @@ function InstallCode({
   return (
     <section className="card install" aria-labelledby="install-title">
       <div className="card-head">
-        <h2 id="install-title">Install the ExaCarib box at {install.place ?? install.site}</h2>
+        <h2 id="install-title">Install the XaKore box at {install.place ?? install.site}</h2>
         <button className="button secondary small" onClick={onClose}>
           Done
         </button>
@@ -474,7 +474,7 @@ function InstallCode({
       <p className="small muted" style={{ marginBottom: 0 }}>
         The box only needs to reach out on port 8443; nothing comes in. It makes its own keys and sends only the public
         one. This location turns green here once the box checks in.
-        {!hubReady && " ExaCarib is still preparing your network hub, so traffic flows once that is ready."}
+        {!hubReady && " XaKore is still preparing your network hub, so traffic flows once that is ready."}
       </p>
     </section>
   );

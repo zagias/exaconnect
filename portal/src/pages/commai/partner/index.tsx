@@ -412,7 +412,7 @@ function Domains({ brandId, canEdit }: { brandId: string; canEdit: boolean }) {
     <div className="partner-domains">
       <h3>Custom domains</h3>
       <p className="muted small">
-        Add the TXT record shown at your DNS host, then verify. A certificate is issued only after the domain is verified. Point the domain at ExaCarib with a CNAME.
+        Add the TXT record shown at your DNS host, then verify. A certificate is issued only after the domain is verified. Point the domain at XaKore with a CNAME.
       </p>
       {list.data?.map((d) => (
         <div key={d.id} className="partner-domain">
@@ -734,7 +734,7 @@ function DataLocation({ base }: { base: string }) {
             <dt>{i.label}</dt>
             <dd>
               {i.provider ?? "Not recorded"} {i.provider_region ? `· ${i.provider_region}` : ""}{" "}
-              <span className="muted">({i.source === "recorded" ? "recorded by ExaCarib" : i.source === "configuration" ? "from the server's set-up" : "not recorded"})</span>
+              <span className="muted">({i.source === "recorded" ? "recorded by XaKore" : i.source === "configuration" ? "from the server's set-up" : "not recorded"})</span>
             </dd>
           </div>
         ))}

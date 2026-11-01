@@ -61,6 +61,31 @@ All optional; everything works with the simulated providers while empty.
 - `EXA_360DIALOG_API_KEY`, `EXA_360DIALOG_WEBHOOK_SECRET`: 360dialog. **Not live** until set.
 - `EXA_SMTP_HOST`, `EXA_SMTP_PORT`, `EXA_SMTP_USER`, `EXA_SMTP_PASSWORD`, `EXA_SMTP_STARTTLS`: outbound email.
 
+The standard controller service in `deploy/docker-compose.yml` forwards these
+SMTP settings. Use the mailbox provider's verified SMTP submission host, port
+587 and STARTTLS (`EXA_SMTP_STARTTLS=true`) for authenticated account mail.
+The shared sender verifies the TLS certificate and refuses authenticated
+plain-text SMTP. It does not use implicit TLS on port 465; the separate mailbox
+connector supports that mode.
+
+Company account emails (password resets and organisation invitations) use
+`EXA_SMTP_FROM`, defaulting to `XaKore <hello@xakore.com>`. Account links use
+`EXA_PUBLIC_URL` when set; otherwise they use the requested host and retain the
+HTTPS scheme set by the private Caddy proxy. An existing installation's
+`EXA_PUBLIC_URL` also determines passkey and OIDC origins: do not change it just
+to add a Hub hostname alias. Invitations are sent after their database transaction commits. SMTP
+acceptance returns `emailed=true`; unavailable or failed sending leaves the
+one-use copyable link valid and reports the fallback. Reset requests keep a
+neutral response to avoid revealing whether an account exists.
+
+Jibsy replies keep the selected company's email account address and
+`settings.from_name`; `EXA_SMTP_FROM` does not replace tenant addresses.
+Configuring global SMTP does not create an inbound mailbox, enable Connect
+email alerts or start a Jibsy staff email-notification worker. For inbound mail,
+configure a provider webhook or the per-company IMAP/SMTP connector described in
+[integrations.md](integrations.md#mailbox-imap-and-smtp). Credentials must be
+entered through a secure server or account configuration flow, never committed.
+
 An account can use a second set of credentials with the setting
 `credentials_env` (for example `EXA_TWILIO_ACME`, reading
 `EXA_TWILIO_ACME_ACCOUNT_SID`); the prefix must start with the provider's own.

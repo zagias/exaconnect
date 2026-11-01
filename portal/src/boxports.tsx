@@ -67,7 +67,7 @@ export function rowsFrom(
 const STATE_WORDS: Record<string, [string, string]> = {
   trying: [
     "warn",
-    "The box is trying these ports. It keeps them once it can still reach ExaCarib with them.",
+    "The box is trying these ports. It keeps them once it can still reach XaKore with them.",
   ],
   kept: ["ok", "The box is using the ports set here"],
   undone: ["bad", "The box put its earlier ports back"],
@@ -273,7 +273,7 @@ export function BoxPorts({
           onSubmit={save}
           onCancel={() => setRows(null)}
           intro={
-            "The box tries the new ports and keeps them once it can still reach ExaCarib with them. If it can't, it puts the earlier ports back after two minutes." +
+            "The box tries the new ports and keeps them once it can still reach XaKore with them. If it can't, it puts the earlier ports back after two minutes." +
             (portal?.template
               ? ` Changing them here stops this box following the template ${portal.template.name}.`
               : "")

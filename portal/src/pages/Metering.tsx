@@ -49,7 +49,7 @@ export default function Metering({ carrierView = false }: { carrierView?: boolea
     if (customerId) params.set("customer_id", customerId);
     if (linkId) params.set("link_id", linkId);
     try {
-      await download(`/metering/settlement.csv?${params}`, `exacarib-connect-usage${linkId ? "-link" : ""}.csv`);
+      await download(`/metering/settlement.csv?${params}`, `xakore-connect-usage${linkId ? "-link" : ""}.csv`);
     } catch (e) {
       setDlError((e as Error).message);
     }

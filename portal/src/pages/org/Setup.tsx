@@ -70,7 +70,7 @@ export default function SetupPage() {
                   <p>{s.detail}</p>
                   {s.id === "connect" && s.hub_ready === false && (
                     <p className="small muted">
-                      ExaCarib is preparing your network hub. You can add locations and install boxes now; they
+                      XaKore is preparing your network hub. You can add locations and install boxes now; they
                       connect once the hub is ready.
                     </p>
                   )}

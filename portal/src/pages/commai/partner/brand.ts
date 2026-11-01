@@ -12,7 +12,7 @@ export interface Brand {
   logo_url: string | null;
 }
 
-const DEFAULT_TITLE = "ExaCarib";
+const DEFAULT_TITLE = "XaKore";
 
 function dark(): boolean {
   const theme = document.documentElement.getAttribute("data-theme");

@@ -428,6 +428,7 @@ export interface OrgInviteCreated extends OrgInvite {
   path: string;
   url: string;
   emailed: boolean;
+  email_sender?: "smtp" | "failed" | "unavailable" | "simulated";
 }
 
 export interface InviteInfo {

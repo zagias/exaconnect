@@ -65,6 +65,13 @@ services:
       # Sign-in (ADR 0017). Google/Microsoft/enterprise SSO stay off until the gateway is set.
       EXA_COOKIE_SECURE: ${EXA_COOKIE_SECURE:-1}
       EXA_PUBLIC_URL: ${EXA_PUBLIC_URL:-}
+      # Company account mail and SMTP email channels. Unset host keeps mail unavailable.
+      EXA_SMTP_HOST: ${EXA_SMTP_HOST:-}
+      EXA_SMTP_PORT: ${EXA_SMTP_PORT:-587}
+      EXA_SMTP_USER: ${EXA_SMTP_USER:-}
+      EXA_SMTP_PASSWORD: ${EXA_SMTP_PASSWORD:-}
+      EXA_SMTP_STARTTLS: ${EXA_SMTP_STARTTLS:-true}
+      EXA_SMTP_FROM: "${EXA_SMTP_FROM:-XaKore <hello@xakore.com>}"
       EXA_OIDC_ISSUER: ${EXA_OIDC_ISSUER:-}
       EXA_OIDC_CLIENT_ID: ${EXA_OIDC_CLIENT_ID:-}
       EXA_OIDC_CLIENT_SECRET: ${EXA_OIDC_CLIENT_SECRET:-}

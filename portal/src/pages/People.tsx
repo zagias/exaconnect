@@ -249,7 +249,7 @@ export default function People() {
                         {m.managed_by && (
                           <span className="sub">
                             {["sandbox", "partner"].includes(m.managed_by)
-                              ? `Managed by ExaCarib (${m.managed_by})`
+                              ? `Managed by XaKore (${m.managed_by})`
                               : `Managed by your directory (${m.managed_by.toUpperCase()})`}
                           </span>
                         )}
@@ -394,8 +394,8 @@ function Invitations({
         <h2 id="invites-title">Invitations</h2>
       </div>
       <p className="muted small" style={{ marginTop: 0 }}>
-        We don't send invitation emails yet. You get a link to pass on yourself;
-        it is shown once, works once and expires in 7 days.
+        Invitation links work once and expire in 7 days. After creating an
+        invitation, you can also copy its link to share yourself.
       </p>
       <ErrorNote error={error} />
       {invites.length > 0 && (
@@ -480,9 +480,18 @@ function Invitations({
       <ErrorNote error={create.error} />
       {created && (
         <div className="secret" role="region" aria-label="Invitation link">
-          <p className="callout" style={{ margin: 0 }}>
-            <strong>Copy this link for {created.email} now.</strong> It is not
-            shown again.
+          <p className="callout" style={{ margin: 0 }} role="status">
+            {created.emailed ? (
+              <>
+                <strong>Invitation sent to {created.email}.</strong> You can also copy the link below.
+              </>
+            ) : (
+              <>
+                <strong>{created.email_sender === "failed" ? "We couldn't email this invitation." : "Email isn't available for this service."}</strong>{" "}
+                Copy this link and send it to {created.email}.
+              </>
+            )}{" "}
+            This link is not shown again.
           </p>
           <p>
             <code className="small" style={{ wordBreak: "break-all" }}>
@@ -516,7 +525,7 @@ type Other = Extra & { name: string; email: string; kind: "staff" | "phone_only"
 type PeopleExtras = { by_user: Record<string, Extra>; others: Other[] };
 
 const OTHER_KIND: Record<Other["kind"], string> = {
-  staff: "ExaCarib staff, signs in with an ExaCarib account",
+  staff: "XaKore staff, signs in with a XaKore account",
   phone_only: "Phone only, no sign-in to the portal",
   not_member: "Has a sign-in but is not a member here",
 };

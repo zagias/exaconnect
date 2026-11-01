@@ -705,7 +705,7 @@ function Accounts({ base, channel, title, placeholder, extra }: { base: string; 
           </dl>
           {a.missing_env.length > 0 && (
             <p className="callout warn small">
-              <strong>Not live yet.</strong> {a.provider_label} needs {a.missing_env.join(", ")} set on the server by ExaCarib before it can send or receive.
+              <strong>Not live yet.</strong> {a.provider_label} needs {a.missing_env.join(", ")} set on the server by XaKore before it can send or receive.
             </p>
           )}
           {a.last_error && (
@@ -877,7 +877,7 @@ function WhatsApp({ base }: { base: string }) {
     ["Business verification", "Meta checks your business documents. It can take a few days. We can't check it from here.", "outside"],
     [
       "Connect your number through the provider",
-      "Through the provider's Embedded Signup (Twilio or 360dialog). ExaCarib hasn't chosen the provider yet, so this step isn't open.",
+      "Through the provider's Embedded Signup (Twilio or 360dialog). XaKore hasn't chosen the provider yet, so this step isn't open.",
       real.length ? "done" : "todo",
     ],
     ["Number live in Jibsy", "The provider's credentials are set on the server and the number is set live.", liveReal ? "done" : "todo"],
@@ -976,7 +976,7 @@ function Templates({ base, tpls }: { base: string; tpls: Loaded<Template[]> }) {
           </table>
         </div>
       )}
-      <p className="small muted">With a simulated number, Approve stands in for Meta's review. With a real provider, approval comes from Meta and ExaCarib records it here.</p>
+      <p className="small muted">With a simulated number, Approve stands in for Meta's review. With a real provider, approval comes from Meta and XaKore records it here.</p>
       <ErrorNote error={act.error} />
       <h3 className="ch-h3">New template</h3>
       <form

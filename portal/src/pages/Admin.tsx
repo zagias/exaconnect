@@ -36,17 +36,17 @@ interface EnrolToken {
 // enrolment tokens, classes and SLA policies, partners, DDoS protection, users, settings, releases and the audit log.
 const SECTIONS: Record<string, [string, string]> = {
   agents: ["Agents", "Every box that has enrolled, what it runs and when it last checked in."],
-  boxes: ["Boxes", "Every ExaCarib box by serial number, across all organisations. Assign one to a location and it installs itself."],
+  boxes: ["Boxes", "Every XaKore box by serial number, across all organisations. Assign one to a location and it installs itself."],
   sites: ["Sites and links", "Each organisation's Connect sites, their carrier links and install codes, with every network setting."],
   classes: ["Classes and SLA", "Application classes and the SLA each one is held to."],
   partners: ["Partners", "White-label partners and the apps they offer."],
   billing: ["Billing", "Plans, price lists and invoices."],
-  catalogue: ["Catalogue", "What ExaCarib sells and its prices, for quotes."],
+  catalogue: ["Catalogue", "What XaKore sells and its prices, for quotes."],
   quotes: ["Quotes", "Build, discount, approve and send quotes. An accepted quote becomes an order."],
   orders: ["Orders", "Accepted quotes being set up. Mark manual items done; their charges start that day."],
   protection: ["Protection", "DDoS protection on the PoPs."],
   integrations: ["Integrations", "Monitoring and ticketing connections."],
-  users: ["Accounts", "ExaCarib staff and carrier logins. Customers invite their own people under Organisation › People and access."],
+  users: ["Accounts", "XaKore staff and carrier logins. Customers invite their own people under Organisation › People and access."],
   settings: ["Settings", "Shadow mode, Storm Mode and satellite rules for the organisation you are working on."],
   releases: ["Releases", "What is running, and going back to an earlier release."],
   audit: ["Audit log", "Every change, who made it and when."],
@@ -273,7 +273,7 @@ function SitesAdmin() {
     <>
       <p className="small muted">
         New organisations are created under <Link to="/ops/organisations">Organisations</Link>. Customers can add
-        and connect their own locations; this screen keeps every network setting for ExaCarib.
+        and connect their own locations; this screen keeps every network setting for XaKore.
       </p>
       {current && (
         <Card

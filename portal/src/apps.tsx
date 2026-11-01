@@ -18,8 +18,8 @@ export const AREA_NAME: Record<"account" | "ops", string> = { account: "Organisa
 export const JIBSY = "Jibsy";
 
 export const APP_INFO: Record<AppId, { name: string; full: string; blurb: string; home: string }> = {
-  connect: { name: "Connect", full: "ExaCarib Connect", blurb: "Sites, paths, SLA and Storm Mode", home: "/" },
-  commai: { name: JIBSY, full: "Jibsy by ExaCarib", blurb: "Inbox, AI agents, phone and workflows", home: "/commai" },
+  connect: { name: "Connect", full: "XaKore Connect", blurb: "Sites, paths, SLA and Storm Mode", home: "/" },
+  commai: { name: JIBSY, full: "Jibsy by XaKore", blurb: "Inbox, AI agents, phone and workflows", home: "/commai" },
 };
 
 export const APP_ORDER: AppId[] = ["connect", "commai"];

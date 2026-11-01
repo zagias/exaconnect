@@ -13,7 +13,7 @@
 		X-Frame-Options DENY
 		Referrer-Policy strict-origin-when-cross-origin
 		Permissions-Policy "camera=(), microphone=(self), geolocation=()"
-		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' wss://{host}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' wss://{host} wss://connect.exacarib.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
 		-Server
 	}
 
@@ -73,5 +73,10 @@
 # straight into Jibsy Phone, so people never need the portal to make calls.
 {$EXA_PHONE_HOST:jibsyapp.exacarib.com} {
 	redir / /phone
+	import site
+}
+
+# XaKore Hub: same application and private-route restrictions.
+hub.xakore.com {
 	import site
 }

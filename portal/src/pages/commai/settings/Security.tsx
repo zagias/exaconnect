@@ -137,13 +137,13 @@ export default function Security({ base }: { base: string }) {
           </label>
           <p className="muted small wide">
             Your address now is <span className="mono">{d.your_ip || "unknown"}</span>. A list that leaves it out is
-            refused, so you can&apos;t lock yourself out. ExaCarib staff are not limited by it.
+            refused, so you can&apos;t lock yourself out. XaKore staff are not limited by it.
           </p>
           <fieldset className="wide">
             <legend>Signing out</legend>
             <label className="check">
               <input type="checkbox" checked={f.sso_logout} onChange={(e) => set({ sso_logout: e.target.checked })} />
-              Signing out of ExaCarib also signs out of your company&apos;s identity provider
+              Signing out of XaKore also signs out of your company&apos;s identity provider
             </label>
             {d.sso_connections.map((c) => (
               <p key={c.id} className="muted small">
@@ -174,7 +174,7 @@ export default function Security({ base }: { base: string }) {
         </div>
       </Card>
       <Card title="Alerts" note={<button className="button secondary" disabled={act.busy} onClick={() => post("/security/watch", alerts.reload)}>Check now</button>}>
-        <p className="muted small">Alerts go to you here and by webhook (security.alert), and to ExaCarib.</p>
+        <p className="muted small">Alerts go to you here and by webhook (security.alert), and to XaKore.</p>
         <ErrorNote error={alerts.error} />
         {(alerts.data ?? []).length === 0 && <p className="muted">No alerts.</p>}
         <ul>

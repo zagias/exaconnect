@@ -144,6 +144,8 @@ jobs:
           controller/tests/test_commai_presence_calls.py
           controller/tests/test_commai_governance.py::test_daily_action_limits_per_role
           controller/tests/test_portal_read_scope.py
+          controller/tests/test_account_email_delivery.py
+          controller/tests/test_platform_mailer.py
           controller/tests/test_commai_voice_global.py::test_livekit_controller_contract_requires_a_ready_phone_worker
 
   firewall-packets:

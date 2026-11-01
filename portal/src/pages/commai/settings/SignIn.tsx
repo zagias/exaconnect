@@ -23,7 +23,7 @@ const STATUS: Record<SsoConnection["status"], { word: string; cls: string }> = {
 };
 
 const DOMAIN: Record<string, { word: string; cls: string }> = {
-  pending: { word: "waiting for ExaCarib approval", cls: "wait" },
+  pending: { word: "waiting for XaKore approval", cls: "wait" },
   approved: { word: "✓ approved", cls: "on" },
   rejected: { word: "✕ not approved", cls: "bad" },
 };
@@ -104,14 +104,14 @@ function Connections({ base }: { base: string }) {
       <p className="muted small" style={{ marginTop: 0 }}>
         Let your people sign in with your own identity provider (Microsoft Entra ID, Okta, Google Workspace, ADFS and
         others) over SAML 2.0 or OpenID Connect. Add it, run a test sign-in, then switch it on. Each email domain is
-        checked by ExaCarib before it sends anyone to your provider.
+        checked by XaKore before it sends anyone to your provider.
       </p>
       {gateway && !gateway.configured && (
         <p className="callout small">The sign-in gateway is not set up on this controller yet, so test sign-ins can't run.</p>
       )}
       {gateway?.simulated && (
         <p className="callout small">
-          Connections are kept by a simulated gateway until ExaCarib connects the live one. Nothing is sent to your
+          Connections are kept by a simulated gateway until XaKore connects the live one. Nothing is sent to your
           identity provider yet.
         </p>
       )}
@@ -297,7 +297,7 @@ function AddConnection({ base, onDone }: { base: string; onDone: () => void }) {
             Client secret
             <input type="password" autoComplete="off" value={secret} onChange={(e) => setSecret(e.target.value)} />
           </label>
-          <p className="muted small wide">The secret goes to the sign-in gateway only. ExaCarib does not keep it.</p>
+          <p className="muted small wide">The secret goes to the sign-in gateway only. XaKore does not keep it.</p>
         </>
       )}
       <div className="actions wide">
@@ -365,7 +365,7 @@ function Directory({ base, customerId }: { base: string; customerId: string }) {
     <Card title="Directory sync (SCIM)">
       <p className="muted small" style={{ marginTop: 0 }}>
         Your directory adds, changes and removes people and groups here automatically. Someone removed or switched off
-        there is signed out of ExaCarib at once and their API keys stop working. New people can use Jibsy; they get
+        there is signed out of XaKore at once and their API keys stop working. New people can use Jibsy; they get
         admin rights only through a group mapping that a second admin approves.
       </p>
       <ErrorNote error={tokens.error} />
@@ -537,7 +537,7 @@ function DomainApprovals() {
   return (
     <Card title="Email domains waiting for approval">
       <p className="muted small" style={{ marginTop: 0 }}>
-        For ExaCarib admins. Approve a domain only after the organisation has shown it owns it, for example with a DNS
+        For XaKore admins. Approve a domain only after the organisation has shown it owns it, for example with a DNS
         TXT record. An approved domain sends everyone with that email to the organisation's own sign-in.
       </p>
       <ErrorNote error={error} />

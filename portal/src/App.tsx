@@ -73,7 +73,7 @@ function AvailableAsk() {
   return (
     <>
       <PageHead title={capabilities.loading ? "Checking assistant availability…" : "The assistant is unavailable"}>
-        {capabilities.loading ? "Checking the services available to your organisation." : "Your network monitoring and history are still available. Contact ExaCarib if you need help."}
+        {capabilities.loading ? "Checking the services available to your organisation." : "Your network monitoring and history are still available. Contact XaKore if you need help."}
       </PageHead>
       <Link className="button secondary" to="/">Back to overview</Link>
     </>
@@ -189,8 +189,8 @@ function NoAccess({ app, mine }: { app: AppId; mine: AppId[] }) {
         {onPlan
           ? `${org} has ${name}, but you haven't been given it. Ask an owner or admin of your organisation.`
           : manager
-            ? `${org} doesn't have ${name} yet. You can ask ExaCarib to add it.`
-            : `${org} doesn't have ${name}. An owner or admin can ask ExaCarib to add it.`}
+            ? `${org} doesn't have ${name} yet. You can ask XaKore to add it.`
+            : `${org} doesn't have ${name}. An owner or admin can ask XaKore to add it.`}
       </PageHead>
       <div className="actions" style={{ justifyContent: "flex-start", marginTop: 16 }}>
         {mine.map((a) => (

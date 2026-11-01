@@ -10,14 +10,11 @@ sign-in, where it is on, still applies at the next sign-in."""
 from __future__ import annotations
 
 import logging
-import os
-from email.message import EmailMessage
-from email.utils import make_msgid
 
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
-from .. import audit, db
+from .. import audit, db, mailer
 from ..commai.channels.email import SmtpSender
 from ..identity import sso
 from ..security import hash_password, new_token, token_hash
@@ -45,15 +42,12 @@ def _email_live() -> bool:
 
 
 def _send(email: str, link: str) -> None:
-    msg = EmailMessage()
-    msg["From"] = os.environ.get("EXA_SMTP_FROM", "no-reply@exacarib.com")
-    msg["To"] = email
-    msg["Subject"] = "Reset your ExaCarib password"
-    msg["Message-ID"] = make_msgid(domain="accounts.exacarib.invalid")
-    msg.set_content(
-        "Someone asked to reset the password for this ExaCarib account.\n\n"
+    msg = mailer.message(
+        email,
+        "Reset your XaKore password",
+        "Someone asked to reset the password for this XaKore account.\n\n"
         f"Choose a new password here (the link works once, for one hour):\n{link}\n\n"
-        "If it wasn't you, ignore this email; your password stays as it is.\n"
+        "If it wasn't you, ignore this email; your password stays as it is.\n",
     )
     SmtpSender().send(None, {"customer_id": None, "id": None}, msg)
 
@@ -93,7 +87,7 @@ def ask(body: ResetAskIn, request: Request) -> dict:
                 VALUES (%s, %s, now() + interval '{LIFETIME}', %s)""",
             (row["id"], token_hash(token), ip),
         )
-    base = request.app.state.settings.public_url or str(request.base_url).rstrip("/")
+    base = mailer.public_base(request)
     try:
         _send(row["email"], f"{base}/reset/{token}")
     except Exception as e:  # never tell the asker; the log says why

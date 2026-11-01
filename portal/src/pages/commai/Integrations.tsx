@@ -136,7 +136,7 @@ function Catalogue() {
       <ErrorNote error={error} />
       {data && data.length === 0 && (
         <EmptyState title="No apps to connect yet" action={<Link className="button" to="/commai/catalogue">See the app catalogue</Link>}>
-          Apps your business can connect appear here once ExaCarib makes them available.
+          Apps your business can connect appear here once XaKore makes them available.
         </EmptyState>
       )}
       <div className="auto-grid">

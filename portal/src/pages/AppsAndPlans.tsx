@@ -73,7 +73,7 @@ export default function AppsAndPlans() {
                       , <Stamp iso={a.requested_at} />
                     </>
                   )}
-                  . ExaCarib will be in touch.
+                  . XaKore will be in touch.
                 </p>
               )}
               <div className="actions">
@@ -84,10 +84,10 @@ export default function AppsAndPlans() {
                 )}
                 {a.status === "off" && manage && !admin && (
                   <button type="button" className="button" disabled={act.busy} onClick={() => ask(a.id)}>
-                    Ask ExaCarib to add {info.name}
+                    Ask XaKore to add {info.name}
                   </button>
                 )}
-                {a.status === "off" && !manage && <span className="muted small">An owner or admin can ask ExaCarib to add it.</span>}
+                {a.status === "off" && !manage && <span className="muted small">An owner or admin can ask XaKore to add it.</span>}
               </div>
             </section>
           );

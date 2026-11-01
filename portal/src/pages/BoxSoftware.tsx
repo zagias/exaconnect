@@ -81,7 +81,7 @@ export function BoxSoftware() {
   return (
     <>
       <PageHead title="Box software">
-        Update ExaCarib boxes from here, or take them back to an earlier
+        Update XaKore boxes from here, or take them back to an earlier
         version. Each box restarts into the new software and keeps it only if it
         comes up healthy; otherwise it goes back to its earlier software by
         itself.
@@ -101,7 +101,7 @@ export function BoxSoftware() {
       <Card title={`Boxes of ${current.name}`}>
         {boxes.length === 0 ? (
           <p className="muted small">
-            This organisation has no ExaCarib boxes in Connect yet.
+            This organisation has no XaKore boxes in Connect yet.
           </p>
         ) : (
           <div className="table-wrap">

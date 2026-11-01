@@ -7,7 +7,7 @@ import { when } from "../lib";
 import type { VoiceOverview } from "./types";
 
 /* Voice stage 5 screens (ADR 0033): numbers by country, port orders,
-   emergency addresses, fraud protection and (ExaCarib only) carriers. */
+   emergency addresses, fraud protection and (XaKore only) carriers. */
 
 interface Country {
   code: string;
@@ -231,7 +231,7 @@ export function Numbers({ base, v }: { base: string; v: VoiceOverview }) {
 
   return (
     <>
-      <Card title="Countries" note={<span className="muted small">ExaCarib switches each country on after its written go-live checks pass.</span>}>
+      <Card title="Countries" note={<span className="muted small">XaKore switches each country on after its written go-live checks pass.</span>}>
         <ErrorNote error={list.error} />
         <table className="paths dt">
           <thead>
@@ -802,7 +802,7 @@ export function Fraud({ base, v }: { base: string; v: VoiceOverview }) {
       </Card>
       <Card title="High-risk destinations" note={<ExampleTag />}>
         <p className="muted small">
-          ExaCarib keeps this list for callers in {s.origin}. These destinations are often used for revenue share fraud, so calls to them are blocked unless you allow one. Allowing one needs spend permission.
+          XaKore keeps this list for callers in {s.origin}. These destinations are often used for revenue share fraud, so calls to them are blocked unless you allow one. Allowing one needs spend permission.
         </p>
         <table className="paths dt">
           <thead>

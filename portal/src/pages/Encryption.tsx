@@ -70,7 +70,7 @@ export default function Encryption() {
           {data.layer2.length > 0 && <Layer2 data={data} />}
           <Card title="Control channel and internet">
             <p style={{ marginTop: 0 }}>
-              <strong>Between your sites and ExaCarib's controller:</strong> {data.control.protocol}.
+              <strong>Between your sites and XaKore's controller:</strong> {data.control.protocol}.
             </p>
             <p style={{ marginBottom: 0 }}>{data.internet}</p>
           </Card>

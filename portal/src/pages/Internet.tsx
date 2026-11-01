@@ -32,7 +32,7 @@ import { canOperateConnect } from "../permissions";
 // carrier links, or not at all. The firewall applies where traffic leaves.
 
 const MODES: { mode: BreakoutMode; label: string }[] = [
-  { mode: "pop", label: "Through ExaCarib's PoP" },
+  { mode: "pop", label: "Through XaKore's PoP" },
   { mode: "local", label: "Straight out at the site" },
   { mode: "off", label: "Off" },
 ];
@@ -484,7 +484,7 @@ export function protectionLimits(p: { new_per_source: number; syn_per_s: number;
   return [
     `A source sending more than ${plural(p.new_per_source, "new connection")} a second is blocked for ${plural(p.block_minutes, "minute")}.`,
     `New TCP connections above ${p.syn_per_s.toLocaleString("en-GB")} a second, from all sources together, are dropped (SYN flood protection).`,
-    "Addresses on ExaCarib's block list are always dropped.",
+    "Addresses on XaKore's block list are always dropped.",
   ];
 }
 
@@ -537,8 +537,8 @@ function Protection({ p, publicAddress }: { p: ProtectionSummary; publicAddress:
         {p.updated_at && <span className="muted"> · Counts from {ago(p.updated_at)}</span>}
       </p>
       <p className="small muted" style={{ margin: "4px 0 0" }}>
-        ExaCarib manages these settings. The public address is shared, so they are the same for every customer on it. Contact
-        ExaCarib if a service you rely on is being blocked.
+        XaKore manages these settings. The public address is shared, so they are the same for every customer on it. Contact
+        XaKore if a service you rely on is being blocked.
       </p>
     </Card>
   );

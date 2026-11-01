@@ -1,8 +1,8 @@
-/* ExaCarib brand (CLAUDE.md §4.6, ADR 0014): pale page, white cards, brand blue
-   for actions, status colours always with a word. Coral is for the satellite path. */
+/* XaKore: red actions, charcoal text, pale page and white cards.
+   Operational status colours always have a word. Coral is for the satellite path. */
 :root {
-  --navy: #07182e; --blue: #155eef; --blue-hover: #084bd0; --blue-tint: #e9f0ff;
-  --page: #f3f6fb; --card: #fff; --ink: #10213d; --muted: #52647a; --line: #dfe6ee; --line-strong: #cbd6e4;
+  --navy: #0c1018; --blue: #d7192d; --blue-hover: #b81225; --blue-tint: #f1f3f5;
+  --page: #f5f6f8; --card: #fff; --ink: #192021; --muted: #5d6572; --line: #e0e3e8; --line-strong: #c6cbd3;
   --coral: #ff7a59; --success: #18704b; --warning: #9a5b00; --danger: #b42318;
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
@@ -25,7 +25,7 @@ a:hover { color: var(--blue-hover); }
 .top { background: var(--card); border-bottom: 1px solid var(--line); }
 .top-in { max-width: 1120px; margin: 0 auto; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; color: var(--ink); }
-.brand img { display: block; }
+.brand img { display: block; width: 150px; height: auto; }
 .brand-sub { padding-left: 12px; border-left: 1px solid var(--line-strong); font-weight: 600; font-size: 14px; color: var(--muted); }
 .who { display: flex; align-items: center; gap: 12px; font-size: 14px; color: var(--muted); }
 .tabs { max-width: 1120px; margin: 0 auto; padding: 0 16px; display: flex; gap: 4px; overflow-x: auto; }
@@ -79,7 +79,7 @@ th { text-align: left; font-weight: 600; color: var(--muted); font-size: 12px; t
 td { padding: 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
 tr:last-child td { border-bottom: 0; }
 td .sub { display: block; color: var(--muted); font-size: 13px; }
-pre.out { background: var(--navy); color: #e6eefb; border-radius: 8px; padding: 14px 16px; font: 13px/20px var(--mono); overflow: auto; max-height: 460px; white-space: pre-wrap; margin: 12px 0 0; }
+pre.out { background: var(--navy); color: #f0f2f6; border-radius: 8px; padding: 14px 16px; font: 13px/20px var(--mono); overflow: auto; max-height: 460px; white-space: pre-wrap; margin: 12px 0 0; }
 .steps { display: flex; gap: 8px; list-style: none; padding: 0; margin: 0 0 20px; flex-wrap: wrap; }
 .steps li { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; color: var(--muted); padding: 6px 12px 6px 6px; border: 1px solid var(--line); border-radius: 20px; background: var(--card); }
 .steps li .n { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--page); font-size: 13px; }

@@ -121,23 +121,23 @@ export function AuthGate({
     if (product === "Connect")
       return (
         <main className="signin-page signin-page-connect" id="main">
-          <aside className="connect-signin-story" aria-label="ExaCarib Connect">
-            <a className="connect-signin-wordmark" href="https://exacarib.com/" aria-label="ExaCarib home">
-              <img src="/brand/exacarib-wordmark-red-reversed.svg" alt="ExaCarib" width={188} height={33} />
+          <aside className="connect-signin-story" aria-label="XaKore Connect">
+            <a className="connect-signin-wordmark" href="https://xakore.com/" aria-label="XaKore home">
+              <img src="/brand/xakore-wordmark-red-reversed.svg" alt="XaKore" width={188} height={50} />
             </a>
             <div className="connect-signin-proposition">
-              <span className="connect-signin-label">ExaCarib Connect</span>
+              <span className="connect-signin-label">XaKore Connect</span>
               <h2>Your network.<br /><span>In view.</span></h2>
               <p>Review site performance, set traffic priorities and see the reasons behind routing decisions.</p>
             </div>
-            <a className="connect-signin-public-link" href="https://exacarib.com/">Visit ExaCarib</a>
+            <a className="connect-signin-public-link" href="https://xakore.com/">Visit XaKore</a>
           </aside>
           <div className="connect-signin-panel">
             <div className="connect-signin-form">
               <span className="connect-signin-label">Your Connect account</span>
               {entry}
             </div>
-            <a className="connect-signin-help" href="https://exacarib.com/contact/">Contact ExaCarib</a>
+            <a className="connect-signin-help" href="https://xakore.com/contact/">Contact XaKore</a>
           </div>
         </main>
       );
@@ -146,8 +146,8 @@ export function AuthGate({
       <main className="signin-page" id="main">
         <div className="signin-box">
           <div className="signin-brand">
-            <img className="wm-light" src="/brand/exacarib-wordmark.png" alt="ExaCarib" width={168} height={29} />
-            <img className="wm-dark" src="/brand/exacarib-wordmark-reversed.png" alt="ExaCarib" width={168} height={29} />
+            <img className="wm-light" src="/brand/xakore-wordmark-red.svg" alt="XaKore" width={168} height={45} />
+            <img className="wm-dark" src="/brand/xakore-wordmark-red-reversed.svg" alt="XaKore" width={168} height={45} />
             <span className="signin-product">{product}</span>
           </div>
           {entry}

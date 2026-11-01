@@ -42,7 +42,7 @@ import { Card, EmptyState, PageHead, RowActions, useAction } from "../ui";
 import "./billing.css";
 
 /* Catalogue, quotes (CPQ), sales orders and contracts (ADR 0055).
-   ExaCarib staff see them under Operations (/admin/...); an organisation sees
+   XaKore staff see them under Operations (/admin/...); an organisation sees
    its own under Organisation (/quotes, /orders) and on the Billing page. */
 
 const CHARGED: Record<ChargeType, string> = { recurring: "Monthly", one_off: "Once", usage: "By use" };
@@ -113,7 +113,7 @@ function QuoteList() {
   return (
     <>
       <Head title="Quotes and orders">
-        Quotes from ExaCarib, or ones you build from the catalogue. Accepting a quote places the order.{" "}
+        Quotes from XaKore, or ones you build from the catalogue. Accepting a quote places the order.{" "}
         <Link to="/orders">Your orders</Link>.
       </Head>
       <ErrorNote error={quotes.error} />
@@ -141,7 +141,7 @@ function QuoteList() {
       >
         {quotes.data && rows.length === 0 && (
           <EmptyState title="No quotes yet">
-            {staff ? "Build one for the organisation you're working on." : manager ? "Build one from the catalogue, or ask ExaCarib." : "Quotes ExaCarib sends appear here."}
+            {staff ? "Build one for the organisation you're working on." : manager ? "Build one from the catalogue, or ask XaKore." : "Quotes XaKore sends appear here."}
           </EmptyState>
         )}
         {rows.length > 0 && (
@@ -768,7 +768,7 @@ function OrderList() {
                     <td data-label="Progress" className="small">
                       {o.done_count} of {o.item_count} done
                       {o.failed_count > 0 && <span className="pill bad small"> {o.failed_count} failed</span>}
-                      {o.waiting_count > 0 && <div className="muted">{o.waiting_count} waiting for ExaCarib</div>}
+                      {o.waiting_count > 0 && <div className="muted">{o.waiting_count} waiting for XaKore</div>}
                     </td>
                     <td data-label="Placed" className="nowrap">
                       {day(o.created_at)}
@@ -847,7 +847,7 @@ function OrderPage() {
                     </div>
                   </td>
                   <td data-label="How" className="small">
-                    {i.automatic ? "Set up automatically" : "Done by ExaCarib staff"}
+                    {i.automatic ? "Set up automatically" : "Done by XaKore staff"}
                   </td>
                   <td data-label="State">
                     <span className={`pill ${ITEM_PILL[i.status]}`}>{ITEM_WORD[i.status]}</span>

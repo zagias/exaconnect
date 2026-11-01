@@ -338,7 +338,7 @@ function DraftView({
         <p className="callout warn" role="status">
           {capabilities.loading
             ? "Checking availability for the dedicated cloud connection in this order…"
-            : "The dedicated cloud connection in this draft is not available to order. Contact ExaCarib before continuing."}
+            : "The dedicated cloud connection in this draft is not available to order. Contact XaKore before continuing."}
         </p>
       )}
 
@@ -443,7 +443,7 @@ function Directory({ customerId, sites, onDrafted }: { customerId: string; sites
   return (
     <Card title="Partner directory">
       <p className="small muted" style={{ marginTop: 0 }}>
-        Clouds and services you can reach privately through ExaCarib's PoP. Pick one and we draft the order for you to
+        Clouds and services you can reach privately through XaKore's PoP. Pick one and we draft the order for you to
         confirm.
       </p>
       <div className="filters">

@@ -95,7 +95,7 @@ export default function Fabric() {
   return (
     <>
       <PageHead eyebrow="Private links" title="Virtual circuits">
-        Private circuits to your clouds and between your sites, through ExaCarib's PoP. Change the bandwidth at any time;
+        Private circuits to your clouds and between your sites, through XaKore's PoP. Change the bandwidth at any time;
         you pay by the hour.
       </PageHead>
       <CloudRouter customerId={current.id} canOperate={canOperate} />
@@ -205,7 +205,7 @@ function CloudRouter({ customerId, canOperate }: { customerId: string; canOperat
         <strong>Cloud router</strong>
       </label> : <strong>Cloud router: {settings.data ? on ? "On" : "Off" : "Loading…"}</strong>}
       <p className="small muted" style={{ margin: "4px 0 0" }}>
-        When on, your clouds can reach each other through ExaCarib's PoP, without going back to an office.
+        When on, your clouds can reach each other through XaKore's PoP, without going back to an office.
       </p>
       <ErrorNote error={settings.error ?? act.error} />
     </div>

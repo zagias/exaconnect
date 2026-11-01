@@ -81,14 +81,14 @@ export default function Integrations() {
     act.run(async () => {
       const d = await testIntegration(i.id);
       setOpen(i.id);
-      if (!admin && d.status === "simulated") throw new Error("Nothing was sent. This integration is not active yet. Contact ExaCarib for help.");
+      if (!admin && d.status === "simulated") throw new Error("Nothing was sent. This integration is not active yet. Contact XaKore for help.");
       if (d.status === "failed") throw new Error(`The test failed: ${d.last_error || "no reason given"}.`);
       list.reload();
     });
   const onSync = (i: Integration) =>
     act.run(async () => {
       const result = await syncIntegration(i.id);
-      if (!admin && result.mode === "simulated") throw new Error("No live sync was run. Contact ExaCarib to finish activating this integration.");
+      if (!admin && result.mode === "simulated") throw new Error("No live sync was run. Contact XaKore to finish activating this integration.");
       list.reload();
     });
   const onToggle = (i: Integration) =>
@@ -109,7 +109,7 @@ export default function Integrations() {
     return (
       <>
         <PageHead title={capabilities.loading ? "Checking integrations…" : "Integrations are not available right now"}>
-          {capabilities.loading ? "Checking which services are ready for your organisation." : "Contact ExaCarib to discuss connecting your monitoring and business tools."}
+          {capabilities.loading ? "Checking which services are ready for your organisation." : "Contact XaKore to discuss connecting your monitoring and business tools."}
         </PageHead>
         <ErrorNote error={capabilities.catalogueError} />
         <Link className="button secondary" to="/">Back to your network</Link>
@@ -122,13 +122,13 @@ export default function Integrations() {
         Send network events to your monitoring, support and business tools. Review each connection’s status and delivery history here.
       </PageHead>
       {admin && catalogue && !catalogue.live && <p className="callout warn">Live delivery is off. Connections and tests below are for configuration only; no events are sent to providers.</p>}
-      {!admin && awaitingActivation && <p className="callout warn" role="status">Your connection is saved. ExaCarib needs to finish activating it before it can send events.</p>}
+      {!admin && awaitingActivation && <p className="callout warn" role="status">Your connection is saved. XaKore needs to finish activating it before it can send events.</p>}
 
       <Card title="Your integrations" note={admin && current ? <span className="small muted">For {current.name}</span> : undefined}>
         <ErrorNote error={list.error ?? capabilities.catalogueError} />
         {list.data && rows.length === 0 && (
           <div className="empty">
-            <p>{canManage ? "No active integrations yet. Add a connection below, or contact ExaCarib to finish activating an existing one." : "No active integrations to show."}</p>
+            <p>{canManage ? "No active integrations yet. Add a connection below, or contact XaKore to finish activating an existing one." : "No active integrations to show."}</p>
           </div>
         )}
         {rows.length > 0 && (

@@ -130,7 +130,7 @@ export default function Assistant() {
       </div>
       <Card title="Support cases">
         {cases.data && cases.data.length === 0 && (
-          <EmptyState title="No support cases">When the assistant can't fix something, it offers to open a case with ExaCarib support. Cases and replies appear here.</EmptyState>
+          <EmptyState title="No support cases">When the assistant can't fix something, it offers to open a case with XaKore support. Cases and replies appear here.</EmptyState>
         )}
         <ul className="auto-evidence" aria-label="Your support cases">
           {(cases.data ?? []).map((c) => (

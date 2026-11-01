@@ -69,6 +69,6 @@ describe("selected organisation network journeys", () => {
     expect(screen.getByRole("link", { name: "open Billing" }).getAttribute("href")).toBe("/billing");
     fireEvent.click(screen.getByRole("button", { name: "Last 6 hours" }));
     fireEvent.click(screen.getByRole("button", { name: "Download CSV" }));
-    expect(download).toHaveBeenCalledWith("/metering/settlement.csv?hours=6&customer_id=chosen-org", "exacarib-connect-usage.csv");
+    expect(download).toHaveBeenCalledWith("/metering/settlement.csv?hours=6&customer_id=chosen-org", "xakore-connect-usage.csv");
   });
 });

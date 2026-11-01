@@ -108,7 +108,7 @@ export default function Countries() {
       <ErrorNote error={list.error} />
       {admin && (
         <p className="muted small">
-          ExaCarib admins switch countries on, and record each check, on the <Link to="/commai/golive">Go-live</Link> screen.
+          XaKore admins switch countries on, and record each check, on the <Link to="/commai/golive">Go-live</Link> screen.
         </p>
       )}
       {groups.map((g) => {
@@ -203,7 +203,7 @@ function Senders({ base }: { base: string }) {
   return (
     <Card title="SMS sender registrations">
       <p className="muted">
-        Some countries only deliver SMS from registered senders (in the United States, 10DLC registration for ordinary numbers and verification for toll-free numbers). Ask here; ExaCarib
+        Some countries only deliver SMS from registered senders (in the United States, 10DLC registration for ordinary numbers and verification for toll-free numbers). Ask here; XaKore
         files it with the carrier and records the outcome.
       </p>
       <ErrorNote error={regs.error} />

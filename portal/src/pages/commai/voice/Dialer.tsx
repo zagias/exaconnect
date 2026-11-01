@@ -180,7 +180,7 @@ export default function Dialer({ base }: { base: string }) {
         </div>
       )}
       <audio ref={audio} autoPlay />
-      <p className="small muted">Calls use your extension and your company's call rules. Calls outside the business work once ExaCarib connects the phone provider.</p>
+      <p className="small muted">Calls use your extension and your company's call rules. Calls outside the business work once XaKore connects the phone provider.</p>
       <ErrorNote error={act.error} />
     </Card>
   );

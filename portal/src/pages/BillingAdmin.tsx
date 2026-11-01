@@ -542,7 +542,7 @@ function PayablesCard({ onDone }: { onDone: (m: string) => void }) {
   const act = useAction();
   const cost = (id: number, name: string, now: string | null) =>
     act.run(async () => {
-      const v = window.prompt(`What ExaCarib pays ${name} per Mbps a month (blank: not agreed yet)`, now ?? "");
+      const v = window.prompt(`What XaKore pays ${name} per Mbps a month (blank: not agreed yet)`, now ?? "");
       if (v === null) return;
       await setPartnerCost(id, v.trim() || null);
       onDone(`Saved ${name}'s cost.`);
@@ -551,7 +551,7 @@ function PayablesCard({ onDone }: { onDone: (m: string) => void }) {
   return (
     <Card title="Payables" note={<MonthPicker value={month} onChange={setMonth} />}>
       <p className="muted small">
-        What ExaCarib owes carriers (commit plus burst per link, from the same settlement as the carrier view) and Fabric
+        What XaKore owes carriers (commit plus burst per link, from the same settlement as the carrier view) and Fabric
         partners (per circuit, hour by hour). Kept apart from customer prices.
       </p>
       <ErrorNote error={p.error ?? act.error} />
@@ -640,7 +640,7 @@ function MarginCard() {
   const SOURCE: Record<string, string> = { issued: "issued", draft: "draft", estimate: "worked out now", unavailable: "unavailable" };
   return (
     <Card title="Margin" note={<MonthPicker value={month} onChange={setMonth} />}>
-      <p className="muted small">Billed less what ExaCarib owes carriers and partners, in USD. Jibsy supply cost is not counted yet.</p>
+      <p className="muted small">Billed less what XaKore owes carriers and partners, in USD. Jibsy supply cost is not counted yet.</p>
       <ErrorNote error={m.error} />
       {m.data && (
         <>

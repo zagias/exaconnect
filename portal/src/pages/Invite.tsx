@@ -84,8 +84,8 @@ export default function InvitePage({ token }: { token: string }) {
     <main className="signin-page" id="main">
       <div className="signin-box">
         <div className="signin-brand">
-          <img className="wm-light" src="/brand/exacarib-wordmark-red.svg" alt="ExaCarib" width={168} height={29} />
-          <img className="wm-dark" src="/brand/exacarib-wordmark-red-reversed.svg" alt="ExaCarib" width={168} height={29} />
+          <img className="wm-light" src="/brand/xakore-wordmark-red.svg" alt="XaKore" width={168} height={45} />
+          <img className="wm-dark" src="/brand/xakore-wordmark-red-reversed.svg" alt="XaKore" width={168} height={45} />
           <span className="signin-product">Connect</span>
         </div>
         <section className="card signin" aria-labelledby="invite-title">
@@ -103,7 +103,7 @@ export default function InvitePage({ token }: { token: string }) {
                 You are now a member of <strong>{joined}</strong>.
               </p>
               <button className="button" type="button" onClick={() => window.location.assign(start)}>
-                {start === "/" ? "Open ExaCarib" : "Start setting up"}
+                {start === "/" ? "Open XaKore" : "Start setting up"}
               </button>
             </>
           )}

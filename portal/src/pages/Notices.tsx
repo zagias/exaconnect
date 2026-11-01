@@ -58,7 +58,7 @@ export default function Notices() {
     <>
       <PageHead eyebrow={carrier ? "Carrier" : "Monitor"} title="Carrier notices">
         {carrier
-          ? "Tell ExaCarib about faults and planned maintenance on your links. Affected sites see them, and traffic moves off a link before its maintenance window."
+          ? "Tell XaKore about faults and planned maintenance on your links. Affected sites see them, and traffic moves off a link before its maintenance window."
           : "Faults and planned maintenance that carriers have posted about your links. Traffic moves off a link a minute before its window starts."}
       </PageHead>
       <Card title={carrier ? "Your notices" : "Notices"}>
@@ -201,7 +201,7 @@ function PostNotice({ links, onPosted }: { links: LinkRow[]; onPosted: () => voi
           <legend className="small" style={{ fontWeight: 600 }}>
             Links affected
           </legend>
-          {links.length === 0 && <p className="muted small">You have no links with ExaCarib yet.</p>}
+          {links.length === 0 && <p className="muted small">You have no links with XaKore yet.</p>}
           {links.map((l) => (
             <label key={l.id} className="check">
               <input

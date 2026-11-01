@@ -61,11 +61,21 @@ def _who(m: dict) -> str:
     return "ai" if m["author_kind"] == "ai" else "business"
 
 
-def history(conn: psycopg.Connection, customer_id: Any, conversation_id: Any, limit: int) -> list[dict]:
+def history(
+    conn: psycopg.Connection,
+    customer_id: Any,
+    conversation_id: Any,
+    limit: int,
+    *,
+    fresh_transcripts: dict[str, str] | None = None,
+) -> list[dict]:
     """Customer-facing messages only (inbox.messages never reads notes). A voice
     note's transcript counts as the customer's words (ADR 0032)."""
     msgs = inbox.messages(conn, customer_id, conversation_id)[-limit:]
     spoken = attachments.transcripts(conn, customer_id, msgs)
+    # A newly read note may still be awaiting the publication/privacy guard.
+    # Include its words in model context without writing the cache first.
+    spoken.update(fresh_transcripts or {})
     out = []
     for m in msgs:
         text = " ".join(x for x in (m["body"], spoken.get(str(m["id"]), "")) if x).strip()
@@ -75,7 +85,14 @@ def history(conn: psycopg.Connection, customer_id: Any, conversation_id: Any, li
 
 
 def build_context(
-    conn: psycopg.Connection, customer_id: Any, conv: dict, prof: dict, last_text: str, customer_language: str
+    conn: psycopg.Connection,
+    customer_id: Any,
+    conv: dict,
+    prof: dict,
+    last_text: str,
+    customer_language: str,
+    *,
+    fresh_transcripts: dict[str, str] | None = None,
 ) -> dict:
     rp = runtime.PROFILES[ROLE]
     verified = memory.identity_verified(conn, conv)
@@ -112,7 +129,7 @@ def build_context(
         "business_language": prof["business_language"],
         "customer_language": customer_language,
         "channel": conv["channel"],
-        "conversation": history(conn, customer_id, conv["id"], rp.max_history),
+        "conversation": history(conn, customer_id, conv["id"], rp.max_history, fresh_transcripts=fresh_transcripts),
         "knowledge": kb,
         "tools": [t["tool"] for t in tools],
         "tool_details": tools,
@@ -255,7 +272,15 @@ def _run(conn: psycopg.Connection, customer_id: Any, conv: dict, message_id: Any
         last_text = f"{last_text} {files['transcript']}".strip()
     business_lang = prof["business_language"]
     detected = language.detect(last_text, default=conv["language"] or business_lang)
-    ctx = build_context(conn, customer_id, conv, prof, last_text, detected)
+    ctx = build_context(
+        conn,
+        customer_id,
+        conv,
+        prof,
+        last_text,
+        detected,
+        fresh_transcripts={str(last_msg["id"]): files["transcript"]} if last_msg and files.get("transcript") else None,
+    )
     ctx["attachments"] = files["files"]
     esc = prof["escalation"]
 

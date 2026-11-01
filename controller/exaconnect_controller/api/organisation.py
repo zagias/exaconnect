@@ -12,7 +12,7 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
-from .. import audit, db, inventory, organisation
+from .. import audit, db, inventory, mailer, organisation
 from ..identity import orgs
 from .deps import PRODUCTS, AdminDep, UserDep, check_customer, check_product, require_org_manager
 
@@ -314,9 +314,21 @@ def new_organisation(body: NewOrgIn, user: AdminDep, request: Request) -> dict:
         audit.record(conn, user.actor, "org.invite.create", row["email"], cid, {"role": "owner"})
     path = f"/invite/{token}"
     base = request.app.state.settings.public_url
+    delivery = mailer.send_invitation(
+        to=row["email"],
+        organisation=name,
+        by=user.email,
+        role="owner",
+        url=f"{mailer.public_base(request)}{path}",
+    )
     return {
         "id": str(cid),
         "name": name,
         "products": wanted,
-        "invite": {"email": row["email"], "url": f"{base}{path}" if base else path, "expires_at": row["expires_at"]},
+        "invite": {
+            "email": row["email"],
+            "url": f"{base}{path}" if base else path,
+            "expires_at": row["expires_at"],
+            **delivery,
+        },
     }

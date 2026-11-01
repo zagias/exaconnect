@@ -4,6 +4,7 @@ Only the deterministic model is injected. Usage, rate-card initialization,
 conversation/call locks, memory FK writes and erasure use their real services.
 """
 
+import datetime as dt
 import time
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier, Event
@@ -462,6 +463,26 @@ def test_runtime_claims_after_model_output_and_before_any_usage(monkeypatch):
         before_usage=lambda: order.append("claim"),
     )
     assert order == ["model", "claim", "billing", "ai_reply", "ai_tokens"]
+
+
+@pytest.mark.parametrize("body", ["", "Please listen."])
+@pytest.mark.parametrize("cached", [False, True])
+def test_uncached_voice_note_is_present_in_model_history_without_a_cache_write(monkeypatch, body, cached):
+    created = dt.datetime(2026, 1, 1, tzinfo=dt.UTC)
+    messages = [
+        {"id": "previous", "direction": "out", "author_kind": "ai", "body": "How can I help?", "created_at": created},
+        {"id": "note", "direction": "in", "author_kind": "contact", "body": body, "created_at": created},
+    ]
+    transcript = "When are you open on Saturday?"
+    monkeypatch.setattr(inbox, "messages", lambda *args: messages)
+    monkeypatch.setattr(attachments, "transcripts", lambda *args: {"note": transcript} if cached else {})
+    # No database interface is available here: fresh model context must not need
+    # the deferred attachment_readings INSERT or duplicate an existing reading.
+    context = agent.history(None, "customer", "conversation", 10, fresh_transcripts={"note": transcript})
+    assert [(m["from"], m["text"]) for m in context] == [
+        ("ai", "How can I help?"),
+        ("customer", f"{body} {transcript}".strip()),
+    ]
 
 
 def test_parallel_completions_recheck_the_recorded_budget_after_claiming_publication(client, monkeypatch):

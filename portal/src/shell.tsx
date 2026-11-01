@@ -28,7 +28,7 @@ function initials(email: string | undefined): string {
   return s.toUpperCase();
 }
 
-const ROLE_NAMES: Record<string, string> = { admin: "ExaCarib admin", customer: "Customer", carrier: "Carrier" };
+const ROLE_NAMES: Record<string, string> = { admin: "XaKore admin", customer: "Customer", carrier: "Carrier" };
 const ORG_ROLE_NAMES: Record<string, string> = { owner: "Owner", admin: "Admin", member: "Member", viewer: "Viewer (read-only)" };
 
 /** "Admin, Example Bank" for organisation members; the account role otherwise. */
@@ -75,7 +75,7 @@ export function Shell({ children }: { children: ReactNode }) {
   // The tab says which app you are in.
   useEffect(() => {
     if (brand) return;
-    document.title = `${area === "account" || area === "ops" ? AREA_NAME[area] : APP_INFO[area].name} · ExaCarib`;
+    document.title = `${area === "account" || area === "ops" ? AREA_NAME[area] : APP_INFO[area].name} · XaKore`;
   }, [area, brand]);
   const [drawer, setDrawer] = useState(false);
   const [jump, setJump] = useState(false);
@@ -128,14 +128,14 @@ export function Shell({ children }: { children: ReactNode }) {
     <div className="shell">
       <aside id="shell-nav" className="shell-side" data-open={drawer || undefined} data-app={area} aria-label="Portal">
         <div className="shell-brand">
-          <NavLink to="/" className="shell-brand-link" aria-label={`${brand ? brand.product_name : "ExaCarib"}, home`}>
+          <NavLink to="/" className="shell-brand-link" aria-label={`${brand ? brand.product_name : "XaKore"}, home`}>
             {brand?.logo_url ? (
               <img className="shell-wordmark shell-partner-logo" src={brand.logo_url} alt={brand.product_name} />
             ) : (
-              <img className="shell-wordmark" src="/brand/exacarib-wordmark-red-reversed.svg" alt="ExaCarib" width={140} height={25} />
+              <img className="shell-wordmark" src="/brand/xakore-wordmark-red-reversed.svg" alt="XaKore" width={140} height={37} />
             )}
             <span className="shell-symbol" aria-hidden="true">
-              <img src="/brand/exacarib-symbol-red.svg" alt="" width={25} height={25} />
+              <img src="/brand/xakore-symbol-red.svg" alt="" width={25} height={25} />
             </span>
           </NavLink>
           {brand && <span className="shell-product">{brand.product_name}</span>}
@@ -222,11 +222,11 @@ export function Shell({ children }: { children: ReactNode }) {
           >
             {icons.menu}
           </button>
-          <NavLink to="/" className="shell-top-brand" aria-label={`${brand ? brand.product_name : "ExaCarib"}, home`}>
+          <NavLink to="/" className="shell-top-brand" aria-label={`${brand ? brand.product_name : "XaKore"}, home`}>
             {brand?.logo_url ? (
               <img className="shell-partner-logo" src={brand.logo_url} alt={brand.product_name} height={20} />
             ) : (
-              <img src="/brand/exacarib-wordmark-red-reversed.svg" alt="ExaCarib" width={112} height={20} />
+              <img src="/brand/xakore-wordmark-red-reversed.svg" alt="XaKore" width={112} height={30} />
             )}
           </NavLink>
           <div className="shell-context" aria-hidden={ctx ? undefined : true}>
@@ -478,7 +478,7 @@ function AppSwitcher({ area, mine, staff, carrier }: { area: Area; mine: AppId[]
                       <span className="app-switch-title">{APP_INFO[o.id].full}</span>
                       <span className="app-switch-blurb">{APP_INFO[o.id].blurb}</span>
                       {o.status === "requested" ? (
-                        <span className="app-switch-note">Requested. ExaCarib will be in touch.</span>
+                        <span className="app-switch-note">Requested. XaKore will be in touch.</span>
                       ) : (
                         <button type="button" className="button small" onClick={() => ask(o.id)}>
                           Ask to add {APP_INFO[o.id].name}
@@ -500,7 +500,7 @@ function AppSwitcher({ area, mine, staff, carrier }: { area: Area; mine: AppId[]
               "Company, locations, people, plans and billing",
               area === "account",
             )}
-            {staff && item("/ops/organisations", "ops", "ExaCarib operations", "Every customer, platform and service screens (staff only)", area === "ops")}
+            {staff && item("/ops/organisations", "ops", "XaKore operations", "Every customer, platform and service screens (staff only)", area === "ops")}
           </ul>
         </div>
       )}

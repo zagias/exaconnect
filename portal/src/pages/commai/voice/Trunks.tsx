@@ -137,11 +137,11 @@ export default function Trunks({ base, v }: { base: string; v: VoiceOverview }) 
     <>
       <Card
         title="Your SIP trunks"
-        note={<span className="muted small">Bring your own carrier: calls from each location try its primary trunk, then its secondary, then your default, then ExaCarib's carriers.</span>}
+        note={<span className="muted small">Bring your own carrier: calls from each location try its primary trunk, then its secondary, then your default, then XaKore's carriers.</span>}
       >
         <ErrorNote error={act.error} />
         {d.trunks.length === 0 ? (
-          <p className="muted">No trunks of your own yet. Your calls go out through ExaCarib's carriers.</p>
+          <p className="muted">No trunks of your own yet. Your calls go out through XaKore's carriers.</p>
         ) : (
           <table className="paths dt" aria-label="SIP trunks">
             <thead>
@@ -243,7 +243,7 @@ export default function Trunks({ base, v }: { base: string; v: VoiceOverview }) 
             <button type="button" className="button secondary" onClick={() => setOpen(false)}>
               Cancel
             </button>
-            <p className="small muted">Your carrier lets calls in by IP address: give them ExaCarib's address for your account. Trunks that need a SIP registration aren't supported yet.</p>
+            <p className="small muted">Your carrier lets calls in by IP address: give them XaKore's address for your account. Trunks that need a SIP registration aren't supported yet.</p>
           </form>
         )}
       </Card>
@@ -309,7 +309,7 @@ export default function Trunks({ base, v }: { base: string; v: VoiceOverview }) 
           </div>
           <label className="small" style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 12 }}>
             <input type="checkbox" disabled={!admin || act.busy} checked={d.settings.exacarib_fallback} onChange={(e) => setSettings({ exacarib_fallback: e.target.checked })} />
-            Use ExaCarib's carriers when none of your trunks can take a call
+            Use XaKore's carriers when none of your trunks can take a call
           </label>
           {d.settings.default_trunk_id && <p className="small muted">Locations without their own trunks use {name(d.settings.default_trunk_id)}.</p>}
         </Card>
@@ -352,7 +352,7 @@ function TrunkNumbers({ base, d, admin, reload }: { base: string; d: TrunksView;
           {d.numbers.map((num) => (
             <tr key={num.id}>
               <td className="mono">{num.e164}</td>
-              <td>{num.source === "trunk" ? num.trunk : "ExaCarib"}</td>
+              <td>{num.source === "trunk" ? num.trunk : "XaKore"}</td>
               <td>
                 <select aria-label={`Location of ${num.e164}`} disabled={!admin || act.busy} value={num.location_id ?? ""} onChange={(e) => move(num, e.target.value)}>
                   {!num.location_id && <option value="">Not set</option>}
