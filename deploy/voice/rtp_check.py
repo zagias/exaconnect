@@ -47,6 +47,50 @@ def eventually(check, description: str, timeout: float = 10):
     raise AssertionError(f"{description} did not succeed within {timeout}s: {error}")
 
 
+def isolated_vars(source: str) -> str:
+    """A private-only fixture cannot infer its address through a default route."""
+    if not source.startswith("<include>"):
+        raise ValueError("Expected the production FreeSWITCH variables include")
+    return source.replace(
+        "<include>",
+        "<include>\n  <!-- CI internal network has no default route: use its explicit interface. -->\n"
+        '  <X-PRE-PROCESS cmd="exec-set" data="local_ip_v4=echo $EXA_VOICE_PUBLIC_IP"/>',
+        1,
+    )
+
+
+def wait_for_call(endpoint, before: set[str], process, label: str, timeout: float = 10):
+    """Do not hide the failed originate or a rejected SDP behind a generic timeout."""
+    output = None
+
+    def check():
+        nonlocal output
+        if endpoint.error:
+            raise AssertionError(f"endpoint failed: {endpoint.error}")
+        call = next(
+            (call for key, call in endpoint.calls.copy().items() if key not in before),
+            None,
+        )
+        if call:
+            return call
+        if process.poll() is not None:
+            if output is None:
+                output, _ = process.communicate(timeout=1)
+            if process.returncode or "-ERR" in output:
+                raise AssertionError(f"FreeSWITCH originate failed: {output.strip()}")
+        return None
+
+    try:
+        return eventually(check, f"{label}: real SIP INVITE/SDP", timeout)
+    except AssertionError as error:
+        if output is None and process.poll() is not None:
+            output, _ = process.communicate(timeout=1)
+        raise AssertionError(
+            f"{error}; endpoint received {endpoint.invites} INVITEs; "
+            f"endpoint error={endpoint.error!r}; fs_cli={output!r}"
+        ) from error
+
+
 def encode_ulaw(sample: int) -> int:
     sign = 0x80 if sample < 0 else 0
     value = min(abs(sample) + 132, 32635)
@@ -280,6 +324,14 @@ def main():
             "external SIP profile",
             30,
         )
+        gateway = fs("sofia status gateway exacarib_sip")
+        assert re.search(r"(?m)^\s*Name\s+exacarib_sip\s*$", gateway), gateway
+        assert fs("global_getvar local_ip_v4") == args.freeswitch_ip, (
+            "FreeSWITCH must bind its isolated interface"
+        )
+        assert fs("global_getvar external_rtp_ip") == args.freeswitch_ip, (
+            "RTP must advertise its isolated interface"
+        )
 
     endpoint = Endpoint(args.endpoint_ip, args.freeswitch_ip)
     processes = []
@@ -321,18 +373,7 @@ def main():
         def media_check(label: str):
             before = set(endpoint.calls)
             call_uuid, process = originate()
-            call = eventually(
-                lambda: next(
-                    (
-                        call
-                        for key, call in endpoint.calls.copy().items()
-                        if key not in before
-                    ),
-                    None,
-                ),
-                f"{label}: real SIP INVITE/SDP",
-                10,
-            )
+            call = wait_for_call(endpoint, before, process, label)
             eventually(lambda: call.ack.is_set(), f"{label}: established SIP ACK")
             eventually(
                 lambda: len(call.received) >= 100,
@@ -390,6 +431,20 @@ def main():
         ready()
         reload_lists()
         media_check("fresh call after FreeSWITCH restart")
+    except Exception:
+        for label, operation in (
+            ("SIP profiles", lambda: fs("sofia status")),
+            ("SIP gateway", lambda: fs("sofia status gateway exacarib_sip")),
+            ("external profile", lambda: fs("sofia status profile external")),
+            ("dispatcher", lambda: rpc("dispatcher.list")),
+        ):
+            try:
+                print(f"-- failure diagnostic: {label}\n{operation()}", flush=True)
+            except (RuntimeError, OSError, subprocess.TimeoutExpired) as error:
+                print(
+                    f"-- failure diagnostic unavailable: {label}: {error}", flush=True
+                )
+        raise
     finally:
         for process in processes:
             if process.poll() is None:

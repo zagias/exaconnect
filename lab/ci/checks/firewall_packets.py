@@ -446,7 +446,7 @@ def packets(fixtures: Path):
         ):
             assert outbound.exchange("outbound-before-off")["ok"]
             assert inbound.exchange("inbound-before-off")["ok"]
-            connections = lab.ns("router", "conntrack", "--list", "--proto", "tcp")
+            connections = lab.ns("router", "conntrack", "-L", "-p", "tcp")
             assert (
                 "ESTABLISHED" in connections
                 and "dport=8000" in connections

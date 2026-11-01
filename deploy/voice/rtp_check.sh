@@ -19,6 +19,7 @@ cleanup() {
     docker inspect "$rtp_kam" "$rtp_fs" --format '{{.Name}}: {{.State.Status}} {{.State.Error}}' 2>/dev/null || true
     docker logs --tail 60 "$rtp_kam" 2>&1 || true
     docker logs --tail 60 "$rtp_fs" 2>&1 || true
+    docker exec "$rtp_fs" sh -c 'tail -n 100 /var/log/freeswitch/freeswitch.log' 2>&1 || true
   fi
   docker rm -f "$rtp_kam" "$rtp_fs" >/dev/null 2>&1 || true
   docker network rm "$rtp_net" >/dev/null 2>&1 || true
@@ -46,6 +47,14 @@ rtp_kam_ip=$(docker inspect "$rtp_kam" --format '{{range .NetworkSettings.Networ
 sed "s/203.0.113.10/$rtp_kam_ip/g" kamailio/kamailio-local.cfg.example >"$rtp_tmp/local.cfg"
 touch "$rtp_tmp/start/ready"
 cp freeswitch/sip_profiles/external/exacarib_sip.kamailio.xml.example "$rtp_tmp/external/exacarib_sip.xml"
+# The production config normally detects its local interface using the route
+# table. This deliberately route-less network supplies that address explicitly.
+PYTHONPATH="$PWD/voice" python3 - "$PWD/freeswitch/vars.xml" "$rtp_tmp/vars.xml" <<'PY'
+import sys
+from pathlib import Path
+from rtp_check import isolated_vars
+Path(sys.argv[2]).write_text(isolated_vars(Path(sys.argv[1]).read_text()))
+PY
 docker run -d --name "$rtp_fs" --network "$rtp_net" --network-alias freeswitch \
   --tmpfs /etc/freeswitch/directory/default --entrypoint /bin/sh \
   -v "$PWD/freeswitch/start.sh:/exacarib-start.sh:ro" -v "$rtp_tmp/exacarib:/exacarib:ro" \
@@ -55,12 +64,12 @@ docker run -d --name "$rtp_fs" --network "$rtp_net" --network-alias freeswitch \
   -v "$PWD/freeswitch/ivr_menus/exacarib.xml:/etc/freeswitch/ivr_menus/exacarib.xml:ro" \
   -v "$PWD/freeswitch/autoload_configs/callcenter.conf.xml:/etc/freeswitch/autoload_configs/callcenter.conf.xml:ro" \
   -v "$PWD/freeswitch/autoload_configs/verto.conf.xml:/etc/freeswitch/autoload_configs/verto.conf.xml:ro" \
-  -v "$PWD/freeswitch/vars.xml:/etc/freeswitch/vars.xml:ro" \
+  -v "$rtp_tmp/vars.xml:/etc/freeswitch/vars.xml:ro" \
   -v "$PWD/freeswitch/autoload_configs/event_socket.conf.xml:/etc/freeswitch/autoload_configs/event_socket.conf.xml:ro" \
   -v "$PWD/freeswitch/autoload_configs/modules.conf.xml:/etc/freeswitch/autoload_configs/modules.conf.xml:ro" \
   -v "$PWD/freeswitch/autoload_configs/switch.conf.xml:/etc/freeswitch/autoload_configs/switch.conf.xml:ro" \
   -v "$rtp_tmp/external:/etc/freeswitch/sip_profiles/external:ro" -e EXA_PBX_SECRET=rtp-ci-only \
-  "$FS_IMAGE" /exacarib-start.sh >/dev/null
+  "$FS_IMAGE" -c 'EXA_VOICE_PUBLIC_IP=$(hostname -i); export EXA_VOICE_PUBLIC_IP; exec /exacarib-start.sh' >/dev/null
 rtp_fs_ip=$(docker inspect "$rtp_fs" --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
 # Internal networks deliberately give containers no default gateway. Their
 # bridge still has an IPAM address where this local-only SIP/RTP peer listens.
