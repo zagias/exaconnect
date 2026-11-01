@@ -24,10 +24,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from typing import TYPE_CHECKING
 
 import httpx
-from livekit import agents, rtc
-from livekit.agents import AutoSubscribe, JobContext, WorkerOptions, cli
+
+if TYPE_CHECKING:
+    from livekit.agents import JobContext
 
 log = logging.getLogger("exacarib.livekit.agent")
 
@@ -41,21 +43,31 @@ def _headers() -> dict:
 
 def speech():
     """The speech-to-text and text-to-speech plugins. Choose them when the spend is agreed."""
-    raise RuntimeError("Choose the STT and TTS providers first (needs Dudley's yes to the spend).")
+    raise RuntimeError(
+        "Choose the STT and TTS providers first (needs Dudley's yes to the spend)."
+    )
 
 
 async def entrypoint(ctx: JobContext) -> None:
+    # Refuse the job before joining audio or creating a metered conversation.
+    # A configured server is not evidence that this unfinished worker can
+    # hear, speak, interrupt or hand an answered call to a person.
+    stt, tts = speech()
+    from livekit import agents, rtc
+    from livekit.agents import AutoSubscribe
+
     await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
     caller = await ctx.wait_for_participant()
     attrs = caller.attributes or {}
     dialled = attrs.get("sip.trunkPhoneNumber", "")
     async with httpx.AsyncClient(timeout=20) as http:
         r = await http.post(
-            BASE, json={"dialled": dialled, "caller": attrs.get("sip.phoneNumber", "")}, headers=_headers()
+            BASE,
+            json={"dialled": dialled, "caller": attrs.get("sip.phoneNumber", "")},
+            headers=_headers(),
         )
         r.raise_for_status()
         call = r.json()
-        stt, tts = speech()
         source = rtc.AudioSource(16000, 1)
         track = rtc.LocalAudioTrack.create_audio_track("agent", source)
         await ctx.room.local_participant.publish_track(track)
@@ -93,8 +105,19 @@ async def entrypoint(ctx: JobContext) -> None:
                     break  # staff take over in the inbox; FreeSWITCH's fallback handles the call
         finally:
             feeder.cancel()
-            await http.post(f"{BASE}/{call['customer_id']}/{call['conversation_id']}/end", headers=_headers())
+            await http.post(
+                f"{BASE}/{call['customer_id']}/{call['conversation_id']}/end",
+                headers=_headers(),
+            )
+
+
+def main() -> None:
+    # Do not register an unavailable worker and accept live caller jobs.
+    speech()
+    from livekit.agents import WorkerOptions, cli
+
+    cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint, agent_name="exacarib-phone"))
 
 
 if __name__ == "__main__":
-    cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint, agent_name="exacarib-phone"))
+    main()

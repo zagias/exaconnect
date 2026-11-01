@@ -169,7 +169,7 @@ def respond(conn: psycopg.Connection, customer_id: Any, conversation_id: Any, me
     conv = conn.execute(
         "SELECT * FROM conversations WHERE id = %s AND customer_id = %s", (conversation_id, customer_id)
     ).fetchone()
-    if conv is None or conv["handler"] != "ai":
+    if conv is None or conv["handler"] != "ai" or _call_ended(conn, customer_id, conv):
         return {"outcome": "stopped"}
     if message_id:
         if conn.execute("SELECT 1 FROM ai_runs WHERE message_id = %s AND role = %s", (message_id, ROLE)).fetchone():
@@ -194,7 +194,22 @@ def respond(conn: psycopg.Connection, customer_id: Any, conversation_id: Any, me
         return _fail(conn, customer_id, conversation_id, message_id, prof, e)
 
 
+def _call_ended(conn, customer_id: Any, conv: dict, *, lock: bool = False) -> bool:
+    if conv["channel"] != "voice":
+        return False
+    row = conn.execute(
+        "SELECT ended_at FROM ai_calls WHERE customer_id = %s AND conversation_id = %s"
+        + (" FOR UPDATE" if lock else ""),
+        (customer_id, conv["id"]),
+    ).fetchone()
+    return row is not None and row["ended_at"] is not None
+
+
 def _claim(conn, customer_id: Any, conv: dict, message_id: Any) -> Any:
+    # The model can finish after the caller disconnected. Serialize the
+    # short write/tool-proposal phase against end_call, not the model call.
+    if _call_ended(conn, customer_id, conv, lock=True):
+        raise inbox.NotHandler("This call has ended.")
     row = conn.execute(
         """INSERT INTO ai_runs (customer_id, conversation_id, message_id, role, task, outcome, actor)
            VALUES (%s, %s, %s, %s, 'reply', 'failed', 'ai') ON CONFLICT DO NOTHING RETURNING id""",
@@ -469,8 +484,11 @@ def _fail(conn, customer_id: Any, conversation_id: Any, message_id: Any, prof: d
     """The model or a dependency failed: a person takes the conversation, with a
     holding reply to the customer, so it is never lost and never silent."""
     conv = conn.execute(
-        "SELECT * FROM conversations WHERE id = %s AND customer_id = %s FOR UPDATE", (conversation_id, customer_id)
+        "SELECT * FROM conversations WHERE id = %s AND customer_id = %s", (conversation_id, customer_id)
     ).fetchone()
+    if conv is None or _call_ended(conn, customer_id, conv, lock=True):
+        return {"outcome": "stopped"}
+    conv = inbox.get(conn, customer_id, conversation_id, lock=True)
     if conv is None or conv["handler"] != "ai":
         return {"outcome": "stopped"}
     what = str(err) if isinstance(err, ModelError) else f"{type(err).__name__} in the AI agent"

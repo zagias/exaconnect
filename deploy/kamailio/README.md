@@ -16,6 +16,20 @@ FreeSWITCH has no public SIP port.
 - **Trunk health**: the dispatcher sends SIP OPTIONS every 30 s. Three failures
   mark a destination inactive, and one answer brings it back.
 
+Outbound calls require the PBX's explicit, numeric `X-Exa-Route` set list; a missing
+or malformed list fails closed instead of selecting set 1. Dispatcher failover
+retains alternate addresses, trying a platform's primary address before its backups.
+An in-dialog request must belong to a tracked call before its Route or Contact alias
+is used. Call-cap counters update under a lock, expire on a fixed one-minute window,
+and count a retransmitted INVITE once.
+
+`make voice-check` also runs `deploy/voice/sbc_policy_check.py` against its isolated
+Kamailio container and fake local SIP carriers. It checks route refusal, forged
+dialogs, same-carrier and next-carrier failover, busy handling, established ACK/BYE
+with a Contact alias, retransmission counting, cancellation and cap expiry. This is
+signalling coverage; it does not prove two-way RTP, NAT traversal, capacity or
+preservation of calls across a proxy restart. Dialog state is currently in memory.
+
 ## Outside calls: the controller decides, Kamailio carries
 
 Before every outside call except an emergency call, FreeSWITCH's dial plan asks the controller

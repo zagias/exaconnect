@@ -74,9 +74,23 @@ func InternetExits(s *desired.State, up func(tunnel string) bool) []Exit {
 }
 
 // internet applies the internet block of s: the internet table and its ip
-// rules, then the NAT and firewall table. A refused route does not fail the
-// apply (the next exit is used, and the preferred one is retried later).
+// rules and the NAT/firewall table. A refused preferred route does not fail
+// the apply when a fallback succeeds; a completely refused table does.
 func (a *Applier) internet(ctx context.Context, s *desired.State) error {
+	// The managed internet policy is IPv4-only. Install the fail-closed IPv6
+	// boundary before changing any route; a failed guard cannot be ignored.
+	if err := a.internetGuard(ctx, render.InternetForwardGuard(s)); err != nil {
+		return fmt.Errorf("forwarding guard: %w", err)
+	}
+	// Install the new local/gateway firewall before a route can send traffic
+	// out through it. When leaving local mode, retain the old firewall until
+	// the route has moved away from the uplink.
+	nft := render.InternetNFT(s)
+	if nft != "" {
+		if err := a.internetNFT(ctx, nft); err != nil {
+			return err
+		}
+	}
 	a.inetMu.Lock()
 	a.inetState = s
 	a.inetMu.Unlock()
@@ -84,6 +98,10 @@ func (a *Applier) internet(ctx context.Context, s *desired.State) error {
 	if s.Internet != nil {
 		// The table first, so the rules never send traffic to an empty one.
 		if _, err := a.route(ctx, false); err != nil {
+			var refused *internetRouteFailure
+			if errors.As(err, &refused) {
+				return err
+			}
 			a.Log.Warn("internet route", "err", err)
 		}
 		if err := a.internetRules(ctx, rules); err != nil {
@@ -97,7 +115,46 @@ func (a *Applier) internet(ctx context.Context, s *desired.State) error {
 			return err
 		}
 	}
-	return a.internetNFT(ctx, render.InternetNFT(s))
+	if nft == "" {
+		return a.internetNFT(ctx, "")
+	}
+	return nil
+}
+
+func (a *Applier) internetGuard(ctx context.Context, text string) error {
+	if a.inetGuardKnown && text == a.inetGuard {
+		return nil
+	}
+	path := filepath.Join(a.StateDir, "internet-guard.nft")
+	appliedPath := filepath.Join(a.StateDir, "internet-guard-applied.nft")
+	if text == "" {
+		_, err := a.Sys.Run(ctx, "nft", "delete", "table", "inet", render.InternetGuardTable)
+		if err != nil && !strings.Contains(err.Error(), "No such file or directory") && !errors.Is(err, exec.ErrNotFound) {
+			return err
+		}
+	} else {
+		if old, err := a.Sys.ReadFile(appliedPath); err == nil && string(old) == text {
+			if _, err := a.Sys.Run(ctx, "nft", "list", "table", "inet", render.InternetGuardTable); err == nil {
+				a.inetGuard, a.inetGuardKnown = text, true
+				return nil
+			}
+		}
+		if err := a.Sys.WriteFile(path, []byte(text), 0o600); err != nil {
+			return err
+		}
+		if err := a.run(ctx, "nft", "-f", path); err != nil {
+			a.inetGuardKnown = false
+			return err
+		}
+	}
+	// Only successful transactions are restart-cacheable. The candidate
+	// script may have been written before a rejected transaction or crash.
+	if err := a.Sys.WriteFile(appliedPath, []byte(text), 0o600); err != nil {
+		a.inetGuardKnown = false
+		return err
+	}
+	a.inetGuard, a.inetGuardKnown = text, true
+	return nil
 }
 
 // Reroute re-chooses the exit of the last applied internet block, for a BFD
@@ -178,9 +235,15 @@ func (a *Applier) route(ctx context.Context, force bool) (changed bool, err erro
 		}
 		return true, nil
 	}
-	a.setRoute(exits[0].Route, false, "", false)
-	return true, fmt.Errorf("no internet exit could be set: %s", strings.Join(errs, "; "))
+	// None of the replacements succeeded: the old kernel route may still
+	// exist. Fail the configuration instead of acknowledging an off/local
+	// policy that has not taken effect.
+	return false, &internetRouteFailure{message: strings.Join(errs, "; ")}
 }
+
+type internetRouteFailure struct{ message string }
+
+func (e *internetRouteFailure) Error() string { return "no internet exit could be set: " + e.message }
 
 // forgetNAT drops the connection tracking entries translated to the old
 // uplink's address. Without this, a flow that started before the switch
@@ -288,17 +351,22 @@ func (a *Applier) internetNFT(ctx context.Context, text string) error {
 		return nil
 	}
 	path := filepath.Join(a.StateDir, "internet.nft")
+	appliedPath := filepath.Join(a.StateDir, "internet-applied.nft")
 	if text == "" {
 		_, err := a.Sys.Run(ctx, "nft", "delete", "table", "ip", render.InternetNFTable)
 		// No table, or no nft at all (so no table either), is the goal.
 		if err != nil && !strings.Contains(err.Error(), "No such file or directory") && !errors.Is(err, exec.ErrNotFound) {
 			return err
 		}
+		if err := a.Sys.WriteFile(appliedPath, nil, 0o600); err != nil {
+			a.inetNFTKnown = false
+			return err
+		}
 		a.inetNFT, a.inetNFTKnown = "", true
 		return nil
 	}
 	if !a.inetNFTKnown {
-		if old, err := a.Sys.ReadFile(path); err == nil && string(old) == text {
+		if old, err := a.Sys.ReadFile(appliedPath); err == nil && string(old) == text {
 			if _, err := a.Sys.Run(ctx, "nft", "list", "table", "ip", render.InternetNFTable); err == nil {
 				a.inetNFT, a.inetNFTKnown = text, true
 				return nil
@@ -309,6 +377,10 @@ func (a *Applier) internetNFT(ctx context.Context, text string) error {
 		return err
 	}
 	if err := a.run(ctx, "nft", "-f", path); err != nil {
+		a.inetNFTKnown = false
+		return err
+	}
+	if err := a.Sys.WriteFile(appliedPath, []byte(text), 0o600); err != nil {
 		a.inetNFTKnown = false
 		return err
 	}

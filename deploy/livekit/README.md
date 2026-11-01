@@ -7,14 +7,21 @@ ADR 0033. This is self-hosted LiveKit, run under the compose profile `voice`
 docker compose --profile voice up -d livekit-redis livekit livekit-sip livekit-agent
 ```
 
-How a phone call reaches the AI agent: carrier → Kamailio → FreeSWITCH (an AI
+The telephone AI worker is **not production ready**. Its speech providers
+and answered-call handover are unfinished. Having LiveKit credentials does
+not enable it: the controller refuses new AI phone calls, the worker refuses
+to register, and generated PBX rules go directly to their configured
+fallback. Browser voice conversations use a separate path.
+
+The intended phone path is: carrier → Kamailio → FreeSWITCH (an AI
 rule transfers to the `exacarib_ai` gateway) → LiveKit SIP → a room
 `call-<id>`. The agent worker (`agent/agent.py`) joins that room. It turns
 speech into text and asks the controller what to say
 (`/api/v1/commai/voice/livekit/calls...`, with `EXA_LIVEKIT_AGENT_SECRET`), then
-speaks the reply. The call is an inbox conversation, so staff can take over. If
-LiveKit or the agent is down, FreeSWITCH's fallback (voicemail, ring group or
-queue) answers. Basic calling never depends on it.
+speaks the reply. Before enabling this path, prove real audio, interruptions,
+caller disconnects, provider outages, answered-call transfer to a person,
+bounded silence and PBX fallback under worker/server failure. A SIP bridge
+ringing timeout alone does not protect a caller after LiveKit answers.
 
 ## Settings (environment or a git-ignored `.env`, never in the repo)
 

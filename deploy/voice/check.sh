@@ -33,6 +33,10 @@ ip=$(docker inspect exa-sbc-kam --format '{{range .NetworkSettings.Networks}}{{.
 python3 voice/sip_probe.py "$ip" 5060 | tee "$tmp/answer"
 grep -q "^SIP/2.0 403" "$tmp/answer"
 
+echo "-- real SIP policy and carrier failover regressions"
+gateway=$(docker inspect exa-sbc-kam --format '{{range .NetworkSettings.Networks}}{{.Gateway}}{{end}}')
+python3 voice/sbc_policy_check.py "$ip" "$gateway" "$tmp/exacarib/kamailio" exa-sbc-kam
+
 echo "-- freeswitch starts with ExaCarib's files"
 # The gateway as make voice-up installs it for EXA_VOICE_EDGE=kamailio.
 mkdir -p "$tmp/external"

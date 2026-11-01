@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field
 from ... import audit, db
 from ...api.deps import UserDep
 from .. import access
-from ..voice import billing, bulk, carriers, config, freeswitch, perms, provisioning, selfservice
+from ..voice import billing, bulk, carriers, config, freeswitch, livekit, perms, provisioning, selfservice
 from ..voice import provider as providers
 from ..voice.common import VoiceError, month_start, now, policy, set_policy
 from .common import errors
@@ -70,6 +70,7 @@ def overview(customer_id: str, user: UserDep) -> dict:
             "is_exacarib": user.role == "admin",
             "policy": policy(conn, customer_id),
             "provider": {"name": providers.get().name, "live": providers.get().live},
+            "ai_phone_ready": livekit.phone_ready(),
         }
         try:
             out["me"] = selfservice.mine(conn, customer_id, user.id)

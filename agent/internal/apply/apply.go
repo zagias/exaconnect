@@ -45,14 +45,16 @@ type Applier struct {
 	shaped   map[string]string // circuit interface -> shaping last applied
 	shapeErr map[string]string // circuit interface -> last shaping error logged
 
-	inetMu       sync.Mutex
-	inetState    *desired.State // the state whose internet block was applied last
-	inetWant     string         // the preferred internet route last written or tried
-	inetOK       bool           // inetWant is in place
-	inetVia      string
-	inetFlushed  bool   // the internet table was flushed and nothing written since
-	inetNFT      string // the NAT and firewall table last applied
-	inetNFTKnown bool   // inetNFT is what the host has
+	inetMu         sync.Mutex
+	inetState      *desired.State // the state whose internet block was applied last
+	inetWant       string         // the preferred internet route last written or tried
+	inetOK         bool           // inetWant is in place
+	inetVia        string
+	inetFlushed    bool   // the internet table was flushed and nothing written since
+	inetNFT        string // the NAT and firewall table last applied
+	inetNFTKnown   bool   // inetNFT is what the host has
+	inetGuard      string // the IPv4-only forwarding guard last applied
+	inetGuardKnown bool
 }
 
 func (a *Applier) lastGoodPath() string { return filepath.Join(a.StateDir, "last-good.json") }
@@ -79,7 +81,13 @@ func (a *Applier) Apply(ctx context.Context, s *desired.State) error {
 	err := a.apply(ctx, s)
 	if err == nil {
 		b, _ := json.MarshalIndent(s, "", "  ")
-		return a.Sys.WriteFile(a.lastGoodPath(), b, 0o600)
+		err = a.Sys.WriteFile(a.lastGoodPath(), b, 0o600)
+		if err == nil {
+			return nil
+		}
+		// The live state changed, but cannot be recorded for restart recovery.
+		// Restore the previous policy just as for a command/apply failure.
+		err = fmt.Errorf("save last-good state: %w", err)
 	}
 	prev := a.LastGood()
 	if prev == nil || prev.Version == s.Version {

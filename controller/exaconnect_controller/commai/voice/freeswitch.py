@@ -32,18 +32,19 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from pathlib import Path
 from typing import Any
+from xml.etree import ElementTree
 from xml.sax.saxutils import escape, quoteattr
 
 import psycopg
 from psycopg.types.json import Jsonb
 
 from .. import jobs
-from . import emergency, pbx, platforms
+from . import emergency, livekit, pbx, platforms
 from .billing import EMERGENCY, fraud_limits
 from .common import domain as tenant_domain
 from .common import now
+from .files import write_files
 
 WDAY = {"sun": 1, "mon": 2, "tue": 3, "wed": 4, "thu": 5, "fri": 6, "sat": 7}  # FreeSWITCH numbering
 GATEWAY = "exacarib_sip"
@@ -78,6 +79,7 @@ def gather(conn: psycopg.Connection, cid: Any) -> dict:
             {
                 **{k: v for k, v in u.items() if k != "sip_password"},
                 "a1": hashlib.md5(f"{u['extension']}:{dom}:{u['sip_password']}".encode()).hexdigest(),
+                "emergency_callback": pbx.caller_id(conn, cid, u["id"]),
             }  # noqa: S324 - SIP digest needs MD5
             for u in users
         ],
@@ -111,6 +113,7 @@ def gather(conn: psycopg.Connection, cid: Any) -> dict:
         # emergency calls, which never wait for it, every carrier switched on.
         "controller_url": controller_url(),
         "emergency_sets": pbx.emergency_sets(conn, cid),
+        "ai_phone_ready": livekit.phone_ready(),
         # Teams, Zoom and other calling platforms (ADR 0056).
         **platforms.dial_data(conn, cid),
     }
@@ -193,6 +196,7 @@ def _directory(data: dict) -> str:
             "            <variables>",
             f'              <variable name="effective_caller_id_name" value={a(u["name"])}/>',
             f'              <variable name="effective_caller_id_number" value={a(u["extension"])}/>',
+            f'              <variable name="exa_emergency_callback" value={a(u.get("emergency_callback", ""))}/>',
             f'              <variable name="user_context" value={a(ctx)}/>',
             f'              <variable name="exa_site" value={a(u["site"])}/>',
         ]
@@ -314,15 +318,21 @@ def _dialplan(data: dict) -> str:
         "    </extension>",
     ]
 
-    # The AI agent. If the AI service doesn't answer, the call falls back.
+    # An answered SIP room can still have no speech worker. Until the complete
+    # telephone service is ready, use the configured fallback directly.
     ai_fallback = _fallback_target(data, data["ai_rules"][0]["fallback"]) if data["ai_rules"] else "exa-voicemail-main"
     out += [
         '    <extension name="exa-ai">',
         '      <condition field="destination_number" expression="^exa-ai$">',
-        '        <action application="set" data="continue_on_fail=true"/>',
-        '        <action application="set" data="hangup_after_bridge=true"/>',
-        '        <action application="set" data="call_timeout=8"/>',
-        f'        <action application="bridge" data={a("sofia/gateway/" + AI_GATEWAY + "/" + data["tenant"])}/>',
+    ]
+    if data.get("ai_phone_ready", False):
+        out += [
+            '        <action application="set" data="continue_on_fail=true"/>',
+            '        <action application="set" data="hangup_after_bridge=true"/>',
+            '        <action application="set" data="call_timeout=8"/>',
+            f'        <action application="bridge" data={a("sofia/gateway/" + AI_GATEWAY + "/" + data["tenant"])}/>',
+        ]
+    out += [
         f'        <action application="transfer" data={a(ai_fallback + " XML " + ctx)}/>',
         "      </condition>",
         "    </extension>",
@@ -530,6 +540,7 @@ OUTSIDE = "^\\+?(\\d{7,15})$"
 FROM_PLATFORM_OUTSIDE = "^exa-plat-in-(\\d{7,15})$"
 PLATFORM_DIALLED = "^\\+?(\\d{2,15})$"
 PLATFORM_LINK = "^org-[0-9a-f]{8}-[0-9a-f]{8}$"
+AUTH_OK = r"OK (?:none|[1-9]\d*(?:,[1-9]\d*)*) (?:none|\+\d{7,15})"
 
 
 def _outbound(data: dict, platform: bool = False) -> list[str]:
@@ -596,7 +607,7 @@ def _outbound(data: dict, platform: bool = False) -> list[str]:
         ),
         *ext(
             "outbound-unavailable",
-            "^(?!OK )",
+            "^(?!" + AUTH_OK + "$)",
             [
                 '<action application="log" data="WARNING outside call refused: no answer from the controller"/>',
                 '<action application="set" data="exa_refused=controller_unreachable"/>',
@@ -618,7 +629,7 @@ def _outbound(data: dict, platform: bool = False) -> list[str]:
         ),
         *ext(
             "outbound",
-            "^OK ",
+            "^" + AUTH_OK + "$",
             [f'<action application="bridge" data={a("sofia/gateway/" + GATEWAY + "/+${exa_dest}")}/>'],
         ),
     ]
@@ -631,6 +642,7 @@ def _public(data: dict) -> str:
     for lk in data.get("platform_links", ()):
         if not (lk["live"] and lk["enabled"]):
             continue
+        media_policy = "mandatory" if lk["srtp"] else "optional"
         out += [
             f"  <extension name={a('plat-' + lk['key'])}>",
             f'    <condition field="${{sip_h_X-Exa-Link}}" expression={a("^" + lk["key"] + "$")}/>',
@@ -639,7 +651,7 @@ def _public(data: dict) -> str:
             f'      <action application="set" data={a("exa_platform_link=" + lk["key"])}/>',
             '      <action application="set" data="exa_from=${regex(${caller_id_number}|^\\+?(\\d{7,15})$|%1)}"/>',
             '      <action application="set" data="exa_emergency_callback=${caller_id_number}"/>',
-            '      <action application="set" data="rtp_secure_media=optional"/>',
+            f'      <action application="set" data={a("rtp_secure_media=" + media_policy)}/>',
             f'      <action application="transfer" data={a("exa-plat-in-$1 XML " + data["tenant"])}/>',
             "    </condition>",
             "  </extension>",
@@ -733,13 +745,10 @@ def digest(files: dict[str, str]) -> str:
 
 
 def write(files: dict[str, str], root: str) -> None:
-    """Write files under root, each one atomically."""
-    for rel, content in files.items():
-        path = Path(root) / rel
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(path.suffix + ".tmp")
-        tmp.write_text(content)
-        os.replace(tmp, path)
+    """Reject malformed XML before publishing any part of the rendered batch."""
+    for content in files.values():
+        ElementTree.fromstring(content)
+    write_files(files, root)
 
 
 def output_dir() -> str:

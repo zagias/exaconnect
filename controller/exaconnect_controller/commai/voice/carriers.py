@@ -28,7 +28,6 @@ import datetime as dt
 import ipaddress
 import os
 from decimal import Decimal
-from pathlib import Path
 from typing import Any
 
 import psycopg
@@ -36,9 +35,10 @@ from psycopg.types.json import Jsonb
 
 from ... import audit
 from .. import golive, jobs
-from . import billing
+from . import billing, signalling
 from . import provider as providers
 from .common import VoiceError, digits, money, month_start, next_month, q2, q4, s
+from .files import write_files
 
 CARRIER_CRITERIA = {
     "contract": "Carrier contract signed, with credit limits, fraud liability and support contacts written down.",
@@ -150,14 +150,19 @@ def save(conn: psycopg.Connection, body: dict, actor: str) -> dict:
     if outbound:
         if outbound.get("transport", "tls") not in ("tls", "tcp", "udp"):
             raise VoiceError("Transport is tls, tcp or udp.", 422)
-        port = int(outbound.get("port", 5061))
+        transport = outbound.get("transport", "tls")
+        try:
+            port = int(outbound.get("port", 5061 if transport == "tls" else 5060))
+            max_channels = int(outbound.get("max_channels", 30))
+        except (TypeError, ValueError) as e:
+            raise VoiceError("Port and channels are whole numbers.", 422) from e
         if not 1 <= port <= 65535:
             raise VoiceError("The port is 1 to 65535.", 422)
         outbound = {
-            "host": str(outbound.get("host", ""))[:200],
+            "host": signalling.host(outbound.get("host", ""), qualified=False),
             "port": port,
-            "transport": outbound.get("transport", "tls"),
-            "max_channels": max(1, min(int(outbound.get("max_channels", 30)), 10000)),
+            "transport": transport,
+            "max_channels": max(1, min(max_channels, 10000)),
             "prefix": digits(outbound.get("prefix", "")),
         }
     inbound = {"allow_ips": _check_ips((body.get("inbound") or {}).get("allow_ips"))}
@@ -515,18 +520,20 @@ def dispatcher_list(conn: psycopg.Connection) -> str:
             # the organisation's SIP address for the set). Simulated links never reach Kamailio.
             if c["adapter"] != "sip":
                 continue
-            for pri, host in enumerate(o.get("hosts") or []):
+            hosts = o.get("hosts") or []
+            # Dispatcher algorithm 8 tries higher priorities first. Keep the
+            # platform's primary/secondary host order, rather than reversing it.
+            for index, host in enumerate(hosts):
+                target = signalling.destination(host, o.get("port", 5061), "tls")
                 lines.append(
-                    f"{c['set_id']} sip:{host}:{o.get('port', 5061)};transport=tls 0 {pri} "
+                    f"{c['set_id']} {target} 0 {len(hosts) - index} "
                     f"carrier={c['key']};maxload={o.get('max_channels', 30)}"
                 )
             continue
         if not o.get("host"):
             continue
-        lines.append(
-            f"{c['set_id']} sip:{o['host']}:{o.get('port', 5061)};transport={o.get('transport', 'tls')} 0 0 "
-            f"carrier={c['key']};maxload={o.get('max_channels', 30)}"
-        )
+        target = signalling.destination(o["host"], o.get("port", 5061), o.get("transport", "tls"))
+        lines.append(f"{c['set_id']} {target} 0 0 carrier={c['key']};maxload={o.get('max_channels', 30)}")
     return "\n".join(lines) + "\n"
 
 
@@ -572,9 +579,5 @@ def render_kamailio(conn: psycopg.Connection) -> dict:
     }
     root = os.environ.get("EXA_KAMAILIO_DIR", "")
     if root:
-        Path(root).mkdir(parents=True, exist_ok=True)
-        for name, text in files.items():
-            tmp = Path(root) / f".{name}.tmp"
-            tmp.write_text(text)
-            tmp.replace(Path(root) / name)
+        write_files(files, root)
     return {"files": files, "written_to": root, "sets": carrier_sets(conn)}

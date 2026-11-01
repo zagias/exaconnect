@@ -28,7 +28,7 @@ from typing import Any
 
 import psycopg
 
-from . import inbox, ratelimit, usage
+from . import inbox, jobs, ratelimit, usage
 
 CALLS_PER_VISITOR_HOUR = 3
 CALLS_PER_KEY_HOUR = 60
@@ -72,6 +72,14 @@ def start(conn: psycopg.Connection, key: dict, visitor: str, name: str = "") -> 
         "UPDATE ai_calls SET widget_key_id = %s, visitor = %s WHERE conversation_id = %s",
         (key["id"], visitor, out["conversation_id"]),
     )
+    jobs.enqueue(
+        conn,
+        "ai.visitor_call_expire",
+        {"conversation_id": out["conversation_id"]},
+        customer_id=cid,
+        dedupe_key=f"visitor-call-expire:{out['conversation_id']}",
+        delay_s=MAX_CALL_MINUTES * 60,
+    )
     return {"conversation_id": out["conversation_id"], "greeting": out["greeting"], "handler": out["handler"]}
 
 
@@ -97,3 +105,18 @@ def turn_allowed(conn: psycopg.Connection, key: dict, call: dict) -> None:
     ok, _, _ = ratelimit.hit(conn, f"widget-turn:{call['id']}", TURNS_PER_MIN, 60)
     if not ok:
         raise CallRefused("That's a lot at once. Give our assistant a moment.", 429)
+
+
+@jobs.handler("ai.visitor_call_expire")
+def _expire(conn: psycopg.Connection, job: dict):
+    """Close abandoned calls even when the browser never sends End call."""
+    from .ai import voice
+
+    call = voice.get_call(conn, job["customer_id"], job["payload"]["conversation_id"])
+    if call["ended_at"] is not None or call["widget_key_id"] is None:
+        return None
+    remaining = (call["started_at"] + dt.timedelta(minutes=MAX_CALL_MINUTES) - dt.datetime.now(dt.UTC)).total_seconds()
+    if remaining > 0:
+        return jobs.Later("Call has not reached its time limit.", delay_s=remaining)
+    voice.end_call(conn, job["customer_id"], call["conversation_id"], "system:time limit")
+    return None

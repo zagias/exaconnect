@@ -5,7 +5,7 @@ the website visitor's AI browser call."""
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
@@ -417,7 +417,13 @@ async def widget_call_turn(public_key: str, conversation_id: str, request: Reque
     def store(c) -> dict:
         body = ch_api._body(VisitorTurnIn, raw)
         call = visitor_calls.own_call(c.conn, c.key, c.address, conversation_id)
-        visitor_calls.turn_allowed(c.conn, c.key, call)
+        try:
+            visitor_calls.turn_allowed(c.conn, c.key, call)
+        except visitor_calls.CallRefused as e:
+            # A time-limit refusal ends and meters the call. Return the error
+            # after committing it; raising through _widget_call would roll
+            # the termination back and leave the call open indefinitely.
+            return JSONResponse({"detail": str(e)}, status_code=e.code)
         state["msg"] = voice.caller_turn(c.conn, c.key["customer_id"], conversation_id, body.text)
         state["customer_id"] = c.key["customer_id"]
         return {}
@@ -431,7 +437,9 @@ async def widget_call_turn(public_key: str, conversation_id: str, request: Reque
         agent.respond(c.conn, state["customer_id"], conversation_id, state["msg"]["id"])
         return {}
 
-    await run_in_threadpool(ch_api._widget_call, request, public_key, answer)
+    answered = await run_in_threadpool(ch_api._widget_call, request, public_key, answer)
+    if answered.status_code != 200:
+        return answered
 
     def read(c) -> dict:
         replies = voice.replies_after(c.conn, state["customer_id"], conversation_id, state["msg"])

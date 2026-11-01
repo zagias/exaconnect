@@ -41,7 +41,24 @@ def missing() -> list[str]:
 
 def status() -> dict:
     m = missing()
-    return {"configured": not m, "missing": m, "url": os.environ.get("EXA_LIVEKIT_URL", "") if not m else ""}
+    return {
+        "configured": not m,
+        "missing": m,
+        "url": os.environ.get("EXA_LIVEKIT_URL", "") if not m else "",
+        "phone_ready": phone_ready(),
+        "phone_reason": "Telephone AI is unavailable until speech and call handover are implemented and validated.",
+    }
+
+
+def phone_ready() -> bool:
+    """Configuration alone does not make telephone AI operational.
+
+    The worker's speech providers and an answered-call handover are not yet
+    implemented. Keep calls on their ordinary PBX fallback until those paths
+    have real audio, interruption, disconnect and recovery tests. There is no
+    environment override that can turn this unfinished worker on.
+    """
+    return False
 
 
 def _b64(data: bytes) -> str:
@@ -79,7 +96,10 @@ def check_agent(authorization: str | None) -> None:
     secret = os.environ.get("EXA_LIVEKIT_AGENT_SECRET", "")
     if not secret:
         raise VoiceError("The LiveKit agent is not set up yet.", 503)
-    got = (authorization or "").removeprefix("Bearer ").strip()
+    scheme, _, got = (authorization or "").partition(" ")
+    if scheme.lower() != "bearer" or not got.strip():
+        raise VoiceError("Not allowed.", 401)
+    got = got.strip()
     if not hmac.compare_digest(got.encode(), secret.encode()):
         raise VoiceError("Not allowed.", 401)
 

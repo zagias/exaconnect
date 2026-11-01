@@ -251,7 +251,11 @@ def emergency_sets(conn: psycopg.Connection, cid: Any) -> list[int]:
     from .. import golive
 
     return [
-        n
-        for key, n in sorted(carriers.carrier_sets(conn).items(), key=lambda kv: kv[1])
-        if golive.enabled(conn, "carrier", key, cid)
+        carrier["set_id"]
+        for carrier in conn.execute(
+            """SELECT key, set_id, customer_id FROM voice_carriers
+               WHERE enabled AND platform IS NULL ORDER BY set_id"""
+        ).fetchall()
+        if (carrier["customer_id"] is not None and str(carrier["customer_id"]) == str(cid))
+        or (carrier["customer_id"] is None and golive.enabled(conn, "carrier", carrier["key"], cid))
     ]

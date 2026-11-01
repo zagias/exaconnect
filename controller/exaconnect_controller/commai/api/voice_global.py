@@ -618,6 +618,8 @@ def agent_start(body: AgentCallIn, authorization: str | None = Header(default=No
     with db.tx() as conn, errors():
         livekit.check_agent(authorization)
         num = livekit.business_for(conn, body.dialled)
+        if not livekit.phone_ready():
+            raise VoiceError("Telephone AI is not ready. Use the configured call fallback.", 503)
         cid = num["customer_id"]
         out = ai_voice.start_call(conn, cid, caller=body.caller, started_by="livekit")
         audit.record(conn, "system:livekit", "commai.voice.ai_phone_call", out["conversation_id"], cid)

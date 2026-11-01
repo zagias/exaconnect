@@ -388,7 +388,7 @@ function TargetPicker({ v, value, onChange, label }: { v: VoiceOverview; value: 
       <Field label={`${label}: goes to`}>
         <select value={value.type} onChange={(e) => onChange({ type: e.target.value, id: targets(v, e.target.value)[0]?.id ?? "" })}>
           {Object.entries(TARGET_LABEL).map(([k, l]) => (
-            <option key={k} value={k}>
+            <option key={k} value={k} disabled={k === "ai" && !v.ai_phone_ready}>
               {l}
             </option>
           ))}
@@ -889,7 +889,9 @@ function AiRulesCard({ v, propose }: { v: VoiceOverview; propose: Propose }) {
   return (
     <Card title="AI agent rules">
       <p className="muted small">
-        The AI agent answers calls when a rule says so. If it can't answer, calls go to the fallback, so calling never depends on the AI services.
+        {v.ai_phone_ready
+          ? "Choose when the AI answers and where callers go if it is unavailable."
+          : "Telephone AI is not available yet. Existing rules send callers directly to their configured fallback."}
       </p>
       <ul className="plain-list">
         {(v.ai_rules ?? []).map((r) => (
@@ -904,7 +906,7 @@ function AiRulesCard({ v, propose }: { v: VoiceOverview; propose: Propose }) {
           </li>
         ))}
       </ul>
-      <form
+      {v.ai_phone_ready && <form
         className="form"
         onSubmit={(e) => {
           e.preventDefault();
@@ -956,7 +958,7 @@ function AiRulesCard({ v, propose }: { v: VoiceOverview; propose: Propose }) {
         <div className="actions wide">
           <button className="button">Check rule</button>
         </div>
-      </form>
+      </form>}
     </Card>
   );
 }

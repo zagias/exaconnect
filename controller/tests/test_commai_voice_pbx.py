@@ -159,10 +159,10 @@ def test_rendered_dial_plan_asks_first_and_never_holds_up_emergency_calls(client
     refused = plan.split('name="outbound-refused"')[1].split("</extension>")[0]
     assert "^NO (\\S+)" in refused and 'data="CALL_REJECTED"' in refused
     down = plan.split('name="outbound-unavailable"')[1].split("</extension>")[0]
-    assert "^(?!OK )" in down and 'data="SERVICE_UNAVAILABLE"' in down
+    assert "^(?!" + freeswitch.AUTH_OK + "$)" in down and 'data="SERVICE_UNAVAILABLE"' in down
     assert 'data="sip_h_X-Exa-Route=$1"' in plan.split('name="outbound-route"')[1].split("</extension>")[0]
     final = plan.split('<extension name="outbound">')[1].split("</extension>")[0]
-    assert 'expression="^OK "' in final and "sofia/gateway/exacarib_sip/+${exa_dest}" in final
+    assert 'expression="^' + freeswitch.AUTH_OK + '$"' in final and "sofia/gateway/exacarib_sip/+${exa_dest}" in final
     assert plan.index("outbound-authorise") < plan.index("outbound-refused") < plan.index('name="outbound"')
     # Forwarding to an outside number goes back through the same check.
     ben = plan.split('name="user-202"')[1].split("</extension>")[0]

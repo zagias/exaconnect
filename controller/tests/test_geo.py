@@ -39,8 +39,8 @@ def test_candidates_keep_voice_off_geo(storm):
     assert maps.candidates(BULK, CUSTOMER, site, geo) == terrestrial
     # With nowhere but GEO left, voice pauses rather than follow BGP onto it.
     assert maps.pause_if_none(VOICE, CUSTOMER, site, geo) is True
-    assert maps.pause_if_none(VOICE, CUSTOMER, site, leo) is False
-    assert maps.pause_if_none(BUSINESS, CUSTOMER, site, geo) is False
+    assert maps.pause_if_none(VOICE, CUSTOMER, site, leo) is (not storm)
+    assert maps.pause_if_none(BUSINESS, CUSTOMER, site, geo) is (not storm)
     assert maps.pause_if_none(BULK, CUSTOMER, site, geo) is True
     # Even when the admin lets bulk onto satellite, voice stays off GEO.
     allow = {"storm_allow_bulk_sat": True}

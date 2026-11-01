@@ -51,12 +51,11 @@ import psycopg
 from psycopg.types.json import Jsonb
 
 from ... import audit
-from . import billing, carriers, freeswitch
+from . import billing, carriers, freeswitch, signalling
 from .common import VoiceError, digits
 
 SIP_DOMAIN_ENV = "EXA_PLATFORM_SIP_DOMAIN"
 SIM_FAIL = ("", "refuse", "down")
-HOST = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$")
 MAX_ADDRESSES = 16
 
 # What each platform needs. "hosts" and "allow_ips" are built in where the platform
@@ -202,11 +201,7 @@ def _addresses(values: Any, *, ips: bool) -> list[str]:
                 raise VoiceError(f"{v} is too wide: list the platform's signalling addresses (at most a /24).", 422)
             v = str(net)
         else:
-            try:
-                ipaddress.ip_address(v)
-            except ValueError:
-                if not HOST.match(v) or "." not in v:
-                    raise VoiceError(f"{v} is not a host name or IP address.", 422) from None
+            v = signalling.host(v)
         if v not in out:
             out.append(v)
     if len(out) > MAX_ADDRESSES:

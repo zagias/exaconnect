@@ -162,6 +162,7 @@ def run_customer(
                     return_since=_epoch(row["return_since"]) if row["return_since"] else None,
                     breach_streak=row["breach_streak"],
                     note=row["note"],
+                    last_evaluated=_epoch(row["updated_at"]),
                 )
                 if row
                 else None
@@ -188,10 +189,10 @@ def _save_state(conn: psycopg.Connection, site: dict, cls: str, customer_id: Any
     conn.execute(
         """INSERT INTO steering (site_id, class_name, customer_id, path, since, return_path, return_since,
                                 breach_streak, note, updated_at)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, now())
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
            ON CONFLICT (site_id, class_name) DO UPDATE SET path = EXCLUDED.path, since = EXCLUDED.since,
              return_path = EXCLUDED.return_path, return_since = EXCLUDED.return_since,
-             breach_streak = EXCLUDED.breach_streak, note = EXCLUDED.note, updated_at = now()""",
+             breach_streak = EXCLUDED.breach_streak, note = EXCLUDED.note, updated_at = EXCLUDED.updated_at""",
         (
             site["id"],
             cls,
@@ -202,6 +203,7 @@ def _save_state(conn: psycopg.Connection, site: dict, cls: str, customer_id: Any
             _ts(s.return_since),
             s.breach_streak,
             s.note,
+            _ts(s.last_evaluated),
         ),
     )
 

@@ -562,7 +562,9 @@ def test_tenant_isolation(client, admin_headers):
     assert client.get(f"{ua}/voice/port-orders/{pid}", headers=admin_headers).status_code == 200
 
 
-def test_livekit_agent_answers_a_phone_call(client, monkeypatch):
+def test_livekit_controller_contract_requires_a_ready_phone_worker(client, monkeypatch):
+    from exaconnect_controller.commai.voice import livekit
+
     b = setup_voice(client)
     out = save(client, b, [{"op": "add_number", "target_type": "user", "target": "201"}])
     e164 = out["results"][0]["e164"]
@@ -579,14 +581,22 @@ def test_livekit_agent_answers_a_phone_call(client, monkeypatch):
     assert client.post(url, json={"dialled": e164}, headers={"Authorization": "Bearer wrong"}).status_code == 401
     h = {"Authorization": f"Bearer {secret}"}
     assert client.post(url, json={"dialled": "+1 868 555 0000"}, headers=h).status_code == 404
+    # Keys alone cannot enable the unfinished audio worker. No conversation
+    # or billable call should be opened when it cannot speak or hand over.
+    r = client.post(url, json={"dialled": e164}, headers=h)
+    assert r.status_code == 503 and "not ready" in r.json()["detail"]
+    with db.tx() as conn:
+        assert (
+            conn.execute("SELECT count(*) AS n FROM ai_calls WHERE customer_id = %s", (b["id"],)).fetchone()["n"] == 0
+        )
+    # Exercise the controller contract separately; this is not an audio test.
+    monkeypatch.setattr(livekit, "phone_ready", lambda: True)
     r = client.post(url, json={"dialled": e164, "caller": "+1 868 555 0111"}, headers=h)
     assert r.status_code == 201, r.text
     call = r.json()
     assert call["customer_id"] == b["id"] and call["room"] == f"call-{call['conversation_id']}" and call["greeting"]
     end = client.post(f"{url}/{b['id']}/{call['conversation_id']}/end", headers=h)
     assert end.status_code == 200 and end.json()["ended_at"]
-
-    from exaconnect_controller.commai.voice import livekit
 
     tok = livekit.token("agent", call["room"], agent=True)
     head, body, sig = tok.split(".")

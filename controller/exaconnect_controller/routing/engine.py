@@ -174,6 +174,7 @@ class State:
     return_since: float | None = None
     breach_streak: int = 0
     note: str | None = None
+    last_evaluated: float | None = None
 
 
 @dataclass(frozen=True)
@@ -310,13 +311,22 @@ def decide(
     portal shows why (logged once per episode).
     """
     cands = [paths[c] for c in candidates if c in paths]
+    if state is not None:
+        # An evaluation gap is not evidence of uninterrupted health or
+        # consecutive breaches. In particular, a controller restart must not
+        # finish a return clock using time nobody observed.
+        if state.last_evaluated is not None and (
+            now - state.last_evaluated > policy.stale_after_s or now < state.last_evaluated
+        ):
+            state = replace(state, return_path=None, return_since=None, breach_streak=0, note=None)
+        state = replace(state, last_evaluated=now)
     if not cands:
-        st = state or State(path="", since=now)
+        st = state or State(path="", since=now, last_evaluated=now)
         return st, None
     by_pref = sorted(cands, key=preference)
     home = by_pref[0]
     if state is None or not state.path:
-        state = State(path=home.name, since=now - policy.hold_s)
+        state = State(path=home.name, since=now - policy.hold_s, last_evaluated=now)
 
     def best_alternative(exclude: str, need_healthy: bool, better_than: float = -1.0) -> PathEval | None:
         alts = [
@@ -329,7 +339,7 @@ def decide(
         return min(alts, key=lambda p: (cost_rank(p), -p.score_ahead, p.ordinal))
 
     def moved(to: PathEval, kind: str, reason: str) -> tuple[State, Decision]:
-        return State(path=to.name, since=now), Decision(kind, state.path, to.name, reason)
+        return State(path=to.name, since=now, last_evaluated=now), Decision(kind, state.path, to.name, reason)
 
     def note(text: str) -> tuple[State, Decision | None]:
         if state.note == text:

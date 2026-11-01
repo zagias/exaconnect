@@ -189,9 +189,11 @@ def start_call(
     return {"call": call, "conversation_id": str(conv["id"]), "greeting": msg["body"], "handler": conv["handler"]}
 
 
-def get_call(conn: psycopg.Connection, customer_id: Any, conversation_id: Any) -> dict:
+def get_call(conn: psycopg.Connection, customer_id: Any, conversation_id: Any, *, for_update: bool = False) -> dict:
     call = conn.execute(
-        "SELECT * FROM ai_calls WHERE conversation_id = %s AND customer_id = %s", (conversation_id, customer_id)
+        "SELECT * FROM ai_calls WHERE conversation_id = %s AND customer_id = %s"
+        + (" FOR UPDATE" if for_update else ""),
+        (conversation_id, customer_id),
     ).fetchone()
     if call is None:
         raise inbox.InboxError("Call not found.", 404)
@@ -201,7 +203,9 @@ def get_call(conn: psycopg.Connection, customer_id: Any, conversation_id: Any) -
 def caller_turn(conn: psycopg.Connection, customer_id: Any, conversation_id: Any, text: str) -> dict:
     """Store what the caller said (transcribed in their browser). Returns the
     inbound message. The AI answers in a separate step (see reply_after)."""
-    call = get_call(conn, customer_id, conversation_id)
+    # Serialize a received turn against call termination. Once end_call has
+    # committed, no late transcript can reopen or extend the call.
+    call = get_call(conn, customer_id, conversation_id, for_update=True)
     if call["ended_at"] is not None:
         raise inbox.InboxError("This call has ended.", 409)
     text = " ".join((text or "").split())
@@ -224,14 +228,19 @@ def replies_after(conn: psycopg.Connection, customer_id: Any, conversation_id: A
 
 
 def end_call(conn: psycopg.Connection, customer_id: Any, conversation_id: Any, actor: str) -> dict:
-    call = get_call(conn, customer_id, conversation_id)
-    if call["ended_at"] is not None:
-        return call
+    from ..visitor_calls import MAX_CALL_MINUTES
+
+    # Claim termination atomically: simultaneous browser disconnect/end
+    # requests must not change the duration or emit two end events.
     call = conn.execute(
-        "UPDATE ai_calls SET ended_at = now() WHERE id = %s RETURNING *, extract(epoch FROM ended_at - started_at)"
-        " AS seconds",
-        (call["id"],),
+        "UPDATE ai_calls SET ended_at = CASE WHEN widget_key_id IS NOT NULL"
+        " THEN least(now(), started_at + make_interval(mins => %s)) ELSE now() END"
+        " WHERE conversation_id = %s AND customer_id = %s AND ended_at IS NULL"
+        " RETURNING *, extract(epoch FROM ended_at - started_at) AS seconds",
+        (MAX_CALL_MINUTES, conversation_id, customer_id),
     ).fetchone()
+    if call is None:
+        return get_call(conn, customer_id, conversation_id)
     minutes = max(1, math.ceil(float(call["seconds"]) / 60))
     usage.record(conn, customer_id, "ai_voice_minute", minutes, ref=f"call:{call['id']}", detail={"speech": "browser"})
     events.emit(

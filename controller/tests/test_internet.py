@@ -67,7 +67,12 @@ def test_local_breakout_uses_the_sites_links_and_its_rules(client, admin_headers
     assert len(_desired(client, a_h)["internet"]["firewall"]) == 1
 
     client.patch(f"{url}/internet/sites/{sites['site-a']}", json={"mode": "off"}, headers=admin_headers)
-    assert _desired(client, a_h)["internet"] == {"mode": "off", "lan_prefixes": ["192.168.10.0/24"]}
+    assert _desired(client, a_h)["internet"] == {
+        "mode": "off",
+        "lan_prefixes": ["192.168.10.0/24"],
+        "corporate_prefixes": corp,
+    }
+    assert client.get("/api/v1/agent/steering", headers=a_h).json()["corporate_prefixes"] == corp
     audit = client.get("/api/v1/audit", headers=admin_headers).text
     assert "internet.mode" in audit and "firewall.create" in audit
 

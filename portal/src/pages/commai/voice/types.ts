@@ -161,6 +161,7 @@ export interface VoiceOverview {
   is_exacarib: boolean;
   policy: { recording_access: "none" | "own" | "admins" };
   provider: { name: string; live: boolean };
+  ai_phone_ready?: boolean;
   me: Me | null;
   sites?: Site[];
   users?: VoiceUser[];

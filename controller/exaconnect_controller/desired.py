@@ -67,6 +67,7 @@ def _load(conn: psycopg.Connection, customer_id: Any) -> dict[str, Any]:
         "nodes": {n["site_id"]: n for n in nodes},
         "cloud_to_cloud": bool(customer and customer["cloud_to_cloud"]),
         "circuits": circuits,
+        "corporate": internet.corporate(conn, customer_id),
         "internet": internet.load(conn, customer_id),
         "ipfix": conn.execute(
             "SELECT config, site_ids FROM connect_integrations WHERE customer_id = %s AND provider = 'ipfix'"

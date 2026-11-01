@@ -102,6 +102,40 @@ jobs:
       - name: unit tests
         run: cd portal && npm test
 
+  controller-reliability:
+    # Keep the new failure/recovery checks visible without waiting for the
+    # full application suite, which still runs independently above.
+    runs-on: ubuntu-24.04
+    services:
+      db:
+        image: timescale/timescaledb:latest-pg16
+        env:
+          POSTGRES_USER: exa
+          POSTGRES_PASSWORD: ci-only
+          POSTGRES_DB: exatest
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U exa" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      EXA_TEST_DATABASE_URL: postgresql://exa:ci-only@127.0.0.1:5432/exatest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e 'controller[dev]'
+      - name: Database failure, isolation and recovery regressions
+        run: >-
+          pytest -q
+          controller/tests/test_routing_recovery.py
+          controller/tests/test_firewall_boundaries.py
+          controller/tests/test_firewall_api_boundaries.py
+          controller/tests/test_action_execution_permissions.py
+          controller/tests/test_commai_call_reliability.py
+          controller/tests/test_voice_sbc_robustness.py
+          controller/tests/test_commai_presence_calls.py
+          controller/tests/test_commai_voice_global.py::test_livekit_controller_contract_requires_a_ready_phone_worker
+
   lab:
     runs-on: ubuntu-24.04
     steps:
