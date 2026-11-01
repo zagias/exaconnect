@@ -41,6 +41,8 @@ export default function AiAgents() {
 interface AiStatus {
   model: string;
   live: boolean;
+  available?: boolean;
+  test_mode?: boolean;
   note: string;
   ai_available: boolean;
   enabled: boolean;
@@ -144,7 +146,7 @@ const MODES: { value: Mode; label: string; hint: string }[] = [
 function ModelStatus({ s }: { s: AiStatus }) {
   return (
     <div className="ai-status" role="status">
-      <span className={`pill ${s.live ? "ok" : "warn"}`}>{s.live ? `AI service: ${s.model}` : "Simulated AI"}</span>
+      <span className={`pill ${s.live ? "ok" : "off"}`}>{s.live ? `AI service: ${s.model}` : s.available === false ? "AI service unavailable" : "AI test mode"}</span>
       <span className={`pill ${s.enabled ? "ok" : "off"}`}>{s.enabled ? "Agent switched on" : "Agent switched off"}</span>
       {s.note && <p className="muted small">{s.note}</p>}
     </div>
@@ -891,14 +893,14 @@ function TryCall({ base }: { base: string }) {
   return (
     <Card title="Try a browser call with the AI agent">
       <p className="muted small ai-intro">
-        Speech is recognised and spoken by your browser, at no cost. The call is a conversation in the inbox, so a person
+        Your browser handles speech recognition and playback. The call is a conversation in the inbox, so a person
         can take over. If your browser has no speech recognition, type instead.
       </p>
       {status.data && <p className="muted small">{status.data.speech.note}</p>}
-      {status.data && !status.data.live && <p className="pill warn">Simulated AI: answers come from approved knowledge only.</p>}
+      {status.data?.test_mode && <p className="muted small">AI test mode: this does not place a live telephone call or confirm a real booking service.</p>}
       {!live ? (
         <div className="ai-actions">
-          <button type="button" className="button" disabled={act.busy} onClick={start}>
+          <button type="button" className="button" disabled={act.busy || status.data?.ai_available === false || status.data?.enabled === false} onClick={start}>
             {ended ? "Start another call" : "Start a call"}
           </button>
           {ended && callId && <Link to={`/commai/c/${callId}`}>Open the call in the inbox</Link>}

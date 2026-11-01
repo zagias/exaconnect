@@ -276,7 +276,7 @@ class PacketLab:
             "--file",
             "-",
             input="""table inet exa_ci_cached {
- chain mark {
+ chain classify_cached {
   type filter hook prerouting priority mangle; policy accept;
   ip saddr 10.70.1.0/24 meta mark set 0x101
  }

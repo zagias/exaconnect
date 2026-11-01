@@ -52,6 +52,7 @@ def client(settings, monkeypatch):
     # Integration fixtures intentionally exercise fictional telephone services.
     # Production never infers this permission from EXA_ENV or pytest detection.
     monkeypatch.setenv("EXA_VOICE_TEST_MODE", "1")
+    monkeypatch.setenv("EXA_COMMAI_AI_TEST_MODE", "1")
     monkeypatch.setenv("EXA_SIP_PROVIDER", "simulated")
     if not DB_URL:
         pytest.skip("set EXA_TEST_DATABASE_URL to run database tests")

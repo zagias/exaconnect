@@ -126,10 +126,7 @@ def server_speech() -> DeepInfraSpeech | None:
     )
 
 
-SPEECH_OFF = (
-    "Speech runs in the caller's browser at no cost. Server-side speech (DeepInfra) is built but not live: it"
-    " waits for agreement to the spend, then EXA_COMMAI_SERVER_SPEECH=on and EXA_SPEECH_API_KEY."
-)
+SPEECH_OFF = "Your browser handles speech recognition and playback. Server-side speech is not available."
 
 
 def speech_status() -> dict:
@@ -137,7 +134,7 @@ def speech_status() -> dict:
     return {
         "browser": True,
         "server": bool(s and s.live),
-        "note": "Server-side speech is switched on." if s else SPEECH_OFF,
+        "note": "Server-side speech is configured." if s else SPEECH_OFF,
     }
 
 
@@ -158,7 +155,11 @@ def start_call(
 ) -> dict:
     """Open a browser call: a conversation on channel 'voice', handled by the
     AI when the AI agent is switched on, with a spoken greeting."""
+    if not inbox.ai_available():
+        raise inbox.InboxError("Calls with the AI assistant are unavailable until an AI service is connected.", 503)
     prof = runtime.profile(conn, customer_id)
+    if not prof.get("enabled", True):
+        raise inbox.InboxError("The AI assistant is switched off for this business.", 503)
     identity = inbox.find_or_create_identity(
         conn, customer_id, "voice", f"browser:{uuid.uuid4()}", name=caller.strip()[:100], contact_id=contact_id
     )

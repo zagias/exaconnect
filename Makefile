@@ -61,12 +61,12 @@ lab-agent: ## Build exa-agent for this host into bin/lab/ (uses Docker if Go is 
 	fi
 
 lab-up: lab-image lab-agent ## Deploy the containerlab topology, apply underlay profiles, smoke test
-	cd lab && sudo containerlab deploy -t "$(LAB_TOPOLOGY)" --reconfigure
+	cd lab && sudo env CLAB_VERSION_CHECK=disable containerlab deploy -t "$(LAB_TOPOLOGY)" --reconfigure
 	SAT_PROFILE=$(SAT_PROFILE) lab/netem/apply-profiles.sh
 	lab/scripts/smoke.sh
 
 lab-down: ## Destroy the lab
-	cd lab && sudo containerlab destroy -t "$(LAB_TOPOLOGY)" --cleanup
+	cd lab && sudo env CLAB_VERSION_CHECK=disable containerlab destroy -t "$(LAB_TOPOLOGY)" --cleanup
 	rm -rf lab/.state
 
 lab-smoke: ## Ping the PoP from every site over every underlay

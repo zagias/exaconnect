@@ -59,8 +59,10 @@ def _extras():
 
 
 def ai_available() -> bool:
-    """True once an AI module has registered its reply job."""
-    return "ai.respond" in jobs._handlers
+    """A registered handler also needs a configured model, or explicit test mode."""
+    from .ai import runtime
+
+    return "ai.respond" in jobs._handlers and runtime.model_ready()
 
 
 # ---- contacts -----------------------------------------------------------------

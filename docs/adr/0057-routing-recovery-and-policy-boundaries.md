@@ -65,3 +65,15 @@ of BGP fallthrough onto an excluded satellite. Dummy interfaces and
 deterministic FRR JSON keep this bounded and reproducible. This is kernel
 actuation validation; it does not replace the lab's real FRR/WireGuard
 faults, packet-loss measurement or hold-time acceptance tests.
+
+The independent `routing-frr-lab` CI job runs those existing acceptance
+checks on an ephemeral Arm Linux runner: the production topology/image,
+`check-routing.sh`, `m4-steering.sh`, `m5-storm.sh` and `m7-outage.sh`.
+It has a 30-minute hard limit and bypasses the general lab release/public
+and voice workflow. Management and controller Docker networks are internal;
+hazard/LLM/live integration endpoints are disabled. The wrapper refuses an
+existing environment or CI-named resources, uses new disposable credentials,
+collects routing diagnostics without uploading the enrolment seed or .env,
+and tears down only its own resources. Dependency/image downloads occur
+during setup; the running lab has no external network egress. Missing kernel
+modules, images or privileges fail the job rather than producing a skip.

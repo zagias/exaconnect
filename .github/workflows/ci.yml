@@ -134,6 +134,7 @@ jobs:
           controller/tests/test_commai_call_reliability.py
           controller/tests/test_voice_sbc_robustness.py
           controller/tests/test_voice_provider_readiness.py
+          controller/tests/test_jibsy_model_readiness.py
           controller/tests/test_commai_presence_calls.py
           controller/tests/test_commai_governance.py::test_daily_action_limits_per_role
           controller/tests/test_portal_read_scope.py
@@ -188,3 +189,69 @@ jobs:
         run: shellcheck -x deploy/voice/*.sh deploy/kamailio/start.sh lab/ci/checks/voice-sbc.sh lab/ci/checks/voice-phone-app.sh lab/ci/checks/org-setup.sh lab/ci/checks/voice-trunks.sh lab/ci/checks/voice-push.sh lab/ci/checks/voice-platforms.sh
       - name: Kamailio and FreeSWITCH start with this config
         run: make voice-check
+
+  voice-rtp:
+    # A real local SIP/RTP endpoint, production media images and config. The
+    # disposable Docker network is internal; no ports or calls reach the public.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      EXA_VOICE_RTP_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Media oracle rejects silence and ringback
+        run: python3 deploy/voice/rtp_check_test.py
+      - name: Real PCMU media, endpoint refusal and fresh-call recovery
+        run: bash deploy/voice/rtp_check.sh
+
+  routing-frr-lab:
+    # Actual FRR/WireGuard/BFD acceptance checks, separate from fast kernel
+    # fixtures. An ephemeral Arm VM, no release/public/voice service scripts.
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    env:
+      EXA_EPHEMERAL_ROUTING_LAB: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: agent/go.mod
+      - name: Install disposable runner dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y jq wireguard-tools iproute2 kmod python3-yaml shellcheck curl openssl make ca-certificates
+          sudo modprobe -a wireguard sch_netem dummy
+          docker compose version
+          # Pinned upstream release with its published checksum; no installer
+          # script, cloud account or production credential is used.
+          mkdir -p "$RUNNER_TEMP/containerlab"
+          cd "$RUNNER_TEMP/containerlab"
+          archive=containerlab_0.72.0_linux_arm64.tar.gz
+          curl --fail --location --retry 3 --max-time 90 -O "https://github.com/srl-labs/containerlab/releases/download/v0.72.0/$archive"
+          curl --fail --location --retry 3 --max-time 30 -O "https://github.com/srl-labs/containerlab/releases/download/v0.72.0/checksums.txt"
+          grep "  $archive$" checksums.txt | sha256sum --check --strict
+          tar -xzf "$archive" containerlab
+          sudo install -m 0755 containerlab /usr/local/bin/containerlab
+          containerlab version
+      - name: Real routing failure, packet loss, recovery and controller outage
+        env:
+          EXA_ROUTING_CI_RUNNER: ${{ runner.environment }}
+        run: |
+          shellcheck -x lab/ci/routing-run.sh
+          # Leave time for diagnostics and cleanup before the hard job limit.
+          timeout --signal=TERM --kill-after=90s 24m bash lab/ci/routing-run.sh
+      - name: Remove only this job's disposable lab resources
+        if: always()
+        env:
+          EXA_ROUTING_CI_RUNNER: ${{ runner.environment }}
+        run: bash lab/ci/routing-run.sh --cleanup
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: routing-frr-arm64-diagnostics
+          path: lab/.state/routing-ci-diagnostics/
+          if-no-files-found: ignore
+          retention-days: 7

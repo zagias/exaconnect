@@ -641,7 +641,7 @@ def test_browser_call_with_the_ai_agent(client):
         ).fetchone()
     assert float(q["quantity"]) == 1
     sp = client.get(f"{base(b)}/ai/speech", headers=h).json()
-    assert sp["browser"] is True and sp["server"] is False and "not live" in sp["note"]
+    assert sp["browser"] is True and sp["server"] is False and "not available" in sp["note"]
     # The job queued for each caller turn finds the turn answered and does nothing.
     n = len(rec["transcript"])
     run_jobs()
