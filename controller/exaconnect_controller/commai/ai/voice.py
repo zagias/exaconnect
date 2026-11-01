@@ -24,7 +24,7 @@ from typing import Any, Protocol
 import psycopg
 
 from .. import events, inbox, usage
-from . import runtime
+from . import memory, runtime
 
 
 class SpeechError(Exception):
@@ -206,13 +206,16 @@ def caller_turn(conn: psycopg.Connection, customer_id: Any, conversation_id: Any
     inbound message. The AI answers in a separate step (see reply_after)."""
     # Serialize a received turn against call termination. Once end_call has
     # committed, no late transcript can reopen or extend the call.
+    before = inbox.get(conn, customer_id, conversation_id)
+    memory.lock_subject(conn, customer_id, before)
     call = get_call(conn, customer_id, conversation_id, for_update=True)
     if call["ended_at"] is not None:
         raise inbox.InboxError("This call has ended.", 409)
     text = " ".join((text or "").split())
     if not text:
         raise inbox.InboxError("Say something first.")
-    conv = inbox.get(conn, customer_id, conversation_id)
+    conv = inbox.get(conn, customer_id, conversation_id, lock=True)
+    memory.check_subject(before, conv)
     ident = conn.execute("SELECT address FROM contact_identities WHERE id = %s", (conv["identity_id"],)).fetchone()
     out = inbox.receive(conn, customer_id, "voice", ident["address"], text[:2000], conversation_id=conversation_id)
     conn.execute("UPDATE ai_calls SET turns = turns + 1 WHERE id = %s", (call["id"],))
@@ -231,6 +234,8 @@ def replies_after(conn: psycopg.Connection, customer_id: Any, conversation_id: A
 def end_call(conn: psycopg.Connection, customer_id: Any, conversation_id: Any, actor: str) -> dict:
     from ..visitor_calls import MAX_CALL_MINUTES
 
+    conv = inbox.get(conn, customer_id, conversation_id)
+    memory.lock_subject(conn, customer_id, conv, require_active=False)
     # Claim termination atomically: simultaneous browser disconnect/end
     # requests must not change the duration or emit two end events.
     call = conn.execute(

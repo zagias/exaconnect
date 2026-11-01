@@ -136,8 +136,7 @@ def ensure_card(conn: psycopg.Connection, customer_id: Any) -> None:
     )
 
 
-def card_at(conn: psycopg.Connection, customer_id: Any, at: dt.datetime | None = None) -> dict:
-    ensure_card(conn, customer_id)
+def _stored_card_at(conn: psycopg.Connection, customer_id: Any, at: dt.datetime | None = None) -> dict | None:
     row = conn.execute(
         """SELECT * FROM commai_rate_cards WHERE customer_id = %s AND effective_from <= coalesce(%s, now())
            ORDER BY version DESC LIMIT 1""",
@@ -149,6 +148,16 @@ def card_at(conn: psycopg.Connection, customer_id: Any, at: dt.datetime | None =
             "SELECT * FROM commai_rate_cards WHERE customer_id = %s ORDER BY version LIMIT 1", (customer_id,)
         ).fetchone()
     )
+
+
+def card_at(conn: psycopg.Connection, customer_id: Any, at: dt.datetime | None = None) -> dict:
+    ensure_card(conn, customer_id)
+    return _stored_card_at(conn, customer_id, at)
+
+
+def quote_card(conn: psycopg.Connection, customer_id: Any) -> dict:
+    """Budget estimates never initialise cards or hold billing locks during model IO."""
+    return _stored_card_at(conn, customer_id) or {"currency": "USD", "prices": EXAMPLE_PRICES}
 
 
 def cards(conn: psycopg.Connection, customer_id: Any) -> list[dict]:
@@ -189,7 +198,7 @@ def price_now(conn, customer_id: Any, meter: str) -> Decimal:
     """What one unit of `meter` costs today (0 when it isn't priced on this card)."""
     if family(meter) in ("voice", "other"):
         return Decimal(0)
-    return unit_price(card_at(conn, customer_id), meter) or Decimal(0)
+    return unit_price(quote_card(conn, customer_id), meter) or Decimal(0)
 
 
 # ---- rating ----------------------------------------------------------------------------

@@ -6,12 +6,10 @@ the result kept in attachment_readings:
 - plain text: decoded as UTF-8;
 - PDF: the text in its content streams, pulled out by a small parser here
   (no PDF library, nothing is rendered or executed);
-- images: described by a vision model behind `Vision` (simulated without an
-  AI service: it reports the format and size and says it can't see the
-  picture);
+- images: described by a connected vision model behind `Vision`;
 - voice notes: transcribed by the speech interface (`voice.SpeechProvider`).
-  Server speech is not live (ADR 0019), so `SimulatedSpeech` answers unless
-  EXA_COMMAI_SERVER_SPEECH is on.
+  an unavailable speech service refuses transcription. Simulated readers
+  require EXA_COMMAI_AI_TEST_MODE=1 and never substitute for a live service.
 
 Safe handling: types are decided by sniffing the bytes, never by the name or
 the declared type alone; the declared type must match; executables, archives,
@@ -340,25 +338,38 @@ def vision() -> Vision:
         real = OpenAICompatibleVision(s.llm_api_key, s.llm_base_url, os.environ.get("EXA_VISION_MODEL", ""))
         if real.live:
             return real
-    return SimulatedVision()
+    if os.environ.get("EXA_COMMAI_AI_TEST_MODE") == "1":
+        return SimulatedVision()
+    raise AttachmentError("Image analysis is not connected. A member of your team needs to review the image.", 503)
 
 
 def speech() -> Any:
     if _speech is not None:
         return _speech
-    return voice.server_speech() or SimulatedSpeech()
+    real = voice.server_speech()
+    if real is not None and real.live:
+        return real
+    if os.environ.get("EXA_COMMAI_AI_TEST_MODE") == "1":
+        return SimulatedSpeech()
+    raise AttachmentError("Voice-note transcription is not connected. A member of your team needs to listen.", 503)
 
 
 # ---- reading ------------------------------------------------------------------------------
 
 
-def read_file(conn: psycopg.Connection, customer_id: Any, file_id: Any, *, again: bool = False) -> dict | None:
+def _reader_allowed(reader: str) -> bool:
+    return not reader.startswith("simulated-") or os.environ.get("EXA_COMMAI_AI_TEST_MODE") == "1"
+
+
+def read_file(
+    conn: psycopg.Connection, customer_id: Any, file_id: Any, *, again: bool = False, defer_cache: bool = False
+) -> dict | None:
     """Read one customer file once (kept in attachment_readings)."""
     if not again:
         row = conn.execute(
             "SELECT * FROM attachment_readings WHERE file_id = %s AND customer_id = %s", (file_id, customer_id)
         ).fetchone()
-        if row:
+        if row and _reader_allowed(row["reader"]):
             return row
     f = conn.execute(
         "SELECT id, name, content_type, data FROM channel_files WHERE id = %s AND customer_id = %s",
@@ -389,29 +400,60 @@ def read_file(conn: psycopg.Connection, customer_id: Any, file_id: Any, *, again
         status, reason = "refused", str(e)
     except Exception as e:  # noqa: BLE001 - a reader failing is recorded, the conversation goes on
         status, reason = "failed", f"The file could not be read ({type(e).__name__})."
+    reading = {
+        "file_id": f["id"],
+        "customer_id": customer_id,
+        "kind": kind,
+        "status": status,
+        "text": text[:MAX_TEXT_CHARS],
+        "reason": reason[:300],
+        "reader": reader,
+    }
+    if defer_cache:
+        return {**reading, "_pending": True}
+    return _store_reading(conn, reading)
+
+
+def _store_reading(conn: psycopg.Connection, reading: dict) -> dict | None:
     return conn.execute(
         """INSERT INTO attachment_readings (file_id, customer_id, kind, status, text, reason, reader)
-           VALUES (%s, %s, %s, %s, %s, %s, %s)
+           SELECT f.id, f.customer_id, %s, %s, %s, %s, %s FROM channel_files f
+           WHERE f.id = %s AND f.customer_id = %s
            ON CONFLICT (file_id) DO UPDATE SET kind = EXCLUDED.kind, status = EXCLUDED.status, text = EXCLUDED.text,
              reason = EXCLUDED.reason, reader = EXCLUDED.reader, created_at = now()
+           WHERE attachment_readings.customer_id = EXCLUDED.customer_id
            RETURNING *""",
-        (f["id"], customer_id, kind, status, text[:MAX_TEXT_CHARS], reason[:300], reader),
+        tuple(reading[k] for k in ("kind", "status", "text", "reason", "reader", "file_id", "customer_id")),
     ).fetchone()
+
+
+def persist_pending(conn: psycopg.Connection, files: dict) -> None:
+    """Cache only after the caller has acquired its publication/privacy guard.
+
+    A cache INSERT references channel_files. Deferring it prevents that FK
+    lock from being held across model IO and opposing contact erasure.
+    """
+    for reading in files.get("pending", []):
+        if _store_reading(conn, reading) is None:
+            raise AttachmentError("The attachment is no longer available.", 409)
+    files.pop("pending", None)
 
 
 def _file_ids(message: dict) -> list[str]:
     return [str(a["id"]) for a in (message.get("attachments") or []) if isinstance(a, dict) and a.get("id")]
 
 
-def for_message(conn: psycopg.Connection, customer_id: Any, message: dict) -> dict:
+def for_message(conn: psycopg.Connection, customer_id: Any, message: dict, *, defer_cache: bool = False) -> dict:
     """{"transcript": voice-note words, "files": [{name, kind, text}], "unreadable": [reasons]}"""
     out: dict = {"transcript": "", "files": [], "unreadable": []}
     names = {str(a.get("id")): a.get("name", "") for a in message.get("attachments") or [] if isinstance(a, dict)}
     words = []
     for fid in _file_ids(message):
-        r = read_file(conn, customer_id, fid)
+        r = read_file(conn, customer_id, fid, defer_cache=defer_cache)
         if r is None:
             continue
+        if r.get("_pending"):
+            out.setdefault("pending", []).append({k: v for k, v in r.items() if k != "_pending"})
         if r["status"] != "read":
             out["unreadable"].append(f"{names.get(fid) or 'A file'}: {r['reason']}")
             continue
@@ -431,10 +473,12 @@ def transcripts(conn: psycopg.Connection, customer_id: Any, messages: list[dict]
     rows = {
         str(r["file_id"]): r["text"]
         for r in conn.execute(
-            """SELECT file_id, text FROM attachment_readings WHERE customer_id = %s AND file_id = ANY(%s::uuid[])
+            """SELECT file_id, text, reader FROM attachment_readings
+               WHERE customer_id = %s AND file_id = ANY(%s::uuid[])
                AND kind = 'voice' AND status = 'read'""",
             (customer_id, ids),
         ).fetchall()
+        if _reader_allowed(r["reader"])
     }
     out = {}
     for m in messages:
@@ -446,10 +490,21 @@ def transcripts(conn: psycopg.Connection, customer_id: Any, messages: list[dict]
 
 def readings(conn: psycopg.Connection, customer_id: Any, conversation_id: Any) -> list[dict]:
     """What the AI read from each file in a conversation, for staff."""
-    return conn.execute(
+    rows = conn.execute(
         """SELECT f.id AS file_id, f.name, f.content_type, f.size, r.kind, r.status, r.text, r.reason, r.reader,
                   r.created_at
            FROM channel_files f LEFT JOIN attachment_readings r ON r.file_id = f.id
            WHERE f.customer_id = %s AND f.conversation_id = %s ORDER BY f.created_at""",
         (customer_id, conversation_id),
     ).fetchall()
+    return [
+        r
+        if _reader_allowed(r["reader"] or "")
+        else {
+            **r,
+            "status": "refused",
+            "text": "",
+            "reason": "This reading was generated in test mode. A member of your team needs to review the file.",
+        }
+        for r in rows
+    ]

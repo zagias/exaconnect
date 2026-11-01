@@ -208,8 +208,13 @@ def _call_ended(conn, customer_id: Any, conv: dict, *, lock: bool = False) -> bo
 def _claim(conn, customer_id: Any, conv: dict, message_id: Any) -> Any:
     # The model can finish after the caller disconnected. Serialize the
     # short write/tool-proposal phase against end_call, not the model call.
+    memory.lock_subject(conn, customer_id, conv)
     if _call_ended(conn, customer_id, conv, lock=True):
         raise inbox.NotHandler("This call has ended.")
+    locked = inbox.get(conn, customer_id, conv["id"], lock=True)
+    memory.check_subject(conv, locked)
+    if locked["handler"] != "ai":
+        raise inbox.NotHandler()
     row = conn.execute(
         """INSERT INTO ai_runs (customer_id, conversation_id, message_id, role, task, outcome, actor)
            VALUES (%s, %s, %s, %s, 'reply', 'failed', 'ai') ON CONFLICT DO NOTHING RETURNING id""",
@@ -241,7 +246,11 @@ def _run(conn: psycopg.Connection, customer_id: Any, conv: dict, message_id: Any
     last_text = last_msg["body"] if last_msg else ""
     # Attachments and voice notes (ADR 0032): a voice note's words are the
     # customer's words; other files go to the model as data.
-    files = attachments.for_message(conn, customer_id, last_msg) if last_msg else {"files": [], "unreadable": []}
+    files = (
+        attachments.for_message(conn, customer_id, last_msg, defer_cache=True)
+        if last_msg
+        else {"files": [], "unreadable": []}
+    )
     if files.get("transcript"):
         last_text = f"{last_text} {files['transcript']}".strip()
     business_lang = prof["business_language"]
@@ -250,12 +259,17 @@ def _run(conn: psycopg.Connection, customer_id: Any, conv: dict, message_id: Any
     ctx["attachments"] = files["files"]
     esc = prof["escalation"]
 
+    def claim():
+        claimed = _claim(conn, customer_id, conv, message_id)
+        attachments.persist_pending(conn, files)
+        return claimed
+
     def escalate(reason: str, *, out: ModelOutput | None = None, tried: list[str] | None = None, gap: str = ""):
         return _escalate(
             conn,
             customer_id,
             conv,
-            run_id or _claim(conn, customer_id, conv, message_id),
+            run_id or claim(),
             prof,
             ctx,
             reason,
@@ -286,11 +300,26 @@ def _run(conn: psycopg.Connection, customer_id: Any, conv: dict, message_id: Any
         return escalate(f"The customer writes in {language.name(detected)}, which the AI agent is not set to answer.")
 
     try:
-        out = runtime.complete(conn, customer_id, ROLE, "reply", ctx, ref=str(message_id or ""), prof=prof)
+
+        def claim_before_usage():
+            nonlocal run_id
+            # Publish in contact -> call -> conversation -> billing order after model IO.
+            run_id = claim()
+
+        out = runtime.complete(
+            conn,
+            customer_id,
+            ROLE,
+            "reply",
+            ctx,
+            ref=str(message_id or ""),
+            prof=prof,
+            before_usage=claim_before_usage,
+        )
     except runtime.UsageLimit as e:
         return escalate(str(e) + " A person takes over.")
 
-    run_id = _claim(conn, customer_id, conv, message_id)
+    run_id = run_id or claim()
     kb = ctx["knowledge"]
     hit_ids = {h["chunk_id"] for h in kb["hits"]}
     out.sources = [s for s in out.sources if s in hit_ids]
@@ -486,9 +515,17 @@ def _fail(conn, customer_id: Any, conversation_id: Any, message_id: Any, prof: d
     conv = conn.execute(
         "SELECT * FROM conversations WHERE id = %s AND customer_id = %s", (conversation_id, customer_id)
     ).fetchone()
-    if conv is None or _call_ended(conn, customer_id, conv, lock=True):
+    if conv is None:
         return {"outcome": "stopped"}
-    conv = inbox.get(conn, customer_id, conversation_id, lock=True)
+    try:
+        memory.lock_subject(conn, customer_id, conv)
+        if _call_ended(conn, customer_id, conv, lock=True):
+            return {"outcome": "stopped"}
+        locked = inbox.get(conn, customer_id, conversation_id, lock=True)
+        memory.check_subject(conv, locked)
+        conv = locked
+    except inbox.NotHandler:
+        return {"outcome": "stopped"}
     if conv is None or conv["handler"] != "ai":
         return {"outcome": "stopped"}
     what = str(err) if isinstance(err, ModelError) else f"{type(err).__name__} in the AI agent"

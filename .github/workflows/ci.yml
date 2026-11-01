@@ -132,6 +132,12 @@ jobs:
           controller/tests/test_firewall_api_boundaries.py
           controller/tests/test_action_execution_permissions.py
           controller/tests/test_commai_call_reliability.py
+          controller/tests/test_commai_call_billing_locks.py
+          controller/tests/test_commai_attachment_readiness.py
+          controller/tests/test_commai_quality.py
+          controller/tests/test_commai_ai.py::test_takeover_while_the_model_is_thinking_writes_nothing
+          controller/tests/test_commai_ai.py::test_browser_call_with_the_ai_agent
+          controller/tests/test_commai_ai.py::test_copilot_helps_but_never_sends
           controller/tests/test_voice_sbc_robustness.py
           controller/tests/test_voice_provider_readiness.py
           controller/tests/test_jibsy_model_readiness.py

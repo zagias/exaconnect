@@ -112,11 +112,20 @@ def _expire(conn: psycopg.Connection, job: dict):
     """Close abandoned calls even when the browser never sends End call."""
     from .ai import voice
 
-    call = voice.get_call(conn, job["customer_id"], job["payload"]["conversation_id"])
+    try:
+        call = voice.get_call(conn, job["customer_id"], job["payload"]["conversation_id"])
+    except inbox.InboxError as error:
+        if error.code == 404:
+            return None  # contact deletion already removed this call
+        raise
     if call["ended_at"] is not None or call["widget_key_id"] is None:
         return None
     remaining = (call["started_at"] + dt.timedelta(minutes=MAX_CALL_MINUTES) - dt.datetime.now(dt.UTC)).total_seconds()
     if remaining > 0:
         return jobs.Later("Call has not reached its time limit.", delay_s=remaining)
-    voice.end_call(conn, job["customer_id"], call["conversation_id"], "system:time limit")
+    try:
+        voice.end_call(conn, job["customer_id"], call["conversation_id"], "system:time limit")
+    except inbox.InboxError as error:
+        if error.code != 404:
+            raise
     return None

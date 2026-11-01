@@ -81,6 +81,7 @@ def run(
     if task not in TASKS:
         raise ValueError(f"Unknown copilot task {task}.")
     prof = runtime.profile(conn, customer_id)
+    before = inbox.get(conn, customer_id, conversation_id)
     ctx = staff_context(conn, customer_id, conversation_id, include_notes=include_notes, prof=prof)
     if task == "translate":
         if message_id:
@@ -100,7 +101,21 @@ def run(
         }
     if instruction:
         ctx["staff_instruction"] = instruction[:500]
-    out = runtime.complete(conn, customer_id, ROLE, task, ctx, prof=prof)
+
+    def before_usage():
+        memory.lock_subject(conn, customer_id, before)
+        locked = inbox.get(conn, customer_id, conversation_id, lock=True)
+        memory.check_subject(before, locked)
+
+    out = runtime.complete(
+        conn,
+        customer_id,
+        ROLE,
+        task,
+        ctx,
+        prof=prof,
+        before_usage=before_usage,
+    )
     hits = {h["chunk_id"]: h for h in (ctx.get("knowledge") or {}).get("hits", [])}
     sources = [
         {k: hits[s][k] for k in ("chunk_id", "source_id", "title", "source_url")} for s in out.sources if s in hits
