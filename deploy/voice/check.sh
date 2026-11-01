@@ -71,6 +71,9 @@ done
 cat "$tmp/sofia"
 [[ $(grep -c RUNNING "$tmp/sofia") == 2 ]]
 
+echo "-- running PBX version, startup guard and loaded SIP transfer mitigation"
+python3 voice/phone_runtime_check.py --container exa-sbc-fs
+
 echo "-- freeswitch can ask the controller before outside calls"
 docker exec exa-sbc-fs fs_cli -x "module_exists mod_curl" | grep -qx true
 docker exec exa-sbc-fs fs_cli -x "global_getvar exa_pbx_secret" | grep -qx check-only

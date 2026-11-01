@@ -159,6 +159,7 @@ jobs:
           controller/tests/test_phone_worker_transport.py
           controller/tests/test_phone_sip_provisioning.py
           controller/tests/test_phone_pbx_runtime_script.py
+          controller/tests/test_phone_runtime_mitigation.py
           controller/tests/test_commai_voice_global.py::test_livekit_controller_contract_requires_measured_speech_and_real_scoped_transfer
 
   phone-worker-sdk:
