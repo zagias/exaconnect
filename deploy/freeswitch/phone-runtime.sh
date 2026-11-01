@@ -224,7 +224,9 @@ probe_curl() (
 probe() {
   state_dir=${1:-/run/xakore-phone-runtime}
   [ -n "${EXA_PBX_SECRET:-}" ] || { fail "probe has no signing secret"; return 1; }
-  [ -f "$state_dir/guard" ] && [ ! -L "$state_dir/guard" ] || { fail "probe has no startup guard"; return 1; }
+  if [ ! -f "$state_dir/guard" ] || [ -L "$state_dir/guard" ]; then
+    fail "probe has no startup guard"; return 1
+  fi
   command -v timeout >/dev/null 2>&1 || { fail "probe needs a command timeout"; return 1; }
   version=$(timeout 5 fs_cli -x version 2>/dev/null | parse_version) || { fail "cannot verify running version"; return 1; }
   startup_version=$(sed -n '1p' "$state_dir/guard")
