@@ -24,8 +24,11 @@ function site(number: number, overrides: Partial<OverviewSite> = {}): OverviewSi
     node_id: `box-${number}`, last_seen: new Date().toISOString(), online: true, apply_ok: true,
     applied_version: 2, desired_version: 2, storm_mode: false, steering: [], paths: [path()], ...overrides };
 }
+function network(sites: OverviewSite[]): OverviewData {
+  return { sites, attention: [], sla_24h: [], sla_target_pct: 99.5, moves_24h: 0, recent_decisions: [] };
+}
 function show(sites: OverviewSite[], responses: { insights?: () => Promise<Response>; overview?: () => Promise<Response> } = {}) {
-  const overview: OverviewData = { sites, attention: [], sla_24h: [], sla_target_pct: 99.5, moves_24h: 0, recent_decisions: [] };
+  const overview = network(sites);
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
     const url = String(input);
     if (url.endsWith("/insights") && responses.insights) return responses.insights();
@@ -107,6 +110,38 @@ describe("overview service availability", () => {
     expect(screen.queryByRole("heading", { level: 1, name: "All sites within SLA" })).toBeNull();
     expect(screen.queryByText("Nothing open")).toBeNull();
     expect(screen.queryByRole("region", { name: "Key figures" })).toBeNull();
+  });
+
+  it("retains last known readings after a refresh fails, withdraws the all-clear and recovers after a successful refresh", async () => {
+    const refreshes: (() => void)[] = [];
+    vi.spyOn(globalThis, "setInterval").mockImplementation(((callback: TimerHandler, delay?: number) => {
+      if (delay === 10_000 && typeof callback === "function") refreshes.push(callback as () => void);
+      return 1;
+    }) as typeof setInterval);
+    const sites = [site(1)];
+    let failing = false;
+    show(sites, { overview: async () => failing
+      ? new Response(JSON.stringify({ detail: "Network refresh failed for this test" }), { status: 503 })
+      : new Response(JSON.stringify(network(sites)), { status: 200 }) });
+    await screen.findByRole("heading", { level: 1, name: "All sites within SLA" });
+
+    failing = true;
+    await act(async () => { refreshes.forEach((refresh) => refresh()); });
+    await screen.findByRole("heading", { level: 1, name: "Current network status unavailable" });
+    const attention = screen.getByRole("region", { name: "Needs attention" });
+    expect(within(attention).queryByText("Nothing open")).toBeNull();
+    expect(attention.querySelector(".pill.ok")).toBeNull();
+    expect(screen.queryByText(/All measured connections are within SLA/)).toBeNull();
+    expect(screen.getByText(/Readings below are from the last successful load/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Office 1" })).toBeTruthy();
+    expect(screen.getByText("Paths within SLA, last known")).toBeTruthy();
+    expect(screen.queryByText("Paths within SLA now")).toBeNull();
+
+    failing = false;
+    await act(async () => { refreshes.forEach((refresh) => refresh()); });
+    await screen.findByRole("heading", { level: 1, name: "All sites within SLA" });
+    expect(within(attention).getByText("Nothing open").classList.contains("ok")).toBe(true);
+    expect(screen.queryByText(/Readings below are from the last successful load/)).toBeNull();
   });
 });
 

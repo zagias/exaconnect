@@ -202,7 +202,9 @@ export default function Insights() {
             </label>
           </div>
         </div>
-        <InsightList items={items} reload={list.reload} />
+        {!list.data && !list.error && <p className="muted" role="status">Loading alerts…</p>}
+        {list.error && <p className="muted" role="status">{list.data ? "Showing last known alerts. Current alert status is unavailable." : "Current alert status is unavailable."}</p>}
+        {list.data && (items.length > 0 || !list.error) && <InsightList items={items} reload={list.reload} />}
       </section>
     </>
   );

@@ -148,6 +148,7 @@ export default function Overview() {
         sites: raw.data.sites.map((s) => ({ ...s, steering: s.steering ?? [] })),
       }
     : null;
+  const networkReady = data !== null && !error;
   const insights = useApi<Insight[]>(user?.role === "admin" && !current ? null : `/insights${q}`, 30_000);
 
   const alertsReady = insights.data !== null && !insights.error;
@@ -164,8 +165,10 @@ export default function Overview() {
   const criticalOpen = alerts.some((i) => i.severity === "critical");
   const siteIds = Object.fromEntries(sites.map((s) => [s.name, s.id]));
 
-  const headline = !data
-    ? error ? "We couldn't load the network" : "Loading the network"
+  const headline = error
+    ? data ? "Current network status unavailable" : "We couldn't load the network"
+    : !data
+    ? "Loading the network"
     : enrolled.length === 0
       ? "Your network isn't connected yet"
       : online.length === 0
@@ -183,7 +186,9 @@ export default function Overview() {
             : "All sites within SLA";
 
   const networkLine =
-    issues.length === 0
+    !networkReady
+      ? "Current connection health could not be checked."
+      : issues.length === 0
       ? paths.length && paths.every((p) => p.sent) ? `Network: all ${plural(paths.length, "path")} within SLA.` : "Waiting for current connection measurements."
       : `Network: ${issues.slice(0, 3).map((i) => i.short).join(", ")}${issues.length > 3 ? ` and ${issues.length - 3} more` : ""}.`;
   const alertLine = !alertsReady
@@ -214,6 +219,7 @@ export default function Overview() {
           {" · refreshes every 10 s"}
         </p>
         <ErrorNote error={error ?? insights.error} />
+        {error && data && <p className="small muted" role="status">Readings below are from the last successful load. They do not confirm current network health.</p>}
       </header>
 
       {data && enrolled.length === 0 && <><FirstRun waiting={edge.length} />{edge.length > 0 && <NetworkSites sites={edge} />}</>}
@@ -225,6 +231,7 @@ export default function Overview() {
             enrolled={enrolled.length}
             healthy={healthy.length}
             paths={paths.length}
+            stale={!networkReady}
           />
 
           <section className="card ov-attn" aria-labelledby="ov-attn-h">
@@ -233,7 +240,7 @@ export default function Overview() {
               {needs > 0 ? (
                 <span className="ov-count mono">{needs}</span>
               ) : (
-                <StatusPill health={alertsReady && paths.length > 0 && paths.every((path) => path.sent) ? "ok" : "warn"}>{!alertsReady ? insights.error ? "Alerts unavailable" : "Checking alerts" : paths.length > 0 && paths.every((path) => path.sent) ? "Nothing open" : "Measurements pending"}</StatusPill>
+                <StatusPill health={networkReady && alertsReady && paths.length > 0 && paths.every((path) => path.sent) ? "ok" : "warn"}>{!networkReady ? "Network status unavailable" : !alertsReady ? insights.error ? "Alerts unavailable" : "Checking alerts" : paths.length > 0 && paths.every((path) => path.sent) ? "Nothing open" : "Measurements pending"}</StatusPill>
               )}
               <Link className="ov-more" to="/insights">
                 Risk and cost alerts{alerts.length > 0 ? ` (${alerts.length})` : ""}
@@ -241,7 +248,7 @@ export default function Overview() {
             </div>
             {issues.length + alerts.length === 0 ? (
               <p className="muted small ov-empty">
-                {!alertsReady ? "Risk and cost alert status is not confirmed. Check the site inventory for current connection health." : paths.length > 0 && paths.every((path) => path.sent) ? "All measured connections are within SLA. There are no open risk or cost alerts." : "Connection health is not confirmed yet. Waiting for measurements; there are no open risk or cost alerts."}
+                {!networkReady ? "Current connection health is unavailable. The readings below are the last known measurements." : !alertsReady ? "Risk and cost alert status is not confirmed. Check the site inventory for current connection health." : paths.length > 0 && paths.every((path) => path.sent) ? "All measured connections are within SLA. There are no open risk or cost alerts." : "Connection health is not confirmed yet. Waiting for measurements; there are no open risk or cost alerts."}
               </p>
             ) : (
               <ul className="attn-list">
@@ -306,12 +313,14 @@ function KpiStrip({
   enrolled,
   healthy,
   paths,
+  stale,
 }: {
   data: OverviewData;
   online: number;
   enrolled: number;
   healthy: number;
   paths: number;
+  stale: boolean;
 }) {
   const storm = data.sites.filter((s) => s.storm_mode);
   const sla = (name: string) => data.sla_24h.find((c) => c.class_name === name);
@@ -320,7 +329,7 @@ function KpiStrip({
   return (
     <section className="kpis" aria-label="Key figures">
       <div className="kpi">
-        <div className="kpi-label">Sites online</div>
+        <div className="kpi-label">{stale ? "Sites online, last known" : "Sites online"}</div>
         <div className="kpi-figure mono">
           {online}
           <span className="kpi-of"> of {enrolled}</span>
@@ -332,7 +341,7 @@ function KpiStrip({
         )}
       </div>
       <div className="kpi">
-        <div className="kpi-label">Paths within SLA now</div>
+        <div className="kpi-label">{stale ? "Paths within SLA, last known" : "Paths within SLA now"}</div>
         <div className="kpi-figure mono">
           {healthy}
           <span className="kpi-of"> of {paths}</span>
