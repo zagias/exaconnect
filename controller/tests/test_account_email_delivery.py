@@ -5,6 +5,7 @@ checks cannot contact a provider or send email.
 """
 
 import re
+from dataclasses import replace
 
 import pytest
 
@@ -33,7 +34,9 @@ def no_external_mail(monkeypatch):
 def test_invitation_delivery_retains_one_use_link_and_honest_status(
     client, admin_headers, settings, monkeypatch, caplog, flow, outcome, public_origin
 ):
-    settings.public_url = "https://hub.xakore.com" if public_origin == "configured" else ""
+    client.app.state.settings = replace(
+        settings, public_url="https://hub.xakore.com" if public_origin == "configured" else ""
+    )
     headers = {**admin_headers, "Host": "hub.xakore.com", "X-Forwarded-Proto": "https"}
     if flow == "organisation_member":
         created = client.post(
@@ -132,7 +135,7 @@ def test_refused_invitation_requests_do_not_send_mail(client, admin_headers, mon
 def test_password_reset_uses_external_https_without_changing_passkey_origin_setting(client, settings, monkeypatch):
     from exaconnect_controller.api import password_reset
 
-    settings.public_url = ""
+    client.app.state.settings = replace(settings, public_url="")
     monkeypatch.setenv("EXA_SMTP_HOST", "smtp.example.net")
     sent = []
     monkeypatch.setattr(password_reset, "_send", lambda to, url: sent.append((to, url)))
