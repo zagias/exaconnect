@@ -18,7 +18,7 @@ export function siteHealth(site: SiteSummary): { key: string; label: string; ran
 }
 
 /** A bounded site inventory; detailed paths and charts belong on the selected site. */
-export function NetworkSites({ sites }: { sites: OverviewSite[] }) {
+export function NetworkSites({ sites, embedded = false }: { sites: OverviewSite[]; embedded?: boolean }) {
   const { user } = useAuth();
   const manage = user?.role === "admin" || user?.org_role === "owner" || user?.org_role === "admin";
   const [search, setSearch] = useState("");
@@ -40,7 +40,7 @@ export function NetworkSites({ sites }: { sites: OverviewSite[] }) {
   return (
     <section className="card network-sites" id="network-sites" aria-labelledby="network-sites-title">
       <div className="network-sites-head">
-        <div><h2 id="network-sites-title">Your sites <span className="network-total">{sites.length}</span></h2><p className="muted small">Check the sites that need attention. Open a site for its connections, traffic and history.</p></div>
+        <div><h2 id="network-sites-title">{embedded ? `${sites.length} ${sites.length === 1 ? "site" : "sites"}` : <>Sites <span className="network-total">{sites.length}</span></>}</h2>{!embedded && <p className="muted small">Connection health and latest reports.</p>}</div>
         {manage && <Link className="button secondary small" to="/locations">Add or connect a location</Link>}
       </div>
       <div className="network-filters">

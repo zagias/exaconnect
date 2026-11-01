@@ -25,13 +25,13 @@ export function SiteList() {
     <>
       <div className="page-head">
         <Eyebrow>Business network</Eyebrow>
-        <h1>Connected locations</h1>
+        <h1>Sites</h1>
         <p className="muted">
-          Check the boxes connecting your offices and branches, then open a location to review its links and performance.
+          Monitor connections and traffic across your locations.
         </p>
         <ErrorNote error={error} />
       </div>
-      {data && <NetworkSites sites={sites.map((site) => ({ ...site, paths: site.paths ?? [], steering: site.steering ?? [] }))} />}
+      {data && <NetworkSites embedded sites={sites.map((site) => ({ ...site, paths: site.paths ?? [], steering: site.steering ?? [] }))} />}
       <section>
         {hubs.length > 0 && (
           <details style={{ marginTop: 20 }}>

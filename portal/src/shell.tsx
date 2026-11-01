@@ -266,7 +266,7 @@ export function Shell({ children }: { children: ReactNode }) {
         {!carrier && connect && <StormBanner />}
         {manager && area !== "ops" && <SetupBanner path={location.pathname} />}
         <main className="page" id="main" tabIndex={-1}>
-          {current?.example && <p className="example-banner" role="note">Example data · This organisation is for testing, not a live customer network.</p>}
+          {current?.example && <p className="example-banner" role="note">Example data</p>}
           {children}
         </main>
       </div>
@@ -519,11 +519,10 @@ function SetupBanner({ path }: { path: string }) {
   return (
     <div className="setup-band" role="status">
       <span>
-        <strong>Finish setting up {current?.name || "your organisation"}</strong>: {setup.data.done} of {setup.data.total} steps
-        done.
+        Setup: {setup.data.done} of {setup.data.total} steps complete
       </span>
-      <NavLink to="/org/setup" className="button small">
-        Continue set-up
+      <NavLink to="/org/setup" className="setup-link">
+        Finish setup
       </NavLink>
     </div>
   );
