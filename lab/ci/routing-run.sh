@@ -73,7 +73,13 @@ if docker network inspect "$management" >/dev/null 2>&1; then
 fi
 mkdir -p lab/.state "$diagnostics"
 touch "$marker"
-trap 'routing_code=$?; cleanup || routing_code=1; exit "$routing_code"' EXIT
+routing_exit() {
+  local routing_code=$?
+  trap - EXIT
+  cleanup || routing_code=1
+  exit "$routing_code"
+}
+trap routing_exit EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 

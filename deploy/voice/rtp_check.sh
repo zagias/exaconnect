@@ -14,6 +14,12 @@ rtp_kam="$rtp_id-kam"
 rtp_fs="$rtp_id-fs"
 rtp_tmp=$(mktemp -d)
 cleanup() {
+  local rtp_status=$?
+  if ((rtp_status != 0)); then
+    docker inspect "$rtp_kam" "$rtp_fs" --format '{{.Name}}: {{.State.Status}} {{.State.Error}}' 2>/dev/null || true
+    docker logs --tail 60 "$rtp_kam" 2>&1 || true
+    docker logs --tail 60 "$rtp_fs" 2>&1 || true
+  fi
   docker rm -f "$rtp_kam" "$rtp_fs" >/dev/null 2>&1 || true
   docker network rm "$rtp_net" >/dev/null 2>&1 || true
   rm -rf "$rtp_tmp"
@@ -56,7 +62,10 @@ docker run -d --name "$rtp_fs" --network "$rtp_net" --network-alias freeswitch \
   -v "$rtp_tmp/external:/etc/freeswitch/sip_profiles/external:ro" -e EXA_PBX_SECRET=rtp-ci-only \
   "$FS_IMAGE" /exacarib-start.sh >/dev/null
 rtp_fs_ip=$(docker inspect "$rtp_fs" --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
-rtp_gateway=$(docker inspect "$rtp_kam" --format '{{range .NetworkSettings.Networks}}{{.Gateway}}{{end}}')
+# Internal networks deliberately give containers no default gateway. Their
+# bridge still has an IPAM address where this local-only SIP/RTP peer listens.
+rtp_gateway=$(docker network inspect "$rtp_net" --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}')
+echo "-- isolated RTP addresses: Kamailio $rtp_kam_ip, FreeSWITCH $rtp_fs_ip, endpoint $rtp_gateway"
 python3 voice/rtp_check.py --kamailio "$rtp_kam" --freeswitch "$rtp_fs" \
   --kamailio-ip "$rtp_kam_ip" --freeswitch-ip "$rtp_fs_ip" --endpoint-ip "$rtp_gateway" \
   --directory "$rtp_tmp/exacarib/kamailio"

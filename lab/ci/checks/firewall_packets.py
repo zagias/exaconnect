@@ -227,6 +227,19 @@ class PacketLab:
 
     def cached_pre_off_steering(self):
         """A real old mark rule wins over the unreachable Internet table."""
+        # The unreachable source-policy table can itself reject a TCP reply
+        # during reverse-path validation, masking the outbound mark bypass.
+        # Test the firewall under the more permissive RPF configuration: it
+        # must stop both directions without depending on an RPF side effect.
+        self.ns(
+            "router",
+            "sysctl",
+            "-qw",
+            *(
+                f"net.ipv4.conf.{interface}.rp_filter=0"
+                for interface in ("all", "default", "lan-a", "lan-b", "eth9")
+            ),
+        )
         self.ip(
             "router",
             "route",
@@ -278,7 +291,7 @@ class PacketLab:
             input="""table inet exa_ci_cached {
  chain classify_cached {
   type filter hook prerouting priority mangle; policy accept;
-  ip saddr 10.70.1.0/24 meta mark set 0x101
+  ip saddr 10.70.1.0/24 counter meta mark set 0x101
  }
 }
 """,
@@ -316,6 +329,7 @@ class PacketLab:
             for command in (
                 ("ip", "-brief", "address"),
                 ("ip", "route", "show", "table", "all"),
+                ("ip", "rule", "show"),
                 ("ip", "-6", "route", "show", "table", "all"),
                 ("ip", "-6", "neighbour", "show"),
                 (
@@ -323,6 +337,7 @@ class PacketLab:
                     "net.ipv4.ip_forward",
                     "net.ipv6.conf.all.forwarding",
                     "net.ipv6.conf.all.disable_ipv6",
+                    "net.ipv4.conf.all.rp_filter",
                 ),
                 ("nft", "list", "ruleset"),
             ):
@@ -421,6 +436,10 @@ def packets(fixtures: Path):
         lab.cached_pre_off_steering()
         # This succeeds even with table 251 unreachable: the old mark rule wins.
         lab.allowed("site_a", "198.51.100.10", 8000)
+        print(
+            "PASS cached steering bypass positive control with namespace-only rp_filter=0",
+            flush=True,
+        )
         with (
             Session(lab, "site_a", "198.51.100.10", 8000) as outbound,
             Session(lab, "outside", "192.0.2.1", 8080, "192.0.2.2") as inbound,

@@ -252,9 +252,17 @@ def main():
     args = parser.parse_args()
     if os.environ.get("EXA_VOICE_RTP_TESTS") != "1":
         parser.error("only the explicit ephemeral RTP job may run this harness")
-    for address in (args.kamailio_ip, args.freeswitch_ip, args.endpoint_ip):
-        if not ipaddress.IPv4Address(address).is_private:
-            parser.error("all test endpoints must be on the private Docker network")
+    for label, address in (
+        ("Kamailio", args.kamailio_ip),
+        ("FreeSWITCH", args.freeswitch_ip),
+        ("local endpoint", args.endpoint_ip),
+    ):
+        try:
+            private = ipaddress.IPv4Address(address).is_private
+        except ValueError:
+            parser.error(f"{label} has no valid isolated IPv4 address: {address!r}")
+        if not private:
+            parser.error(f"{label} must be on the private Docker network")
 
     def fs(text: str) -> str:
         return command("docker", "exec", args.freeswitch, "fs_cli", "-x", text)
