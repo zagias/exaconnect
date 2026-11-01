@@ -21,6 +21,12 @@ site_a_access() {
   for dev in eth1 eth2; do
     docker exec "$(node site-a)" ip link set dev "$dev" "$1" || failed=1
   done
+  if [[ $1 == up ]]; then
+    # Linux removes these one-shot topology routes when their interface goes
+    # down. The lab has no DHCP/network daemon to restore them after link-up.
+    docker exec "$(node site-a)" ip route replace 10.11.0.0/24 via 10.11.1.1 dev eth1 || failed=1
+    docker exec "$(node site-a)" ip route replace 10.12.0.0/24 via 10.12.1.1 dev eth2 || failed=1
+  fi
   return "$failed"
 }
 trap 'site_a_access up >/dev/null' EXIT
@@ -49,7 +55,7 @@ else
 fi
 sleep 20
 sat_rate=$(sql "SELECT round(avg(sent)) FROM path_metrics pm JOIN nodes n ON n.id = pm.node_id
-                WHERE n.name = 'site-a' AND pm.path = 'sat' AND pm.time > now() - interval '15 seconds'")
+                WHERE n.customer_id = '$cid' AND n.site_id = '$site_a' AND pm.path = 'sat' AND pm.time > now() - interval '15 seconds'")
 # Storm Mode probes satellite 5 times a second (50 per 10 s window) against
 # once a second normally; partial windows read lower, so 30 is the bar.
 if [[ -n $sat_rate ]] && ((sat_rate >= 30)); then ok "satellite warm: $sat_rate probes per 10 s"; else bad "satellite probes per 10 s: ${sat_rate:-none}"; fi
@@ -112,5 +118,7 @@ off_terrestrial() {
 if wait_for 60 off_terrestrial; then ok "voice and business back on terrestrial paths, bulk resumed"; else bad "classes did not leave satellite"; fi
 by=$(sql "SELECT storm_by FROM customers WHERE id = '$cid'")
 note "Storm Mode last switched by ${by:-?}"
-sql "SELECT to_char(time, 'HH24:MI:SS') || ' ' || kind FROM events WHERE kind LIKE 'storm_%' ORDER BY time DESC LIMIT 2" | sed 's/^/      /'
+sql "SELECT to_char(e.time, 'HH24:MI:SS') || ' ' || e.kind FROM events e JOIN nodes n ON n.id = e.node_id
+     WHERE e.customer_id = '$cid' AND n.customer_id = '$cid' AND n.site_id = '$site_a' AND e.kind LIKE 'storm_%'
+     ORDER BY e.time DESC LIMIT 2" | sed 's/^/      /'
 exit $fail

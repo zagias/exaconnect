@@ -1035,14 +1035,7 @@ func (a *Agent) steer(ctx context.Context, why string) {
 		a.mu.Unlock()
 		return
 	}
-	var choices []steer.Choice
-	if a.silent {
-		// Without the controller the agent also keeps each class off a path
-		// whose latest probe window breaches that class's SLA.
-		choices = steer.ChooseHealthy(m, a.usable(m), a.slaHealthy, a.slaSeverity(m))
-	} else {
-		choices = steer.Choose(m, a.usable(m))
-	}
+	choices := a.chooseSteering(m)
 	sig := a.slaSignature()
 	prev := a.choices
 	a.mu.Unlock()
