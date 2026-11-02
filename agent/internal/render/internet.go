@@ -13,6 +13,38 @@ import (
 // InternetNFTable is the nftables table (family ip) for internet NAT and firewall.
 const InternetNFTable = "exa_inet"
 
+// InternetGuardTable blocks unsupported IPv6 forwarding even at pop/off
+// sites, where the IPv4 NAT table is deliberately absent. It never touches
+// host input/output, so IPv6 management and neighbor discovery remain intact.
+const InternetGuardTable = "exa_inet_guard"
+
+func InternetForwardGuard(s *desired.State) string {
+	if s.Internet == nil {
+		return ""
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "table inet %s {}\ndelete table inet %s\ntable inet %s {\n", InternetGuardTable, InternetGuardTable, InternetGuardTable)
+	b.WriteString("\tchain forward {\n\t\ttype filter hook forward priority -10; policy accept;\n")
+	b.WriteString("\t\tmeta nfproto ipv6 counter drop comment \"IPv6 forwarding unsupported\"\n")
+	if s.Internet.Mode == desired.InternetOff {
+		lan := nftPrefixes(s.Internet.LANPrefixes)
+		corporate := nftPrefixes(s.Internet.CorporatePrefixes)
+		if len(lan) > 0 {
+			from, to := "", ""
+			if len(corporate) > 0 {
+				from = " ip saddr != { " + strings.Join(corporate, ", ") + " }"
+				to = " ip daddr != { " + strings.Join(corporate, ", ") + " }"
+			}
+			// Enforce off before any established-flow acceptance and regardless
+			// of the routing mark or an older steering map. Both directions stop.
+			fmt.Fprintf(&b, "\t\tip saddr { %s }%s counter drop comment \"Internet off\"\n", strings.Join(lan, ", "), to)
+			fmt.Fprintf(&b, "\t\tip daddr { %s }%s counter drop comment \"Internet off\"\n", strings.Join(lan, ", "), from)
+		}
+	}
+	b.WriteString("\t}\n}\n")
+	return b.String()
+}
+
 // Rule comments that name a counter in telemetry.
 const (
 	CommentRule    = "fw"      // fw<id>: a firewall rule
@@ -68,11 +100,14 @@ func InternetNFT(s *desired.State) string {
 	}
 	b.WriteString("\t}\n")
 	b.WriteString("\tchain filter_fwd {\n\t\ttype filter hook forward priority filter; policy accept;\n")
+	b.WriteString("\t\tct state invalid drop\n")
 	b.WriteString("\t\tct state established,related accept\n")
 	if len(ifs) > 0 {
 		if s.Role == desired.RolePoP {
 			for _, f := range in.PortForwards {
-				r := fmt.Sprintf("iifname %s ct status dnat ip daddr %s %s dport %d", uplinks, f.ToAddress, f.Protocol, f.ToPort)
+				// Different public forwards can share a backend. Keep the original
+				// destination tuple in the match so their allowlists cannot overlap.
+				r := fmt.Sprintf("iifname %s ct status dnat ct original ip daddr %s ct original proto-dst %d ip daddr %s %s dport %d", uplinks, in.PublicAddress, f.Port, f.ToAddress, f.Protocol, f.ToPort)
 				if from := nftPrefixes(f.AllowFrom); len(from) > 0 {
 					r += " ip saddr { " + strings.Join(from, ", ") + " }"
 				}

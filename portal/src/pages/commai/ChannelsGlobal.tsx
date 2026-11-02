@@ -92,7 +92,7 @@ function SimulatedTag() {
 function NotOn({ label }: { label: string }) {
   return (
     <p className="callout warn small">
-      <strong>{label} isn't switched on for your business yet.</strong> ExaCarib switches each channel on once its written go-live checks have passed. Until then it can't be connected.
+      <strong>{label} isn't switched on for your business yet.</strong> XaKore switches each channel on once its written go-live checks have passed. Until then it can't be connected.
     </p>
   );
 }
@@ -402,7 +402,7 @@ function CloudApi({ base }: { base: string }) {
           <h3 className="ch-h3">Connect a number</h3>
           {d.embedded_signup.ready ? (
             <p className="muted small">
-              Embedded Signup is configured. Opening Meta's window from here needs Meta's JavaScript SDK on this page, which is added when ExaCarib's Meta app passes review.
+              Embedded Signup is configured. Opening Meta's window from here needs Meta's JavaScript SDK on this page, which is added when XaKore's Meta app passes review.
             </p>
           ) : (
             <p className="callout small">

@@ -206,7 +206,7 @@ def _rate_and_alert(conn, rec: dict) -> None:
 def _currency(conn, customer_id: Any) -> str:
     from . import bill
 
-    return bill.card_at(conn, customer_id)["currency"]
+    return bill.quote_card(conn, customer_id)["currency"]
 
 
 def describe(conn, b: dict) -> str:

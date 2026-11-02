@@ -86,7 +86,7 @@ export default function HelpCentre() {
       </main>
       <footer className="help-foot help-wrap">
         <p>
-          {h.business} help centre. Runs on {h.platform || "ExaCarib"}.
+          {h.business} help centre. Runs on {h.platform || "XaKore"}.
         </p>
       </footer>
     </div>

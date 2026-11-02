@@ -24,7 +24,7 @@ interface Org {
 interface Created {
   id: string;
   name: string;
-  invite: { email: string; url: string; expires_at: string };
+  invite: { email: string; url: string; expires_at: string; emailed: boolean; email_sender: string };
 }
 
 /** ExaCarib operations (ADR 0043): every organisation, and a new one in one step. */
@@ -127,9 +127,19 @@ function NewOrganisation({ onCreated, onOpen }: { onCreated: () => void; onOpen:
     <Card title="New organisation">
       {created ? (
         <div className="install" style={{ marginBottom: 0 }}>
-          <p style={{ marginTop: 0 }}>
-            <strong>{created.name}</strong> is ready. Send this link to <strong>{created.invite.email}</strong>; they
-            choose a password and become the owner. It works once and expires in 7 days. No email is sent for you.
+          <p style={{ marginTop: 0 }} role="status">
+            <strong>{created.name}</strong> is ready.{" "}
+            {created.invite.emailed ? (
+              <>
+                Invitation sent to <strong>{created.invite.email}</strong>. You can also copy the link below.
+              </>
+            ) : (
+              <>
+                {created.invite.email_sender === "failed" ? "We couldn't email this invitation." : "Email isn't available for this service."}{" "}
+                Copy this link and send it to <strong>{created.invite.email}</strong>.
+              </>
+            )}{" "}
+            They choose a password and become the owner. The link works once and expires in 7 days.
           </p>
           <pre className="mono small install-command">{link}</pre>
           <p className="form-actions">

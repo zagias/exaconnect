@@ -1,11 +1,13 @@
 import { useState, type FormEvent } from "react";
+import { Navigate, useLocation } from "react-router-dom";
 import { api, useApi } from "../../api";
 import { ErrorNote } from "../../components";
-import { Card, EmptyState, PageHead, useAction } from "../../ui";
+import { Card, EmptyState, useAction } from "../../ui";
+import { assistantAddress } from "../assistant/types";
 import { useCommaiBase, when } from "./lib";
 import { CASE_STATUS, ReplyForm, Thread, type CaseFull } from "./SupportQueue";
 import { PriceLines } from "./voice/ChangeBox";
-import { SpeechButton } from "./voice/SpeechInput";
+import { SpeechButton, speechAvailable } from "./voice/SpeechInput";
 import type { PriceImpact } from "./voice/types";
 import "./automation.css";
 
@@ -69,10 +71,16 @@ const SUGGESTED = [
 ];
 
 export default function Assistant() {
+  return <Navigate to={assistantAddress(useLocation().search, "jibsy")} replace />;
+}
+
+/** Existing Jibsy checks and permissioned repairs, embedded in the shared assistant. */
+export function JibsyChecks() {
   const base = useCommaiBase();
   const [q, setQ] = useState("");
   const [answer, setAnswer] = useState<Answer | null>(null);
   const [openCase, setOpenCase] = useState<string | null>(null);
+  const [hasSpeech] = useState(speechAvailable);
   const cases = useApi<Case[]>(base && `${base}/support-cases`, 0);
   const act = useAction();
   if (!base) return <p className="muted">Choose an organisation first.</p>;
@@ -85,14 +93,15 @@ export default function Assistant() {
     if (q.trim().length >= 2) ask(q.trim());
   };
   return (
-    <>
-      <PageHead title="Assistant">
-        Ask about your set-up. The assistant checks your real configuration, shows the evidence, and suggests fixes that apply only when you approve them.
-      </PageHead>
-      <Card title="Ask">
+    <div className="assistant-jibsy">
+      <div className="assistant-intro" style={{ paddingTop: 0 }}>
+        <h2>Check Jibsy configuration</h2>
+        <p className="muted">Checks use your configured services and redacted errors. Review each repair or phone proposal before approving it.</p>
+      </div>
+      <section>
         <form onSubmit={submit} className="form" aria-describedby="assistant-hint">
           <label className="wide" htmlFor="assistant-question">
-            Your question, or a phone change
+            Your question or request
           </label>
           <input
             id="assistant-question"
@@ -103,18 +112,19 @@ export default function Assistant() {
             placeholder="Why has WhatsApp stopped sending?"
           />
           <div className="actions">
-            <SpeechButton onText={setQ} label="Say your question instead of typing it" />
-            <button className="button" disabled={act.busy} aria-busy={act.busy}>
+            <SpeechButton onText={setQ} label="Dictate your question into the text box" />
+            <button className="button" disabled={act.busy || q.trim().length < 2} aria-busy={act.busy}>
               {act.busy ? "Checking…" : "Ask"}
             </button>
           </div>
         </form>
         <p id="assistant-hint" className="small muted">
-          You can also ask for a phone change, such as “forward my calls to my mobile until 5”. You see the exact change first and nothing changes until you confirm.
+          Phone requests use your existing phone access. Check the proposed change and any price before confirming.
         </p>
-        <div className="auto-row" style={{ marginTop: 8 }} role="group" aria-label="Suggested questions">
-          {SUGGESTED.map((s) => (
-            <button key={s} className="button small secondary" disabled={act.busy} onClick={() => {
+        {hasSpeech && <p className="small muted">Speak fills the text box. Check the words, then send.</p>}
+        <div className="assistant-suggestions" role="group" aria-label="Suggested Jibsy checks">
+          {SUGGESTED.slice(0, 3).map((s) => (
+            <button key={s} className="linklike" disabled={act.busy} onClick={() => {
               setQ(s);
               ask(s);
             }}>
@@ -124,13 +134,14 @@ export default function Assistant() {
         </div>
         <p className="auto-secret-note">Never paste passwords or API keys here. Sign-ins and keys go through the Apps and Channels screens.</p>
         <ErrorNote error={act.error} />
-      </Card>
+      </section>
       <div aria-live="polite">
         {answer && <AnswerCard key={answer.id ?? answer.question} base={base} answer={answer} onCase={cases.reload} />}
       </div>
       <Card title="Support cases">
+        <ErrorNote error={cases.error} />
         {cases.data && cases.data.length === 0 && (
-          <EmptyState title="No support cases">When the assistant can't fix something, it offers to open a case with ExaCarib support. Cases and replies appear here.</EmptyState>
+          <EmptyState title="No support cases">When the assistant can't fix something, it offers to open a case with XaKore support. Cases and replies appear here.</EmptyState>
         )}
         <ul className="auto-evidence" aria-label="Your support cases">
           {(cases.data ?? []).map((c) => (
@@ -144,7 +155,7 @@ export default function Assistant() {
           ))}
         </ul>
       </Card>
-    </>
+    </div>
   );
 }
 
@@ -175,7 +186,7 @@ function VoiceChange({ base, vc }: { base: string; vc: NonNullable<Answer["voice
       const p = vc.price_impact;
       const body = p?.changes_bill ? { accepted_price: { monthly_delta: p.monthly_delta, one_time: p.one_time } } : {};
       await api(`${base}/voice/say/${vc.id}/confirm`, { method: "POST", body: JSON.stringify(body) });
-      setDone("Done: the change is live.");
+      setDone("The phone change was confirmed.");
     });
   const cancel = () =>
     act.run(async () => {
@@ -234,8 +245,9 @@ function AnswerCard({ base, answer, onCase }: { base: string; answer: Answer; on
     });
   const problems = answer.findings.filter((f) => f.status === "problem");
   return (
-    <Card title="Answer" note={<span className={`pill ${cls}`}>{word}</span>}>
+    <Card title="Answer" note={<span className={`pill ${answer.source === "voice" ? "" : cls}`}>{answer.source === "voice" ? "Phone proposal" : word}</span>}>
       <p className="auto-answer">{answer.answer}</p>
+      <p className="small muted">Source: {answer.source === "voice" ? "Jibsy phone proposal" : "Jibsy configuration checks"}</p>
       {answer.voice_change && <VoiceChange base={base} vc={answer.voice_change} />}
       {problems.length > 0 && (
         <>

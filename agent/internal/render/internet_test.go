@@ -44,9 +44,10 @@ table ip exa_inet {
 	}
 	chain filter_fwd {
 		type filter hook forward priority filter; policy accept;
+		ct state invalid drop
 		ct state established,related accept
-		iifname { "eth9" } ct status dnat ip daddr 192.168.10.10 tcp dport 80 ip saddr { 0.0.0.0/0 } counter accept comment "pf3"
-		iifname { "eth9" } ct status dnat ip daddr 192.168.30.5 udp dport 5060 counter accept comment "pf4"
+		iifname { "eth9" } ct status dnat ct original ip daddr 100.64.0.2 ct original proto-dst 8080 ip daddr 192.168.10.10 tcp dport 80 ip saddr { 0.0.0.0/0 } counter accept comment "pf3"
+		iifname { "eth9" } ct status dnat ct original ip daddr 100.64.0.2 ct original proto-dst 5060 ip daddr 192.168.30.5 udp dport 5060 counter accept comment "pf4"
 		iifname { "eth9" } counter drop comment "inbound"
 		oifname { "eth9" } ip saddr @lan ip saddr { 192.168.10.0/24 } ip daddr { 198.51.100.0/24 } meta l4proto icmp counter drop comment "fw12"
 		oifname { "eth9" } ip saddr @lan ip daddr { 203.0.113.0/24 } tcp dport { 443, 8000-8100 } counter accept comment "fw13"
@@ -70,6 +71,7 @@ table ip exa_inet {
 	}
 	chain filter_fwd {
 		type filter hook forward priority filter; policy accept;
+		ct state invalid drop
 		ct state established,related accept
 		iifname { "eth1", "eth2" } counter drop comment "inbound"
 		oifname { "eth1", "eth2" } ip saddr @lan ip daddr { 198.51.100.0/24 } counter drop comment "fw7"
@@ -123,6 +125,7 @@ table ip exa_inet {
 	}
 	chain filter_fwd {
 		type filter hook forward priority filter; policy accept;
+		ct state invalid drop
 		ct state established,related accept
 	}
 }
@@ -197,6 +200,7 @@ table ip exa_inet {
 	}
 	chain filter_fwd {
 		type filter hook forward priority filter; policy accept;
+		ct state invalid drop
 		ct state established,related accept
 		iifname { "eth9" } counter drop comment "inbound"
 	}

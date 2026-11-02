@@ -33,6 +33,10 @@ ip=$(docker inspect exa-sbc-kam --format '{{range .NetworkSettings.Networks}}{{.
 python3 voice/sip_probe.py "$ip" 5060 | tee "$tmp/answer"
 grep -q "^SIP/2.0 403" "$tmp/answer"
 
+echo "-- real SIP policy and carrier failover regressions"
+gateway=$(docker inspect exa-sbc-kam --format '{{range .NetworkSettings.Networks}}{{.Gateway}}{{end}}')
+python3 voice/sbc_policy_check.py "$ip" "$gateway" "$tmp/exacarib/kamailio" exa-sbc-kam
+
 echo "-- freeswitch starts with ExaCarib's files"
 # The gateway as make voice-up installs it for EXA_VOICE_EDGE=kamailio.
 mkdir -p "$tmp/external"
@@ -40,6 +44,7 @@ cp freeswitch/sip_profiles/external/*.example "$tmp/external/"
 cp freeswitch/sip_profiles/external/exacarib_sip.kamailio.xml.example "$tmp/external/exacarib_sip.xml"
 docker run -d --name exa-sbc-fs --tmpfs /etc/freeswitch/directory/default \
   --entrypoint /bin/sh -v "$PWD/freeswitch/start.sh:/exacarib-start.sh:ro" \
+  -v "$PWD/freeswitch/phone-runtime.sh:/exacarib-phone-runtime.sh:ro" \
   -v "$tmp/exacarib:/exacarib:ro" \
   -v "$PWD/freeswitch/directory/exacarib.xml:/etc/freeswitch/directory/exacarib.xml:ro" \
   -v "$PWD/freeswitch/dialplan/exacarib.xml:/etc/freeswitch/dialplan/exacarib.xml:ro" \
@@ -65,6 +70,10 @@ for _ in $(seq 30); do
 done
 cat "$tmp/sofia"
 [[ $(grep -c RUNNING "$tmp/sofia") == 2 ]]
+
+echo "-- running PBX version, startup guard and loaded SIP transfer mitigation"
+python3 voice/phone_parser_check.py --container exa-sbc-fs
+python3 voice/phone_runtime_check.py --container exa-sbc-fs
 
 echo "-- freeswitch can ask the controller before outside calls"
 docker exec exa-sbc-fs fs_cli -x "module_exists mod_curl" | grep -qx true

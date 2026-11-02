@@ -1,0 +1,17 @@
+<!--
+  Private self-hosted LiveKit SIP gateway. This template is not loaded until
+  copied to exacarib_ai.xml during an explicitly reviewed voice deployment.
+  First use a patched FreeSWITCH >=1.11.2 and configure_sip.py to review an
+  inbound DID allow-list limited to the FreeSWITCH signalling address.
+  No public SIP hostname, wildcard DID or carrier credentials belong here.
+-->
+<include>
+  <gateway name="exacarib_ai">
+    <param name="username" value="xakore-phone"/>
+    <param name="password" value="not-used"/>
+    <param name="realm" value="livekit-sip"/>
+    <param name="proxy" value="livekit-sip:5062"/>
+    <param name="register" value="false"/>
+    <param name="caller-id-in-from" value="true"/>
+  </gateway>
+</include>

@@ -23,6 +23,7 @@ Every node gets an `internet` block (absent = remove everything below):
   "mode": "pop",                         // site: pop | local | off; PoP: "gateway"
   "lan_prefixes": ["192.168.10.0/24"],   // sources this applies to. Site: its LAN. PoP: the LANs
                                          // of every pop-mode site, plus its own LAN
+  "corporate_prefixes": ["192.168.0.0/16", "10.254.0.0/24"], // off mode: authoritative allowed network destinations
   "tunnels": ["wg-a", "wg-b", "wg-sat"], // site, pop mode: tunnels to the PoP in preference order
   "uplinks": [                           // site, local mode: its carrier links in preference order.
     {"interface": "eth1", "gateway": "10.11.1.1", "path": "carrier-a", "tunnel": "wg-a"}
@@ -40,6 +41,15 @@ Every node gets an `internet` block (absent = remove everything below):
 ```
 
 ### What the agent does
+
+Every managed Internet mode installs a separate `inet exa_inet_guard`
+forwarding table. IPv6 forwarding is blocked because the current Internet
+policy is IPv4-only; host input/output and IPv6 neighbour discovery are
+untouched. In `off` mode it also drops IPv4 forwarding between the site's
+LANs and destinations outside `corporate_prefixes`, in both directions,
+before stateful return-traffic acceptance. This remains effective with an
+older steering map or an existing connection. An absent corporate list
+fails closed for LAN forwarding.
 
 Routing (all nodes, table 251, rules after the steering rules at 1000+):
 
@@ -68,6 +78,12 @@ new carrier instead of waiting to time out. Sites need `conntrack` installed.
 Firewall and NAT, one nftables table `ip exa_inet`, replaced atomically
 (`nft -f`), only on a local-mode site and the PoP:
 
+The new firewall is installed before enabling an exit route. A failed nft
+transaction leaves the old table in place; only successful transactions
+are cached across restarts. Refusing every exit, including the unreachable
+fallback, fails the configuration and invokes last-good rollback rather
+than reporting the new mode as applied.
+
 ```
 table ip exa_inet {
   set lan { type ipv4_addr; flags interval; elements = { <lan_prefixes> } }
@@ -81,15 +97,27 @@ table ip exa_inet {
   }
   chain filter_fwd {
     type filter hook forward priority filter; policy accept;
+    ct state invalid drop
     ct state established,related accept
     # inbound: only port forwards, from allowed sources
-    iifname { <uplinks> } ct status dnat ip daddr 192.168.10.10 tcp dport 8080 ip saddr { <allow_from> } counter accept comment "pf3"
+    iifname { <uplinks> } ct status dnat ct original ip daddr <public_address> ct original proto-dst 8080 ip daddr 192.168.10.10 tcp dport 8080 ip saddr { <allow_from> } counter accept comment "pf3"
     iifname { <uplinks> } counter drop comment "inbound"
     # outbound: the customer's rules, first match wins, then allow
     oifname { <uplinks> } ip saddr @lan ip saddr { <src> } ip daddr { <dst> } meta l4proto icmp counter drop comment "fw12"
   }
 }
 ```
+
+Each port forward's allowlist is bound to its original public address and
+port, even when multiple public ports reach the same backend. Public UDP
+ports used by WireGuard listeners and IPsec (500/4500) cannot be forwarded.
+Forward destinations must stay inside managed LANs. Policy edits are
+serialized within their database transaction to preserve first-match order,
+limits and the shared public-port namespace under concurrent requests.
+
+The outbound default remains allow after the ordered rules. Ordinary rule
+changes apply to new connections; existing established return traffic is
+retained. Internet Off is enforced before that stateful acceptance.
 
 An empty `src` or `dst` means any; `allow_from` empty means any. The
 controller only lists a port forward while its site is in `pop` mode (the

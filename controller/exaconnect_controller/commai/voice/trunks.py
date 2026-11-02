@@ -41,11 +41,10 @@ import psycopg
 from psycopg.types.json import Jsonb
 
 from ... import audit
-from . import carriers, emergency, freeswitch
+from . import carriers, emergency, freeswitch, signalling
 from .common import VoiceError, digits
 
 SIM_FAIL = ("", "refuse", "down")
-HOST = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$")
 
 
 # ---- trunks ---------------------------------------------------------------------------------
@@ -104,11 +103,7 @@ def _clean(body: dict, old: dict | None) -> dict:
         raise VoiceError("A trunk is a real SIP trunk (sip) or a simulated one for testing (simulated).", 422)
     host = str(get("host", "")).strip().lower()
     if host:
-        try:
-            ipaddress.ip_address(host)
-        except ValueError:
-            if not HOST.match(host) or "." not in host:
-                raise VoiceError(f"{host} is not a host name or IP address.", 422) from None
+        host = signalling.host(host)
     if adapter == "sip" and not host:
         raise VoiceError("A SIP trunk needs the carrier's host name or IP address.", 422)
     transport = get("transport", "udp")

@@ -12,6 +12,33 @@ cid=$(customer_id)
 site_a=$(sql "SELECT id FROM sites WHERE name = 'site-a' AND customer_id = '$cid'")
 lab/faults/restore.sh >/dev/null
 
+# The shared carrier routers also serve site-b (eth3). Cutting those routers
+# would take both sites down while only site-a is allowed to use satellite;
+# site-b would correctly pause the return stream. Fail only site-a's access
+# interfaces: topology eth1=carrier-a, eth2=carrier-b, eth3=satellite.
+site_a_access() {
+  local dev failed=0
+  for dev in eth1 eth2; do
+    docker exec "$(node site-a)" ip link set dev "$dev" "$1" || failed=1
+  done
+  if [[ $1 == up ]]; then
+    # Linux removes these one-shot topology routes when their interface goes
+    # down. The lab has no DHCP/network daemon to restore them after link-up.
+    docker exec "$(node site-a)" ip route replace 10.11.0.0/24 via 10.11.1.1 dev eth1 || failed=1
+    docker exec "$(node site-a)" ip route replace 10.12.0.0/24 via 10.12.1.1 dev eth2 || failed=1
+  fi
+  return "$failed"
+}
+trap 'site_a_access up >/dev/null' EXIT
+site_b_terrestrial() {
+  local path peers
+  path=$(path_of site-b "$VOICE" 192.168.10.10)
+  peers=$(docker exec "$(node site-b)" vtysh -c 'show bfd peers json' |
+    jq '[.[] | select(.status == "up")] | length')
+  note "site-b return voice path ${path:-none}; BFD ${peers:-0}/3 up"
+  [[ $path == wg-[ab] && ${peers:-0} -ge 3 ]]
+}
+
 echo "-- Storm Mode on at site-a only"
 if api POST "/sites/$site_a/storm" '{"on": true}' |
   jq -e '.storm_mode == true and ([.sites[] | select(.storm_mode) | .name] == ["site-a"])' >/dev/null; then
@@ -28,19 +55,20 @@ else
 fi
 sleep 20
 sat_rate=$(sql "SELECT round(avg(sent)) FROM path_metrics pm JOIN nodes n ON n.id = pm.node_id
-                WHERE n.name = 'site-a' AND pm.path = 'sat' AND pm.time > now() - interval '15 seconds'")
+                WHERE n.customer_id = '$cid' AND n.site_id = '$site_a' AND pm.path = 'sat' AND pm.time > now() - interval '15 seconds'")
 # Storm Mode probes satellite 5 times a second (50 per 10 s window) against
 # once a second normally; partial windows read lower, so 30 is the bar.
 if [[ -n $sat_rate ]] && ((sat_rate >= 30)); then ok "satellite warm: $sat_rate probes per 10 s"; else bad "satellite probes per 10 s: ${sat_rate:-none}"; fi
 bgp_sat=$(docker exec "$(node site-a)" vtysh -c 'show bgp summary json' | jq '[.ipv4Unicast.peers | to_entries[] | select(.key | startswith("100.64.3.")) | select(.value.state == "Established")] | length')
 if ((bgp_sat >= 1)); then ok "satellite BGP established"; else bad "satellite BGP not established"; fi
 
-echo "-- both terrestrial links cut"
+echo "-- both site-a terrestrial access links cut; site-b stays on terrestrial"
+if site_b_terrestrial; then ok "site-b terrestrial paths are healthy before the fault"; else bad "site-b is not ready for the single-site outage"; fi
 docker exec -d "$(node lan-a)" sh -c "ping -Q 184 -i 0.02 -c 1500 -W 1 $DST > /tmp/storm-voice.txt 2>&1"
 sleep 3
-lab/faults/cut.sh carrier-a >/dev/null
-lab/faults/cut.sh carrier-b >/dev/null
+if site_a_access down; then ok "site-a eth1/eth2 down; satellite eth3 and site-b access left up"; else bad "could not cut site-a terrestrial access"; fi
 sleep 15
+if site_b_terrestrial; then ok "site-b remains on terrestrial paths during site-a's outage"; else bad "the single-site fault affected site-b"; fi
 on_sat=("business $BUSINESS")
 paused=("bulk $BULK")
 if [[ $SAT_PROFILE == geo ]]; then
@@ -75,6 +103,7 @@ else
 fi
 
 echo "-- restore and switch Storm Mode off"
+site_a_access up || bad "could not restore site-a terrestrial access"
 lab/faults/restore.sh >/dev/null
 sleep 10
 if api POST "/sites/$site_a/storm" '{"on": false}' | jq -e '.storm_mode == false' >/dev/null; then
@@ -89,5 +118,7 @@ off_terrestrial() {
 if wait_for 60 off_terrestrial; then ok "voice and business back on terrestrial paths, bulk resumed"; else bad "classes did not leave satellite"; fi
 by=$(sql "SELECT storm_by FROM customers WHERE id = '$cid'")
 note "Storm Mode last switched by ${by:-?}"
-sql "SELECT to_char(time, 'HH24:MI:SS') || ' ' || kind FROM events WHERE kind LIKE 'storm_%' ORDER BY time DESC LIMIT 2" | sed 's/^/      /'
+sql "SELECT to_char(e.time, 'HH24:MI:SS') || ' ' || e.kind FROM events e JOIN nodes n ON n.id = e.node_id
+     WHERE e.customer_id = '$cid' AND n.customer_id = '$cid' AND n.site_id = '$site_a' AND e.kind LIKE 'storm_%'
+     ORDER BY e.time DESC LIMIT 2" | sed 's/^/      /'
 exit $fail

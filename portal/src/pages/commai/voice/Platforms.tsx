@@ -232,10 +232,10 @@ function LinkCard({ base, l, d, admin, reload }: { base: string; l: Link; d: Vie
               <input value={txt} placeholder="ms=ms12345678" onChange={(e) => setTxt(e.target.value)} />
             </label>
             <button className="button secondary" disabled={act.busy}>
-              Send to ExaCarib
+              Send to XaKore
             </button>
             <p className="small muted">
-              {l.dns_done ? "ExaCarib has published it: press Verify in Microsoft 365." : l.dns_txt ? "ExaCarib will publish it and let you know." : "Microsoft shows this when you add the domain."}
+              {l.dns_done ? "XaKore has published it: press Verify in Microsoft 365." : l.dns_txt ? "XaKore will publish it and let you know." : "Microsoft shows this when you add the domain."}
             </p>
           </form>
         )}

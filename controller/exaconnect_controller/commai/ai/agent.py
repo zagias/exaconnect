@@ -61,11 +61,21 @@ def _who(m: dict) -> str:
     return "ai" if m["author_kind"] == "ai" else "business"
 
 
-def history(conn: psycopg.Connection, customer_id: Any, conversation_id: Any, limit: int) -> list[dict]:
+def history(
+    conn: psycopg.Connection,
+    customer_id: Any,
+    conversation_id: Any,
+    limit: int,
+    *,
+    fresh_transcripts: dict[str, str] | None = None,
+) -> list[dict]:
     """Customer-facing messages only (inbox.messages never reads notes). A voice
     note's transcript counts as the customer's words (ADR 0032)."""
     msgs = inbox.messages(conn, customer_id, conversation_id)[-limit:]
     spoken = attachments.transcripts(conn, customer_id, msgs)
+    # A newly read note may still be awaiting the publication/privacy guard.
+    # Include its words in model context without writing the cache first.
+    spoken.update(fresh_transcripts or {})
     out = []
     for m in msgs:
         text = " ".join(x for x in (m["body"], spoken.get(str(m["id"]), "")) if x).strip()
@@ -75,7 +85,14 @@ def history(conn: psycopg.Connection, customer_id: Any, conversation_id: Any, li
 
 
 def build_context(
-    conn: psycopg.Connection, customer_id: Any, conv: dict, prof: dict, last_text: str, customer_language: str
+    conn: psycopg.Connection,
+    customer_id: Any,
+    conv: dict,
+    prof: dict,
+    last_text: str,
+    customer_language: str,
+    *,
+    fresh_transcripts: dict[str, str] | None = None,
 ) -> dict:
     rp = runtime.PROFILES[ROLE]
     verified = memory.identity_verified(conn, conv)
@@ -112,7 +129,7 @@ def build_context(
         "business_language": prof["business_language"],
         "customer_language": customer_language,
         "channel": conv["channel"],
-        "conversation": history(conn, customer_id, conv["id"], rp.max_history),
+        "conversation": history(conn, customer_id, conv["id"], rp.max_history, fresh_transcripts=fresh_transcripts),
         "knowledge": kb,
         "tools": [t["tool"] for t in tools],
         "tool_details": tools,
@@ -169,7 +186,7 @@ def respond(conn: psycopg.Connection, customer_id: Any, conversation_id: Any, me
     conv = conn.execute(
         "SELECT * FROM conversations WHERE id = %s AND customer_id = %s", (conversation_id, customer_id)
     ).fetchone()
-    if conv is None or conv["handler"] != "ai":
+    if conv is None or conv["handler"] != "ai" or _call_ended(conn, customer_id, conv):
         return {"outcome": "stopped"}
     if message_id:
         if conn.execute("SELECT 1 FROM ai_runs WHERE message_id = %s AND role = %s", (message_id, ROLE)).fetchone():
@@ -194,7 +211,27 @@ def respond(conn: psycopg.Connection, customer_id: Any, conversation_id: Any, me
         return _fail(conn, customer_id, conversation_id, message_id, prof, e)
 
 
+def _call_ended(conn, customer_id: Any, conv: dict, *, lock: bool = False) -> bool:
+    if conv["channel"] != "voice":
+        return False
+    row = conn.execute(
+        "SELECT ended_at FROM ai_calls WHERE customer_id = %s AND conversation_id = %s"
+        + (" FOR UPDATE" if lock else ""),
+        (customer_id, conv["id"]),
+    ).fetchone()
+    return row is not None and row["ended_at"] is not None
+
+
 def _claim(conn, customer_id: Any, conv: dict, message_id: Any) -> Any:
+    # The model can finish after the caller disconnected. Serialize the
+    # short write/tool-proposal phase against end_call, not the model call.
+    memory.lock_subject(conn, customer_id, conv)
+    if _call_ended(conn, customer_id, conv, lock=True):
+        raise inbox.NotHandler("This call has ended.")
+    locked = inbox.get(conn, customer_id, conv["id"], lock=True)
+    memory.check_subject(conv, locked)
+    if locked["handler"] != "ai":
+        raise inbox.NotHandler()
     row = conn.execute(
         """INSERT INTO ai_runs (customer_id, conversation_id, message_id, role, task, outcome, actor)
            VALUES (%s, %s, %s, %s, 'reply', 'failed', 'ai') ON CONFLICT DO NOTHING RETURNING id""",
@@ -226,21 +263,38 @@ def _run(conn: psycopg.Connection, customer_id: Any, conv: dict, message_id: Any
     last_text = last_msg["body"] if last_msg else ""
     # Attachments and voice notes (ADR 0032): a voice note's words are the
     # customer's words; other files go to the model as data.
-    files = attachments.for_message(conn, customer_id, last_msg) if last_msg else {"files": [], "unreadable": []}
+    files = (
+        attachments.for_message(conn, customer_id, last_msg, defer_cache=True)
+        if last_msg
+        else {"files": [], "unreadable": []}
+    )
     if files.get("transcript"):
         last_text = f"{last_text} {files['transcript']}".strip()
     business_lang = prof["business_language"]
     detected = language.detect(last_text, default=conv["language"] or business_lang)
-    ctx = build_context(conn, customer_id, conv, prof, last_text, detected)
+    ctx = build_context(
+        conn,
+        customer_id,
+        conv,
+        prof,
+        last_text,
+        detected,
+        fresh_transcripts={str(last_msg["id"]): files["transcript"]} if last_msg and files.get("transcript") else None,
+    )
     ctx["attachments"] = files["files"]
     esc = prof["escalation"]
+
+    def claim():
+        claimed = _claim(conn, customer_id, conv, message_id)
+        attachments.persist_pending(conn, files)
+        return claimed
 
     def escalate(reason: str, *, out: ModelOutput | None = None, tried: list[str] | None = None, gap: str = ""):
         return _escalate(
             conn,
             customer_id,
             conv,
-            run_id or _claim(conn, customer_id, conv, message_id),
+            run_id or claim(),
             prof,
             ctx,
             reason,
@@ -271,11 +325,26 @@ def _run(conn: psycopg.Connection, customer_id: Any, conv: dict, message_id: Any
         return escalate(f"The customer writes in {language.name(detected)}, which the AI agent is not set to answer.")
 
     try:
-        out = runtime.complete(conn, customer_id, ROLE, "reply", ctx, ref=str(message_id or ""), prof=prof)
+
+        def claim_before_usage():
+            nonlocal run_id
+            # Publish in contact -> call -> conversation -> billing order after model IO.
+            run_id = claim()
+
+        out = runtime.complete(
+            conn,
+            customer_id,
+            ROLE,
+            "reply",
+            ctx,
+            ref=str(message_id or ""),
+            prof=prof,
+            before_usage=claim_before_usage,
+        )
     except runtime.UsageLimit as e:
         return escalate(str(e) + " A person takes over.")
 
-    run_id = _claim(conn, customer_id, conv, message_id)
+    run_id = run_id or claim()
     kb = ctx["knowledge"]
     hit_ids = {h["chunk_id"] for h in kb["hits"]}
     out.sources = [s for s in out.sources if s in hit_ids]
@@ -469,8 +538,19 @@ def _fail(conn, customer_id: Any, conversation_id: Any, message_id: Any, prof: d
     """The model or a dependency failed: a person takes the conversation, with a
     holding reply to the customer, so it is never lost and never silent."""
     conv = conn.execute(
-        "SELECT * FROM conversations WHERE id = %s AND customer_id = %s FOR UPDATE", (conversation_id, customer_id)
+        "SELECT * FROM conversations WHERE id = %s AND customer_id = %s", (conversation_id, customer_id)
     ).fetchone()
+    if conv is None:
+        return {"outcome": "stopped"}
+    try:
+        memory.lock_subject(conn, customer_id, conv)
+        if _call_ended(conn, customer_id, conv, lock=True):
+            return {"outcome": "stopped"}
+        locked = inbox.get(conn, customer_id, conversation_id, lock=True)
+        memory.check_subject(conv, locked)
+        conv = locked
+    except inbox.NotHandler:
+        return {"outcome": "stopped"}
     if conv is None or conv["handler"] != "ai":
         return {"outcome": "stopped"}
     what = str(err) if isinstance(err, ModelError) else f"{type(err).__name__} in the AI agent"

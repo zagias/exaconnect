@@ -63,7 +63,7 @@ export default function SupportQueue() {
   if (q.trim()) params.set("q", q.trim());
   const list = useApi<QueueRow[]>(user?.role === "admin" ? `/commai/exacarib/support/cases?${params}` : null, 30_000);
   const [open, setOpen] = useState<string | null>(null);
-  if (user?.role !== "admin") return <p className="muted">The support queue is for ExaCarib staff.</p>;
+  if (user?.role !== "admin") return <p className="muted">The support queue is for XaKore staff.</p>;
   return (
     <>
       <PageHead title="Support queue">
@@ -201,7 +201,7 @@ export function Thread({ replies }: { replies: Reply[] }) {
       {replies.map((r) => (
         <li key={r.id}>
           <span className="small muted">
-            {r.from_exacarib ? "ExaCarib" : r.author.replace(/^user:/, "")} · {when(r.created_at)}
+            {r.from_exacarib ? "XaKore" : r.author.replace(/^user:/, "")} · {when(r.created_at)}
             {r.internal && <span className="tag"> Internal note</span>}
           </span>
           <span style={{ whiteSpace: "pre-wrap" }}>{r.body}</span>

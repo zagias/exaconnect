@@ -290,6 +290,12 @@ export interface Group {
   collapsible?: boolean;
 }
 
+/** The same signed-in assistant is reachable from both apps and account pages. */
+const ASSISTANT: Item = {
+  to: "/assistant", label: "XaKore assistant", icon: icons.ask,
+  also: ["/ask", "/commai/assistant"], keywords: "ask help support configuration proposals plans",
+};
+
 /** Whether `path` is this entry's screen (or one of its tabs or detail pages). */
 export function matches(i: Item, path: string): boolean {
   const one = (to: string, exact: boolean) => (exact || to === "/" ? path === to : path === to || path.startsWith(to + "/"));
@@ -307,6 +313,7 @@ export function navGroups(
   role: string | undefined,
   modules: Record<string, boolean> | null = null,
   apps: readonly string[] | null = null,
+  capabilities: { ask?: boolean; integrations?: boolean } = {},
 ): Group[] {
   if (role === "carrier")
     return [
@@ -315,7 +322,7 @@ export function navGroups(
         items: [
           { to: "/", label: "Carrier view", icon: icons.carrier, end: true },
           { to: "/notices", label: "Notices", icon: icons.insights },
-          { to: "/integrations", label: "Integrations", icon: icons.fabric },
+          ...(capabilities.integrations === false ? [] : [{ to: "/integrations", label: "Integrations", icon: icons.fabric }]),
         ],
       },
     ];
@@ -327,37 +334,41 @@ export function navGroups(
   const connect: Group[] = [
     {
       app: "connect",
-      label: "Monitor",
+      label: "Your network",
       items: [
         { to: "/", label: "Overview", icon: icons.overview, end: true },
-        { to: "/sites", label: "Sites", icon: icons.sites },
-        { to: "/decisions", label: "Routing moves", icon: icons.decisions, keywords: "decisions why traffic moved" },
-        { to: "/insights", label: "Alerts", icon: icons.insights, keywords: "insights hurricane bill anomaly" },
-        { to: "/notices", label: "Carrier notices", icon: icons.carrier, keywords: "faults maintenance" },
-        { to: "/ask", label: "Ask", icon: icons.ask },
+        { to: "/sites", label: "Sites", icon: icons.sites, also: ["/locations"], keywords: "locations install enrol setup" },
+        { to: "/traffic", label: "Traffic", icon: icons.traffic, keywords: "applications priorities classes rules" },
+        { to: "/decisions", label: "Activity", icon: icons.decisions, also: ["/insights", "/notices"], keywords: "routing moves history alerts risks cost carrier notices maintenance" },
+        { to: "/metering", label: "Usage", icon: icons.metering, keywords: "metering costs 95th percentile burst" },
       ],
     },
     {
       app: "connect",
-      label: "Set up",
+      label: "Network settings",
+      collapsible: true,
       items: [
-        { to: "/traffic", label: "Traffic rules", icon: icons.traffic, keywords: "traffic applications priorities classes" },
-        { to: "/fabric", label: "Private links", icon: icons.fabric, keywords: "fabric virtual circuits cloud router" },
-        { to: "/internet", label: "Internet access", icon: icons.internet, keywords: "breakout firewall port forwards" },
+        { to: "/fabric", label: "Private connections", icon: icons.fabric, keywords: "fabric virtual circuits cloud router links" },
+        { to: "/internet", label: "Internet and firewall", icon: icons.internet, keywords: "breakout port forwards security" },
+        { to: "/encryption", label: "Encryption", icon: icons.encryption },
         { to: "/box-templates", label: "Box templates", icon: icons.sites, keywords: "boxes ports templates many sites cloud managed" },
         { to: "/box-software", label: "Box software", icon: icons.sites, keywords: "boxes firmware software update upgrade rollback fleet" },
-        { to: "/encryption", label: "Encryption", icon: icons.encryption },
-        { to: "/integrations", label: "Integrations", icon: icons.fabric, keywords: "monitoring ticketing snmp syslog" },
+        ...(capabilities.integrations === false ? [] : [{ to: "/integrations", label: "Integrations", icon: icons.fabric, keywords: "monitoring ticketing snmp syslog" }]),
       ],
     },
     {
       app: "connect",
-      label: "Orders and usage",
+      label: "Services",
+      collapsible: true,
       items: [
-        { to: "/order", label: "Orders", icon: icons.order, keywords: "order circuits bandwidth" },
-        { to: "/metering", label: "Usage", icon: icons.metering, keywords: "metering 95th percentile burst" },
+        { to: "/order", label: "Request a service", icon: icons.order, keywords: "orders order circuits bandwidth" },
         ...(admin ? [{ to: "/carrier", label: "Carrier view", icon: icons.carrier }] : []),
       ],
+    },
+    {
+      app: "connect" as const,
+      label: "Help",
+      items: [ASSISTANT],
     },
   ];
   const groups: Group[] = plan("connect") ? connect : [];
@@ -379,7 +390,6 @@ export function navGroups(
         { to: "/commai/workflows", label: "Workflows", icon: icons.traffic, module: "automation", keywords: "automations" },
         { to: "/commai/approvals", label: "Approvals", icon: icons.check, keywords: "waiting sensitive actions" },
         { to: "/commai/integrations", label: "Apps", icon: icons.apps, module: "automation", also: ["/commai/catalogue"], keywords: "integrations catalogue connectors api" },
-        { to: "/commai/assistant", label: "Assistant", icon: icons.ask, keywords: "help support cases" },
       ],
     },
     {
@@ -403,6 +413,7 @@ export function navGroups(
         { to: "/commai/partner", label: admin ? "Partners" : "Partners and apps", icon: icons.carrier, keywords: "white-label oauth" },
       ],
     },
+    { label: "Help", items: [ASSISTANT] },
   ];
   if (plan("commai"))
     groups.push(
@@ -488,11 +499,13 @@ export function accountGroups(opts: { carrier: boolean; jibsy: boolean; manager?
         ...(opts.jibsy ? [{ to: "/commai/me", label: "My settings", icon: icons.admin, keywords: "notifications phone" }] : []),
       ],
     },
+    { label: "Help", items: [ASSISTANT] },
   ];
 }
 
 /** The menu group a path belongs to ("Conversations", "Set up"...), for page eyebrows. */
 export function groupOf(path: string): string | null {
+  if (matches(ASSISTANT, path)) return "XaKore Hub";
   if (path === "/commai/me" || path.startsWith("/commai/me/")) return "You";
   for (const g of [...opsGroups(), ...navGroups("admin"), ...accountGroups({ carrier: false, jibsy: true })])
     for (const i of g.items) if (matches(i, path)) return g.label;
@@ -504,6 +517,8 @@ export function groupOf(path: string): string | null {
  * <Tabs>; an entry whose screen is hidden from someone is hidden here too.
  */
 export const TABS: Record<string, [string, string, string?][]> = {
+  "/sites": [["/sites", "Connected sites"], ["/locations", "Add or connect sites", "install locations"]],
+  "/decisions": [["/decisions", "Routing history"], ["/insights", "Risk and cost alerts"], ["/notices", "Carrier notices"]],
   "/traffic": [
     ["/traffic/applications", "Seen on your network"],
     ["/traffic/rules", "Rules"],
@@ -578,8 +593,9 @@ export function destinations(groups: Group[], extra: Destination[] = []): Destin
   const out: Destination[] = [];
   for (const g of groups)
     for (const i of g.items) {
+      if (i.to === "/assistant" && out.some((destination) => destination.to === "/assistant")) continue;
       const where = [g.app ? APP_INFO[g.app].name : null, g.label].filter(Boolean).join(" · ");
-      out.push({ to: i.to, label: i.label, where, keywords: i.keywords ?? "" });
+      out.push({ to: i.to, label: i.label, where: i.to === "/assistant" ? "XaKore Hub" : where, keywords: i.keywords ?? "" });
       for (const [to, label, kw] of TABS[i.to] ?? []) out.push({ to, label, where: i.label, keywords: kw ?? "" });
     }
   return [...out, ...extra];

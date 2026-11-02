@@ -38,7 +38,7 @@
 .shell-wordmark { display: block; width: 140px; height: auto; }
 /* The rail shows only the X of the reversed wordmark. */
 .shell-symbol { display: none; width: 34px; height: 25px; overflow: hidden; }
-.shell-symbol img { display: block; width: 141px; height: 25px; max-width: none; }
+.shell-symbol img { display: block; width: 25px; height: 25px; max-width: none; }
 .shell-product {
   font: 500 11px/16px var(--font-body); letter-spacing: 0.14em; text-transform: uppercase;
   color: var(--shell-side-muted); padding-left: 1px;
@@ -48,7 +48,7 @@
 .shell-nav { padding: 8px 12px 16px; flex: 1; }
 .shell-group { margin-top: 14px; }
 .shell-group-label {
-  font: 600 11px/16px var(--font-body); letter-spacing: 0.12em; text-transform: uppercase;
+  font: 600 11px/16px var(--font-body); letter-spacing: 0.08em; text-transform: uppercase;
   color: var(--shell-side-muted); padding: 0 12px 6px;
 }
 .shell-side ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
@@ -57,7 +57,7 @@
   position: relative; display: flex; align-items: center; gap: 12px; width: 100%;
   min-height: 38px; padding: 8px 12px; box-sizing: border-box;
   color: var(--shell-side-text); text-decoration: none; text-align: left;
-  font: 500 15px/20px var(--font-body); border-radius: var(--radius-md);
+  font: 500 14px/20px var(--font-body); border-radius: 3px;
   background: transparent; border: none; cursor: pointer;
   transition: background-color 120ms ease-out, color 120ms ease-out;
 }
@@ -84,7 +84,7 @@
 .shell-iconbtn.shell-menu, .shell-top-brand { display: none; }
 .shell-context { display: flex; align-items: baseline; gap: 8px; min-width: 0; flex: 1; white-space: nowrap; overflow: hidden; }
 .shell-context-group {
-  font: 600 11px/16px var(--font-body); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-muted);
+  font: 600 11px/16px var(--font-body); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-muted);
 }
 .shell-context-group::after { content: "/"; margin-left: 8px; color: var(--line); letter-spacing: 0; }
 .shell-context-page { font: 600 15px/20px var(--font-head); color: var(--ink); overflow: hidden; text-overflow: ellipsis; }
@@ -276,8 +276,9 @@
 /* ---- Apps (ADR 0041): one switcher; each app has its own mark and accent ---- */
 .app-mark {
   flex: none; display: inline-grid; place-items: center; border-radius: 6px;
-  background: var(--blue-tint); color: var(--blue);
+  background: transparent; color: var(--ink-muted);
 }
+.app-mark-connect { background: transparent; color: inherit; }
 .app-mark-commai { background: #efecff; color: #6652d6; }
 .app-mark-account { background: var(--page); color: var(--ink); }
 .app-mark-ops { background: var(--navy); color: var(--light-blue, #8DCFFF); box-shadow: inset 0 0 0 1px #2c4366; }
@@ -346,6 +347,8 @@ a.app-switch-static:hover { background: var(--shell-side-hover); }
 /* The set-up band (ADR 0043): under the top bar until the checklist is done. */
 .setup-band {
   display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px;
-  padding: 10px 24px; background: var(--blue-tint); color: var(--ink); border-bottom: 1px solid var(--line);
+  padding: 8px 24px; background: var(--card); color: var(--ink-muted); border-bottom: 1px solid var(--line);
   font-size: 14px;
 }
+
+.setup-link { color: var(--ink); font-size: 13px; font-weight: 600; text-underline-offset: 3px; }

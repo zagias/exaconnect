@@ -18,17 +18,17 @@ function Frame({ title, children }: { title: string; children: ReactNode }) {
         <div className="signin-brand">
           <img
             className="wm-light"
-            src="/brand/exacarib-wordmark.png"
-            alt="ExaCarib"
+            src="/brand/xakore-wordmark-red.svg"
+            alt="XaKore"
             width={168}
-            height={29}
+            height={45}
           />
           <img
             className="wm-dark"
-            src="/brand/exacarib-wordmark-reversed.png"
-            alt="ExaCarib"
+            src="/brand/xakore-wordmark-red-reversed.svg"
+            alt="XaKore"
             width={168}
-            height={29}
+            height={45}
           />
           <span className="signin-product">Connect</span>
         </div>
@@ -82,7 +82,7 @@ export function ForgotPage() {
       {sent === null ? (
         <form onSubmit={submit}>
           <p className="signin-intro">
-            Enter the email address you sign in with, and we'll send a link to
+            Enter the email address you sign in with to request a link to
             choose a new password.
           </p>
           <label>
@@ -97,19 +97,20 @@ export function ForgotPage() {
             />
           </label>
           <button className="button" type="submit" disabled={busy}>
-            {busy ? "Sending…" : "Send reset link"}
+            {busy ? "Requesting…" : "Send reset link"}
           </button>
         </form>
       ) : sent ? (
         <p className="signin-intro" role="status">
-          If an account uses <strong>{email.trim()}</strong>, a link is on its
-          way. It works once, for one hour. If your organisation signs in with
-          its own single sign-on, reset your password there instead.
+          If an account uses <strong>{email.trim()}</strong>, check its inbox for
+          a reset link. Reset links work once and expire after one hour. If your
+          organisation signs in with its own single sign-on, reset your password
+          there instead.
         </p>
       ) : (
         <p className="signin-intro" role="status">
-          Email isn't switched on for this service yet, so no link can be sent.
-          Ask your administrator to reset your password.
+          Email isn't available for this service. Ask your administrator for
+          help resetting your password.
         </p>
       )}
     </Frame>

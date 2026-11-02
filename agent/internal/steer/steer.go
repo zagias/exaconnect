@@ -36,6 +36,7 @@ import (
 const (
 	RulePrefBase = 1000
 	RulePrefSpan = 1000
+	GuardPref    = RulePrefBase - 1 // temporary fail-closed rules during reconciliation
 	NFTable      = "exaconnect"
 )
 
@@ -747,7 +748,8 @@ func Routes(m *Map) map[int][]string {
 }
 
 // Steerer applies maps and choices to the host, skipping work that is
-// already in place so a BFD-driven swap is a single `ip -batch` call.
+// already in place. Changes are fenced by temporary per-class blackholes,
+// so a partial kernel batch cannot fall through to a forbidden BGP path.
 type Steerer struct {
 	Sys      system.Runner
 	StateDir string
@@ -756,10 +758,11 @@ type Steerer struct {
 	Resolve    func(ctx context.Context, host string) ([]netip.Addr, error)
 	Interfaces func() ([]string, error)
 
-	nftKey   string
-	routeKey string
-	rules    []string
-	primed   bool
+	nftKey      string
+	routeKey    string
+	rules       []string
+	primed      bool
+	guardActive bool
 
 	qosKeys   map[string]string // tunnel -> tc arguments last run
 	qosFailed map[string]bool   // tunnels whose last tc run failed
@@ -923,7 +926,24 @@ func (s *Steerer) currentLookups() *Lookups {
 // the QoS qdiscs, and the ip rules for choices. A QoS failure does not fail
 // steering; QoSError reports it.
 func (s *Steerer) Apply(ctx context.Context, m *Map, choices []Choice) error {
-	if nft := NFT(m, s.currentLookups()); nft != s.nftKey {
+	nft := NFT(m, s.currentLookups())
+	routes := Routes(m)
+	routeKey := fmt.Sprint(routes)
+	want := IPRules(m, choices)
+	changed := nft != s.nftKey || routeKey != s.routeKey || !s.primed || !equal(want, s.rules)
+	if !changed {
+		s.applyQoS(ctx, m)
+		if s.guardActive {
+			return s.releaseGuard(ctx)
+		}
+		return nil
+	}
+	// ip batches are not atomic. Fence the new class marks before changing
+	// either classifier or route tables, and retain the fence on every error.
+	if err := s.protect(ctx, m); err != nil {
+		return err
+	}
+	if nft != s.nftKey {
 		f := filepath.Join(s.StateDir, "steer.nft")
 		if err := s.Sys.WriteFile(f, []byte(nft), 0o600); err != nil {
 			return err
@@ -933,32 +953,25 @@ func (s *Steerer) Apply(ctx context.Context, m *Map, choices []Choice) error {
 		}
 		s.nftKey = nft
 	}
-	routes := Routes(m)
-	if key := fmt.Sprint(routes); key != s.routeKey {
+	if routeKey != s.routeKey {
 		if err := s.applyRoutes(ctx, routes); err != nil {
 			return err
 		}
-		s.routeKey = key
+		s.routeKey = routeKey
 	}
 	s.applyQoS(ctx, m)
-	want := IPRules(m, choices)
 	if s.primed && equal(want, s.rules) {
-		return nil
+		return s.releaseGuard(ctx)
 	}
 	var batch strings.Builder
-	if s.primed {
-		for _, r := range s.rules {
-			fmt.Fprintf(&batch, "rule del %s\n", prefOf(r))
-		}
-	} else {
-		// First run: clear whatever an earlier agent left in our range.
-		prefs, err := s.ownedPrefs(ctx)
-		if err != nil {
-			return err
-		}
-		for _, p := range prefs {
-			fmt.Fprintf(&batch, "rule del pref %d\n", p)
-		}
+	// Reconcile the actual kernel, including duplicate/partial rules from a
+	// previous run. A cached list is not proof that only those rules remain.
+	prefs, err := s.ownedPrefs(ctx)
+	if err != nil {
+		return err
+	}
+	for _, p := range prefs {
+		fmt.Fprintf(&batch, "rule del pref %d\n", p)
 	}
 	for _, r := range want {
 		fmt.Fprintf(&batch, "rule add %s\n", r)
@@ -974,7 +987,7 @@ func (s *Steerer) Apply(ctx context.Context, m *Map, choices []Choice) error {
 		}
 	}
 	s.rules, s.primed = want, true
-	return nil
+	return s.releaseGuard(ctx)
 }
 
 // QoSArgs is the tc command that puts CAKE (diffserv4) on a tunnel's egress.
@@ -1077,11 +1090,9 @@ func (s *Steerer) ownedPrefs(ctx context.Context) ([]int, error) {
 			return nil, fmt.Errorf("parse ip rules: %w", err)
 		}
 	}
-	seen := map[int]bool{}
 	var prefs []int
 	for _, r := range rules {
-		if r.Priority >= RulePrefBase && r.Priority < RulePrefBase+RulePrefSpan && !seen[r.Priority] {
-			seen[r.Priority] = true
+		if r.Priority >= RulePrefBase && r.Priority < RulePrefBase+RulePrefSpan {
 			prefs = append(prefs, r.Priority)
 		}
 	}
@@ -1105,7 +1116,7 @@ func (s *Steerer) Clear(ctx context.Context) error {
 			return err
 		}
 	}
-	return nil
+	return s.releaseGuard(ctx)
 }
 
 func prefOf(rule string) string {

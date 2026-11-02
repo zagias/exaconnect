@@ -1,50 +1,49 @@
 import { useState } from "react";
-import { useStormToggle } from "../customer";
+import { useCustomer, useStormToggle } from "../customer";
+import { useAuth } from "../auth";
 import { Link, useParams } from "react-router-dom";
-import { num, useApi, type EventRow, type MetricPoint, type SiteDetail, type SiteSummary, type SteeringRow } from "../api";
+import { num, useApi, type EventRow, type MetricPoint, type SiteDetail, type OverviewSite, type SteeringRow } from "../api";
 import { ErrorNote, Eyebrow, LineChart, Stamp, StatusPill, ago, fmt, when, type Series } from "../components";
 import { BoxManagedNote, ManagedFrom } from "../box";
 import { BoxPorts } from "../boxports";
 import { useCanManage } from "./org/common";
 import { NodeState } from "./Overview";
+import { canOperateConnect } from "../permissions";
+import { NetworkSites } from "../NetworkSites";
+import "../site-detail.css";
 
 export function SiteList() {
-  const { data, error } = useApi<{ sites: SiteSummary[] }>("/overview", 10_000);
+  const { current } = useCustomer();
+  const { user } = useAuth();
+  const endpoint = user?.role === "admin"
+    ? current ? `/overview?customer_id=${current.id}` : null
+    : "/overview";
+  const { data, error } = useApi<{ sites: OverviewSite[] }>(endpoint, 10_000);
+  const sites = (data?.sites ?? []).filter((s) => s.kind === "site");
+  const hubs = (data?.sites ?? []).filter((s) => s.kind === "pop");
   return (
     <>
       <div className="page-head">
-        <Eyebrow>Sites</Eyebrow>
-        <h1>Sites and PoPs</h1>
+        <Eyebrow>Business network</Eyebrow>
+        <h1>Sites</h1>
+        <p className="muted">
+          Monitor connections and traffic across your locations.
+        </p>
         <ErrorNote error={error} />
       </div>
-      <section className="card">
-        <table className="paths">
-          <thead>
-            <tr>
-              <th scope="col">Name</th>
-              <th scope="col">Location</th>
-              <th scope="col">Agent</th>
-              <th scope="col" className="num">Config version</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(data?.sites ?? []).map((s) => (
-              <tr key={s.id}>
-                <td>
-                  <Link to={`/sites/${s.id}`}>{s.name}</Link>
-                  {s.kind === "pop" && <span className="muted"> (PoP)</span>}
-                </td>
-                <td>{s.location}</td>
-                <td>
-                  <NodeState site={s} />
-                </td>
-                <td className="num mono">
-                  {s.node_id ? `${s.applied_version ?? 0} of ${s.desired_version ?? "–"}` : "–"}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {data && <NetworkSites embedded sites={sites.map((site) => ({ ...site, paths: site.paths ?? [], steering: site.steering ?? [] }))} />}
+      <section>
+        {hubs.length > 0 && (
+          <details style={{ marginTop: 20 }}>
+            <summary>Network hub</summary>
+            <p className="muted small">Your location links meet at this hub.</p>
+            <ul>
+              {hubs.map((s) => (
+                <li key={s.id}><Link to={`/sites/${s.id}`}>{s.name}</Link>{" · "}<NodeState site={s} /></li>
+              ))}
+            </ul>
+          </details>
+        )}
       </section>
     </>
   );
@@ -58,11 +57,15 @@ const WINDOWS = [
 
 export function SitePage() {
   const { id } = useParams();
+  const { current } = useCustomer();
+  const { user } = useAuth();
   const [minutes, setMinutes] = useState(15);
-  const site = useApi<SiteDetail>(`/sites/${id}`, 10_000);
-  const canManage = useCanManage();
-  const metrics = useApi<{ points: MetricPoint[] }>(`/sites/${id}/metrics?minutes=${minutes}`, 10_000);
-  const events = useApi<EventRow[]>(`/events?site_id=${id}&limit=20`, 10_000);
+  const scope = user?.role === "admin" && current ? `customer_id=${current.id}` : "";
+  const ready = user?.role !== "admin" || !!current;
+  const site = useApi<SiteDetail>(ready ? `/sites/${id}${scope ? `?${scope}` : ""}` : null, 10_000);
+  const canManage = useCanManage() && canOperateConnect(user);
+  const metrics = useApi<{ points: MetricPoint[] }>(ready ? `/sites/${id}/metrics?minutes=${minutes}${scope ? `&${scope}` : ""}` : null, 10_000);
+  const events = useApi<EventRow[]>(ready ? `/events?site_id=${id}&limit=20${scope ? `&${scope}` : ""}` : null, 10_000);
   const s = site.data;
   if (!s) {
     return (
@@ -97,25 +100,24 @@ export function SitePage() {
   return (
     <>
       <div className="page-head">
-        <Eyebrow>{s.kind === "pop" ? "PoP" : "Site"}</Eyebrow>
+        <Eyebrow>{s.kind === "pop" ? "Network hub" : "Site"}</Eyebrow>
         <h1>{s.name}</h1>
-        <p className="muted">
-          {s.location} · AS {s.asn} · LAN {s.lan_prefixes.join(", ")} ·{" "}
-          {s.node_id ? `agent seen ${ago(s.last_seen)}, config v${s.applied_version ?? 0}` : "agent not enrolled"}
-        </p>
-        {s.apply_error && <p className="pill bad">Last config failed: {s.apply_error}</p>}
-        <BoxManagedNote box={s.box} />
-        <ManagedFrom siteId={s.id} box={s.box} managed={s.box_managed} canManage={canManage} onChange={site.reload} />
+        {s.location && <p className="muted">{s.location}</p>}
+        <div className="site-status-line">
+          {s.kind === "site" ? <NodeState site={s} /> : <StatusPill health={!s.node_id || !s.last_seen ? "warn" : s.online ? "ok" : "bad"}>{!s.node_id || !s.last_seen ? "Waiting for first report" : s.online ? "Online" : "Offline"}</StatusPill>}
+          <span className="small muted">{s.last_seen ? `Last report ${ago(s.last_seen)}` : "No reports received yet"}</span>
+        </div>
+        {s.apply_error && <p className="pill bad">The box could not apply its latest configuration.</p>}
+        <ErrorNote error={site.error} />
         {s.kind === "site" && <SiteStorm name={s.name} />}
       </div>
       <div className="grid">
-        <BoxPorts siteId={s.id} customerId={s.customer_id} box={s.box} managed={s.box_managed} portal={s.box_network} canManage={canManage} onChange={site.reload} />
         {s.kind === "site" && (
-          <section className="card span-12">
+          <section className="card span-12" aria-labelledby="site-connections-h">
             <div className="card-head">
               <div>
-                <Eyebrow>Path health</Eyebrow>
-                <h2>Every path to the PoP</h2>
+                <Eyebrow>Performance</Eyebrow>
+                <h2 id="site-connections-h">Connections</h2>
               </div>
               <div className="segmented" role="group" aria-label="Time window">
                 {WINDOWS.map((w) => (
@@ -125,10 +127,10 @@ export function SitePage() {
                 ))}
               </div>
             </div>
-            <table className="paths">
+            <div className="table-wrap"><table className="paths">
               <thead>
                 <tr>
-                  <th scope="col">Path</th>
+                  <th scope="col">Connection</th>
                   <th scope="col">Carrier</th>
                   <th scope="col">Status</th>
                   <th scope="col" className="num">Latency</th>
@@ -162,7 +164,8 @@ export function SitePage() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
+            {s.paths.length === 0 && <p className="muted">Connection measurements have not arrived yet.</p>}
             <p className="muted small">
               Last 30 seconds, against the voice SLA, the strictest class. A diamond marks a figure above 80% of the SLA;
               a square marks a breach.
@@ -176,21 +179,21 @@ export function SitePage() {
           </section>
         )}
         {s.kind === "site" && (
-          <section className="card span-12">
+          <section className="card span-12" aria-labelledby="site-traffic-h">
             <div className="card-head">
               <div>
-                <Eyebrow>Steering</Eyebrow>
-                <h2>Where each class runs</h2>
+                <Eyebrow>Traffic priorities</Eyebrow>
+                <h2 id="site-traffic-h">Current traffic</h2>
               </div>
-              <Link to="/decisions">All routing moves</Link>
+              <Link to={`/decisions?site_id=${s.id}`}>Routing history at this site</Link>
             </div>
-            <table className="paths">
+            <div className="table-wrap"><table className="paths">
               <thead>
                 <tr>
-                  <th scope="col">Class</th>
-                  <th scope="col">Controller wants</th>
-                  <th scope="col">Agent reports</th>
-                  <th scope="col">Last reason</th>
+                  <th scope="col">Traffic class</th>
+                  <th scope="col">Chosen connection</th>
+                  <th scope="col">Box reports</th>
+                  <th scope="col">Reason</th>
                 </tr>
               </thead>
               <tbody>
@@ -206,48 +209,13 @@ export function SitePage() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
+            {s.steering.length === 0 && <p className="muted">No traffic class reports yet.</p>}
           </section>
         )}
-        <section className="card span-6">
-          <Eyebrow>Tunnels</Eyebrow>
-          <h2>WireGuard and BFD</h2>
-          {s.tunnels.length === 0 ? (
-            <p className="muted">No tunnel reports yet.</p>
-          ) : (
-            <table className="paths">
-              <thead>
-                <tr>
-                  <th scope="col">Tunnel</th>
-                  <th scope="col">Handshake</th>
-                  <th scope="col">BFD</th>
-                </tr>
-              </thead>
-              <tbody>
-                {s.tunnels.map((t) => (
-                  <tr key={t.tunnel}>
-                    <td className="mono">{t.tunnel}</td>
-                    <td>
-                      {t.handshake_age_s < 0 ? (
-                        <StatusPill health="bad">None</StatusPill>
-                      ) : (
-                        <StatusPill health={t.handshake_age_s <= 180 ? "ok" : "bad"}>{t.handshake_age_s} s ago</StatusPill>
-                      )}
-                    </td>
-                    <td>{bfdPill(t.bfd)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-          <p className="muted small">
-            WireGuard renews its handshake every two minutes while traffic flows. Tunnel state from{" "}
-            {s.tunnels[0] ? ago(s.tunnels[0].updated_at) : "–"}.
-          </p>
-        </section>
-        <section className="card span-6">
-          <Eyebrow>Events</Eyebrow>
-          <h2>What happened</h2>
+        <section className="card span-12" aria-labelledby="site-events-h">
+          <Eyebrow>Activity</Eyebrow>
+          <h2 id="site-events-h">Recent activity</h2>
           <ErrorNote error={events.error} />
           <ul className="events stamped">
             {(events.data ?? []).map((e, i) => (
@@ -261,9 +229,49 @@ export function SitePage() {
                 </span>
               </li>
             ))}
-            {events.data?.length === 0 && <li className="muted">Nothing yet.</li>}
+            {events.data?.length === 0 && <li className="muted">No events recorded for this site yet.</li>}
           </ul>
         </section>
+        {s.box?.console && (
+          <details className="card span-12 site-disclosure">
+            <summary>Box settings<span className="small muted">Management access and network ports</span></summary>
+            <div className="site-box-settings">
+              <BoxManagedNote box={s.box} />
+              <ManagedFrom siteId={s.id} box={s.box} managed={s.box_managed} canManage={canManage} onChange={site.reload} />
+              <BoxPorts siteId={s.id} customerId={s.customer_id} box={s.box} managed={s.box_managed} portal={s.box_network} canManage={canManage} onChange={site.reload} />
+            </div>
+          </details>
+        )}
+        <details className="card span-12 site-disclosure">
+          <summary>Technical details<span className="small muted">Network addresses, configuration and tunnel diagnostics</span></summary>
+          <dl className="site-network-facts">
+            <div><dt>Network number (ASN)</dt><dd className="mono">{s.asn}</dd></div>
+            <div><dt>{s.kind === "pop" ? "Hub network" : "Office network"}</dt><dd className="mono">{s.lan_prefixes.join(", ") || "Not configured"}</dd></div>
+            <div><dt>Box reference</dt><dd className="mono">{s.node_id ?? "Not installed"}</dd></div>
+            <div><dt>Configuration version</dt><dd className="mono">{s.applied_version ?? "Not applied yet"}</dd></div>
+          </dl>
+          {s.apply_error && <p className="pill bad">Last configuration failed: {s.apply_error}</p>}
+          <section aria-labelledby="site-tunnels-h">
+            <h2 id="site-tunnels-h">Tunnel diagnostics</h2>
+            {s.tunnels.length === 0 ? (
+              <p className="muted">No tunnel reports yet.</p>
+            ) : (
+              <table className="paths">
+                <thead><tr><th scope="col">Tunnel</th><th scope="col">Handshake</th><th scope="col">BFD</th></tr></thead>
+                <tbody>
+                  {s.tunnels.map((t) => (
+                    <tr key={t.tunnel}>
+                      <td className="mono">{t.tunnel}</td>
+                      <td>{t.handshake_age_s < 0 ? <StatusPill health="bad">None</StatusPill> : <StatusPill health={t.handshake_age_s <= 180 ? "ok" : "bad"}>{t.handshake_age_s} s ago</StatusPill>}</td>
+                      <td>{bfdPill(t.bfd)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            <p className="muted small">WireGuard renews its handshake every two minutes while traffic flows. Tunnel state from {s.tunnels[0] ? ago(s.tunnels[0].updated_at) : "–"}.</p>
+          </section>
+        </details>
       </div>
     </>
   );
@@ -272,7 +280,7 @@ export function SitePage() {
 function actualCell(c: SteeringRow) {
   if (!c.reported_at) return <span className="muted">No report in the last minute</span>;
   if (c.paused) return <StatusPill health="bad">Paused, no allowed path</StatusPill>;
-  if (!c.actual) return <span className="muted">Following BGP</span>;
+  if (!c.actual) return <span className="muted" title="Following BGP">Default network route</span>;
   return (
     <>
       {c.actual_label}
@@ -347,6 +355,8 @@ function Probes({ sent, received }: { sent: number | null; received: number | nu
 /** This site's Storm Mode state and switch. */
 function SiteStorm({ name }: { name: string }) {
   const { current, busy, error, toggle } = useStormToggle();
+  const { user } = useAuth();
+  const canOperate = canOperateConnect(user);
   const site = current?.sites.find((x) => x.name === name);
   if (!site) return null;
   return (
@@ -356,13 +366,13 @@ function SiteStorm({ name }: { name: string }) {
       ) : (
         <span className="muted small">Storm Mode off at this site.</span>
       )}
-      <button
+      {canOperate && <button
         className={site.storm_mode ? "button secondary small" : "button small storm-on"}
         disabled={busy}
         onClick={() => toggle(site, !site.storm_mode)}
       >
         {site.storm_mode ? "Switch Storm Mode off" : "Switch Storm Mode on"}
-      </button>
+      </button>}
       {error && <span className="small" style={{ color: "var(--danger)" }}>{error}</span>}
     </div>
   );

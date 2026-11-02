@@ -3,6 +3,8 @@ import { api, useApi } from "../api";
 import { ErrorNote } from "../components";
 import { useCustomer } from "../customer";
 import { Card, RowActions, useAction } from "../ui";
+import { useAuth } from "../auth";
+import { canOperateConnect } from "../permissions";
 
 // ---- Application classes and SLA policies ----
 
@@ -40,6 +42,8 @@ export interface PathOption {
 
 /** Classes say how traffic is treated: queue priority, SLA and preferred path. */
 export function Classes() {
+  const { user } = useAuth();
+  const canOperate = canOperateConnect(user);
   const { current } = useCustomer();
   const list = useApi<ClassRow[]>(current ? `/classes?customer_id=${current.id}` : null, 0);
   const paths = useApi<PathOption[]>(current ? `/customers/${current.id}/paths` : null, 0);
@@ -58,7 +62,7 @@ export function Classes() {
     <Card
       title={`Classes for ${current.name}`}
       note={
-        <button className="button small" onClick={() => setEditing("new")}>
+        canOperate && <button className="button small" onClick={() => setEditing("new")}>
           Add a class
         </button>
       }
@@ -68,7 +72,7 @@ export function Classes() {
         Its own DSCP, ports and subnets are matched after your traffic rules.
       </p>
       <ErrorNote error={list.error ?? act.error} />
-      {editing && (
+      {canOperate && editing && (
         <ClassForm
           customerId={current.id}
           cls={editing === "new" ? null : editing}
@@ -91,9 +95,9 @@ export function Classes() {
               <th scope="col" className="num">Jitter</th>
               <th scope="col" className="num">Loss</th>
               <th scope="col">Satellite</th>
-              <th scope="col" className="actions">
+              {canOperate && <th scope="col" className="actions">
                 <span className="sr-only">Actions</span>
-              </th>
+              </th>}
             </tr>
           </thead>
           <tbody>
@@ -127,7 +131,7 @@ export function Classes() {
                 <td data-label="Satellite" className="small">
                   {c.allow_satellite ? "In Storm Mode" : "Never"}
                 </td>
-                <td className="actions">
+                {canOperate && <td className="actions">
                   <RowActions
                     label={`the ${c.name} class`}
                     disabled={act.busy}
@@ -138,7 +142,7 @@ export function Classes() {
                     }
                     items={c.builtin ? [] : [{ label: "Delete class", danger: true, onSelect: () => remove(c) }]}
                   />
-                </td>
+                </td>}
               </tr>
             ))}
           </tbody>

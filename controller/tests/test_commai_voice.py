@@ -496,7 +496,7 @@ def test_freeswitch_render_is_deterministic_and_complete(client, tmp_path):
     assert 'application="bridge"' not in ben and "voicemail" in ben
     # The AI agent always has a fallback, so calls never depend on the AI service.
     ai = plan.split('name="exa-ai"')[1].split("</extension>")[0]
-    assert "exacarib_ai" in ai and 'application="transfer" data="400 XML' in ai
+    assert "exacarib_ai" not in ai and 'application="transfer" data="400 XML' in ai
     assert "&amp;" in files[f"{tenant}/ivr.xml"] and 'digits="1"' in files[f"{tenant}/ivr.xml"]
     assert "callcenter" in plan and "<tier agent=" in files[f"{tenant}/tiers.xml"]
     pub = files[f"{tenant}/public.xml"]

@@ -46,6 +46,7 @@ from psycopg.types.json import Jsonb
 
 from ... import audit
 from . import billing, carriers
+from . import provider as providers
 from .common import VoiceError, digits, domain, now
 
 SECRET_ENV = "EXA_PBX_SECRET"
@@ -102,8 +103,9 @@ def caller_id(conn: psycopg.Connection, cid: Any, voice_user_id: Any) -> str:
     """The number an outside call shows: the caller's own number, else the business's first."""
     row = conn.execute(
         """SELECT e164 FROM voice_numbers WHERE customer_id = %s AND status = 'active'
+           AND (%s OR provider <> 'simulated')
            ORDER BY (target_type = 'user' AND target_id = %s) DESC, e164 LIMIT 1""",
-        (cid, voice_user_id),
+        (cid, providers.test_mode(), voice_user_id),
     ).fetchone()
     return row["e164"] if row else ""
 
@@ -251,7 +253,11 @@ def emergency_sets(conn: psycopg.Connection, cid: Any) -> list[int]:
     from .. import golive
 
     return [
-        n
-        for key, n in sorted(carriers.carrier_sets(conn).items(), key=lambda kv: kv[1])
-        if golive.enabled(conn, "carrier", key, cid)
+        carrier["set_id"]
+        for carrier in conn.execute(
+            """SELECT key, set_id, customer_id FROM voice_carriers
+               WHERE enabled AND platform IS NULL ORDER BY set_id"""
+        ).fetchall()
+        if (carrier["customer_id"] is not None and str(carrier["customer_id"]) == str(cid))
+        or (carrier["customer_id"] is None and golive.enabled(conn, "carrier", carrier["key"], cid))
     ]

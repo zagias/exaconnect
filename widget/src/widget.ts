@@ -166,7 +166,7 @@ interface QueueStub {
     teamTyping: "Our team is writing a reply…",
     talk: "Talk to our assistant",
     callTitle: "Talking to our assistant",
-    callNote: "Speak after the tone, or type below. Our assistant can pass you to our team.",
+    callNote: "Select Speak to use your microphone, or type below. You can end the call at any time.",
     callStarting: "Connecting…",
     callListen: "Speak",
     callListening: "Listening… select to stop",
@@ -174,7 +174,7 @@ interface QueueStub {
     callSay: "Say",
     callEnd: "End call",
     callEnded: "Call ended. You can carry on in the chat.",
-    callHanded: "Our team will take it from here. We'll be in touch.",
+    callHanded: "The assistant has stopped. Please send us a message to continue with our team.",
   };
 
   const ICON_CHAT =
@@ -324,6 +324,9 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
     private typingNote: HTMLParagraphElement | null = null;
     private lastTypingPing = 0;
     private callId: string | null = null;
+    private callEpoch = 0;
+    private callStarting = false;
+    private callQueue: Promise<void> = Promise.resolve();
     private callLog: HTMLDivElement | null = null;
     private recogniser: Recogniser | null = null;
 
@@ -339,12 +342,23 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
       const headers: Record<string, string> = {};
       if (body !== undefined) headers["Content-Type"] = "application/json";
       if (auth && this.session) headers["X-Widget-Session"] = this.session.token;
-      const r = await fetch(this.base + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), mode: "cors", credentials: "omit" });
+      const controller = new AbortController();
+      const deadline = window.setTimeout(() => controller.abort(), 30000);
+      let r: Response;
       let data: Record<string, unknown> = {};
       try {
-        data = await r.json();
-      } catch {
-        /* empty */
+        r = await fetch(this.base + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), mode: "cors", credentials: "omit", signal: controller.signal });
+        try {
+          data = await r.json();
+        } catch (error) {
+          if (controller.signal.aborted) throw error;
+          /* an empty response is allowed */
+        }
+      } catch (error) {
+        if (controller.signal.aborted) throw new Error("The service took too long to respond. Please try again.");
+        throw error;
+      } finally {
+        window.clearTimeout(deadline);
       }
       if (data && typeof data === "object" && data.session) this.setSession(data.session as Session);
       if (!r.ok) {
@@ -514,6 +528,7 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
 
     close() {
       if (!this.panel) return;
+      if (this.view === "call") void this.endCall(COPY.callEnded);
       this.isOpen = false;
       this.panel.hidden = true;
       this.launcher.setAttribute("aria-expanded", "false");
@@ -730,11 +745,15 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
             this.recogniser.stop();
             return;
           }
+          if ("speechSynthesis" in window) window.speechSynthesis.cancel();
           const r = new Rec();
+          const epoch = this.callEpoch;
+          const id = this.callId;
           r.lang = document.documentElement.lang || navigator.language || "en";
           r.interimResults = false;
           r.continuous = false;
           r.onresult = (e) => {
+            if (epoch !== this.callEpoch || id !== this.callId || !id) return;
             const said = Array.from(e.results).map((x) => x[0].transcript).join(" ").trim();
             if (said) this.callSay(said);
           };
@@ -746,7 +765,12 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
           this.recogniser = r;
           mic.textContent = COPY.callListening;
           mic.setAttribute("aria-pressed", "true");
-          r.start();
+          try {
+            r.start();
+          } catch {
+            r.onend?.();
+            this.flashIn(this.callLog, "Your microphone could not start. You can type below instead.");
+          }
         });
         row.append(mic);
       }
@@ -786,48 +810,72 @@ textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 
     }
 
     private async startCall() {
+      if (this.callStarting || this.callId) return;
+      this.callStarting = true;
+      const epoch = ++this.callEpoch;
+      this.callQueue = Promise.resolve();
       this.callLine(COPY.assistant, COPY.callStarting, "them note");
       try {
         await this.ensureSession();
         const out = await this.call<{ conversation_id: string; greeting: string }>("POST", "/calls", {});
+        if (epoch !== this.callEpoch || this.view !== "call") {
+          await this.call("POST", `/calls/${encodeURIComponent(out.conversation_id)}/end`, {}).catch(() => undefined);
+          return;
+        }
         this.callId = out.conversation_id;
         this.callLog?.lastElementChild?.remove();
         this.callLine(COPY.assistant, out.greeting);
         this.speak(out.greeting);
       } catch (e) {
-        this.callId = null;
-        this.flashIn(this.callLog, (e as Error).message);
+        if (epoch === this.callEpoch) {
+          this.callId = null;
+          this.flashIn(this.callLog, (e as Error).message);
+        }
+      } finally {
+        this.callStarting = false;
+        if (epoch !== this.callEpoch && this.view === "call" && !this.callId) void this.startCall();
       }
     }
 
     private async callSay(text: string) {
-      if (!this.callId) return;
-      this.callLine(COPY.you, text, "you");
-      try {
-        const out = await this.call<{ reply: string; handed_over: boolean }>("POST", `/calls/${encodeURIComponent(this.callId)}/turns`, { text });
-        if (out.reply) {
-          this.callLine(COPY.assistant, out.reply);
-          this.speak(out.reply);
+      const id = this.callId;
+      const epoch = this.callEpoch;
+      if (!id) return;
+      // Keep rapid typed/spoken turns in order. A late reply must never
+      // speak after End call, or be inserted into a subsequent call.
+      this.callQueue = this.callQueue.then(async () => {
+        if (this.callId !== id || this.callEpoch !== epoch) return;
+        this.callLine(COPY.you, text, "you");
+        try {
+          const out = await this.call<{ reply: string; handed_over: boolean }>("POST", `/calls/${encodeURIComponent(id)}/turns`, { text });
+          if (this.callId !== id || this.callEpoch !== epoch) return;
+          if (out.reply) {
+            this.callLine(COPY.assistant, out.reply);
+            this.speak(out.reply);
+          }
+          if (out.handed_over) void this.endCall(COPY.callHanded);
+        } catch (e) {
+          if (this.callId === id && this.callEpoch === epoch) this.flashIn(this.callLog, (e as Error).message);
         }
-        if (out.handed_over) await this.endCall(COPY.callHanded);
-      } catch (e) {
-        this.flashIn(this.callLog, (e as Error).message);
-      }
+      });
+      await this.callQueue;
     }
 
     private async endCall(text: string) {
       const id = this.callId;
+      ++this.callEpoch;
       this.callId = null;
+      this.callQueue = Promise.resolve();
       if (this.recogniser) this.recogniser.stop();
       try {
         if ("speechSynthesis" in window) window.speechSynthesis.cancel();
       } catch {
         /* nothing to stop */
       }
-      if (id) await this.call("POST", `/calls/${encodeURIComponent(id)}/end`, {}).catch(() => undefined);
       this.doneText = text;
       this.view = "done";
       this.render();
+      if (id) await this.call("POST", `/calls/${encodeURIComponent(id)}/end`, {}).catch(() => undefined);
     }
 
     private flashIn(box: HTMLElement | null, text: string) {

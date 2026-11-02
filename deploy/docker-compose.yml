@@ -35,6 +35,7 @@ services:
       EXA_AGENT_PUBLIC_HOST: ${EXA_PUBLIC_HOST:-}
       # AI features (ADR 0006). Ask your network stays off until the key is set in .env.
       EXA_LLM_API_KEY: ${EXA_LLM_API_KEY:-}
+      EXA_COMMAI_AI_TEST_MODE: ${EXA_COMMAI_AI_TEST_MODE:-0}
       EXA_LLM_MODEL: ${EXA_LLM_MODEL:-deepseek-ai/DeepSeek-V4-Flash}
       EXA_NHC_URL: ${EXA_NHC_URL-https://www.nhc.noaa.gov/CurrentStorms.json}
       EXA_USGS_URL: ${EXA_USGS_URL-https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_day.geojson}
@@ -43,6 +44,7 @@ services:
       # Jibsy voice (ADR 0021): rendered FreeSWITCH config, read by the freeswitch service.
       EXA_FREESWITCH_DIR: /data/freeswitch
       EXA_SIP_PROVIDER: ${EXA_SIP_PROVIDER:-simulated}
+      EXA_VOICE_TEST_MODE: ${EXA_VOICE_TEST_MODE:-0}
       # Voice stage 5 (ADR 0033): the real provider's API, Kamailio's carrier lists, LiveKit.
       EXA_SIP_PROVIDER_URL: ${EXA_SIP_PROVIDER_URL:-}
       EXA_SIP_PROVIDER_KEY: ${EXA_SIP_PROVIDER_KEY:-}
@@ -53,6 +55,9 @@ services:
       # FreeSWITCH signs its check before each outside call with this (voice/pbx.py).
       EXA_PBX_SECRET: ${EXA_PBX_SECRET:-}
       EXA_LIVEKIT_URL: ${EXA_LIVEKIT_URL:-}
+      # Controller-owned tenant handover URI; only the established PBX dialog
+      # may reach it. No model or worker supplied transfer destination is used.
+      EXA_PHONE_HANDOVER_HOST: freeswitch:5080
       # The browser phone (ADR 0039): off until set, e.g. wss://connect.exacarib.com/verto.
       EXA_VERTO_URL: ${EXA_VERTO_URL:-}
       # Jibsy Phone rings when closed (ADR 0045): the VAPID key made by lab/scripts/init-env.sh.
@@ -63,6 +68,13 @@ services:
       # Sign-in (ADR 0017). Google/Microsoft/enterprise SSO stay off until the gateway is set.
       EXA_COOKIE_SECURE: ${EXA_COOKIE_SECURE:-1}
       EXA_PUBLIC_URL: ${EXA_PUBLIC_URL:-}
+      # Company account mail and SMTP email channels. Unset host keeps mail unavailable.
+      EXA_SMTP_HOST: ${EXA_SMTP_HOST:-}
+      EXA_SMTP_PORT: ${EXA_SMTP_PORT:-587}
+      EXA_SMTP_USER: ${EXA_SMTP_USER:-}
+      EXA_SMTP_PASSWORD: ${EXA_SMTP_PASSWORD:-}
+      EXA_SMTP_STARTTLS: ${EXA_SMTP_STARTTLS:-true}
+      EXA_SMTP_FROM: "${EXA_SMTP_FROM:-XaKore <hello@xakore.com>}"
       EXA_OIDC_ISSUER: ${EXA_OIDC_ISSUER:-}
       EXA_OIDC_CLIENT_ID: ${EXA_OIDC_CLIENT_ID:-}
       EXA_OIDC_CLIENT_SECRET: ${EXA_OIDC_CLIENT_SECRET:-}
@@ -193,6 +205,7 @@ services:
     volumes:
       - controller-data:/exacarib:ro
       - ./freeswitch/start.sh:/exacarib-start.sh:ro
+      - ./freeswitch/phone-runtime.sh:/exacarib-phone-runtime.sh:ro
       # Wakes a closed Jibsy Phone with a push message before its extension rings (ADR 0045).
       - ./freeswitch/scripts:/usr/share/freeswitch/scripts:ro
       # Recorded prompts and hold music, downloaded and checked by deploy/voice/sounds.sh.
@@ -288,6 +301,17 @@ services:
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
       EXA_CONTROLLER_URL: http://controller:8000
       EXA_LIVEKIT_AGENT_SECRET: ${EXA_LIVEKIT_AGENT_SECRET:-}
+      EXA_PHONE_WORKER_ID: ${EXA_PHONE_WORKER_ID:-xakore-phone}
+      # Explicit independently reviewed speech endpoints. Unset values keep
+      # the worker unavailable; these are never copied from website settings.
+      EXA_PHONE_STT_URL: ${EXA_PHONE_STT_URL:-}
+      EXA_PHONE_STT_KEY: ${EXA_PHONE_STT_KEY:-}
+      EXA_PHONE_STT_MODEL: ${EXA_PHONE_STT_MODEL:-}
+      EXA_PHONE_TTS_URL: ${EXA_PHONE_TTS_URL:-}
+      EXA_PHONE_TTS_KEY: ${EXA_PHONE_TTS_KEY:-}
+      EXA_PHONE_TTS_MODEL: ${EXA_PHONE_TTS_MODEL:-}
+      EXA_PHONE_TTS_VOICE: ${EXA_PHONE_TTS_VOICE:-}
+      EXA_PHONE_LANGUAGE: ${EXA_PHONE_LANGUAGE:-en}
     depends_on:
       - livekit
       - controller

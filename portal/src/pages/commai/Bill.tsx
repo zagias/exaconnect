@@ -111,7 +111,7 @@ export default function Bill() {
         }
       >
         <ErrorNote error={usage.error} />
-        {u?.example_prices && <p className="tag">Example data: example prices until ExaCarib sets your price list</p>}
+        {u?.example_prices && <p className="tag">Example data: example prices until XaKore sets your price list</p>}
         {u && u.lines.length === 0 && u.voice.length === 0 && <div className="empty">No charges this month.</div>}
         {u && (u.lines.length > 0 || u.voice.length > 0) && (
           <table className="paths dt stack">
@@ -309,7 +309,7 @@ function Bills({ base, exacarib }: { base: string; exacarib: boolean }) {
           </button>
         </div>
       )}
-      {list.data && list.data.items.length === 0 && <div className="empty">No bills yet. ExaCarib issues one bill a month for every module you use.</div>}
+      {list.data && list.data.items.length === 0 && <div className="empty">No bills yet. XaKore issues one bill a month for every module you use.</div>}
       <ul className="auto-evidence" aria-label="Bills">
         {(list.data?.items ?? []).map((b) => (
           <li key={b.id}>
@@ -413,7 +413,7 @@ function Plan({ base, exacarib }: { base: string; exacarib: boolean }) {
           </li>
         ))}
       </ul>
-      {!exacarib && <p className="small muted">Messaging, voice, AI agents and automation are sold separately. Ask ExaCarib to add a module.</p>}
+      {!exacarib && <p className="small muted">Messaging, voice, AI agents and automation are sold separately. Ask XaKore to add a module.</p>}
       <ErrorNote error={act.error} />
     </Card>
   );
@@ -430,7 +430,7 @@ function Supplier({ base }: { base: string }) {
     });
   const r = rec.data;
   return (
-    <Card title="AI supplier costs (ExaCarib only)">
+    <Card title="AI supplier costs (XaKore only)">
       <div className="auto-row">
         <label className="small">
           Month <input type="month" value={period} onChange={(e) => setPeriod(e.target.value || thisMonth())} />

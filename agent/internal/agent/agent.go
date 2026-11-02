@@ -132,41 +132,42 @@ type Agent struct {
 	// ADR 0048). It runs on its own goroutine and must not block for long.
 	Notify func(Event)
 
-	mu          sync.Mutex
-	current     *desired.State
-	stats       map[string]*probe.Stats // by tunnel name
-	probeCancel context.CancelFunc
-	reflCancel  context.CancelFunc
-	circStats   map[string]*probe.Stats // layer 2 circuit probes, by circuit name
-	circCancel  context.CancelFunc
-	buf         Telemetry
-	bfd         map[string]bfdPeer // by peer address
-	bfdErr      string
-	lastContact time.Time
-	silent      bool
-	reached     bool   // the controller has answered since start
-	lastFailure string // version+error of the last failed apply, to avoid repeating events
-	applyErr    string // the last apply's error, for the box console; guarded by mu
-	steerMap    *steer.Map
-	choices     []steer.Choice
-	steerErr    string
-	qosErr      string
-	resolveErr  string
-	kick        chan struct{} // new steering map: look up its domains
-	refreshed   chan struct{} // lookups changed: re-apply the classifier
-	bfdKick     chan struct{} // the BFD watcher saw a change
-	netMu       sync.Mutex
-	netCancel   context.CancelFunc // the controller request in flight, if any
-	unreported  *client.Status     // an apply result the controller has not heard yet
-	flows       flows.Tracker
-	flowErr     string
-	ipfix       ipfix.Exporter
-	ipfixErr    string
-	inetErr     string
-	renewErr    string
-	slaWin      map[string]probe.Window // latest probe window, by tunnel
-	sla         map[string]*slaState    // the agent's own SLA view, by class|path
-	slaSig      string                  // the demotions the last steer applied
+	mu                  sync.Mutex
+	current             *desired.State
+	stats               map[string]*probe.Stats // by tunnel name
+	probeCancel         context.CancelFunc
+	reflCancel          context.CancelFunc
+	circStats           map[string]*probe.Stats // layer 2 circuit probes, by circuit name
+	circCancel          context.CancelFunc
+	buf                 Telemetry
+	bfd                 map[string]bfdPeer // by peer address
+	bfdErr              string
+	lastContact         time.Time
+	silent              bool
+	reached             bool   // the controller has answered since start
+	lastFailure         string // version+error of the last failed apply, to avoid repeating events
+	applyErr            string // the last apply's error, for the box console; guarded by mu
+	steerMap            *steer.Map
+	steerAppliedVersion int64 // acknowledged only after the dataplane apply succeeds
+	choices             []steer.Choice
+	steerErr            string
+	qosErr              string
+	resolveErr          string
+	kick                chan struct{} // new steering map: look up its domains
+	refreshed           chan struct{} // lookups changed: re-apply the classifier
+	bfdKick             chan struct{} // the BFD watcher saw a change
+	netMu               sync.Mutex
+	netCancel           context.CancelFunc // the controller request in flight, if any
+	unreported          *client.Status     // an apply result the controller has not heard yet
+	flows               flows.Tracker
+	flowErr             string
+	ipfix               ipfix.Exporter
+	ipfixErr            string
+	inetErr             string
+	renewErr            string
+	slaWin              map[string]probe.Window // latest probe window, by tunnel
+	sla                 map[string]*slaState    // the agent's own SLA view, by class|path
+	slaSig              string                  // the demotions the last steer applied
 	// writeProc writes a /proc/sys file; nil uses os.WriteFile (tests stub it).
 	writeProc func(path string, data []byte) error
 }
@@ -190,14 +191,7 @@ func (a *Agent) Run(ctx context.Context) error {
 	}
 
 	// Survive restarts while the controller is away: bring back the last good state first.
-	if lg := a.Applier.LastGood(); lg != nil {
-		if err := a.Applier.Apply(ctx, lg); err != nil {
-			a.Log.Error("re-applying last good state failed", "version", lg.Version, "err", err)
-		} else {
-			a.Log.Info("re-applied last good state", "version", lg.Version)
-		}
-		a.setCurrent(ctx, lg)
-	}
+	a.restoreLastGood(ctx)
 	if a.Steerer != nil {
 		go a.lookupLoop(ctx)
 		if m, err := steer.Load(a.steerPath()); err == nil {
@@ -330,7 +324,42 @@ func (a *Agent) have() int64 {
 	return a.current.Version
 }
 
+// A last-good file records an earlier successful apply, not the state of
+// this boot. Keep requesting/retrying until restoration really succeeds.
+func (a *Agent) restoreLastGood(ctx context.Context) {
+	if a.have() != 0 {
+		return
+	}
+	lg := a.Applier.LastGood()
+	if lg == nil {
+		return
+	}
+	st := client.Status{AgentVersion: version.String()}
+	if err := a.Applier.Apply(ctx, lg); err != nil {
+		st.Error = err.Error()
+		a.mu.Lock()
+		a.applyErr = st.Error
+		a.mu.Unlock()
+		if key := itoa(lg.Version) + st.Error; key != a.lastFailure {
+			a.lastFailure = key
+			a.Log.Error("re-applying last good state failed", "version", lg.Version, "err", err)
+			a.event("config_failed", map[string]string{"version": itoa(lg.Version), "error": st.Error})
+		}
+	} else {
+		a.lastFailure = ""
+		a.mu.Lock()
+		a.applyErr = ""
+		a.mu.Unlock()
+		a.setCurrent(ctx, lg)
+		a.steer(ctx, "restore")
+		st.OK, st.AppliedVersion = true, lg.Version
+		a.Log.Info("re-applied last good state", "version", lg.Version)
+	}
+	a.unreported = &st
+}
+
 func (a *Agent) poll(ctx context.Context) {
+	a.restoreLastGood(ctx)
 	if err := a.Applier.RetryInternet(ctx); err != nil {
 		a.Log.Debug("internet exit retry", "err", err)
 	}
@@ -645,6 +674,7 @@ func (a *Agent) checkBFD(ctx context.Context) (changed bool) {
 		return false
 	}
 	a.bfdErr = ""
+	next := make(map[string]bfdPeer, len(peers))
 	for _, p := range peers {
 		tunnel := tunnelOf(a.current, p.Peer, p.Interface)
 		old, ok := a.bfd[p.Peer]
@@ -656,8 +686,16 @@ func (a *Agent) checkBFD(ctx context.Context) (changed bool) {
 		if !ok || old.Status != p.Status || old.Tunnel != tunnel {
 			changed = true
 		}
-		a.bfd[p.Peer] = bfdPeer{Tunnel: tunnel, Status: p.Status}
+		next[p.Peer] = bfdPeer{Tunnel: tunnel, Status: p.Status}
 	}
+	for peer := range a.bfd {
+		if _, ok := next[peer]; !ok {
+			changed = true
+		}
+	}
+	// A successful FRR read is a complete snapshot. Removed/reconfigured
+	// sessions must not leave an old down state on a replacement tunnel.
+	a.bfd = next
 	return changed
 }
 
@@ -678,18 +716,32 @@ func tunnelOf(s *desired.State, peer, iface string) string {
 	return ""
 }
 
-// tunnelBFD is "up" when every BFD peer on the tunnel is up, otherwise the
-// state of the first peer that is not; "" when the tunnel has no BFD peers.
+// tunnelBFD reports a failed peer before an initialising or up peer. Map
+// iteration order must never let an initialising session mask a known failure.
+// An uninitialised/absent session remains unknown ("").
 func tunnelBFD(peers map[string]bfdPeer, tunnel string) string {
 	state := ""
+	bad := ""
 	for _, p := range peers {
 		if p.Tunnel != tunnel {
 			continue
 		}
-		if p.Status != "up" {
-			return p.Status
+		switch p.Status {
+		case "up":
+			if state == "" {
+				state = "up"
+			}
+		case "init":
+			state = "init"
+		case "":
+		default:
+			if bad == "" || p.Status < bad {
+				bad = p.Status
+			}
 		}
-		state = "up"
+	}
+	if bad != "" {
+		return bad
 	}
 	return state
 }
@@ -706,8 +758,8 @@ func (a *Agent) flush(ctx context.Context) {
 			t.Tunnels = append(t.Tunnels, ts)
 		}
 	}
-	if a.steerMap != nil {
-		t.Steering, t.SteeringVersion = a.choices, a.steerMap.Version
+	if a.steerAppliedVersion > 0 && a.steerErr == "" {
+		t.Steering, t.SteeringVersion = a.choices, a.steerAppliedVersion
 	}
 	cur := a.current
 	a.mu.Unlock()
@@ -789,10 +841,12 @@ func (a *Agent) pollSteering(ctx context.Context) {
 	done()
 	if err != nil {
 		a.controllerError(err)
+		a.retrySteering(ctx)
 		return
 	}
 	a.controllerOK()
 	if m == nil {
+		a.retrySteering(ctx)
 		return
 	}
 	if err := m.Validate(); err != nil {
@@ -811,6 +865,17 @@ func (a *Agent) pollSteering(ctx context.Context) {
 	a.Log.Info("new steering map", "version", m.Version, "storm", m.Storm)
 	a.kickLookups()
 	a.steer(ctx, "controller")
+}
+
+// A cached map is desired state, not an acknowledgement. An unchanged map
+// (or a controller outage) still needs another local attempt after a failure.
+func (a *Agent) retrySteering(ctx context.Context) {
+	a.mu.Lock()
+	failed := a.steerErr != ""
+	a.mu.Unlock()
+	if failed {
+		a.steer(ctx, "retry")
+	}
 }
 
 func (a *Agent) kickLookups() {
@@ -970,27 +1035,23 @@ func (a *Agent) steer(ctx context.Context, why string) {
 		a.mu.Unlock()
 		return
 	}
-	var choices []steer.Choice
-	if a.silent {
-		// Without the controller the agent also keeps each class off a path
-		// whose latest probe window breaches that class's SLA.
-		choices = steer.ChooseHealthy(m, a.usable(m), a.slaHealthy, a.slaSeverity(m))
-	} else {
-		choices = steer.Choose(m, a.usable(m))
-	}
-	a.slaSig = a.slaSignature()
+	choices := a.chooseSteering(m)
+	sig := a.slaSignature()
 	prev := a.choices
 	a.mu.Unlock()
 
 	if err := a.Steerer.Apply(ctx, m, choices); err != nil {
-		if msg := err.Error(); msg != a.steerErr {
-			a.steerErr = msg
+		msg := err.Error()
+		a.mu.Lock()
+		changed := msg != a.steerErr
+		a.steerErr = msg
+		a.mu.Unlock()
+		if changed {
 			a.Log.Error("apply steering", "why", why, "err", err)
 			a.event("steering_failed", map[string]string{"error": msg})
 		}
 		return
 	}
-	a.steerErr = ""
 	if msg := a.Steerer.QoSError(); msg != a.qosErr {
 		a.qosErr = msg
 		if msg != "" {
@@ -999,6 +1060,9 @@ func (a *Agent) steer(ctx context.Context, why string) {
 		}
 	}
 	a.mu.Lock()
+	a.steerErr = ""
+	a.steerAppliedVersion = m.Version
+	a.slaSig = sig
 	a.choices = choices
 	for _, ev := range moves(prev, choices, why) {
 		a.addEvent(ev)

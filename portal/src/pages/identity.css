@@ -13,6 +13,96 @@
 .identity-status.bad { color: var(--danger); }
 .identity-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .identity-domains { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 4px 0 0; padding: 0; list-style: none; }
-.identity-conn { border: 1px solid var(--line); border-radius: var(--radius-md); padding: 12px 16px; margin: 12px 0; }
+.identity-conn { border: 1px solid var(--line); border-radius: 2px; padding: 12px 16px; margin: 12px 0; }
 .identity-conn h3 { margin: 0 0 4px; font-size: 17px; }
 .identity-conn .muted { margin: 2px 0; }
+
+/* Connect has its own entry screen; the other identity pages keep their layout. */
+.signin-page.signin-page-connect {
+  --page: #ffffff;
+  --card: #ffffff;
+  --ink: #171b22;
+  --ink-muted: #626975;
+  --line: #e2e4e8;
+  --line-strong: #c9cdd4;
+  --blue: var(--accent, #d7192d);
+  --blue-strong: #bd1226;
+  --blue-hover: var(--accent-hover, #b81225);
+  --on-blue: #ffffff;
+  --focus: var(--accent, #d7192d);
+  --danger: #b42318;
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(420px, 1fr);
+  place-items: stretch;
+  padding: 0;
+  background: #ffffff;
+  color: var(--ink);
+  color-scheme: light;
+}
+.connect-signin-story {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 32px;
+  min-width: 0;
+  padding: clamp(40px, 5vw, 80px);
+  background: var(--charcoal, #0c1018);
+  color: #ffffff;
+}
+.connect-signin-wordmark { display: block; line-height: 0; }
+.connect-signin-wordmark img { display: block; width: 188px; max-width: 100%; height: auto; }
+.connect-signin-proposition { width: 100%; max-width: 580px; margin: 64px 0; }
+.connect-signin-label { display: block; font-size: 12px; line-height: 18px; font-weight: 600; }
+.connect-signin-story .connect-signin-label { margin-bottom: 24px; color: #b8bec8; }
+.connect-signin-proposition h2 {
+  margin: 0;
+  font-size: clamp(52px, 5.25vw, 88px);
+  line-height: 1.01;
+  font-weight: 500;
+  letter-spacing: -0.055em;
+}
+.connect-signin-proposition h2 span { color: #b8bec8; }
+.connect-signin-proposition p { max-width: 400px; margin: 28px 0 0; color: #c5cad2; font-size: 17px; line-height: 1.65; }
+.connect-signin-public-link { color: #c5cad2; font-size: 13px; line-height: 20px; text-underline-offset: 4px; }
+.connect-signin-public-link:hover { color: #ffffff; }
+.connect-signin-wordmark:focus-visible, .connect-signin-public-link:focus-visible { outline-color: #ffffff; }
+.connect-signin-panel { display: flex; flex-direction: column; min-width: 0; padding: 64px clamp(32px, 5vw, 80px) 32px; }
+.connect-signin-form { width: 100%; max-width: 400px; margin: auto; }
+.connect-signin-form > .connect-signin-label { margin-bottom: 24px; color: var(--ink-muted); }
+.signin-page-connect .card.signin { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.signin-page-connect .signin h1 { margin-bottom: 12px; font-size: 40px; line-height: 1.15; font-weight: 550; letter-spacing: -0.045em; }
+.signin-page-connect .signin .signin-intro { margin-bottom: 32px; color: var(--ink-muted); font-size: 15px; line-height: 23px; overflow-wrap: anywhere; }
+.signin-page-connect .signin form { gap: 18px; }
+.signin-page-connect .signin label { gap: 8px; color: var(--ink); }
+.signin-page-connect .signin input { min-height: 42px; padding: 8px 11px; border-color: var(--line-strong); border-width: 1px; border-radius: 2px; background: #ffffff; color: var(--ink); }
+.signin-page-connect .signin input:focus-visible { border-color: var(--focus); }
+.signin-page-connect .signin .button { min-height: 42px; border-radius: 2px; white-space: normal; }
+.signin-page-connect .signin .button:not(.secondary) { background: var(--accent, #d7192d); color: #ffffff; }
+.signin-page-connect .signin .button:not(.secondary):hover:not(:disabled) { background: var(--accent-hover, #b81225); }
+.signin-page-connect .signin .button.secondary { background: #ffffff; color: var(--ink); border-color: var(--line-strong); }
+.signin-page-connect .signin .button.secondary:hover:not(:disabled) { background: #f5f5f6; border-color: var(--ink-muted); }
+.signin-page-connect .signin .signin-foot { margin-top: 24px; color: var(--ink-muted); }
+.signin-page-connect .signin-error { padding: 8px 0; border: 0; border-radius: 0; background: transparent; color: var(--danger); }
+.signin-page-connect .signin-checking { margin: 0; text-align: left; line-height: 1.65; }
+.connect-signin-help { align-self: center; margin-top: 40px; color: var(--ink-muted); font-size: 13px; line-height: 20px; text-underline-offset: 4px; }
+.connect-signin-help:hover { color: var(--ink); }
+
+@media (max-width: 900px) {
+  .signin-page.signin-page-connect { grid-template-columns: minmax(0, 1fr); }
+  .connect-signin-story { gap: 0; padding: 32px max(24px, calc((100vw - 520px) / 2)); }
+  .connect-signin-wordmark img { width: 164px; }
+  .connect-signin-proposition { margin: 36px 0 0; }
+  .connect-signin-story .connect-signin-label { margin-bottom: 14px; }
+  .connect-signin-proposition h2 { font-size: clamp(40px, 7vw, 56px); }
+  .connect-signin-proposition p { max-width: 440px; margin-top: 18px; font-size: 15px; line-height: 1.55; }
+  .connect-signin-public-link { display: none; }
+  .connect-signin-panel { padding: 40px 24px 28px; }
+  .connect-signin-form { max-width: 520px; margin: 0 auto; }
+  .connect-signin-form > .connect-signin-label { margin-bottom: 18px; }
+  .signin-page-connect .signin h1 { font-size: 34px; }
+  .connect-signin-help { margin-top: 32px; }
+}
+@media (max-width: 640px) {
+  .signin-page-connect .signin input, .signin-page-connect .signin .button { min-height: 48px; }
+}

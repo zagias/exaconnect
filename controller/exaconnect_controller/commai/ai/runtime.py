@@ -17,14 +17,16 @@ anything not listed, whatever the model asks for.
 
 from __future__ import annotations
 
+import os
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 import psycopg
 
 from ...settings import get_settings
-from .. import connectors, inbox, usage
+from .. import bill, connectors, inbox, usage
 from .model import Model, ModelError, ModelInput, ModelOutput, OpenAICompatibleModel, SimulatedModel
 
 ROLES = ("customer_agent", "copilot", "platform_assistant")
@@ -228,21 +230,35 @@ def get_model() -> Model:
 
         model = governance.live_model(s.llm_model)
         return OpenAICompatibleModel(api_key=s.llm_api_key, base_url=s.llm_base_url, model=model)
-    return SimulatedModel()
+    if os.environ.get("EXA_COMMAI_AI_TEST_MODE") == "1":
+        return SimulatedModel()
+    raise ModelError("The AI service is not connected. A member of the team needs to answer.")
 
 
-SIMULATED_NOTE = (
-    "No AI service key is set (EXA_LLM_API_KEY), so the built-in simulated model answers: it answers from"
-    " approved knowledge, recognises booking requests and hands anything else to a person. It cannot translate."
-)
+def model_ready() -> bool:
+    """Configured service or an explicit test model; registration alone is insufficient."""
+    return _override is not None or bool(get_settings().llm_api_key) or os.environ.get("EXA_COMMAI_AI_TEST_MODE") == "1"
+
+
+SIMULATED_NOTE = "AI test mode is enabled. Replies use a simulated model and do not prove a live AI or booking service."
 
 
 def model_status() -> dict:
+    if not model_ready():
+        return {
+            "model": "unavailable",
+            "live": False,
+            "available": False,
+            "test_mode": False,
+            "note": "The AI service is not connected. Your team can still handle conversations.",
+        }
     m = get_model()
     live = isinstance(m, OpenAICompatibleModel)
     return {
         "model": m.name,
         "live": live,
+        "available": True,
+        "test_mode": not live,
         "note": "" if live else SIMULATED_NOTE,
     }
 
@@ -257,6 +273,7 @@ def complete(
     ref: str = "",
     business: str | None = None,
     prof: dict | None = None,
+    before_usage: Callable[[], Any] | None = None,
 ) -> ModelOutput:
     """Run one model call for a role, within the business's usage limits.
     Raises UsageLimit before calling when the hard limit is reached, and
@@ -277,6 +294,13 @@ def complete(
     out = get_model().complete(inp)
     if not isinstance(out, ModelOutput):
         raise ModelError("The AI service sent an answer in an unexpected shape.")
+    if before_usage is not None:
+        before_usage()
+    # Recheck recorded usage under the existing customer billing lock. The
+    # earlier read-only estimate does not reserve external model spend.
+    bill.ensure_card(conn, customer_id)
+    if not usage.allowed(conn, customer_id, rp.meter) or not usage.allowed(conn, customer_id, "ai_tokens", 0):
+        raise UsageLimit(f"The monthly limit for {rp.meter.replace('_', ' ')} has been reached.")
     ref = ref or f"{role}:{uuid.uuid4()}"
     usage.record(conn, customer_id, rp.meter, 1, ref=ref, detail={"role": role, "task": task, "model": out.model})
     tokens = out.tokens_in + out.tokens_out

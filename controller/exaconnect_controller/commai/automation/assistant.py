@@ -32,9 +32,15 @@ from .redact import redact
 events.register("assistant.fix_applied", "support_case.opened")
 
 SECRET_HINT = re.compile(
-    r"(?i)(password|passcode|api[_ -]?key|secret|token)\s*(is|=|:)\s*\S+|\b(sk|pk|pat|xox[bp])-[A-Za-z0-9-]{8,}|"
+    r"(?i)\b(password|passcode|api[_ -]?key|(?:client[_ -]?)?secret|(?:access[_ -]?|refresh[_ -]?)?token)"
+    r"\b[\"']?\s*(is\b|=|:)\s*\S+|"
+    r"\b(?:authorization\s*:\s*)?(?:bearer|basic)\s+[A-Za-z0-9_+/=.-]{8,}|"
+    r"-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----|"
+    r"[a-z][a-z0-9+.-]*://[^\s/:@]+:[^\s/@]+@|"
+    r"\b(sk|pk|pat|xox[bp])-[A-Za-z0-9-]{8,}|"
     r"\bEAA[A-Za-z0-9]{20,}|\b(?=[A-Za-z0-9]*\d)(?=[A-Za-z0-9]*[A-Z])(?=[A-Za-z0-9]*[a-z])[A-Za-z0-9]{32,}\b"
 )
+
 NO_SECRETS = (
     "Please don't paste passwords, API keys or tokens here. I've not stored what you sent. Use the sign-in "
     "or secure entry on the Integrations or Channels screen instead."

@@ -46,6 +46,9 @@ func TestInternetLocalApply(t *testing.T) {
 		"ip rule add pref 31000 from 192.168.10.0/24 lookup main suppress_prefixlength 0",
 		"ip rule add pref 31001 from 192.168.10.0/24 lookup 251",
 		"nft -f /state/internet.nft")
+	if commandIndex(f.cmds, "nft -f /state/internet.nft") > commandIndex(f.cmds, "ip route replace default via 10.11.1.1 dev eth1 table 251") {
+		t.Fatal("local route became available before its firewall")
+	}
 	if got := f.files["/state/internet.nft"]; got != render.InternetNFT(s) {
 		t.Fatalf("nft file:\n%s", got)
 	}
@@ -95,7 +98,7 @@ func TestInternetPopAndOffModes(t *testing.T) {
 		t.Fatal(err)
 	}
 	has(t, since(f, n), "ip route replace unreachable default table 251")
-	hasNone(t, since(f, n), "nft") // already gone
+	hasNone(t, since(f, n), "nft -f /state/internet.nft", "nft delete table ip exa_inet") // IPv4 NAT already gone
 	if a.InternetVia() != "" {
 		t.Fatalf("via %q", a.InternetVia())
 	}
@@ -158,7 +161,8 @@ func TestInternetRemovesStaleRules(t *testing.T) {
 		"ip rule del pref 31000 from 192.168.10.0/24 lookup main suppress_prefixlength 0",
 		"ip rule del pref 31001 from 192.168.10.0/24 lookup 251",
 		"ip route flush table 251")
-	hasNone(t, got, "ip rule del pref 1000", "ip rule add", "nft")
+	hasNone(t, got, "ip rule del pref 1000", "ip rule add", "nft -f")
+	has(t, got, "nft delete table inet exa_inet_guard")
 	if a.InternetVia() != "" {
 		t.Fatalf("via %q", a.InternetVia())
 	}
@@ -319,6 +323,119 @@ func TestInternetRollsBack(t *testing.T) {
 		t.Fatalf("via %q after rollback", a.InternetVia())
 	}
 	got := since(f, n)
-	has(t, got, "ip route replace default via 10.11.1.1 dev eth1 table 251", "nft -f /state/internet.nft",
-		"ip route replace default dev wg-a table 251", "nft delete table ip exa_inet")
+	has(t, got, "nft -f /state/internet.nft", "nft delete table ip exa_inet")
+	hasNone(t, got, "ip route replace default via")
+}
+
+func commandIndex(commands []string, want string) int {
+	for i, command := range commands {
+		if command == want {
+			return i
+		}
+	}
+	return -1
+}
+
+func TestInternetOffRefusedDoesNotBecomeLastGood(t *testing.T) {
+	f := &fake{files: map[string]string{}}
+	a := applier(f)
+	if err := a.Apply(context.Background(), inetState(1, desired.InternetPoP)); err != nil {
+		t.Fatal(err)
+	}
+	f.failOn = "ip route replace unreachable default table 251"
+	err := a.Apply(context.Background(), inetState(2, desired.InternetOff))
+	if !IsRolledBack(err) {
+		t.Fatalf("an unapplied off policy must roll back, got %v", err)
+	}
+	if a.LastGood().Version != 1 || a.InternetVia() != "wg-a" {
+		t.Fatalf("unapplied off policy acknowledged: last good=%+v, via=%q", a.LastGood(), a.InternetVia())
+	}
+}
+
+func TestInternetAllExitsRefusedFailsFirstApply(t *testing.T) {
+	f := &fake{files: map[string]string{}, failOn: "ip route replace"}
+	a := applier(f)
+	if err := a.Apply(context.Background(), inetState(1, desired.InternetLocal)); err == nil {
+		t.Fatal("a failed exit table must fail the configuration")
+	}
+	if a.LastGood() != nil {
+		t.Fatal("a state with no installed internet exit became last good")
+	}
+	hasNone(t, f.cmds, "ip rule add")
+}
+
+func TestRejectedFirewallIsRetriedAfterRestart(t *testing.T) {
+	f := &fake{files: map[string]string{}}
+	s := inetState(1, desired.InternetLocal)
+	a := applier(f)
+	if err := a.Apply(context.Background(), s); err != nil {
+		t.Fatal(err)
+	}
+	newState := inetState(2, desired.InternetLocal)
+	newState.Internet.Firewall[0].Dst = []string{"203.0.113.0/24"}
+	f.failOn = "nft -f /state/internet.nft"
+	// Exercise the failed transaction directly so a process death before
+	// rollback leaves the candidate file alongside the last accepted table.
+	if err := a.internetNFT(context.Background(), render.InternetNFT(newState)); err == nil {
+		t.Fatal("expected firewall refusal")
+	}
+	if f.files["/state/internet-applied.nft"] != render.InternetNFT(s) {
+		t.Fatal("rejected candidate replaced successful firewall cache")
+	}
+	f.failOn = ""
+	n := len(f.cmds)
+	if err := applier(f).Apply(context.Background(), newState); err != nil {
+		t.Fatal(err)
+	}
+	has(t, since(f, n), "nft -f /state/internet.nft")
+}
+
+func TestRejectedOffGuardIsRetriedAfterRestart(t *testing.T) {
+	f := &fake{files: map[string]string{}}
+	a := applier(f)
+	if err := a.Apply(context.Background(), inetState(1, desired.InternetPoP)); err != nil {
+		t.Fatal(err)
+	}
+	off := inetState(2, desired.InternetOff)
+	f.failOn = "nft -f /state/internet-guard.nft"
+	if err := a.internetGuard(context.Background(), render.InternetForwardGuard(off)); err == nil {
+		t.Fatal("expected off guard refusal")
+	}
+	f.failOn = ""
+	n := len(f.cmds)
+	if err := applier(f).Apply(context.Background(), off); err != nil {
+		t.Fatal(err)
+	}
+	has(t, since(f, n), "nft -f /state/internet-guard.nft")
+}
+
+func TestIPv6GuardFailurePreventsInternetRouteChanges(t *testing.T) {
+	f := &fake{files: map[string]string{}, failOn: "nft -f /state/internet-guard.nft"}
+	a := applier(f)
+	if err := a.Apply(context.Background(), inetState(1, desired.InternetLocal)); err == nil {
+		t.Fatal("a failed IPv6 guard must fail the new configuration")
+	}
+	hasNone(t, f.cmds, "table 251", "ip rule add", "nft -f /state/internet.nft")
+	if a.LastGood() != nil {
+		t.Fatal("an unguarded state was recorded as last good")
+	}
+}
+
+func TestInternetGuardRemainsInPopAndOffMode(t *testing.T) {
+	f := &fake{files: map[string]string{}}
+	a := applier(f)
+	for version, mode := range []string{desired.InternetPoP, desired.InternetOff, desired.InternetLocal} {
+		if err := a.Apply(context.Background(), inetState(int64(version+1), mode)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	count := 0
+	for _, cmd := range f.cmds {
+		if cmd == "nft -f /state/internet-guard.nft" {
+			count++
+		}
+	}
+	if count != 3 || !strings.Contains(f.files["/state/internet-guard.nft"], "meta nfproto ipv6 counter drop") {
+		t.Fatalf("IPv6 guard must persist and off boundaries must update across mode changes: commands=%v", f.cmds)
+	}
 }

@@ -1,4 +1,4 @@
-// ExaCarib box console (ADR 0046). Plain JavaScript, no build step: the agent
+// XaKore box console (ADR 0046). Plain JavaScript, no build step: the agent
 // embeds this file. Every value from the box goes into the page as text.
 "use strict";
 
@@ -78,7 +78,7 @@ function claimView() {
     catch (x) { err.replaceChildren(note("bad", x.message)); done(); }
   } },
   h("div", { class: "eyebrow" }, "New box"),
-  h("h1", {}, "Set up this ExaCarib box"),
+  h("h1", {}, "Set up this XaKore box"),
   h("p", { class: "muted" }, "Enter the setup code from the box's label. If it has no label, run exa-agent console-code on the box itself to see it. Then choose the password for this console."),
   h("div", { class: "fields" },
     h("label", {}, "Setup code", h("input", { name: "code", required: true, autocomplete: "off", placeholder: "ABCDE-FGHJK", autocapitalize: "characters" })),
@@ -98,9 +98,9 @@ function signinView() {
     try { await api("login", { user: fd.get("user"), password: fd.get("password") }); await start(); }
     catch (x) { err.replaceChildren(note("bad", x.message)); done(); }
   } },
-  h("div", { class: "eyebrow" }, state.name || state.hostname || "ExaCarib box"),
+  h("div", { class: "eyebrow" }, state.name || state.hostname || "XaKore box"),
   h("h1", {}, "Sign in to the box console"),
-  h("p", { class: "muted" }, "For people at this location. Your organisation also manages this box in the ExaCarib portal."),
+  h("p", { class: "muted" }, "For people at this location. Your organisation also manages this box in the XaKore portal."),
   h("div", { class: "fields" },
     h("label", {}, "User name", h("input", { name: "user", value: "admin", required: true, autocomplete: "username" })),
     h("label", {}, "Password", h("input", { name: "password", type: "password", required: true, autocomplete: "current-password" }))),
@@ -124,7 +124,7 @@ function chrome() {
     const on = a.getAttribute("href") === cur || (cur === "#/setup" && a.getAttribute("href") === "#/");
     if (on) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
   }
-  document.getElementById("foot").textContent = `ExaCarib Connect · box console${state && state.version ? " · " + state.version : ""}`;
+  document.getElementById("foot").textContent = `XaKore Connect · box console${state && state.version ? " · " + state.version : ""}`;
 }
 
 async function start() {
@@ -153,8 +153,8 @@ function pendingBanner(p, after) {
 }
 
 const ZTP_WORDS = {
-  calling: "Calling ExaCarib…",
-  waiting: "Waiting for ExaCarib to assign this box to a location. Nothing to do here: it joins by itself once assigned.",
+  calling: "Calling XaKore…",
+  waiting: "Waiting for XaKore to assign this box to a location. Nothing to do here: it joins by itself once assigned.",
   assigned: "Assigned to a location; joining Connect now.",
   joined: "Joined Connect by zero-touch.",
 };
@@ -162,7 +162,7 @@ const ZTP_WORDS = {
 // Zero-touch (ADR 0050): what the box hears when it calls home.
 function ztpNote(z) {
   if (!z || !z.on || z.state === "joined") return null;
-  const line = z.state === "error" ? `Zero-touch: ${z.detail || "no answer from ExaCarib yet"}. The box keeps trying; you can also set it up below.`
+  const line = z.state === "error" ? `Zero-touch: ${z.detail || "no answer from XaKore yet"}. The box keeps trying; you can also set it up below.`
     : `Zero-touch: ${ZTP_WORDS[z.state] || z.state}`;
   return note(z.state === "error" ? "warn" : "good", h("span", {}, line, " ", h("span", { class: "mono small" }, `Serial ${z.serial}`)));
 }
@@ -174,7 +174,7 @@ function cloudBanner(m) {
 }
 
 const PORTAL_WORDS = {
-  trying: ["warn", "Trying ports set in the Connect portal. The box keeps them once it can still reach ExaCarib with them, and puts the earlier ports back otherwise."],
+  trying: ["warn", "Trying ports set in the Connect portal. The box keeps them once it can still reach XaKore with them, and puts the earlier ports back otherwise."],
   kept: ["good", "Ports last set in the Connect portal"],
   undone: ["bad", "Ports set in the Connect portal were put back"],
   refused: ["bad", "Ports set in the Connect portal were not used"],
@@ -191,37 +191,37 @@ function portalNote(p) {
 async function overview() {
   const o = await api("overview");
   if (!o.setup.network || !o.setup.joined) {
-    show(head("Set-up", "Finish setting up this box", "Two short steps: choose which port goes where, then join the box to Connect with the setup code from the ExaCarib portal."),
+    show(head("Set-up", "Finish setting up this box", "Two short steps: choose which port goes where, then join the box to Connect with the setup code from the XaKore portal."),
       ztpNote(o.ztp),
       steps(o.setup.network ? (o.setup.joined ? 3 : 2) : 1, o.setup),
       h("div", { class: "actions" }, h("a", { class: "button", href: "#/setup" }, o.setup.network ? "Join Connect" : "Choose the ports")));
     if (o.setup.network || o.setup.joined) main.append(h("div", { class: "mt24" }), ...overviewCards(o).filter(Boolean));
     return;
   }
-  show(head("Overview", o.controller.name || o.hostname, `This box runs ExaCarib Connect at this location. It keeps forwarding on its last settings if it loses touch with ExaCarib.`),
+  show(head("Overview", o.controller.name || o.hostname, `This box runs XaKore Connect at this location. It keeps forwarding on its last settings if it loses touch with XaKore.`),
     cloudBanner(o.managed), portalNote(o.portal), pendingBanner(o.pending), ...overviewCards(o));
   timer = setInterval(async () => {
-    try { const n = await api("overview"); if ((location.hash.slice(1) || "/") === "/") show(head("Overview", n.controller.name || n.hostname, "This box runs ExaCarib Connect at this location. It keeps forwarding on its last settings if it loses touch with ExaCarib."), cloudBanner(n.managed), portalNote(n.portal), pendingBanner(n.pending), ...overviewCards(n)); } catch { /* next time */ }
+    try { const n = await api("overview"); if ((location.hash.slice(1) || "/") === "/") show(head("Overview", n.controller.name || n.hostname, "This box runs XaKore Connect at this location. It keeps forwarding on its last settings if it loses touch with XaKore."), cloudBanner(n.managed), portalNote(n.portal), pendingBanner(n.pending), ...overviewCards(n)); } catch { /* next time */ }
   }, 5000);
 }
 
 function overviewCards(o) {
   const c = o.controller;
-  const ctlPill = c.state === "connected" ? pill("ok", "Connected") : c.state === "unreachable" ? pill("bad", "Cannot reach ExaCarib") : c.state === "starting" ? pill("warn", "Starting") : pill("none", "Not joined yet");
+  const ctlPill = c.state === "connected" ? pill("ok", "Connected") : c.state === "unreachable" ? pill("bad", "Cannot reach XaKore") : c.state === "starting" ? pill("warn", "Starting") : pill("none", "Not joined yet");
   const wan = o.ports.filter((p) => p.role === "wan");
   const upWan = wan.filter((p) => p.oper === "up" || p.oper === "unknown").length;
   const tunUp = o.tunnels.filter((t) => t.handshake_age_s >= 0 && t.handshake_age_s < 180).length;
   const cards = [
     h("div", { class: "grid" },
-      h("div", { class: "card" }, h("div", { class: "eyebrow" }, "ExaCarib Connect"), ctlPill,
+      h("div", { class: "card" }, h("div", { class: "eyebrow" }, "XaKore Connect"), ctlPill,
         h("p", { class: "small muted mt6" }, c.joined ? `Last heard ${ago(c.last_contact)}. Settings version ${c.applied_version || "–"}.` : "Join the box to Connect to manage it from the portal.")),
       h("div", { class: "card" }, h("div", { class: "eyebrow" }, "Internet links"), h("div", { class: "stat" }, `${upWan} of ${wan.length} up`),
         h("p", { class: "small muted m0" }, wan.map((p) => `${PATHS[p.path] || p.path}: ${p.name}`).join(" · ") || "No internet ports chosen yet.")),
-      h("div", { class: "card" }, h("div", { class: "eyebrow" }, "Tunnels to ExaCarib"), h("div", { class: "stat" }, `${tunUp} of ${o.tunnels.length} up`),
-        h("p", { class: "small muted m0" }, o.tunnels.length ? "One encrypted tunnel over each internet link." : "Tunnels appear once ExaCarib sends this box its settings.")),
+      h("div", { class: "card" }, h("div", { class: "eyebrow" }, "Tunnels to XaKore"), h("div", { class: "stat" }, `${tunUp} of ${o.tunnels.length} up`),
+        h("p", { class: "small muted m0" }, o.tunnels.length ? "One encrypted tunnel over each internet link." : "Tunnels appear once XaKore sends this box its settings.")),
       h("div", { class: "card" }, h("div", { class: "eyebrow" }, "This box"), h("div", { class: "stat mono stat-sm" }, o.hostname),
         h("p", { class: "small muted m0" }, `Up ${duration(o.uptime_s)}. ${o.version}`))),
-    c.last_error ? note("bad", `The last settings from ExaCarib did not apply: ${c.last_error}`) : null,
+    c.last_error ? note("bad", `The last settings from XaKore did not apply: ${c.last_error}`) : null,
     portsTable(o.ports),
     tunnelsCard(o),
     routingCard(o),
@@ -263,7 +263,7 @@ function tunnelsCard(o) {
         h("td", { class: "mono" }, x.probe && x.probe.received ? `${x.probe.rtt_avg_ms.toFixed(1)} ms` : "–"),
         h("td", { class: "mono" }, x.probe && x.probe.received ? `${x.probe.jitter_ms.toFixed(1)} ms` : "–"),
         h("td", { class: "mono" }, x.probe && x.probe.sent ? `${x.probe.loss_pct.toFixed(1)}%` : "–")))))) :
-      h("p", { class: "muted m0" }, o.controller.joined ? "No tunnels yet. ExaCarib sends them once the location's links are set up in the portal." : "Tunnels come once the box has joined Connect."),
+      h("p", { class: "muted m0" }, o.controller.joined ? "No tunnels yet. XaKore sends them once the location's links are set up in the portal." : "Tunnels come once the box has joined Connect."),
     steer.length ? h("div", { class: "mt16" }, h("h3", {}, "Where each kind of traffic goes now"),
       h("div", { class: "table-wrap" }, h("table", {}, h("thead", {}, h("tr", {}, ["Traffic", "Path", ""].map((x) => h("th", { scope: "col" }, x)))),
         h("tbody", {}, steer.map((s) => h("tr", {}, h("td", {}, s.class + (s.dst ? " to " + s.dst : "")),
@@ -296,7 +296,7 @@ async function setup() {
   const o = await api("overview");
   if (!o.setup.network) return portsForm(true, o.setup);
   if (!o.setup.joined) return joinForm(true, o.setup);
-  show(head("Set-up", "This box is set up", "It has joined Connect. ExaCarib now sends it its tunnels and routing, and it shows as online in the portal under your organisation's locations."),
+  show(head("Set-up", "This box is set up", "It has joined Connect. XaKore now sends it its tunnels and routing, and it shows as online in the portal under your organisation's locations."),
     steps(3, o.setup), h("div", { class: "actions" }, h("a", { class: "button", href: "#/" }, "See the box's status")));
 }
 
@@ -345,7 +345,7 @@ async function portsForm(wizard, setupState) {
     h("span", { class: "small muted" }, "If the console loses touch after a change, the box goes back to the earlier ports after 2 minutes.")));
   if (readOnly) for (const el of f.querySelectorAll("input, select")) el.disabled = true;
   show(wizard ? head("Set-up · step 1 of 2", "Choose which port goes where", "Pick the port each internet link is plugged into, and the port for the office network. Most internet links set themselves up automatically.")
-    : head("Ports", "Ports", "Which port carries each internet link, and the office network. ExaCarib routes traffic over these links."),
+    : head("Ports", "Ports", "Which port carries each internet link, and the office network. XaKore routes traffic over these links."),
   wizard ? steps(1, setupState) : null, readOnly ? cloudBanner(mg.managed) : null, pendingBanner(d.pending), f);
 }
 
@@ -415,11 +415,11 @@ async function connectView() {
   const o = await api("overview");
   if (!o.controller.joined) return joinForm(false, o.setup);
   const c = o.controller;
-  show(head("Connect", "Joined to ExaCarib Connect", "ExaCarib manages this box's tunnels, routing and traffic rules. Ports and this console stay under local control too."),
+  show(head("Connect", "Joined to XaKore Connect", "XaKore manages this box's tunnels, routing and traffic rules. Ports and this console stay under local control too."),
     h("section", { class: "card" }, h("table", {}, h("tbody", {},
       h("tr", {}, h("th", { scope: "row" }, "Box name"), h("td", { class: "mono" }, c.name)),
-      h("tr", {}, h("th", { scope: "row" }, "ExaCarib address"), h("td", { class: "mono" }, c.url)),
-      h("tr", {}, h("th", { scope: "row" }, "Connection"), h("td", {}, c.state === "connected" ? pill("ok", "Connected") : c.state === "starting" ? pill("warn", "Starting") : pill("bad", "Cannot reach ExaCarib"), h("span", { class: "sub" }, `Last heard ${ago(c.last_contact)}`))),
+      h("tr", {}, h("th", { scope: "row" }, "XaKore address"), h("td", { class: "mono" }, c.url)),
+      h("tr", {}, h("th", { scope: "row" }, "Connection"), h("td", {}, c.state === "connected" ? pill("ok", "Connected") : c.state === "starting" ? pill("warn", "Starting") : pill("bad", "Cannot reach XaKore"), h("span", { class: "sub" }, `Last heard ${ago(c.last_contact)}`))),
       h("tr", {}, h("th", { scope: "row" }, "Settings version"), h("td", { class: "mono" }, String(c.applied_version || "–")))))),
     h("p", { class: "small muted" }, "To move this box to another location, revoke it in the portal and set it up again."));
 }
@@ -428,7 +428,7 @@ function joinForm(wizard, setupState) {
   const err = h("div");
   const manual = h("details", {}, h("summary", {}, "Enter the details by hand instead"),
     h("div", { class: "fields mt12" },
-      h("label", {}, "ExaCarib address", h("input", { name: "controller", value: "https://connect.exacarib.com:8443", class: "mono" })),
+      h("label", {}, "XaKore address", h("input", { name: "controller", value: "https://connect.exacarib.com:8443", class: "mono" })),
       h("label", {}, "Enrolment token", h("input", { name: "token", autocomplete: "off", class: "mono" })),
       h("label", {}, "CA fingerprint", h("input", { name: "fingerprint", autocomplete: "off", class: "mono" })),
       h("label", {}, "Box name", h("input", { name: "name", autocomplete: "off", class: "mono", placeholder: "kingston-hq" }), h("span", { class: "hint" }, "The location's Connect name, as shown in the portal"))));
@@ -446,13 +446,13 @@ function joinForm(wizard, setupState) {
     } catch (x) { err.replaceChildren(note("bad", x.message)); done(); }
   } },
   h("h2", {}, "Box setup code"),
-  h("p", { class: "muted" }, "In the ExaCarib portal, open Organisation › Locations, choose Connect this location (or Get a new install code), and copy the box setup code. It works once."),
+  h("p", { class: "muted" }, "In the XaKore portal, open Organisation › Locations, choose Connect this location (or Get a new install code), and copy the box setup code. It works once."),
   h("label", {}, h("span", { class: "sr-only" }, "Box setup code"), h("textarea", { name: "code", placeholder: "EXA1.…", autocomplete: "off", spellcheck: "false", "aria-label": "Box setup code" })),
   h("div", { class: "mt12" }, manual),
   err,
   h("div", { class: "actions" }, h("button", { class: "button" }, "Join Connect"),
     h("span", { class: "small muted" }, "The box only connects out, on port 8443. It makes its own keys and sends only the public one.")));
-  show(wizard ? head("Set-up · step 2 of 2", "Join this box to Connect", "Paste the box setup code from the portal. The box then gets its tunnels and routing from ExaCarib.")
+  show(wizard ? head("Set-up · step 2 of 2", "Join this box to Connect", "Paste the box setup code from the portal. The box then gets its tunnels and routing from XaKore.")
     : head("Connect", "Join this box to Connect", "Paste the box setup code from the portal."),
   wizard ? steps(2, setupState) : null, f);
 }
@@ -464,7 +464,7 @@ async function diagView() {
   const out = h("pre", { class: "out", hidden: true, "aria-live": "polite" });
   const err = h("div");
   const tool = h("select", { name: "tool" }, h("option", { value: "ping" }, "Ping"), h("option", { value: "traceroute" }, "Traceroute"),
-    h("option", { value: "dns" }, "Look up a name (DNS)"), h("option", { value: "controller" }, "Reach ExaCarib"));
+    h("option", { value: "dns" }, "Look up a name (DNS)"), h("option", { value: "controller" }, "Reach XaKore"));
   const target = h("input", { name: "target", value: "1.1.1.1", class: "mono", required: true, "aria-label": "Address or name" });
   const iface = h("select", { name: "iface" }, h("option", { value: "" }, "Any (normal routing)"), d.ports.map((p) => h("option", { value: p.name }, `${p.name}${p.role === "wan" ? " · " + PATHS[p.path] : p.role === "lan" ? " · office" : ""}`)));
   tool.addEventListener("change", () => {
@@ -486,7 +486,7 @@ async function diagView() {
   h("div", { class: "port-fields" }, h("label", {}, "Test", tool), h("label", {}, "Address or name", target), h("label", {}, "From port", iface)),
   err,
   h("div", { class: "actions" }, h("button", { class: "button" }, "Run")), out);
-  show(head("Diagnostics", "Diagnostics", "Check the box can reach the internet and ExaCarib over each link."), f);
+  show(head("Diagnostics", "Diagnostics", "Check the box can reach the internet and XaKore over each link."), f);
 }
 
 // ---- monitoring (ADR 0048) ----
@@ -543,12 +543,12 @@ async function monitoringView() {
       field("Location", h("input", { name: "location", value: sn.location || "", maxlength: 120 })),
       field("Contact", h("input", { name: "contact", value: sn.contact || "", maxlength: 120 })))),
   h("h2", { class: "mt24" }, "Traps"),
-  h("p", { class: "muted small" }, "Sent when a port goes up or down, a link or tunnel fails (BFD), traffic moves to another link, the box loses ExaCarib, someone polls with a wrong community, or someone changes the box here."),
+  h("p", { class: "muted small" }, "Sent when a port goes up or down, a link or tunnel fails (BFD), traffic moves to another link, the box loses XaKore, someone polls with a wrong community, or someone changes the box here."),
   traps,
   h("div", { class: "actions" }, h("button", { type: "button", class: "button secondary small", onclick: () => { if (traps.children.length < 4) traps.append(trapRow({ version: "v2c" })); } }, "Add a trap destination")),
   h("table", { class: "mt12" }, h("tbody", {},
     h("tr", {}, h("th", { scope: "row" }, "Engine ID (for v3 traps)"), h("td", { class: "mono small break" }, m.engine_id)),
-    h("tr", {}, h("th", { scope: "row" }, "ExaCarib trap OIDs"), h("td", { class: "mono small break" }, `${m.trap_oid}.0.n (kind, detail, box in ${m.trap_oid}.1.1 to .1.3)`)))),
+    h("tr", {}, h("th", { scope: "row" }, "XaKore trap OIDs"), h("td", { class: "mono small break" }, `${m.trap_oid}.0.n (kind, detail, box in ${m.trap_oid}.1.1 to .1.3)`)))),
   h("h2", { class: "mt24" }, "Syslog"),
   h("p", { class: "muted small" }, "The box's log (agent, routing, firewall, sign-ins) goes to your collector in RFC 5424 format. Empty: off."),
   h("div", { class: "port-fields" },
@@ -585,7 +585,7 @@ async function monitoringView() {
     kf, keyOut);
 
   show(head("Monitoring", "Monitoring", "Let your own monitoring system watch this box: SNMP, traps, syslog and a read-only API."),
-    !m.caps.snmp || !m.caps.syslog ? note("warn", "This box lacks " + [!m.caps.snmp ? "an SNMP agent (snmpd)" : null, !m.caps.syslog ? "rsyslog" : null].filter(Boolean).join(" and ") + ". The ExaCarib box image has both.") : null,
+    !m.caps.snmp || !m.caps.syslog ? note("warn", "This box lacks " + [!m.caps.snmp ? "an SNMP agent (snmpd)" : null, !m.caps.syslog ? "rsyslog" : null].filter(Boolean).join(" and ") + ". The XaKore box image has both.") : null,
     f, keys);
 }
 
@@ -664,12 +664,12 @@ async function settingsView() {
     h("label", {}, "New password", h("input", { name: "new", type: "password", required: true, minlength: 10, autocomplete: "new-password" })),
     h("label", {}, "New password again", h("input", { name: "again", type: "password", required: true, autocomplete: "new-password" }))),
   err, h("div", { class: "actions" }, h("button", { class: "button" }, "Change the password")));
-  show(head("Settings", "Settings", "Where this box is managed from, this console's sign-in, the box's software, and details to give ExaCarib support."), managedCard(o), u ? softwareCard(u) : null, f,
+  show(head("Settings", "Settings", "Where this box is managed from, this console's sign-in, the box's software, and details to give XaKore support."), managedCard(o), u ? softwareCard(u) : null, f,
     h("section", { class: "card" }, h("h2", {}, "About this box"), h("table", {}, h("tbody", {},
       h("tr", {}, h("th", { scope: "row" }, "Host name"), h("td", { class: "mono" }, o.hostname)),
       h("tr", {}, h("th", { scope: "row" }, "Software"), h("td", { class: "mono" }, o.version)),
       o.ztp && o.ztp.serial ? h("tr", {}, h("th", { scope: "row" }, "Serial number"), h("td", { class: "mono" }, o.ztp.serial,
-        o.ztp.key_id ? h("span", { class: "sub" }, `Zero-touch key ${o.ztp.key_id}: ExaCarib's device list shows the same.`) : null)) : null,
+        o.ztp.key_id ? h("span", { class: "sub" }, `Zero-touch key ${o.ztp.key_id}: XaKore's device list shows the same.`) : null)) : null,
       h("tr", {}, h("th", { scope: "row" }, "Console address"), h("td", { class: "mono" }, o.console_url || location.origin)),
       h("tr", {}, h("th", { scope: "row" }, "Console certificate"), h("td", { class: "mono small break" }, o.cert_sha256 || "–",
         h("span", { class: "sub" }, "SHA-256. Your browser warns about this certificate once because the box made it itself; check it matches what exa-agent console-code prints on the box."))),

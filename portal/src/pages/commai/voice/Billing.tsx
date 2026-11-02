@@ -98,7 +98,7 @@ function SpendCard({ base, period }: { base: string; period: string }) {
               <div className="stat-figure mono">{money(d.currency, d.spend_today)}</div>
             </div>
           </div>
-          {d.example_prices && <p className="muted small">Prices come from the example rate card until ExaCarib sets yours.</p>}
+          {d.example_prices && <p className="muted small">Prices come from the example rate card until XaKore sets yours.</p>}
           <ul className="plain-list">
             {d.by_kind.map((k) => (
               <li key={k.kind} className="row-between">
@@ -483,7 +483,7 @@ function InvoicesCard({ base, v, period }: { base: string; v: VoiceOverview; per
     <Card title="Invoices and credit notes">
       <p className="muted small">
         Issued invoices never change; corrections are credit notes. Every line traces back to its call or fee. Voice charges join your single
-        ExaCarib bill when billing is connected (not built yet).
+        XaKore bill when billing is connected (not built yet).
       </p>
       {v.is_exacarib && (
         <button
@@ -629,8 +629,8 @@ function SupplierCard({ base, period }: { base: string; period: string }) {
   const [result, setResult] = useState<{ added: number; duplicates: number; rejected: { row: number; error: string }[] } | null>(null);
   const r = rec.data;
   return (
-    <Card title="Supplier side (ExaCarib only)">
-      <p className="muted small">What the SIP provider charges ExaCarib for this company's calls, against what we bill, and the margin.</p>
+    <Card title="Supplier side (XaKore only)">
+      <p className="muted small">What the SIP provider charges XaKore for this company's calls, against what we bill, and the margin.</p>
       <ErrorNote error={rec.error} />
       {r && (
         <>

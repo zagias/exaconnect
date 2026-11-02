@@ -63,11 +63,12 @@ def raise_insight(
         escalated = RANK[severity] > RANK[old["severity"]]
         conn.execute(
             """UPDATE insights SET severity = %s, title = %s, detail = %s, data = %s, site_id = %s,
+                 link_id = %s, carrier_id = %s,
                  last_seen = now(), resolved_at = NULL,
                  acknowledged_by = CASE WHEN %s THEN NULL ELSE acknowledged_by END,
                  acknowledged_at = CASE WHEN %s THEN NULL ELSE acknowledged_at END
                WHERE id = %s""",
-            (severity, title, detail, Jsonb(data or {}), site_id, escalated, escalated, old["id"]),
+            (severity, title, detail, Jsonb(data or {}), site_id, link_id, carrier_id, escalated, escalated, old["id"]),
         )
         if escalated:
             _event(conn, customer_id, old["id"], kind, severity, title, escalated=True)

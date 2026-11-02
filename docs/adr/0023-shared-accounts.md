@@ -120,3 +120,14 @@ and nav groups hidden for plans the organisation doesn't hold.
 - SSO for an organisation other than the primary one: an enterprise SSO
   sign-in acts for the vouching business; a membership elsewhere is reached
   by switching.
+
+## Account email update (2026-11-01)
+
+The invitation email seam is now implemented with the shared platform SMTP
+mailer. Both a manager's invitation and a new organisation's owner invitation
+send the generated link only after the creating transaction commits. The token
+still appears only in the immediate authorised response and the outgoing email;
+only its hash is stored. Unconfigured or failed SMTP returns an explicit
+delivery outcome and keeps the copyable link valid. No invitation message is
+recorded in the simulated channel outbox. Existing expiry, role, SSO and
+single-use checks are unchanged. See `docs/commai/channels.md` for configuration.

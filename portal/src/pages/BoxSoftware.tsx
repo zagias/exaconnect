@@ -8,6 +8,8 @@ import { ErrorNote, ago } from "../components";
 import { useCustomer } from "../customer";
 import { Card, PageHead, useAction } from "../ui";
 import { useCanManage } from "./org/common";
+import { useAuth } from "../auth";
+import { canOperateConnect } from "../permissions";
 
 interface BoxRow {
   site_id: string;
@@ -46,7 +48,8 @@ const MANAGED_NAMES = {
 
 export function BoxSoftware() {
   const { current } = useCustomer();
-  const canManage = useCanManage();
+  const { user } = useAuth();
+  const canManage = useCanManage() && canOperateConnect(user);
   const q = current ? `?customer_id=${current.id}` : "";
   const data = useApi<{ boxes: BoxRow[] }>(
     current ? `/box-software${q}` : null,
@@ -78,7 +81,7 @@ export function BoxSoftware() {
   return (
     <>
       <PageHead title="Box software">
-        Update ExaCarib boxes from here, or take them back to an earlier
+        Update XaKore boxes from here, or take them back to an earlier
         version. Each box restarts into the new software and keeps it only if it
         comes up healthy; otherwise it goes back to its earlier software by
         itself.
@@ -98,7 +101,7 @@ export function BoxSoftware() {
       <Card title={`Boxes of ${current.name}`}>
         {boxes.length === 0 ? (
           <p className="muted small">
-            This organisation has no ExaCarib boxes in Connect yet.
+            This organisation has no XaKore boxes in Connect yet.
           </p>
         ) : (
           <div className="table-wrap">

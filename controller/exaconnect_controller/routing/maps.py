@@ -53,14 +53,16 @@ def candidates(cls: dict, customer: dict, site: dict, site_paths: list[dict]) ->
 
 
 def pause_if_none(cls: dict, customer: dict, site: dict, site_paths: list[dict] | None = None) -> bool:
-    """A class that may not use satellite pauses when only satellite is left,
-    instead of falling back to BGP (which would put it there). That is bulk
-    unless the admin allowed it, and a real-time class at a site whose only
-    satellite is GEO."""
+    """Never let BGP bypass a satellite path excluded from the class's map.
+
+    Satellite stays established in BGP even outside Storm Mode. When every
+    allowed path fails, falling through to the main table would silently put
+    traffic on that excluded satellite (including GEO for real-time traffic).
+    """
     if not cls["allow_satellite"] and not (site.get("storm_mode") and customer["storm_allow_bulk_sat"]):
         return True
     sats = [p for p in site_paths or [] if p["satellite"]]
-    return bool(sats) and all(geo_blocks(cls, p) for p in sats)
+    return any(not class_allows_sat(cls, customer, site) or geo_blocks(cls, p) for p in sats)
 
 
 def class_sla(cls: dict) -> dict[str, float]:
@@ -191,9 +193,9 @@ def build(inv: dict[str, Any], site: dict) -> dict[str, Any]:
         "rules": rules,
         "local_prefixes": [str(p) for p in site["lan_prefixes"]],
     }
-    # A site breaking out locally classifies only traffic for the customer's
-    # own networks; the rest leaves by its carrier links (ADR 0010).
-    if site["kind"] == "site" and site.get("internet_mode") == "local":
+    # Only PoP breakout may steer public destinations into a tunnel. Local
+    # breakout and InternetOff must reach the site's internet policy table.
+    if site["kind"] == "site" and site.get("internet_mode") in ("local", "off"):
         out["corporate_prefixes"] = inv["corporate"]
     # Traffic rules (ADR 0007). The PoP gets the rules of every site it serves
     # so return traffic is classified the same way.

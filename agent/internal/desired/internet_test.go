@@ -64,6 +64,8 @@ func TestInternetInvalid(t *testing.T) {
 		func(in *Internet) { in.Mode = "" },
 		func(in *Internet) { in.LANPrefixes = []string{"192.168.10.0/33"} },
 		func(in *Internet) { in.LANPrefixes = []string{"fd00::/64"} },
+		func(in *Internet) { in.CorporatePrefixes = []string{"fd00::/64"} },
+		func(in *Internet) { in.CorporatePrefixes = []string{"10.0.0.0/8; accept"} },
 		func(in *Internet) { in.Tunnels = []string{"wg-a", "wg-a"} },
 		func(in *Internet) { in.Tunnels = []string{"wg-sat"} }, // not one of the node's tunnels
 		func(in *Internet) { in.Tunnels = []string{"eth0"} },
@@ -113,6 +115,9 @@ func TestInternetInvalid(t *testing.T) {
 		func(in *Internet) { in.PortForwards[0].Port = 0 },
 		func(in *Internet) { in.PortForwards[0].ToPort = 70000 },
 		func(in *Internet) { in.PortForwards[0].ToAddress = "host.example" },
+		func(in *Internet) { in.PortForwards[0].ToAddress = "192.168.99.10" },
+		func(in *Internet) { in.PortForwards[0].Protocol, in.PortForwards[0].Port = "udp", 500 },
+		func(in *Internet) { in.PortForwards[0].Protocol, in.PortForwards[0].Port = "udp", 4500 },
 		func(in *Internet) { in.PortForwards[0].AllowFrom = []string{"any"} },
 		func(in *Internet) {
 			f := in.PortForwards[0]
@@ -133,6 +138,20 @@ func TestInternetInvalid(t *testing.T) {
 		if s.Validate() == nil {
 			t.Errorf("%s-mode site accepted firewall rules", mode)
 		}
+	}
+}
+
+func TestPortForwardCannotReplaceWireGuardListener(t *testing.T) {
+	s := inetPoP()
+	s.Tunnels = []Tunnel{{Name: "wg-a", Address: "100.64.1.1/24", ListenPort: 51820}}
+	s.Internet.PortForwards[0].Protocol = "udp"
+	s.Internet.PortForwards[0].Port = 51820
+	if err := s.Validate(); err == nil || !strings.Contains(err.Error(), "reserved for WireGuard") {
+		t.Fatalf("a forward can hijack the VPN listener: %v", err)
+	}
+	s.Internet.PortForwards[0].Port = 51821
+	if err := s.Validate(); err != nil {
+		t.Fatalf("unrelated UDP forwards should work: %v", err)
 	}
 }
 

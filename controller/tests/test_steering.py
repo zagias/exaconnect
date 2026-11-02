@@ -58,7 +58,7 @@ def test_steering_maps_and_brownout_decision(client, admin_headers):
     assert {p["name"]: p["table"] for p in m["paths"]} == {"carrier-a": 101, "carrier-b": 102, "sat": 103}
     rules = {r["class"]: r for r in m["rules"]}
     assert rules["voice"]["paths"] == ["carrier-a", "carrier-b"]
-    assert rules["voice"]["pause_if_none"] is False
+    assert rules["voice"]["pause_if_none"] is True  # BGP must not bypass Storm Mode's satellite gate
     assert rules["bulk"]["pause_if_none"] is True
     assert m["local_prefixes"] == ["192.168.10.0/24"] and m["storm"] is False
     assert client.get(f"/api/v1/agent/steering?have={m['version']}", headers=a_h).status_code == 204

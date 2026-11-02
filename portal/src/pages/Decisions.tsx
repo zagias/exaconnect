@@ -1,7 +1,9 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useApi, type DecisionRow, type SiteSummary } from "../api";
 import { ErrorNote, Eyebrow, Stamp } from "../components";
+import { useAuth } from "../auth";
+import { useCustomer } from "../customer";
 
 const KIND_WORDS: Record<DecisionRow["kind"], string> = {
   move: "Moved",
@@ -14,15 +16,28 @@ const METRIC_UNITS: Record<string, string> = { loss: "%", latency: " ms", jitter
 
 /** Every routing decision with its reason, newest first, filterable by site and class. */
 export default function Decisions() {
-  const [site, setSite] = useState("");
-  const [cls, setCls] = useState("");
+  const { current } = useCustomer();
+  const { user } = useAuth();
+  const [params, setParams] = useSearchParams();
+  const site = params.get("site_id") ?? "";
+  const cls = params.get("class_name") ?? "";
   const [holds, setHolds] = useState(false);
   const [open, setOpen] = useState<number | null>(null);
   const q = new URLSearchParams({ limit: "200", include_holds: String(holds) });
+  const scope = user?.role === "admin" && current ? `customer_id=${current.id}` : "";
+  const ready = user?.role !== "admin" || !!current;
+  if (scope && current) q.set("customer_id", current.id);
   if (site) q.set("site_id", site);
   if (cls) q.set("class_name", cls);
-  const { data, error } = useApi<DecisionRow[]>(`/decisions?${q}`, 10_000);
-  const sites = useApi<{ sites: SiteSummary[] }>("/overview", 0);
+  const { data, error } = useApi<DecisionRow[]>(ready ? `/decisions?${q}` : null, 10_000);
+  const sites = useApi<{ sites: SiteSummary[] }>(ready ? `/overview${scope ? `?${scope}` : ""}` : null, 0);
+  const classes = useApi<{ name: string }[]>(current ? `/classes?customer_id=${current.id}` : null, 0);
+  const filter = (key: string, value: string) => {
+    const next = new URLSearchParams(params);
+    if (value) next.set(key, value);
+    else next.delete(key);
+    setParams(next, { replace: true });
+  };
 
   return (
     <>
@@ -30,16 +45,15 @@ export default function Decisions() {
         <Eyebrow>Routing moves</Eyebrow>
         <h1>Why traffic moved</h1>
         <p className="muted">
-          The controller forecasts every path against each class's SLA every 10 seconds. It moves a class before a
-          breach it can see coming, waits out a hold time so nothing flaps, and records the reason here.
+          See when Connect changed a traffic path, which site was affected and why. Filter by site or traffic class to investigate a change.
         </p>
-        <ErrorNote error={error} />
+        <ErrorNote error={error ?? sites.error ?? classes.error} />
       </div>
       <section className="card">
         <div className="filters">
           <label>
             Site{" "}
-            <select value={site} onChange={(e) => setSite(e.target.value)}>
+            <select value={site} onChange={(e) => filter("site_id", e.target.value)}>
               <option value="">All sites</option>
               {(sites.data?.sites ?? [])
                 .filter((s) => s.kind === "site")
@@ -52,11 +66,11 @@ export default function Decisions() {
           </label>
           <label>
             Class{" "}
-            <select value={cls} onChange={(e) => setCls(e.target.value)}>
+            <select value={cls} onChange={(e) => filter("class_name", e.target.value)}>
               <option value="">All classes</option>
-              <option value="voice">voice</option>
-              <option value="business">business</option>
-              <option value="bulk">bulk</option>
+              {(classes.data ?? []).map((c) => (
+                <option key={c.name} value={c.name}>{c.name}</option>
+              ))}
             </select>
           </label>
           <label className="check">
@@ -64,7 +78,13 @@ export default function Decisions() {
             stay put
           </label>
         </div>
-        {data?.length === 0 && <p className="muted">No decisions yet. Every path is within SLA.</p>}
+        {data?.length === 0 && (
+          <p className="muted">
+            {site || cls
+              ? "No routing decisions match these filters."
+              : "No routing decisions to show yet. Decisions appear here when the network records them."}
+          </p>
+        )}
         <ol className="timeline">
           {(data ?? []).map((d) => (
             <li key={d.id} className={`decision ${d.kind}`}>

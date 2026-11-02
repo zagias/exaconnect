@@ -2,7 +2,7 @@
   "id": "/phone",
   "name": "Jibsy Phone",
   "short_name": "Jibsy Phone",
-  "description": "Your work phone: calls on your company extension, from any device.",
+  "description": "Jibsy Phone by XaKore. Your work phone: calls on your company extension, from any device.",
   "start_url": "/phone",
   "scope": "/phone",
   "display": "standalone",

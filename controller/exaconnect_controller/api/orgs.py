@@ -13,7 +13,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 
-from .. import audit, db
+from .. import audit, db, mailer
 from ..identity import orgs, sessions, sso
 from ..security import hash_password, token_hash
 from .deps import (
@@ -298,49 +298,34 @@ def list_invites(customer_id: str, user: UserDep) -> list[dict]:
 
 @router.post("/orgs/{customer_id}/invites", status_code=201)
 def create_invite(customer_id: str, body: InviteIn, user: UserDep, request: Request) -> dict:
-    """Invite someone by email. No email is sent yet: the link is shown once,
-    here, for you to pass on. It works once and expires in 7 days."""
+    """Create a one-use invitation, then send it if company email is configured.
+    The inviter also receives a copyable link if delivery is unavailable."""
     require_org_manager(user, customer_id)
     with db.tx() as conn:
-        if conn.execute("SELECT 1 FROM customers WHERE id = %s", (customer_id,)).fetchone() is None:
+        org = conn.execute("SELECT name FROM customers WHERE id = %s", (customer_id,)).fetchone()
+        if org is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Organisation not found.")
         try:
             row, token = orgs.invite(conn, customer_id, body.email, body.role, user.actor)
         except orgs.OrgError as e:
             raise _fail(e) from e
         audit.record(conn, user.actor, "org.invite.create", row["email"], customer_id, {"role": row["role"]})
-        _notify(conn, customer_id, row, user.email)
     path = f"/invite/{token}"
     base = request.app.state.settings.public_url
+    delivery = mailer.send_invitation(
+        to=row["email"],
+        organisation=org["name"],
+        by=user.email,
+        role=row["role"],
+        url=f"{mailer.public_base(request)}{path}",
+    )
     return {
         **row,
         "token": token,
         "path": path,
         "url": f"{base}{path}" if base else path,
-        "emailed": False,
-        "email_sender": "simulated",
+        **delivery,
     }
-
-
-def _notify(conn, customer_id: str, invite: dict, by: str) -> None:
-    """No invitation email goes out yet. Jibsy's simulated email sender records
-    the notice it would send, so the outbox shows it; the link itself is left
-    out, because only its hash is ever stored."""
-    from email.message import EmailMessage
-    from email.utils import make_msgid
-
-    from ..commai.channels.email import SimulatedSender
-
-    org = conn.execute("SELECT name FROM customers WHERE id = %s", (customer_id,)).fetchone()["name"]
-    msg = EmailMessage()
-    msg["To"] = invite["email"]
-    msg["Subject"] = f"You're invited to {org} on ExaCarib Connect"
-    msg["Message-ID"] = make_msgid(domain="invites.exacarib.invalid")
-    msg.set_content(
-        f"{by} has invited you to join {org} as {invite['role']}.\n"
-        "Your invitation link was given to them to pass on. It works once and expires in 7 days.\n"
-    )
-    SimulatedSender().send(conn, {"customer_id": customer_id, "id": None}, msg)
 
 
 @router.delete("/orgs/{customer_id}/invites/{invite_id}", status_code=204)

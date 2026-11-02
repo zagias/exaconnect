@@ -4,6 +4,12 @@
 # menu or queue added in the portal works without a redeploy. Busybox sh: no bash.
 # Directory, dial plan and menus reload in place; call queues only when the queue
 # files changed, because reloading mod_callcenter drops calls waiting in a queue.
+# The security guard completes before either a watcher or the stock PBX start.
+# On affected/unknown versions it disables SIP REFER on every profile; edit
+# failure stops startup. Signed runtime receipts remain unavailable if optional
+# probe dependencies are absent in the selected image.
+/bin/sh /exacarib-phone-runtime.sh guard || exit 1
+/bin/sh /exacarib-phone-runtime.sh loop &
 (
   last="" lastq=""
   while sleep 5; do

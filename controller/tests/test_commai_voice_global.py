@@ -132,7 +132,8 @@ def test_real_provider_refuses_until_configured(monkeypatch):
         p.search_numbers(None, "TT")
     assert "EXA_SIP_PROVIDER_URL" in str(e.value)
     monkeypatch.setenv("EXA_SIP_PROVIDER", "sip")
-    assert providers.get().live
+    assert not providers.get().live
+    assert not providers.status()["number_ordering_ready"]
 
 
 # ---- emergency addresses ------------------------------------------------------------------------
@@ -562,35 +563,258 @@ def test_tenant_isolation(client, admin_headers):
     assert client.get(f"{ua}/voice/port-orders/{pid}", headers=admin_headers).status_code == 200
 
 
-def test_livekit_agent_answers_a_phone_call(client, monkeypatch):
+def test_livekit_controller_contract_requires_measured_speech_and_real_scoped_transfer(client, monkeypatch):
+    from uuid import uuid4
+
+    from exaconnect_controller.commai.voice import livekit, phone_worker
+
     b = setup_voice(client)
-    out = save(client, b, [{"op": "add_number", "target_type": "user", "target": "201"}])
+    out = save(
+        client,
+        b,
+        [
+            {"op": "add_number", "target_type": "user", "target": "201"},
+            {"op": "save_ai_rule", "name": "Phone assistant", "condition": "always", "fallback": "voicemail"},
+        ],
+    )
     e164 = out["results"][0]["e164"]
-    url = "/api/v1/commai/voice/livekit/calls"
-    assert client.post(url, json={"dialled": e164}).status_code == 503  # not set up
+    root = "/api/v1/commai/voice/livekit"
     secret = "agent-" + "x" * 20
-    for k, v in (
+    tenant = "c" + b["id"].replace("-", "")[:12]
+    lost_room = f"call-{tenant}-lost"
+    body = {
+        "room": f"call-{tenant}-real",
+        "participant_identity": "sip-caller",
+        "sip_call_id": "actual-call-id",
+        "worker_id": "worker-one",
+        "provider_fingerprint": "a" * 64,
+    }
+    assert client.post(root + "/calls", json=body).status_code == 503
+    for key, value in (
         ("EXA_LIVEKIT_URL", "wss://livekit.example"),
         ("EXA_LIVEKIT_API_KEY", "devkey"),
         ("EXA_LIVEKIT_API_SECRET", "s" * 32),
         ("EXA_LIVEKIT_AGENT_SECRET", secret),
+        ("EXA_PHONE_HANDOVER_HOST", "freeswitch:5080"),
     ):
-        monkeypatch.setenv(k, v)
-    assert client.post(url, json={"dialled": e164}, headers={"Authorization": "Bearer wrong"}).status_code == 401
+        monkeypatch.setenv(key, value)
     h = {"Authorization": f"Bearer {secret}"}
-    assert client.post(url, json={"dialled": "+1 868 555 0000"}, headers=h).status_code == 404
-    r = client.post(url, json={"dialled": e164, "caller": "+1 868 555 0111"}, headers=h)
+    assert client.post(root + "/calls", json=body).status_code == 401
+    monkeypatch.setenv("EXA_PBX_SECRET", "pbx-runtime-secret")
+    receipt = {
+        "instance_id": "main",
+        "version": "1.11.2-release",
+        "transfer_enabled": True,
+        "checked_at": dt.datetime.now(dt.UTC).isoformat(),
+        "nonce": str(uuid4()),
+    }
+    signature = hmac.new(
+        b"pbx-runtime-secret", json.dumps(receipt, sort_keys=True, separators=(",", ":")).encode(), hashlib.sha256
+    ).hexdigest()
+    receipt_url = "/api/v1/commai/internal/voice/phone-runtime"
+    assert client.post(receipt_url, json=receipt).status_code == 401
+    assert client.post(receipt_url, json=receipt, headers={"X-Exa-PBX-Auth": signature}).json()["pbx_transfer_ready"]
+    assert client.post(receipt_url, json=receipt, headers={"X-Exa-PBX-Auth": signature}).status_code == 409
+    requests = []
+
+    def transport(service, method, payload, **kwargs):
+        requests.append((service, method, payload))
+        if method == "GetParticipant":
+            return {
+                "kind": "SIP",
+                "attributes": {
+                    "sip.callID": "actual-call-id",
+                    "sip.phoneNumber": "+18685550111",
+                    "sip.trunkPhoneNumber": e164,
+                    "exa.customer_id": b["id"],
+                    "exa.tenant": tenant,
+                },
+            }
+        assert method == "TransferSIPParticipant"
+        assert payload["room_name"] == body["room"]
+        assert payload["participant_identity"] == body["participant_identity"]
+        assert payload["transfer_to"].startswith("sip:exa-ai-handover-")
+        assert payload["transfer_to"].endswith("@freeswitch:5080")
+        return {}
+
+    monkeypatch.setattr(livekit, "service_request", transport)
+    r = client.post(root + "/calls", json=body, headers=h)
+    assert r.status_code == 503 and "not ready" in r.json()["detail"]
+    with db.tx() as conn:
+        assert (
+            conn.execute("SELECT count(*) AS n FROM ai_calls WHERE customer_id = %s", (b["id"],)).fetchone()["n"] == 0
+        )
+    # The speech proof contains the actual recognised challenge; success flags
+    # and a challenge with the wrong phrase cannot create operational evidence.
+    identity = {k: body[k] for k in ("worker_id", "provider_fingerprint")}
+    proof = client.post(root + "/evidence", json=identity, headers=h).json()
+    assert (
+        client.post(
+            root + "/evidence/" + proof["id"], headers=h, json={**identity, "transcript": "wrong phrase"}
+        ).status_code
+        == 409
+    )
+    assert (
+        client.post(
+            root + "/evidence/" + proof["id"], headers=h, json={**identity, "transcript": proof["phrase"]}
+        ).status_code
+        == 200
+    )
+    assert not livekit.phone_ready()  # Speech alone is insufficient.
+    media = {
+        **identity,
+        "transcript": proof["phrase"],
+        "room": body["room"],
+        "participant_identity": body["participant_identity"],
+        "sip_call_id": body["sip_call_id"],
+    }
+    assert client.post(root + "/evidence/" + proof["id"] + "/media", json=media, headers=h).status_code == 200
+    assert client.post(root + "/evidence/" + proof["id"] + "/media", json=media, headers=h).status_code == 409
+    body["acceptance_evidence_id"] = proof["id"]
+    r = client.post(root + "/calls", json={**body, "sip_call_id": "forged"}, headers=h)
+    assert r.status_code == 403
+    r = client.post(root + "/calls", json=body, headers=h)
     assert r.status_code == 201, r.text
     call = r.json()
-    assert call["customer_id"] == b["id"] and call["room"] == f"call-{call['conversation_id']}" and call["greeting"]
-    end = client.post(f"{url}/{b['id']}/{call['conversation_id']}/end", headers=h)
+    assert call["customer_id"] == b["id"] and call["room"] == body["room"] and call["greeting"]
+    url = f"{root}/calls/{b['id']}/{call['conversation_id']}"
+    scoped = {"Authorization": "Bearer " + call["session_token"]}
+    assert client.get(url, headers=h).status_code == 404  # Global secret is not a call capability.
+    other = url.replace(b["id"], str(uuid4()))
+    assert client.get(other, headers=scoped).status_code == 404
+    turn = {"text": "What is your name?", "request_id": str(uuid4())}
+    first = client.post(url + "/turns", json=turn, headers=scoped)
+    assert first.status_code == 200, first.text
+    assert client.post(url + "/turns", json=turn, headers=scoped).json() == first.json()
+    with db.tx() as conn:
+        assert (
+            conn.execute(
+                "SELECT turns FROM ai_calls WHERE conversation_id = %s", (call["conversation_id"],)
+            ).fetchone()["turns"]
+            == 1
+        )
+        conn.execute("UPDATE conversations SET handler = 'human' WHERE id = %s", (call["conversation_id"],))
+        old_attempt = phone_worker.session(conn, b["id"], call["conversation_id"], scoped["Authorization"])
+        assert phone_worker.claim_transfer(conn, old_attempt)
+        conn.execute(
+            "UPDATE voice_ai_phone_sessions SET heartbeat_at = now() - interval '1 minute' WHERE id = %s",
+            (old_attempt["id"],),
+        )
+        task = conn.execute(
+            "SELECT * FROM jobs WHERE dedupe_key = %s", (f"phone-watchdog:{call['session_id']}:0",)
+        ).fetchone()
+        phone_worker.watchdog(conn, task)
+        assert (
+            conn.execute("SELECT ended_at FROM voice_ai_phone_sessions WHERE id = %s", (old_attempt["id"],)).fetchone()[
+                "ended_at"
+            ]
+            is None
+        )
+    replayed = client.post(url + "/turns", json=turn, headers=scoped).json()
+    assert replayed["reply"] == "" and replayed["handed_over"]
+    assert client.post(url + "/handover", headers=scoped).status_code == 409
+    assert not any(request[1] == "TransferSIPParticipant" for request in requests)
+    with db.tx() as conn:
+        conn.execute(
+            "UPDATE voice_ai_phone_sessions SET transfer_lease_until = now() - interval '1 second' WHERE id = %s",
+            (old_attempt["id"],),
+        )
+    transfer = client.post(url + "/handover", headers=scoped)
+    assert transfer.status_code == 200, transfer.text
+    assert transfer.json() == {"state": "accepted", "human_answered": False, "evidence_scope": "lab"}
+    assert client.post(url + "/handover", headers=scoped).status_code == 200
+    assert len([r for r in requests if r[1] == "TransferSIPParticipant"]) == 1
+    with db.tx() as conn:
+        assert phone_worker.record_transfer(conn, old_attempt, False)["state"] == "accepted"
+    assert not livekit.phone_ready()  # Provider stubs prove the lab, never production.
+    end = client.post(url + "/end", json={"reason": "acceptance_complete"}, headers=scoped)
     assert end.status_code == 200 and end.json()["ended_at"]
-
-    from exaconnect_controller.commai.voice import livekit
-
+    assert client.post(url + "/end", json={"reason": "caller_disconnected"}, headers=scoped).json() == end.json()
+    assert client.post(url + "/turns", json={**turn, "request_id": str(uuid4())}, headers=scoped).status_code == 409
     tok = livekit.token("agent", call["room"], agent=True)
-    head, body, sig = tok.split(".")
-    want = hmac.new(("s" * 32).encode(), f"{head}.{body}".encode(), hashlib.sha256).digest()
+    head, payload, sig = tok.split(".")
+    want = hmac.new(("s" * 32).encode(), f"{head}.{payload}".encode(), hashlib.sha256).digest()
     assert base64.urlsafe_b64decode(sig + "==") == want
-    claims = json.loads(base64.urlsafe_b64decode(body + "=="))
+    claims = json.loads(base64.urlsafe_b64decode(payload + "=="))
     assert claims["video"]["room"] == call["room"] and claims["iss"] == "devkey"
+
+    # A killed worker sends no end request. The durable controller watchdog
+    # must attempt the real transfer, remove the SIP caller if unconfirmed,
+    # and cap billing even when the job runs long after the duration limit.
+    from exaconnect_controller.commai.ai import voice as ai_voice
+    from exaconnect_controller.commai.voice.common import VoiceError
+
+    another_proof = client.post(root + "/evidence", json=identity, headers=h).json()
+    assert (
+        client.post(
+            root + "/evidence/" + another_proof["id"],
+            json={**identity, "transcript": another_proof["phrase"]},
+            headers=h,
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            root + "/evidence/" + another_proof["id"] + "/media",
+            json={**media, "room": lost_room, "transcript": another_proof["phrase"]},
+            headers=h,
+        ).status_code
+        == 200
+    )
+    lost = client.post(
+        root + "/calls",
+        json={**body, "room": lost_room, "acceptance_evidence_id": another_proof["id"]},
+        headers=h,
+    )
+    assert lost.status_code == 201, lost.text
+    lost = lost.json()
+    operations = []
+    outage = {"active": True}
+
+    def failed_transfer(service, method, payload, **kwargs):
+        operations.append(method)
+        if outage["active"]:
+            raise VoiceError("Temporary control outage", 502)
+        if method == "TransferSIPParticipant":
+            raise VoiceError("Transfer not confirmed", 502)
+        if method == "RemoveParticipant":
+            return {}
+        return transport(service, method, payload, **kwargs)
+
+    monkeypatch.setattr(livekit, "service_request", failed_transfer)
+    with db.tx() as conn:
+        conn.execute(
+            "UPDATE voice_ai_phone_sessions SET heartbeat_at = now() - interval '1 hour',"
+            " expires_at = now() - interval '30 minutes' WHERE conversation_id = %s",
+            (lost["conversation_id"],),
+        )
+        conn.execute(
+            "UPDATE ai_calls SET started_at = now() - interval '1 hour' WHERE conversation_id = %s",
+            (lost["conversation_id"],),
+        )
+        task = conn.execute(
+            "SELECT * FROM jobs WHERE dedupe_key = %s", (f"phone-watchdog:{lost['session_id']}:0",)
+        ).fetchone()
+        phone_worker.watchdog(conn, task)
+        phone_worker.watchdog(conn, task)
+        ended = ai_voice.get_call(conn, b["id"], lost["conversation_id"])
+        assert (ended["ended_at"] - ended["started_at"]).total_seconds() == 1800
+        pending = conn.execute(
+            "SELECT cleanup_pending FROM voice_ai_phone_sessions WHERE id = %s", (lost["session_id"],)
+        ).fetchone()
+        assert pending["cleanup_pending"]
+        retry = conn.execute(
+            "SELECT * FROM jobs WHERE dedupe_key = %s", (f"phone-watchdog:{lost['session_id']}:1",)
+        ).fetchone()
+        assert retry is not None
+        conn.execute(
+            "UPDATE voice_ai_phone_sessions SET transfer_lease_until = now() - interval '1 second' WHERE id = %s",
+            (lost["session_id"],),
+        )
+        outage["active"] = False
+        phone_worker.watchdog(conn, retry)
+        assert not conn.execute(
+            "SELECT cleanup_pending FROM voice_ai_phone_sessions WHERE id = %s", (lost["session_id"],)
+        ).fetchone()["cleanup_pending"]
+        phone_worker.watchdog(conn, retry)
+    assert operations.count("TransferSIPParticipant") == 1 and operations.count("RemoveParticipant") == 1

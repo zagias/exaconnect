@@ -108,12 +108,12 @@ function day(iso: string | null): string {
 
 /** Recovery codes, shown once, with copy and save. */
 function RecoveryCodes({ codes, onDone }: { codes: string[]; onDone: () => void }) {
-  const text = `ExaCarib recovery codes\n${codes.join("\n")}\n`;
+  const text = `XaKore recovery codes\n${codes.join("\n")}\n`;
   const save = () => {
     const url = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
     const a = document.createElement("a");
     a.href = url;
-    a.download = "exacarib-recovery-codes.txt";
+    a.download = "xakore-recovery-codes.txt";
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -229,7 +229,7 @@ function TwoStep() {
         )}
       </div>
       <p className="muted small" style={{ marginTop: 0 }}>
-        After your password, ExaCarib asks for a code from an authenticator app or for your passkey. If your
+        After your password, XaKore asks for a code from an authenticator app or for your passkey. If your
         organisation signs you in with its own single sign-on, its two-step rules apply instead.
       </p>
       <ErrorNote error={error} />

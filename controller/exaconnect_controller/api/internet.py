@@ -80,6 +80,7 @@ def set_mode(customer_id: str, site_id: str, body: ModeIn, user: UserDep) -> dic
 
 
 def _rule(conn, customer_id: str, rule_id: int) -> dict:
+    internet.lock_policy(conn)
     row = conn.execute(
         "SELECT * FROM firewall_rules WHERE customer_id = %s AND id = %s FOR UPDATE", (customer_id, rule_id)
     ).fetchone()
@@ -138,6 +139,7 @@ def order_rules(customer_id: str, body: OrderIn, user: UserDep) -> list[dict]:
 
 
 def _forward(conn, customer_id: str, forward_id: int) -> dict:
+    internet.lock_policy(conn)
     row = conn.execute(
         "SELECT * FROM port_forwards WHERE customer_id = %s AND id = %s FOR UPDATE", (customer_id, forward_id)
     ).fetchone()

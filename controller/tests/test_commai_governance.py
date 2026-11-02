@@ -3,6 +3,7 @@ instruction change goes live, results are kept, and daily action limits per role
 
 from __future__ import annotations
 
+import datetime as dt
 from types import SimpleNamespace
 
 import pytest
@@ -173,6 +174,7 @@ def test_daily_action_limits_per_role(client):
     assert client.put(f"{u}/ai/governance/limits/robot", json={"daily_limit": 1}, headers=h).status_code == 404
 
     def book(n):
+        future = (dt.datetime.now(dt.UTC) + dt.timedelta(days=n)).replace(hour=10, minute=0, second=0, microsecond=0)
         with db.tx() as conn:
             return actions.propose(
                 conn,
@@ -180,7 +182,7 @@ def test_daily_action_limits_per_role(client):
                 role="customer_agent",
                 app="sim_calendar",
                 action="book",
-                inputs={"start": f"2026-11-0{n}T10:00:00+00:00", "name": "Ana", "contact": "ana@example.org"},
+                inputs={"start": future.isoformat(), "name": "Ana", "contact": "ana@example.org"},
                 actor="ai:customer_agent",
             )
 

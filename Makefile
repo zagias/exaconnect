@@ -1,6 +1,7 @@
 # ExaConnect. Lab targets run on the Linux lab host (Ubuntu 24.04, arm64 first), never on macOS.
 SHELL := bash
 NODE_IMAGE := exaconnect/node:dev
+LAB_TOPOLOGY ?= exaconnect.clab.yml
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 LDFLAGS := -s -w -X github.com/zagias/exaconnect/agent/internal/version.Version=$(VERSION) \
@@ -60,12 +61,12 @@ lab-agent: ## Build exa-agent for this host into bin/lab/ (uses Docker if Go is 
 	fi
 
 lab-up: lab-image lab-agent ## Deploy the containerlab topology, apply underlay profiles, smoke test
-	cd lab && sudo containerlab deploy -t exaconnect.clab.yml --reconfigure
+	cd lab && sudo env CLAB_VERSION_CHECK=disable containerlab deploy -t "$(LAB_TOPOLOGY)" --reconfigure
 	SAT_PROFILE=$(SAT_PROFILE) lab/netem/apply-profiles.sh
 	lab/scripts/smoke.sh
 
 lab-down: ## Destroy the lab
-	cd lab && sudo containerlab destroy -t exaconnect.clab.yml --cleanup
+	cd lab && sudo env CLAB_VERSION_CHECK=disable containerlab destroy -t "$(LAB_TOPOLOGY)" --cleanup
 	rm -rf lab/.state
 
 lab-smoke: ## Ping the PoP from every site over every underlay

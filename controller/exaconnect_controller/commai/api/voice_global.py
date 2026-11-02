@@ -18,6 +18,7 @@ import datetime as dt
 import re
 from decimal import Decimal
 from typing import Any
+from uuid import UUID
 
 from fastapi import APIRouter, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import Response
@@ -25,10 +26,9 @@ from pydantic import BaseModel, Field
 
 from ... import audit, db
 from ...api.deps import UserDep
-from .. import access, inbox
+from .. import access
 from ..ai import agent
-from ..ai import voice as ai_voice
-from ..voice import carriers, countries, emergency, fraud, livekit, perms, porting
+from ..voice import carriers, countries, emergency, fraud, livekit, perms, phone_worker, porting
 from ..voice import provider as providers
 from ..voice.common import VoiceError, month_start, now
 from .common import errors
@@ -88,10 +88,13 @@ def search_numbers(
     access.check(user, customer_id, "commai:read")
     with db.tx() as conn, errors():
         _admin(conn, user, customer_id)
+        readiness = providers.status()
+        if not readiness["number_ordering_ready"]:
+            return {"country": country.upper(), "numbers": [], "example": False, "provider": readiness}
         c = countries.require(conn, country, customer_id)
         prov = providers.get()
         found = prov.search_numbers(conn, c.code, area, contains, limit)
-    return {"country": c.code, "numbers": found, "example": not prov.live}
+    return {"country": c.code, "numbers": found, "example": not prov.live, "provider": readiness}
 
 
 # ---- emergency addresses ------------------------------------------------------------------
@@ -604,54 +607,144 @@ def delete_high_risk(origin: str, prefix: str, user: UserDep) -> dict:
 
 
 class AgentCallIn(BaseModel):
-    dialled: str = Field(min_length=3, max_length=30)
-    caller: str = Field(default="", max_length=40)
+    room: str = Field(min_length=1, max_length=200)
+    participant_identity: str = Field(min_length=1, max_length=200)
+    sip_call_id: str = Field(min_length=1, max_length=200)
+    worker_id: str = Field(min_length=1, max_length=80, pattern=r"^[a-zA-Z0-9_.-]+$")
+    provider_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
+    acceptance_evidence_id: UUID | None = None
 
 
 class AgentTurnIn(BaseModel):
     text: str = Field(min_length=1, max_length=2000)
+    request_id: UUID
+
+
+class AgentEvidenceIn(BaseModel):
+    worker_id: str = Field(min_length=1, max_length=80, pattern=r"^[a-zA-Z0-9_.-]+$")
+    provider_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
+class AgentSpeechProofIn(AgentEvidenceIn):
+    transcript: str = Field(min_length=1, max_length=500)
+
+
+class AgentMediaProofIn(AgentSpeechProofIn):
+    room: str = Field(min_length=1, max_length=200)
+    participant_identity: str = Field(min_length=1, max_length=200)
+    sip_call_id: str = Field(min_length=1, max_length=200)
+
+
+class AgentEndIn(BaseModel):
+    reason: str = Field(default="caller_disconnected", pattern=r"^[a-z_]{1,40}$")
+
+
+@public.get("/readiness")
+def agent_readiness(
+    worker_id: str = Query(min_length=1, max_length=80, pattern=r"^[a-zA-Z0-9_.-]+$"),
+    provider_fingerprint: str = Query(pattern=r"^[a-f0-9]{64}$"),
+    authorization: str | None = Header(default=None),
+) -> dict:
+    with db.tx() as conn, errors():
+        livekit.check_agent(authorization)
+        phone_worker.require_pbx(conn)
+        ready = (
+            conn.execute(
+                """SELECT 1 FROM voice_ai_phone_runtime WHERE worker_id = %s AND provider_fingerprint = %s
+               AND NOT lab_only AND expires_at > now() AND speech_verified_at > now() - interval '90 seconds'
+               AND transfer_verified_at > now() - interval '24 hours' LIMIT 1""",
+                (worker_id, provider_fingerprint),
+            ).fetchone()
+            is not None
+        )
+    return {"ready": ready}
+
+
+@public.post("/evidence", status_code=201)
+def agent_challenge(body: AgentEvidenceIn, authorization: str | None = Header(default=None)) -> dict:
+    with db.tx() as conn, errors():
+        livekit.check_agent(authorization)
+        return phone_worker.challenge(conn, body.worker_id, body.provider_fingerprint)
+
+
+@public.post("/evidence/{evidence_id}")
+def agent_speech_proof(
+    evidence_id: UUID, body: AgentSpeechProofIn, authorization: str | None = Header(default=None)
+) -> dict:
+    with db.tx() as conn, errors():
+        livekit.check_agent(authorization)
+        return phone_worker.prove(conn, str(evidence_id), body.transcript, body.worker_id, body.provider_fingerprint)
+
+
+@public.post("/evidence/{evidence_id}/media")
+def agent_media_proof(
+    evidence_id: UUID, body: AgentMediaProofIn, authorization: str | None = Header(default=None)
+) -> dict:
+    with db.tx() as conn, errors():
+        livekit.check_agent(authorization)
+        return phone_worker.media_proof(conn, str(evidence_id), body.model_dump())
 
 
 @public.post("/calls", status_code=201)
 def agent_start(body: AgentCallIn, authorization: str | None = Header(default=None)) -> dict:
-    """A phone call reached the AI: open the conversation and give the greeting."""
+    """Bind one worker to a real SIP participant and issue its call capability."""
     with db.tx() as conn, errors():
         livekit.check_agent(authorization)
-        num = livekit.business_for(conn, body.dialled)
-        cid = num["customer_id"]
-        out = ai_voice.start_call(conn, cid, caller=body.caller, started_by="livekit")
-        audit.record(conn, "system:livekit", "commai.voice.ai_phone_call", out["conversation_id"], cid)
-    return {
-        "customer_id": str(cid),
-        "conversation_id": out["conversation_id"],
-        "room": livekit.room_for(out["conversation_id"]),
-        "greeting": out["greeting"],
-        "handler": out["handler"],
-    }
+        out = phone_worker.start(conn, body.model_dump(mode="json"))
+        audit.record(conn, "system:livekit", "commai.voice.ai_phone_call", out["conversation_id"], out["customer_id"])
+    return out
+
+
+@public.get("/calls/{customer_id}/{conversation_id}")
+def agent_state(customer_id: UUID, conversation_id: UUID, authorization: str | None = Header(default=None)) -> dict:
+    with db.tx() as conn, errors():
+        row = phone_worker.session(conn, customer_id, conversation_id, authorization, active=False)
+        return phone_worker.state(conn, row)
 
 
 @public.post("/calls/{customer_id}/{conversation_id}/turns")
 def agent_turn(
-    customer_id: str, conversation_id: str, body: AgentTurnIn, authorization: str | None = Header(default=None)
+    customer_id: UUID, conversation_id: UUID, body: AgentTurnIn, authorization: str | None = Header(default=None)
 ) -> dict:
     with db.tx() as conn, errors():
-        livekit.check_agent(authorization)
-        msg = ai_voice.caller_turn(conn, customer_id, conversation_id, body.text)
+        row = phone_worker.session(conn, customer_id, conversation_id, authorization)
+        msg, cached = phone_worker.begin_turn(conn, row, body.text, body.request_id)
+        if cached is not None:
+            return cached
     with db.tx() as conn, errors():
         result = agent.respond(conn, customer_id, conversation_id, msg["id"])
+    with db.tx() as conn, errors():
+        row = phone_worker.session(conn, customer_id, conversation_id, authorization, active=False)
+        return phone_worker.complete_turn(conn, row, body.request_id, msg, result)
+
+
+@public.post("/calls/{customer_id}/{conversation_id}/handover")
+def agent_handover(customer_id: UUID, conversation_id: UUID, authorization: str | None = Header(default=None)) -> dict:
+    with db.tx() as conn, errors():
+        row = phone_worker.session(conn, customer_id, conversation_id, authorization)
+        phone_worker.require_pbx(conn)
+        if row["handover_state"] == "accepted":
+            return {"state": "accepted", "human_answered": False}
+        if not phone_worker.claim_transfer(conn, row):
+            raise VoiceError("A transfer is already in progress.", 409)
+    try:
+        livekit.transfer(row["room_name"], row["participant_identity"], row["sip_call_id"], row["transfer_target"])
+    except VoiceError:
+        with db.tx() as conn:
+            phone_worker.record_transfer(conn, row, False)
+        raise HTTPException(
+            502, "The phone service did not confirm the transfer. The caller may still be connected."
+        ) from None
     with db.tx() as conn:
-        replies = ai_voice.replies_after(conn, customer_id, conversation_id, msg)
-        conv = inbox.get(conn, customer_id, conversation_id)
-    return {
-        "outcome": result.get("outcome"),
-        "reply": " ".join(r["body"] for r in replies),
-        "handed_over": conv["handler"] != "ai",
-    }
+        result = phone_worker.record_transfer(conn, row, True)
+        audit.record(conn, "system:livekit", "commai.voice.ai_phone_transfer", str(conversation_id), str(customer_id))
+    return result
 
 
 @public.post("/calls/{customer_id}/{conversation_id}/end")
-def agent_end(customer_id: str, conversation_id: str, authorization: str | None = Header(default=None)) -> dict:
+def agent_end(
+    customer_id: UUID, conversation_id: UUID, body: AgentEndIn, authorization: str | None = Header(default=None)
+) -> dict:
     with db.tx() as conn, errors():
-        livekit.check_agent(authorization)
-        call = ai_voice.end_call(conn, customer_id, conversation_id, "livekit")
-    return {"ended_at": call["ended_at"]}
+        row = phone_worker.session(conn, customer_id, conversation_id, authorization, active=False)
+        return phone_worker.end(conn, row, body.reason)

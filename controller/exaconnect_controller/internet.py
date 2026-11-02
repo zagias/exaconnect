@@ -31,6 +31,16 @@ class InternetError(ValueError):
     pass
 
 
+def lock_policy(conn: psycopg.Connection) -> None:
+    """Serialize policy edits, including the PoP's shared public-port space.
+
+    Take this before individual row locks. A create/reorder race must not
+    silently change first-match rule order or bypass per-organisation limits.
+    The lock lasts only for this database transaction.
+    """
+    conn.execute("SELECT pg_advisory_xact_lock(hashtext('internet_policy'))")
+
+
 def _cidrs(values: list[str] | None, what: str) -> list[str]:
     out = []
     for v in values or []:
@@ -79,6 +89,7 @@ def set_mode(conn: psycopg.Connection, customer_id: Any, site_id: str, mode: str
 
     if mode not in MODES:
         raise InternetError("Choose through the PoP, straight out at the site, or off.")
+    lock_policy(conn)
     site = _sites(conn, customer_id).get(str(site_id))
     if site is None or site["kind"] != "site":
         raise InternetError("Choose one of this organisation's sites.")
@@ -124,7 +135,9 @@ def _refresh(conn: psycopg.Connection, customer_id: Any) -> None:
 
 def _renumber(conn: psycopg.Connection, customer_id: Any, ids: list[int]) -> None:
     for pos, rid in enumerate(ids, start=1):
-        conn.execute("UPDATE firewall_rules SET position = %s WHERE id = %s", (pos, rid))
+        conn.execute(
+            "UPDATE firewall_rules SET position = %s WHERE id = %s AND customer_id = %s", (pos, rid, customer_id)
+        )
 
 
 def _rule_ids(conn: psycopg.Connection, customer_id: Any) -> list[int]:
@@ -137,6 +150,7 @@ def _rule_ids(conn: psycopg.Connection, customer_id: Any) -> list[int]:
 
 
 def create_rule(conn: psycopg.Connection, customer_id: Any, r: dict[str, Any], actor: str) -> int:
+    lock_policy(conn)
     ids = _rule_ids(conn, customer_id)
     if len(ids) >= MAX_RULES:
         raise InternetError(f"At most {MAX_RULES} firewall rules for now.")
@@ -169,6 +183,7 @@ def create_rule(conn: psycopg.Connection, customer_id: Any, r: dict[str, Any], a
 
 
 def update_rule(conn: psycopg.Connection, customer_id: Any, rule: dict, changes: dict[str, Any], actor: str) -> None:
+    lock_policy(conn)
     merged = {k: rule[k] for k in RULE_FIELDS}
     merged["src"] = [str(p) for p in merged["src"]]
     merged["dst"] = [str(p) for p in merged["dst"]]
@@ -176,7 +191,7 @@ def update_rule(conn: psycopg.Connection, customer_id: Any, rule: dict, changes:
     r = validate_rule(conn, customer_id, merged)
     conn.execute(
         """UPDATE firewall_rules SET site_id = %s, action = %s, src = %s::cidr[], dst = %s::cidr[], protocol = %s,
-             ports = %s, description = %s, enabled = %s, updated_at = now() WHERE id = %s""",
+             ports = %s, description = %s, enabled = %s, updated_at = now() WHERE id = %s AND customer_id = %s""",
         (
             r["site_id"],
             r["action"],
@@ -187,6 +202,7 @@ def update_rule(conn: psycopg.Connection, customer_id: Any, rule: dict, changes:
             r["description"],
             r["enabled"],
             rule["id"],
+            customer_id,
         ),
     )
     audit.record(conn, actor, "firewall.update", f"rule {rule['id']}", customer_id, _detail(changes))
@@ -194,13 +210,15 @@ def update_rule(conn: psycopg.Connection, customer_id: Any, rule: dict, changes:
 
 
 def delete_rule(conn: psycopg.Connection, customer_id: Any, rule: dict, actor: str) -> None:
-    conn.execute("DELETE FROM firewall_rules WHERE id = %s", (rule["id"],))
+    lock_policy(conn)
+    conn.execute("DELETE FROM firewall_rules WHERE id = %s AND customer_id = %s", (rule["id"], customer_id))
     _renumber(conn, customer_id, _rule_ids(conn, customer_id))
     audit.record(conn, actor, "firewall.delete", f"rule {rule['id']}", customer_id)
     _refresh(conn, customer_id)
 
 
 def reorder(conn: psycopg.Connection, customer_id: Any, ids: list[int], actor: str) -> None:
+    lock_policy(conn)
     have = _rule_ids(conn, customer_id)
     if sorted(ids) != sorted(have) or len(set(ids)) != len(ids):
         raise InternetError("Send every rule once, in the new order.")
@@ -230,6 +248,11 @@ def validate_forward(
         raise InternetError("Ports are numbers from 1 to 65535.") from None
     if not (1 <= f["port"] <= 65535 and 1 <= f["to_port"] <= 65535):
         raise InternetError("Ports are numbers from 1 to 65535.")
+    if f["protocol"] == "udp" and (
+        f["port"] in (500, 4500)
+        or conn.execute("SELECT 1 FROM paths WHERE pop_port = %s", (f["port"],)).fetchone() is not None
+    ):
+        raise InternetError("This public UDP port is reserved for the network hub's VPN connections.")
     site = _sites(conn, customer_id).get(str(f.get("to_site_id")))
     if site is None or site["kind"] != "site":
         raise InternetError("Choose the site the forward goes to.")
@@ -259,6 +282,7 @@ def validate_forward(
 
 
 def create_forward(conn: psycopg.Connection, customer_id: Any, f: dict[str, Any], actor: str) -> int:
+    lock_policy(conn)
     count = conn.execute("SELECT count(*) AS n FROM port_forwards WHERE customer_id = %s", (customer_id,)).fetchone()
     if count["n"] >= MAX_FORWARDS:
         raise InternetError(f"At most {MAX_FORWARDS} port forwards for now.")
@@ -286,6 +310,7 @@ def create_forward(conn: psycopg.Connection, customer_id: Any, f: dict[str, Any]
 
 
 def update_forward(conn: psycopg.Connection, customer_id: Any, fwd: dict, changes: dict[str, Any], actor: str) -> None:
+    lock_policy(conn)
     merged = {k: fwd[k] for k in FORWARD_FIELDS}
     merged["allow_from"] = [str(p) for p in merged["allow_from"]]
     merged.update({k: v for k, v in changes.items() if k in FORWARD_FIELDS and v is not None})
@@ -294,7 +319,8 @@ def update_forward(conn: psycopg.Connection, customer_id: Any, fwd: dict, change
     f = validate_forward(conn, customer_id, merged, fwd["id"])
     conn.execute(
         """UPDATE port_forwards SET description = %s, protocol = %s, port = %s, to_site_id = %s, to_address = %s,
-             to_port = %s, allow_from = %s::cidr[], enabled = %s, updated_at = now() WHERE id = %s""",
+             to_port = %s, allow_from = %s::cidr[], enabled = %s, updated_at = now()
+           WHERE id = %s AND customer_id = %s""",
         (
             f["description"],
             f["protocol"],
@@ -305,6 +331,7 @@ def update_forward(conn: psycopg.Connection, customer_id: Any, fwd: dict, change
             f["allow_from"],
             f["enabled"],
             fwd["id"],
+            customer_id,
         ),
     )
     audit.record(conn, actor, "port_forward.update", f"forward {fwd['id']}", customer_id, _detail(changes))
@@ -312,7 +339,8 @@ def update_forward(conn: psycopg.Connection, customer_id: Any, fwd: dict, change
 
 
 def delete_forward(conn: psycopg.Connection, customer_id: Any, fwd: dict, actor: str) -> None:
-    conn.execute("DELETE FROM port_forwards WHERE id = %s", (fwd["id"],))
+    lock_policy(conn)
+    conn.execute("DELETE FROM port_forwards WHERE id = %s AND customer_id = %s", (fwd["id"], customer_id))
     audit.record(conn, actor, "port_forward.delete", f"forward {fwd['id']}", customer_id)
     _refresh(conn, customer_id)
 
@@ -353,13 +381,13 @@ def _rules_for(rules: list[dict], sources: list[dict]) -> list[dict]:
         sites = [s for s in sources if r["site_id"] is None or s["id"] == r["site_id"]]
         if not sites:
             continue
-        lan = [str(p) for s in sites for p in s["lan_prefixes"]]
-        if r["src"]:
-            src = [p for p in r["src"] if any(_overlaps(p, n) for n in lan)]
-            if not src:
-                continue
-        else:
-            src = lan
+        lan = [ipaddress.ip_network(str(p)) for s in sites for p in s["lan_prefixes"]]
+        # A source that merely overlaps a site's LAN can still include other
+        # sites (notably 0.0.0.0/0). Emit the intersection, never the broader
+        # user prefix. An empty LAN must not become the agent's wildcard.
+        src = _source_intersection(r["src"], lan)
+        if not src:
+            continue
         out.append(
             {
                 "id": r["id"],
@@ -373,8 +401,16 @@ def _rules_for(rules: list[dict], sources: list[dict]) -> list[dict]:
     return out
 
 
-def _overlaps(a: str, b: str) -> bool:
-    return ipaddress.ip_network(a).overlaps(ipaddress.ip_network(b))
+def _source_intersection(sources: list[str], lan: list) -> list[str]:
+    if not sources:
+        return [str(p) for p in ipaddress.collapse_addresses(lan)]
+    narrowed = []
+    for value in sources:
+        source = ipaddress.ip_network(value)
+        for network in lan:
+            if source.overlaps(network):
+                narrowed.append(source if source.prefixlen >= network.prefixlen else network)
+    return [str(p) for p in ipaddress.collapse_addresses(narrowed)]
 
 
 def block(inv: dict[str, Any], site: dict, tunnels: list[str], links: list[dict]) -> dict[str, Any] | None:
@@ -427,6 +463,10 @@ def block(inv: dict[str, Any], site: dict, tunnels: list[str], links: list[dict]
         return None
     if mode == "pop":
         out["tunnels"] = tunnels
+    elif mode == "off":
+        # The node enforces this boundary before class-mark routing can use
+        # a cached pre-off steering map. Missing inventory fails closed.
+        out["corporate_prefixes"] = inv.get("corporate", [])
     elif mode == "local":
         out["uplinks"] = [
             {

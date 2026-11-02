@@ -192,16 +192,17 @@ func TestSteererSwapsOnlyRules(t *testing.T) {
 		t.Fatalf("re-applied unchanged state: %v", sys.cmds[n:])
 	}
 
-	// BFD down on B: one ip -batch call, no nft or route work.
+	// BFD down on B: guard and swap rules, without rebuilding nft or routes.
 	up["carrier-b"] = false
 	if err := s.Apply(ctx, m, Choose(m, func(p string) bool { return up[p] })); err != nil {
 		t.Fatal(err)
 	}
-	if len(sys.cmds) != n+1 || !strings.HasPrefix(sys.cmds[n], "ip -batch") {
-		t.Fatalf("swap should be one ip -batch call, got %v", sys.cmds[n:])
+	swap := strings.Join(sys.cmds[n:], "\n")
+	if strings.Contains(swap, "nft -f") || strings.Contains(swap, "route flush") {
+		t.Fatalf("rule swap rebuilt unchanged classifier/routes: %s", swap)
 	}
-	if !strings.Contains(sys.cmds[n], "rule add pref 1000 fwmark 0x101 lookup 101") {
-		t.Fatalf("voice should move to carrier-a: %s", sys.cmds[n])
+	if !strings.Contains(swap, "rule add pref 1000 fwmark 0x101 lookup 101") {
+		t.Fatalf("voice should move to carrier-a: %s", swap)
 	}
 }
 

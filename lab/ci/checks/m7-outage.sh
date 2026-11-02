@@ -15,6 +15,7 @@ VOICE=0x101 DST=192.168.20.10
 # The controller's address on the lab's management network (the proxy).
 CONTROLLER_IP=172.30.0.5
 NODES=(site-a site-b pop-miami)
+cid=$(customer_id)
 lab/faults/restore.sh >/dev/null
 
 silences() { lab/scripts/agents.sh logs "$1" 100000 | grep -c "controller silent"; }
@@ -69,7 +70,7 @@ else
 fi
 lab/faults/restore.sh >/dev/null
 # The point of cutting the agents off instead of stopping the controller.
-if curl -fsS --max-time 5 -o /dev/null http://127.0.0.1:8000/healthz; then
+if controller_health; then
   ok "the live controller stayed up throughout"
 else
   bad "the live controller did not answer during the test"
@@ -79,11 +80,13 @@ echo "-- give the agents the controller back"
 t2=$(date +%s)
 cut_off del
 reconciled() {
-  [[ $(sql "SELECT count(*) FROM nodes WHERE last_seen > to_timestamp($t2) AND apply_ok") == 3 ]]
+  [[ $(sql "SELECT count(*) FROM nodes WHERE customer_id = '$cid' AND name IN ('site-a', 'site-b', 'pop-miami')
+           AND last_seen > to_timestamp($t2) AND apply_ok") == 3 ]]
 }
 if wait_for 90 reconciled; then
   ok "all three agents reconciled $(($(date +%s) - t2)) s after the controller came back"
 else
-  bad "agents did not all report back: $(sql "SELECT string_agg(name, ', ') FROM nodes WHERE NOT (last_seen > to_timestamp($t2) AND apply_ok)")"
+  bad "agents did not all report back: $(sql "SELECT string_agg(name, ', ') FROM nodes WHERE customer_id = '$cid'
+       AND name IN ('site-a', 'site-b', 'pop-miami') AND NOT coalesce(last_seen > to_timestamp($t2) AND apply_ok, false)")"
 fi
 exit $fail

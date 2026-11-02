@@ -1,12 +1,15 @@
-import { lazy, Suspense, useEffect } from "react";
+import { Fragment, lazy, Suspense, useEffect, useRef } from "react";
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { PRODUCT_NAMES } from "./api";
 import { APP_INFO, areaFor, myApps, type AppId } from "./apps";
 import { AuthGate, useAuth } from "./auth";
-import { CustomerProvider } from "./customer";
+import { CustomerProvider, useCustomer } from "./customer";
+import { ConnectCapabilitiesProvider } from "./ConnectCapabilities";
+import { ConnectWorkspaceTabs } from "./ConnectWorkspaceTabs";
 import Account from "./pages/Account";
 import AppsAndPlans from "./pages/AppsAndPlans";
 import Ask from "./pages/Ask";
+import { assistantAddress, isAssistantPath } from "./pages/assistant/types";
 import Insights from "./pages/Insights";
 import InvitePage, { inviteToken, PENDING_INVITE } from "./pages/Invite";
 import People from "./pages/People";
@@ -48,15 +51,31 @@ export default function App() {
   if (reset) return reset.kind === "forgot" ? <ForgotPage /> : <ResetPage token={reset.token} />;
   return (
     <AuthGate>
-      <CustomerProvider>
-        <Layout />
-      </CustomerProvider>
+      <SignedInPortal />
     </AuthGate>
   );
 }
 
+function SignedInPortal() {
+  const { user } = useAuth();
+  const enabled = user?.role === "admin" || user?.role === "carrier" || myApps(user).includes("connect");
+  return (
+    <CustomerProvider>
+      <ConnectCapabilitiesProvider enabled={enabled}>
+        <Layout />
+      </ConnectCapabilitiesProvider>
+    </CustomerProvider>
+  );
+}
+
+function AssistantAlias({ scope }: { scope: "connect" | "jibsy" }) {
+  return <Navigate to={assistantAddress(useLocation().search, scope)} replace />;
+}
+
 function Layout() {
   const { user } = useAuth();
+  const { current } = useCustomer();
+  const selectedOrg = useRef<string | null>(null);
   const carrier = user?.role === "carrier";
   const admin = user?.role === "admin";
   const navigate = useNavigate();
@@ -73,14 +92,23 @@ function Layout() {
   }, [navigate]);
   // Someone with Jibsy but not Connect starts in Jibsy (ADR 0041).
   const path = useLocation().pathname;
+  useEffect(() => {
+    if (selectedOrg.current && current?.id && selectedOrg.current !== current.id) {
+      if (path.startsWith("/sites/")) navigate("/sites", { replace: true });
+      if (path === "/decisions") navigate("/decisions", { replace: true });
+    }
+    selectedOrg.current = current?.id ?? null;
+  }, [current?.id, navigate, path]);
   const mine = myApps(user);
   const connect = mine.includes("connect");
   const area = areaFor(path);
   // A screen of an app the person can't open says why, instead of failing call by call.
   const blocked =
-    !carrier && !admin && area !== "account" && area !== "ops" && !mine.includes(area) && !(path === "/" && mine.length > 0);
+    !carrier && !admin && !isAssistantPath(path) && area !== "account" && area !== "ops" && !mine.includes(area) && !(path === "/" && mine.length > 0);
   return (
     <Shell>
+      <Fragment key={current?.id ?? "no-organisation"}>
+      {!carrier && area === "connect" && !blocked && <ConnectWorkspaceTabs path={path} />}
       {blocked ? (
         <NoAccess app={area as AppId} mine={mine} />
       ) : carrier ? (
@@ -94,6 +122,7 @@ function Layout() {
         <Routes>
           <Route path="/" element={connect ? <Overview /> : <Navigate to="/commai" replace />} />
           <Route path="/sites" element={<SiteList />} />
+          <Route path="/locations" element={<LocationsPage />} />
           <Route path="/sites/:id" element={<SitePage />} />
           <Route path="/traffic/*" element={<Traffic />} />
           <Route path="/decisions" element={<Decisions />} />
@@ -110,7 +139,9 @@ function Layout() {
           <Route path="/insights" element={<Insights />} />
           <Route path="/notices" element={<Notices />} />
           <Route path="/integrations" element={<Integrations />} />
-          <Route path="/ask" element={<Ask />} />
+          <Route path="/assistant" element={<Ask />} />
+          <Route path="/ask" element={<AssistantAlias scope="connect" />} />
+          <Route path="/commai/assistant/*" element={<AssistantAlias scope="jibsy" />} />
           <Route path="/carrier" element={<Metering carrierView />} />
           <Route path="/account" element={<Account />} />
           <Route path="/account/people" element={<People />} />
@@ -134,6 +165,7 @@ function Layout() {
           <Route path="*" element={<NotFound />} />
         </Routes>
       )}
+      </Fragment>
     </Shell>
   );
 }
@@ -151,8 +183,8 @@ function NoAccess({ app, mine }: { app: AppId; mine: AppId[] }) {
         {onPlan
           ? `${org} has ${name}, but you haven't been given it. Ask an owner or admin of your organisation.`
           : manager
-            ? `${org} doesn't have ${name} yet. You can ask ExaCarib to add it.`
-            : `${org} doesn't have ${name}. An owner or admin can ask ExaCarib to add it.`}
+            ? `${org} doesn't have ${name} yet. You can ask XaKore to add it.`
+            : `${org} doesn't have ${name}. An owner or admin can ask XaKore to add it.`}
       </PageHead>
       <div className="actions" style={{ justifyContent: "flex-start", marginTop: 16 }}>
         {mine.map((a) => (

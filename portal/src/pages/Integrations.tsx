@@ -1,4 +1,5 @@
 import { useMemo, useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import {
   createIntegration,
   deleteIntegration,
@@ -18,6 +19,8 @@ import { useAuth } from "../auth";
 import { ErrorNote, ago } from "../components";
 import { useCustomer } from "../customer";
 import { Card, PageHead, RowActions, useAction } from "../ui";
+import { useConnectCapabilities } from "../ConnectCapabilities";
+import { canOperateConnect } from "../permissions";
 
 const CATEGORY: Record<string, string> = {
   webhook: "Webhooks and standards",
@@ -57,29 +60,35 @@ export default function Integrations() {
   const { current } = useCustomer();
   const admin = user?.role === "admin";
   const carrier = user?.role === "carrier";
+  const capabilities = useConnectCapabilities();
+  const canManage = canOperateConnect(user) || (carrier && (!user?.scopes || user.scopes.includes("connect")));
+  const accessible = admin || capabilities.integrations;
   const cid = carrier ? null : current?.id ?? null;
-  const list = useApi<Integration[]>(carrier ? integrationPaths.list() : cid ? integrationPaths.list(cid) : null, 15_000);
-  const cat = useApi<IntegrationCatalogue>(integrationPaths.catalogue, 0);
+  const list = useApi<Integration[]>(accessible ? carrier ? integrationPaths.list() : cid ? integrationPaths.list(cid) : null : null, 15_000);
+  const catalogue = capabilities.catalogue;
   const [open, setOpen] = useState<number | null>(null);
   const [shownSecret, setShownSecret] = useState<{ name: string; secret: string } | null>(null);
+  const [awaitingActivation, setAwaitingActivation] = useState(false);
   const act = useAction();
 
   const providers = useMemo(
-    () => (cat.data?.providers ?? []).filter((p) => p.owners.includes(carrier ? "carrier" : "customer")),
-    [cat.data, carrier],
+    () => (catalogue?.providers ?? []).filter((p) => p.owners.includes(carrier ? "carrier" : "customer")),
+    [catalogue, carrier],
   );
-  const rows = list.data ?? [];
+  const rows = (list.data ?? []).filter((integration) => admin || integration.mode === "live");
 
   const onTest = (i: Integration) =>
     act.run(async () => {
       const d = await testIntegration(i.id);
       setOpen(i.id);
+      if (!admin && d.status === "simulated") throw new Error("Nothing was sent. This integration is not active yet. Contact XaKore for help.");
       if (d.status === "failed") throw new Error(`The test failed: ${d.last_error || "no reason given"}.`);
       list.reload();
     });
   const onSync = (i: Integration) =>
     act.run(async () => {
-      await syncIntegration(i.id);
+      const result = await syncIntegration(i.id);
+      if (!admin && result.mode === "simulated") throw new Error("No live sync was run. Contact XaKore to finish activating this integration.");
       list.reload();
     });
   const onToggle = (i: Integration) =>
@@ -96,18 +105,30 @@ export default function Integrations() {
     });
   };
 
+  if (!admin && !capabilities.integrations)
+    return (
+      <>
+        <PageHead title={capabilities.loading ? "Checking integrations…" : "Integrations are not available right now"}>
+          {capabilities.loading ? "Checking which services are ready for your organisation." : "Contact XaKore to discuss connecting your monitoring and business tools."}
+        </PageHead>
+        <ErrorNote error={capabilities.catalogueError} />
+        <Link className="button secondary" to="/">Back to your network</Link>
+      </>
+    );
+
   return (
     <>
       <PageHead eyebrow="Integrations" title="Integrations">
-        Send Connect's events to your own tools, over open standards first. Each one is simulated until ExaCarib switches
-        live sending on and its credentials are in place.
+        Send network events to your monitoring, support and business tools. Review each connection’s status and delivery history here.
       </PageHead>
+      {admin && catalogue && !catalogue.live && <p className="callout warn">Live delivery is off. Connections and tests below are for configuration only; no events are sent to providers.</p>}
+      {!admin && awaitingActivation && <p className="callout warn" role="status">Your connection is saved. XaKore needs to finish activating it before it can send events.</p>}
 
       <Card title="Your integrations" note={admin && current ? <span className="small muted">For {current.name}</span> : undefined}>
-        <ErrorNote error={list.error ?? cat.error} />
+        <ErrorNote error={list.error ?? capabilities.catalogueError} />
         {list.data && rows.length === 0 && (
           <div className="empty">
-            <p>No integrations yet. Add a webhook, an alerting tool or a log collector below.</p>
+            <p>{canManage ? "No active integrations yet. Add a connection below, or contact XaKore to finish activating an existing one." : "No active integrations to show."}</p>
           </div>
         )}
         {rows.length > 0 && (
@@ -150,11 +171,11 @@ export default function Integrations() {
                         label={i.name}
                         disabled={act.busy}
                         primary={
-                          i.event_types.length > 0 ? (
+                          canManage && i.event_types.length > 0 ? (
                             <button type="button" className="button secondary small" onClick={() => onTest(i)} disabled={act.busy}>
-                              Send test
+                              {i.mode === "live" ? "Send test" : "Preview test"}
                             </button>
-                          ) : i.provider === "netbox" ? (
+                          ) : canManage && i.provider === "netbox" ? (
                             <button type="button" className="button secondary small" onClick={() => onSync(i)} disabled={act.busy}>
                               Sync now
                             </button>
@@ -164,8 +185,10 @@ export default function Integrations() {
                           ...(i.event_types.length > 0
                             ? [{ label: open === i.id ? "Hide delivery log" : "Delivery log", onSelect: () => setOpen(open === i.id ? null : i.id) }]
                             : []),
-                          { label: i.enabled ? "Switch off" : "Switch on", onSelect: () => onToggle(i) },
-                          { label: "Delete", danger: true, onSelect: () => onDelete(i) },
+                          ...(canManage ? [
+                            { label: i.enabled ? "Switch off" : "Switch on", onSelect: () => onToggle(i) },
+                            { label: "Delete", danger: true, onSelect: () => onDelete(i) },
+                          ] : []),
                         ]}
                       />
                     </td>
@@ -176,15 +199,16 @@ export default function Integrations() {
           </div>
         )}
         <ErrorNote error={act.error} />
-        {open !== null && <DeliveryLog integration={rows.find((r) => r.id === open)} onClose={() => setOpen(null)} />}
+        {open !== null && <DeliveryLog integration={rows.find((r) => r.id === open)} canManage={canManage} onClose={() => setOpen(null)} />}
       </Card>
 
-      {cat.data && (
+      {canManage && catalogue && (
         <AddIntegration
           providers={providers}
-          catalogue={cat.data}
+          catalogue={catalogue}
           customerId={admin ? cid : null}
           onAdded={(i) => {
+            setAwaitingActivation(i.mode !== "live");
             if (i.signing_secret) setShownSecret({ name: i.name, secret: i.signing_secret });
             list.reload();
           }}
@@ -208,7 +232,7 @@ export default function Integrations() {
   );
 }
 
-function DeliveryLog({ integration, onClose }: { integration?: Integration; onClose: () => void }) {
+function DeliveryLog({ integration, canManage, onClose }: { integration?: Integration; canManage: boolean; onClose: () => void }) {
   const log = useApi<Delivery[]>(integration ? integrationPaths.deliveries(integration.id) : null, 10_000);
   const retry = useAction();
   if (!integration) return null;
@@ -222,7 +246,7 @@ function DeliveryLog({ integration, onClose }: { integration?: Integration; onCl
       </div>
       <p className="muted small">The latest 50. Addresses and keys are never shown.</p>
       <ErrorNote error={log.error ?? retry.error} />
-      {log.data && log.data.length === 0 && <p className="muted">Nothing sent yet. Use Send test to try it.</p>}
+      {log.data && log.data.length === 0 && <p className="muted">{canManage ? "No deliveries yet. Use the test action to check this connection." : "No deliveries yet."}</p>}
       {log.data && log.data.length > 0 && (
         <div className="table-wrap">
           <table className="paths dt stack">
@@ -256,7 +280,7 @@ function DeliveryLog({ integration, onClose }: { integration?: Integration; onCl
                     {d.attempts}
                   </td>
                   <td className="actions">
-                    {d.status === "failed" && (
+                    {canManage && d.status === "failed" && (
                       <button
                         type="button"
                         className="button secondary small"
@@ -379,11 +403,12 @@ function AddIntegration({
                 <option value="false">No</option>
               </select>
             ) : f.kind === "pem" ? (
-              <textarea rows={4} value={values[f.name] ?? ""} onChange={(e) => setValues({ ...values, [f.name]: e.target.value })} />
+              <textarea rows={4} required={f.required} value={values[f.name] ?? ""} onChange={(e) => setValues({ ...values, [f.name]: e.target.value })} />
             ) : (
               <input
                 type={f.secret ? "password" : f.kind === "int" ? "number" : "text"}
                 autoComplete="off"
+                required={f.required}
                 value={values[f.name] ?? ""}
                 placeholder={f.default !== undefined ? String(f.default) : f.help}
                 onChange={(e) => setValues({ ...values, [f.name]: e.target.value })}

@@ -1,0 +1,40 @@
+.connect-workspace-tabs {
+  position: relative;
+  display: flex;
+  gap: 20px;
+  max-width: 100%;
+  margin: 0 0 20px;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-padding-inline: 4px;
+}
+
+.connect-workspace-tabs a {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  min-height: 38px;
+  padding: 7px 2px 8px;
+  border-bottom: 2px solid transparent;
+  color: var(--ink-muted);
+  font: 500 14px/21px var(--font-body);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.connect-workspace-tabs a:hover { color: var(--ink); }
+.connect-workspace-tabs a[aria-current="page"] {
+  border-bottom-color: var(--ink);
+  color: var(--ink);
+  font-weight: 600;
+}
+.connect-workspace-tabs a:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -4px;
+}
+
+@media (max-width: 640px) {
+  .connect-workspace-tabs { gap: 16px; margin-bottom: 18px; }
+  .connect-workspace-tabs a { min-height: 48px; }
+}

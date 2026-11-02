@@ -29,6 +29,9 @@ const (
 type Internet struct {
 	Mode        string   `json:"mode"`
 	LANPrefixes []string `json:"lan_prefixes"`
+	// CorporatePrefixes are the authoritative private-network destinations
+	// that remain reachable in off mode. An absent list fails closed.
+	CorporatePrefixes []string `json:"corporate_prefixes,omitempty"`
 	// Tunnels are the tunnels to the PoP in preference order (site, pop mode).
 	Tunnels []string `json:"tunnels,omitempty"`
 	// Uplinks are the carrier links in preference order (site, local mode),
@@ -164,6 +167,9 @@ func (s *State) validateInternet() error {
 	if err := prefixes(in.LANPrefixes); err != nil {
 		return fmt.Errorf("internet: lan: %w", err)
 	}
+	if err := prefixes(in.CorporatePrefixes); err != nil {
+		return fmt.Errorf("internet: corporate prefixes: %w", err)
+	}
 	tunnels := map[string]bool{}
 	for _, t := range s.Tunnels {
 		tunnels[t.Name] = true
@@ -256,6 +262,25 @@ func (s *State) validateInternet() error {
 		}
 		if !ipv4(f.ToAddress) {
 			return fmt.Errorf("internet: forward %d: bad to_address %q", f.ID, f.ToAddress)
+		}
+		if f.Protocol == "udp" {
+			if f.Port == 500 || f.Port == 4500 {
+				return fmt.Errorf("internet: forward %d: public UDP port is reserved for IPsec", f.ID)
+			}
+			for _, tunnel := range s.Tunnels {
+				if tunnel.ListenPort > 0 && f.Port == tunnel.ListenPort {
+					return fmt.Errorf("internet: forward %d: public UDP port is reserved for WireGuard", f.ID)
+				}
+			}
+		}
+		inside := false
+		address, _ := netip.ParseAddr(f.ToAddress)
+		for _, value := range in.LANPrefixes {
+			prefix, _ := netip.ParsePrefix(value)
+			inside = inside || prefix.Contains(address)
+		}
+		if !inside {
+			return fmt.Errorf("internet: forward %d: destination is outside the managed LANs", f.ID)
 		}
 		if err := addrsOrPrefixes(f.AllowFrom); err != nil {
 			return fmt.Errorf("internet: forward %d: allow_from: %w", f.ID, err)

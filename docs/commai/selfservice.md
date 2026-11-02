@@ -21,6 +21,11 @@ Portal: Jibsy → My settings (`/commai/me`). API under
 
 Calls use the existing `/voice/me...` endpoints.
 
+Staff notices currently appear in Jibsy. Email preference fields and quiet
+hours remain in the API for compatibility, but no email-notification delivery
+worker uses them; the portal does not offer those inactive controls. Configuring
+the platform's SMTP sender does not activate staff email notifications.
+
 ## Help centre (the business's customers)
 
 Switch on: Jibsy → Settings → Help centre. Publish articles there (only

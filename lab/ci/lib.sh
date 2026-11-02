@@ -44,7 +44,60 @@ moves_since() {
 
 # api <method> <path> [json]: calls the controller API as the lab admin. The
 # password is read from .env on this host and never printed.
+# The disposable routing CI uses an internal Docker network, whose published
+# loopback port is deliberately unavailable to the host. Keep its requests in
+# the controller namespace; neither its generated password nor token leaves it.
+ci_controller_request() {
+  jq -n --arg method "$1" --arg path "$2" --arg body "${3:-}" --argjson detail "${4:-false}" \
+    '{method:$method, path:$path, body:$body, detail:$detail}' |
+    docker compose -f "$REPO/deploy/docker-compose.yml" --env-file "$REPO/.env" exec -T controller \
+      python -c '
+import json, os, sys, urllib.error, urllib.request
+
+args = json.load(sys.stdin)
+origin = "http://127.0.0.1:8000"
+headers = {"Content-Type": "application/json"}
+try:
+    if args["path"].startswith("/api/v1/"):
+        login = json.dumps({"email": os.environ["EXA_ADMIN_EMAIL"],
+                            "password": os.environ["EXA_ADMIN_PASSWORD"]}).encode()
+        request = urllib.request.Request(origin + "/api/v1/auth/login", login, headers)
+        with urllib.request.urlopen(request, timeout=10) as response:
+            headers["Authorization"] = "Bearer " + json.load(response)["token"]
+    request = urllib.request.Request(origin + args["path"],
+        args["body"].encode() if args["body"] else None, headers, method=args["method"])
+    try:
+        response = urllib.request.urlopen(request, timeout=10)
+    except urllib.error.HTTPError as error:
+        response = error
+    with response:
+        status, body = response.status, response.read().decode()
+    if args["detail"]:
+        print(body + "\n" + str(status))
+    elif 200 <= status < 300:
+        print(body)
+    else:
+        print("Local controller request failed: HTTP " + str(status), file=sys.stderr)
+        sys.exit(22)
+except (urllib.error.URLError, TimeoutError, KeyError, ValueError) as error:
+    print("Local controller request failed: " + type(error).__name__, file=sys.stderr)
+    sys.exit(1)
+'
+}
+
+controller_health() {
+  if [[ ${EXA_LAB_API_CONTAINER:-0} == 1 ]]; then
+    ci_controller_request GET /healthz >/dev/null
+  else
+    curl -fsS --max-time 5 -o /dev/null http://127.0.0.1:8000/healthz
+  fi
+}
+
 api() {
+  if [[ ${EXA_LAB_API_CONTAINER:-0} == 1 ]]; then
+    ci_controller_request "$1" "/api/v1$2" "${3:-}"
+    return
+  fi
   local email pass token
   email=$(grep '^EXA_ADMIN_EMAIL=' "$REPO/.env" | cut -d= -f2-)
   pass=$(grep '^EXA_ADMIN_PASSWORD=' "$REPO/.env" | cut -d= -f2-)
@@ -57,6 +110,12 @@ api() {
 # api_detail <method> <path> [json]: like api, but prints the status and the
 # error message instead of failing quietly.
 api_detail() {
+  if [[ ${EXA_LAB_API_CONTAINER:-0} == 1 ]]; then
+    local response
+    response=$(ci_controller_request "$1" "/api/v1$2" "${3:-}" true) || return
+    echo "${response##*$'\n'}: $(jq -r '.detail // .' <<<"${response%$'\n'*}" 2>/dev/null | cut -c1-300)"
+    return
+  fi
   local email pass token
   email=$(grep '^EXA_ADMIN_EMAIL=' "$REPO/.env" | cut -d= -f2-)
   pass=$(grep '^EXA_ADMIN_PASSWORD=' "$REPO/.env" | cut -d= -f2-)

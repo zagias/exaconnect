@@ -258,10 +258,28 @@ def _execute(conn: psycopg.Connection, job: dict):
     if run is None or run["status"] not in ("approved", "executing"):
         return None
     conn.execute("UPDATE action_runs SET status = 'executing' WHERE id = %s", (run["id"],))
-    connector = connectors.get(run["app"])
+    try:
+        connector = connectors.get(run["app"])
+    except KeyError:
+        _fail(conn, run, "The integration is no longer available.", "policy")
+        return None
     c = connectors.connection(conn, run["customer_id"], run["app"])
     if c is None:
         _fail(conn, run, "The integration was removed.", "permission")
+        return None
+    # A job may wait for approval or retry much later. Permissions at proposal
+    # time are not permission to act after the business has revoked access.
+    # A local policy change is not a broken provider sign-in, so preserve the
+    # connection's current status while recording the failed action/handover.
+    allowed_status = ("authorised", "testing", "live") if run["test"] else ("live",)
+    if c["status"] not in allowed_status:
+        _fail(conn, run, f"{connector.label} is not switched on (it is {c['status']}).", "policy")
+        return None
+    if run["action"] not in connector.actions or run["action"] not in c["allowed_actions"]:
+        _fail(conn, run, "This action is no longer switched on for the integration.", "policy")
+        return None
+    if not role_may(conn, run["customer_id"], run["role"], run["app"], run["action"]):
+        _fail(conn, run, "This role is no longer allowed to use the action.", "policy")
         return None
     c = {**c, "test": run["test"]}
     try:

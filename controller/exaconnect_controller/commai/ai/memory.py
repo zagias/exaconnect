@@ -11,7 +11,28 @@ from typing import Any
 
 import psycopg
 
+from .. import inbox
+
 MAX_FACTS = 50
+
+
+def lock_subject(
+    conn: psycopg.Connection, customer_id: Any, conversation: dict, *, require_active: bool = True
+) -> None:
+    """Guard a short mutation against erasure before taking call/conversation locks."""
+    if not conversation.get("contact_id"):
+        return
+    contact = conn.execute(
+        "SELECT anonymised_at FROM contacts WHERE id = %s AND customer_id = %s FOR KEY SHARE",
+        (conversation["contact_id"], customer_id),
+    ).fetchone()
+    if require_active and (contact is None or contact["anonymised_at"] is not None):
+        raise inbox.NotHandler("This contact is no longer available.")
+
+
+def check_subject(before: dict, locked: dict) -> None:
+    if before.get("contact_id") != locked.get("contact_id"):
+        raise inbox.NotHandler("The conversation's contact changed.")
 
 
 def identity_verified(conn: psycopg.Connection, conversation: dict) -> bool:

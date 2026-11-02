@@ -5,10 +5,13 @@ import { useAuth } from "./auth";
 import type { OrgApps, User } from "./api";
 import { APP_INFO, APP_ORDER, AREA_NAME, AppMark, areaFor, myApps, type AppId, type Area } from "./apps";
 import { CustomerPicker, OrganisationSwitcher, StormBanner, StormSwitch, useCustomer } from "./customer";
+import { canOperateConnect } from "./permissions";
+import { useConnectCapabilities } from "./ConnectCapabilities";
 import { JumpTo } from "./jump";
 import { accountGroups, icons, matches, navGroups, opsGroups, type Group } from "./nav";
 import { useBrand } from "./pages/commai/partner/brand";
 import { useCommaiBase } from "./pages/commai/lib";
+import { isAssistantPath } from "./pages/assistant/types";
 import "./shell.css";
 
 /** The current screen's group and name, for the context line in the top bar. */
@@ -26,7 +29,7 @@ function initials(email: string | undefined): string {
   return s.toUpperCase();
 }
 
-const ROLE_NAMES: Record<string, string> = { admin: "ExaCarib admin", customer: "Customer", carrier: "Carrier (read-only)" };
+const ROLE_NAMES: Record<string, string> = { admin: "XaKore admin", customer: "Customer", carrier: "Carrier" };
 const ORG_ROLE_NAMES: Record<string, string> = { owner: "Owner", admin: "Admin", member: "Member", viewer: "Viewer (read-only)" };
 
 /** "Admin, Example Bank" for organisation members; the account role otherwise. */
@@ -44,12 +47,14 @@ const MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator
 /** The portal frame: navy sidebar (icon rail on tablets, drawer on phones), a slim top bar, the Storm banner and the page. */
 export function Shell({ children }: { children: ReactNode }) {
   const { user, signOut } = useAuth();
+  const { current } = useCustomer();
   const carrier = user?.role === "carrier";
   // The apps this person may open (ADR 0041); the sidebar shows one at a time.
   const mine = myApps(user);
   const connect = mine.includes("connect");
   const jibsy = mine.includes("commai");
-  const all = navGroups(user?.role, useModules(!carrier && jibsy), carrier ? null : mine);
+  const capabilities = useConnectCapabilities();
+  const all = navGroups(user?.role, useModules(!carrier && jibsy), carrier ? null : mine, capabilities);
   const staff = user?.role === "admin";
   const manager = staff || (user?.role === "customer" && (user.org_role === "owner" || user.org_role === "admin"));
   const account = accountGroups({ carrier, jibsy, manager });
@@ -57,7 +62,8 @@ export function Shell({ children }: { children: ReactNode }) {
   // A partner's white-label brand (ADR 0031); null keeps ExaCarib's own look.
   const brand = useBrand();
   const location = useLocation();
-  const asked = areaFor(location.pathname);
+  const assistant = isAssistantPath(location.pathname);
+  const asked = assistant ? "account" : areaFor(location.pathname);
   // On a screen of an app the person can't open, the menu stays on one they can.
   const area: Area = carrier
     ? "connect"
@@ -71,8 +77,8 @@ export function Shell({ children }: { children: ReactNode }) {
   // The tab says which app you are in.
   useEffect(() => {
     if (brand) return;
-    document.title = `${area === "account" || area === "ops" ? AREA_NAME[area] : APP_INFO[area].name} · ExaCarib`;
-  }, [area, brand]);
+    document.title = `${assistant ? "Assistant" : area === "account" || area === "ops" ? AREA_NAME[area] : APP_INFO[area].name} · XaKore`;
+  }, [area, assistant, brand]);
   const [drawer, setDrawer] = useState(false);
   const [jump, setJump] = useState(false);
   const menuButton = useRef<HTMLButtonElement>(null);
@@ -124,14 +130,14 @@ export function Shell({ children }: { children: ReactNode }) {
     <div className="shell">
       <aside id="shell-nav" className="shell-side" data-open={drawer || undefined} data-app={area} aria-label="Portal">
         <div className="shell-brand">
-          <NavLink to="/" className="shell-brand-link" aria-label={`${brand ? brand.product_name : "ExaCarib"}, home`}>
+          <NavLink to="/" className="shell-brand-link" aria-label={`${brand ? brand.product_name : "XaKore"}, home`}>
             {brand?.logo_url ? (
               <img className="shell-wordmark shell-partner-logo" src={brand.logo_url} alt={brand.product_name} />
             ) : (
-              <img className="shell-wordmark" src="/brand/exacarib-wordmark-reversed.png" alt="ExaCarib" width={140} height={25} />
+              <img className="shell-wordmark" src="/brand/xakore-wordmark-red-reversed.svg" alt="XaKore" width={140} height={37} />
             )}
             <span className="shell-symbol" aria-hidden="true">
-              <img src="/brand/exacarib-wordmark-reversed.png" alt="" width={141} height={25} />
+              <img src="/brand/xakore-symbol-red.svg" alt="" width={25} height={25} />
             </span>
           </NavLink>
           {brand && <span className="shell-product">{brand.product_name}</span>}
@@ -218,11 +224,11 @@ export function Shell({ children }: { children: ReactNode }) {
           >
             {icons.menu}
           </button>
-          <NavLink to="/" className="shell-top-brand" aria-label={`${brand ? brand.product_name : "ExaCarib"}, home`}>
+          <NavLink to="/" className="shell-top-brand" aria-label={`${brand ? brand.product_name : "XaKore"}, home`}>
             {brand?.logo_url ? (
               <img className="shell-partner-logo" src={brand.logo_url} alt={brand.product_name} height={20} />
             ) : (
-              <img src="/brand/exacarib-wordmark-reversed.png" alt="ExaCarib" width={112} height={20} />
+              <img src="/brand/xakore-wordmark-red-reversed.svg" alt="XaKore" width={112} height={30} />
             )}
           </NavLink>
           <div className="shell-context" aria-hidden={ctx ? undefined : true}>
@@ -230,6 +236,7 @@ export function Shell({ children }: { children: ReactNode }) {
             {ctx && <span className="shell-context-page">{ctx.label}</span>}
           </div>
           <div className="shell-actions">
+            {!carrier && <NavLink to="/assistant" className="shell-assistant-link" aria-label="XaKore assistant">{icons.ask}<span>Assistant</span></NavLink>}
             <button
               className="shell-jump-button"
               onClick={() => setJump(true)}
@@ -255,13 +262,14 @@ export function Shell({ children }: { children: ReactNode }) {
               </div>
             )}
             {/* Storm Mode switch: on every Connect screen, never for carriers. */}
-            {!carrier && connect && area === "connect" && <StormSwitch />}
+            {connect && area === "connect" && canOperateConnect(user) && <StormSwitch />}
             <UserMenu />
           </div>
         </header>
         {!carrier && connect && <StormBanner />}
         {manager && area !== "ops" && <SetupBanner path={location.pathname} />}
         <main className="page" id="main" tabIndex={-1}>
+          {current?.example && <p className="example-banner" role="note">Example data</p>}
           {children}
         </main>
       </div>
@@ -473,7 +481,7 @@ function AppSwitcher({ area, mine, staff, carrier }: { area: Area; mine: AppId[]
                       <span className="app-switch-title">{APP_INFO[o.id].full}</span>
                       <span className="app-switch-blurb">{APP_INFO[o.id].blurb}</span>
                       {o.status === "requested" ? (
-                        <span className="app-switch-note">Requested. ExaCarib will be in touch.</span>
+                        <span className="app-switch-note">Requested. XaKore will be in touch.</span>
                       ) : (
                         <button type="button" className="button small" onClick={() => ask(o.id)}>
                           Ask to add {APP_INFO[o.id].name}
@@ -495,7 +503,7 @@ function AppSwitcher({ area, mine, staff, carrier }: { area: Area; mine: AppId[]
               "Company, locations, people, plans and billing",
               area === "account",
             )}
-            {staff && item("/ops/organisations", "ops", "ExaCarib operations", "Every customer, platform and service screens (staff only)", area === "ops")}
+            {staff && item("/ops/organisations", "ops", "XaKore operations", "Every customer, platform and service screens (staff only)", area === "ops")}
           </ul>
         </div>
       )}
@@ -514,11 +522,10 @@ function SetupBanner({ path }: { path: string }) {
   return (
     <div className="setup-band" role="status">
       <span>
-        <strong>Finish setting up {current?.name || "your organisation"}</strong>: {setup.data.done} of {setup.data.total} steps
-        done.
+        Setup: {setup.data.done} of {setup.data.total} steps complete
       </span>
-      <NavLink to="/org/setup" className="button small">
-        Continue set-up
+      <NavLink to="/org/setup" className="setup-link">
+        Finish setup
       </NavLink>
     </div>
   );

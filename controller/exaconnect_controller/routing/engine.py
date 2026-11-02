@@ -8,6 +8,7 @@ one line.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any
@@ -63,7 +64,8 @@ class Policy:
     # under three quarters of its limit: a hysteresis band, so ordinary noise
     # (lab jitter wobbles around half the voice limit) does not restart it.
     keep_score: float = 0.25
-    # Consecutive evaluations a breach must be seen or forecast before acting.
+    # Consecutive measured/point-forecast breaches establish persistence.
+    # Acting additionally requires a confident breach on the current pass.
     persistence: int = 2
     # SLA windows: loss is a rate, so it needs more probes to be meaningful
     # (3 min at 20 probes/s is 3,600 probes; 1% is 36 of them).
@@ -106,9 +108,11 @@ class PathEval:
     over_commit: bool
     up: bool
     down_reason: str | None
-    known: bool  # enough recent data to judge it
+    known: bool  # recent probe data exists; metrics_complete checks forecast readiness
     metrics: dict[str, MetricView] = field(default_factory=dict)
     maintenance: bool = False
+    # A fresh report may not yet provide enough history for every SLA metric.
+    metrics_complete: bool = True
 
     @property
     def score_now(self) -> float:
@@ -128,7 +132,12 @@ class PathEval:
         """Usable, within SLA now and forecast to stay within it. The confidence
         margin is for deciding to leave a path, not for choosing where to go:
         a noisy but good path is still a better place than one in breach."""
-        return self.up and self.known and all(m.score_now > 0 and m.score_ahead > 0 for m in self.metrics.values())
+        return (
+            self.up
+            and self.known
+            and self.metrics_complete
+            and all(m.score_now > 0 and m.score_ahead > 0 for m in self.metrics.values())
+        )
 
     def worst(self) -> tuple[str, MetricView] | None:
         if not self.metrics:
@@ -142,6 +151,7 @@ class PathEval:
         return {
             "up": self.up,
             "known": self.known,
+            "metrics_complete": self.metrics_complete,
             "over_commit": self.over_commit,
             "score_now": round(self.score_now, 3),
             "score_ahead": round(self.score_ahead, 3),
@@ -166,6 +176,7 @@ class State:
     return_since: float | None = None
     breach_streak: int = 0
     note: str | None = None
+    last_evaluated: float | None = None
 
 
 @dataclass(frozen=True)
@@ -214,6 +225,13 @@ def evaluate(
         f: Forecast | None = forecaster.forecast(series(windows, metric, step), policy.horizon_s, span[metric])
         if f is None:
             continue
+        if (
+            not all(math.isfinite(value) for value in (f.now, f.ahead, f.slope_per_min, f.se))
+            or min(f.now, f.ahead, f.se) < 0
+        ):
+            # An invalid model result establishes neither a breach nor a usable
+            # backup. Leave the metric unassessed so it cannot sustain a streak.
+            continue
         lim = float(limit)
         margin = policy.confidence * f.se
         metrics[metric] = MetricView(
@@ -238,6 +256,7 @@ def evaluate(
         known=known,
         metrics=metrics,
         maintenance=bool(p.maintenance),
+        metrics_complete=all(sla.limit(metric) is None or metric in metrics for metric in METRICS),
     )
 
 
@@ -301,13 +320,22 @@ def decide(
     portal shows why (logged once per episode).
     """
     cands = [paths[c] for c in candidates if c in paths]
+    if state is not None:
+        # An evaluation gap is not evidence of uninterrupted health or
+        # consecutive breaches. In particular, a controller restart must not
+        # finish a return clock using time nobody observed.
+        if state.last_evaluated is not None and (
+            now - state.last_evaluated > policy.stale_after_s or now < state.last_evaluated
+        ):
+            state = replace(state, return_path=None, return_since=None, breach_streak=0, note=None)
+        state = replace(state, last_evaluated=now)
     if not cands:
-        st = state or State(path="", since=now)
+        st = state or State(path="", since=now, last_evaluated=now)
         return st, None
     by_pref = sorted(cands, key=preference)
     home = by_pref[0]
     if state is None or not state.path:
-        state = State(path=home.name, since=now - policy.hold_s)
+        state = State(path=home.name, since=now - policy.hold_s, last_evaluated=now)
 
     def best_alternative(exclude: str, need_healthy: bool, better_than: float = -1.0) -> PathEval | None:
         alts = [
@@ -320,7 +348,7 @@ def decide(
         return min(alts, key=lambda p: (cost_rank(p), -p.score_ahead, p.ordinal))
 
     def moved(to: PathEval, kind: str, reason: str) -> tuple[State, Decision]:
-        return State(path=to.name, since=now), Decision(kind, state.path, to.name, reason)
+        return State(path=to.name, since=now, last_evaluated=now), Decision(kind, state.path, to.name, reason)
 
     def note(text: str) -> tuple[State, Decision | None]:
         if state.note == text:
@@ -349,7 +377,13 @@ def decide(
 
     # 3. Breach seen or forecast on the current path.
     breaching = cur.known and cur.breach
-    streak = state.breach_streak + 1 if breaching else 0
+    # Persistence answers whether the predicted breach has lasted; confidence
+    # answers whether it is actionable now. Requiring the confidence lower bound
+    # on *every* pass can consume the remaining headroom after a sustained point
+    # forecast has already crossed the SLA. Keep the confidence gate below, but
+    # include those earlier predictions in the persistence evidence.
+    predicted = cur.known and any(m.score_now == 0 or m.score_ahead == 0 for m in cur.metrics.values())
+    streak = state.breach_streak + 1 if predicted else 0
     state = replace(state, breach_streak=streak)
     if breaching and streak >= policy.persistence:
         if now - state.since < policy.hold_s:
@@ -371,7 +405,7 @@ def decide(
     # 4. Move back to a preferred path once it has scored well for a while.
     def scores_well(p: PathEval) -> bool:
         bar = policy.keep_score if p.name == state.return_path else policy.good_score
-        return p.up and p.known and p.score_now >= bar and p.score_ahead >= bar
+        return p.up and p.known and p.metrics_complete and p.score_now >= bar and p.score_ahead >= bar
 
     better = [p for p in by_pref if preference(p) < preference(cur) and scores_well(p)]
     target = better[0] if better else None

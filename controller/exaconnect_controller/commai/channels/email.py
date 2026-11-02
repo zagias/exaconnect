@@ -30,7 +30,6 @@ import json
 import os
 import re
 import secrets
-import smtplib
 from email.message import EmailMessage
 from email.utils import formataddr, parseaddr
 from typing import Any
@@ -38,6 +37,7 @@ from typing import Any
 import psycopg
 from psycopg.types.json import Jsonb
 
+from ... import mailer
 from .. import channels, inbox, usage
 from . import messaging
 
@@ -90,20 +90,10 @@ class SmtpSender(Sender):
 
     @staticmethod
     def missing() -> list[str]:
-        return [n for n in ("EXA_SMTP_HOST",) if not os.environ.get(n)]
+        return mailer.missing()
 
-    def send(self, conn, account, msg) -> None:  # pragma: no cover - network
-        host = os.environ.get("EXA_SMTP_HOST", "")
-        if not host:
-            raise RuntimeError("SMTP is not configured: set EXA_SMTP_HOST.")
-        port = int(os.environ.get("EXA_SMTP_PORT", "587"))
-        with smtplib.SMTP(host, port, timeout=15) as s:
-            if os.environ.get("EXA_SMTP_STARTTLS", "true").lower() != "false":
-                s.starttls()
-            user = os.environ.get("EXA_SMTP_USER", "")
-            if user:
-                s.login(user, os.environ.get("EXA_SMTP_PASSWORD", ""))
-            s.send_message(msg)
+    def send(self, conn, account, msg) -> None:
+        mailer.send(msg)
 
 
 SENDERS: dict[str, Sender] = {"simulated": SimulatedSender(), "smtp": SmtpSender()}

@@ -161,7 +161,7 @@ def test_dial_plan_and_kamailio_lists(client):
     assert f"sip_h_X-Exa-Route={set_id}" in dp
     assert "{rtp_secure_media=mandatory:AES_CM_128_HMAC_SHA1_80}sofia/gateway/exacarib_sip/+18685557100" in dp
     assert f"{lk['fqdn']} teams:{lk['key']}" in k["platforms.list"]
-    assert f"{set_id} sip:sip.pstnhub.microsoft.com:5061;transport=tls 0 0" in k["dispatcher.list"]
+    assert f"{set_id} sip:sip.pstnhub.microsoft.com:5061;transport=tls 0 3" in k["dispatcher.list"]
     assert f"set:{set_id} {lk['fqdn']}" in k["platforms.list"]
     assert "1 52.112.0.0 14 0 teams" in k["address.list"]
     # Calls from Teams: the link's header, the organisation's numbers and the controller check.

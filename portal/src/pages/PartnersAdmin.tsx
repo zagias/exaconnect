@@ -26,7 +26,7 @@ import { CATEGORY_LABEL, OrderStatusPill, partnerOf, safeUrl, split, usd, when }
 
 const KIND_LABEL: Record<PartnerKind, string> = {
   cloud: "Cloud: the customer sets up the VPN",
-  service: "Service: ExaCarib completes the order",
+  service: "Service: XaKore completes the order",
 };
 
 export function PartnersAdmin() {

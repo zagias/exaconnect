@@ -541,13 +541,20 @@ def test_teams_bot_endpoint_refuses_without_a_valid_token(client, monkeypatch):
 
 def test_livekit_worker_endpoints_need_the_agent_secret(client, monkeypatch):
     url = "/api/v1/commai/voice/livekit/calls"
+    # A valid current SIP-participant body reaches authentication. Legacy
+    # dialled/caller input is rejected by schema validation before this check.
+    body = {
+        "room": "worker-security-test-room",
+        "participant_identity": "worker-security-test-sip-person",
+        "sip_call_id": "worker-security-test-call",
+        "worker_id": "worker-security-test",
+        "provider_fingerprint": "a" * 64,
+    }
     monkeypatch.delenv("EXA_LIVEKIT_AGENT_SECRET", raising=False)
-    assert client.post(url, json={"dialled": "+18685550100", "caller": "+18685550101"}).status_code in (401, 503)
+    assert client.post(url, json=body).status_code in (401, 503)
     monkeypatch.setenv("EXA_LIVEKIT_AGENT_SECRET", "livekit-" + "secret-for-tests")
-    assert client.post(url, json={"dialled": "+18685550100", "caller": "+18685550101"}).status_code == 401
-    r = client.post(
-        url, json={"dialled": "+18685550100", "caller": "+18685550101"}, headers={"Authorization": "Bearer wrong"}
-    )
+    assert client.post(url, json=body).status_code == 401
+    r = client.post(url, json=body, headers={"Authorization": "Bearer wrong"})
     assert r.status_code == 401
 
 

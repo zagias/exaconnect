@@ -51,7 +51,7 @@ export function InvoiceStatusPill({ inv }: { inv: Pick<Invoice, "status" | "paid
 const fileName = (inv: Invoice) => inv.number ?? `draft-${inv.period}-${inv.product}`;
 
 export async function invoiceCsv(inv: Invoice): Promise<void> {
-  await download(`/billing/invoices/${inv.id}/csv`, `exacarib-invoice-${fileName(inv)}.csv`);
+  await download(`/billing/invoices/${inv.id}/csv`, `xakore-invoice-${fileName(inv)}.csv`);
 }
 
 /** The printable page opens in a new tab (the browser's print or save as PDF). */
@@ -144,7 +144,7 @@ function BillingHome() {
         {invoices.data?.length === 0 && (
           <p className="muted">
             No invoices yet.{" "}
-            {user?.role === "admin" ? "Generate drafts in Admin, Billing." : "Invoices appear here when ExaCarib issues them."}
+            {user?.role === "admin" ? "Generate drafts in Admin, Billing." : "Invoices appear here when XaKore issues them."}
           </p>
         )}
       </Card>
@@ -517,7 +517,7 @@ export function InvoiceDocument({ inv }: { inv: Invoice }) {
     <article className="card bill-doc">
       <header className="bill-doc-head">
         <div>
-          <img src="/brand/exacarib-wordmark.png" alt="ExaCarib" width={160} height={29} className="bill-logo" />
+          <img src="/brand/xakore-wordmark-red.svg" alt="XaKore" width={160} height={43} className="bill-logo" />
           <div className="muted small">{inv.plan}</div>
         </div>
         <div className="bill-doc-meta">

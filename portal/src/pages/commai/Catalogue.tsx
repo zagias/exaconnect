@@ -124,7 +124,7 @@ export default function CatalogueScreen() {
   return (
     <>
       <PageHead title="Apps">
-        Every app Jibsy can work with, what it may do there, and what ExaCarib still has to set up before it can go
+        Every app Jibsy can work with, what it may do there, and what XaKore still has to set up before it can go
         live. Apps not yet live run on a stand-in with example data, so you can try them safely.
       </PageHead>
       <AppsTabs />
@@ -192,7 +192,7 @@ function AppCard({ a }: { a: CatalogueApp }) {
       {a.webhooks && <p className="small muted" style={{ margin: 0 }}>Tells Jibsy about changes: {a.webhooks}</p>}
       {!a.sign_in_ready && (needs.reason || needs.env.length > 0 || needs.app_registration) && (
         <details className="cat-needs">
-          <summary>What ExaCarib still needs</summary>
+          <summary>What XaKore still needs</summary>
           {needs.app_registration && <p className="small">{needs.app_registration}</p>}
           {needs.env.length > 0 && (
             <p className="small">
@@ -596,7 +596,7 @@ function WebhookFormat({ base }: { base: string }) {
           Format
           <select value={format} onChange={(e) => setFormat(e.target.value)}>
             <option value="cloudevents">CloudEvents 1.0</option>
-            <option value="exacarib">ExaCarib JSON</option>
+            <option value="exacarib">XaKore JSON</option>
           </select>
         </label>
         <label>

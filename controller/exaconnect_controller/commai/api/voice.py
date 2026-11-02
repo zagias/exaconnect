@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field
 from ... import audit, db
 from ...api.deps import UserDep
 from .. import access
-from ..voice import billing, bulk, carriers, config, freeswitch, perms, provisioning, selfservice
+from ..voice import billing, bulk, carriers, config, freeswitch, livekit, perms, provisioning, selfservice
 from ..voice import provider as providers
 from ..voice.common import VoiceError, month_start, now, policy, set_policy
 from .common import errors
@@ -69,7 +69,8 @@ def overview(customer_id: str, user: UserDep) -> dict:
             "can_spend": perms.can_spend(conn, user, customer_id),
             "is_exacarib": user.role == "admin",
             "policy": policy(conn, customer_id),
-            "provider": {"name": providers.get().name, "live": providers.get().live},
+            "provider": providers.status(),
+            "ai_phone_ready": livekit.phone_ready(customer_id, conn=conn),
         }
         try:
             out["me"] = selfservice.mine(conn, customer_id, user.id)
@@ -90,7 +91,8 @@ def overview(customer_id: str, user: UserDep) -> dict:
         ).fetchall()
         out["numbers"] = conn.execute(
             """SELECT n.id, n.e164, n.source, n.status, n.target_type, n.target_id, n.site_id, s.name AS site,
-                      n.emergency_address, n.billing_from, n.country, n.outbound_enabled, n.outbound_reason
+                      n.emergency_address, n.billing_from, n.country, n.outbound_enabled, n.outbound_reason,
+                      n.provider, (n.provider = 'simulated') AS simulated
                FROM voice_numbers n LEFT JOIN voice_sites s ON s.id = n.site_id
                WHERE n.customer_id = %s AND n.status <> 'removed' ORDER BY n.e164""",
             (customer_id,),
@@ -639,7 +641,8 @@ def pbx_config(customer_id: str, user: UserDep) -> dict:
     return {
         **out,
         "live": False,
-        "note": "Not live: no SIP provider account yet (phase 3). Calls between extensions work once FreeSWITCH runs.",
+        "provider": providers.status(),
+        "note": "Configuration rendered. Active calls depend on the deployed PBX and your connected SIP trunks.",
     }
 
 
@@ -702,11 +705,11 @@ class SimCallIn(BaseModel):
 
 @router.post("/voice/calls/simulate", status_code=201)
 def simulate_call(customer_id: str, body: SimCallIn, user: UserDep) -> dict:
-    """A simulated outside call (no SIP provider yet): authorised against the
-    fraud limits, then recorded and rated like a real one."""
+    """An explicit test-mode call, authorised and rated for lab verification."""
     access.check(user, customer_id, "commai:admin")
     with db.tx() as conn, errors():
         _admin(conn, user, customer_id)
+        providers.require_test_mode()
         vu = conn.execute(
             "SELECT id FROM voice_users WHERE customer_id = %s AND extension = %s AND status = 'active'",
             (customer_id, body.extension),

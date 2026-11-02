@@ -54,7 +54,7 @@ export default function GoLive() {
   const [kind, setKind] = useState("country");
   const [picked, setPicked] = useState<string | null>(null);
   const list = useApi<Row[]>(`/commai/golive?kind=${kind}`, 0);
-  if (user?.role !== "admin") return <p className="muted">ExaCarib admins only.</p>;
+  if (user?.role !== "admin") return <p className="muted">XaKore admins only.</p>;
   return (
     <>
       <PageHead title="Go-live">

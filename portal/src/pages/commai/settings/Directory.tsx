@@ -93,7 +93,7 @@ interface PreviewRow {
 
 const MODE_WORDS: Record<string, string> = {
   scim: "SCIM: your directory sends changes",
-  pull: "Pull: ExaCarib reads your directory on a schedule",
+  pull: "Pull: XaKore reads your directory on a schedule",
   ldap: "LDAPS sync on a schedule",
   none: "No sync: accounts are made at first sign-in",
 };
@@ -111,7 +111,7 @@ export default function DirectoryPicker({ customerId }: { customerId: string }) 
       <p className="muted small" style={{ marginTop: 0 }}>
         Pick your identity provider for a guided set-up: the exact values to paste into its admin console, the steps,
         a connection test and the group mappings. Each provider stays off for your organisation until you connect it,
-        and ExaCarib switches a provider on only after testing it against a real tenant.
+        and XaKore switches a provider on only after testing it against a real tenant.
       </p>
       <ErrorNote error={error} />
       <div className="dir-picker" role="list">
@@ -129,7 +129,7 @@ export default function DirectoryPicker({ customerId }: { customerId: string }) 
             <span className={`identity-status ${p.status === "connected" ? "on" : p.started ? "wait" : "off"}`}>
               {p.status === "connected" ? "✓ Connected" : p.started ? "Started: not connected" : "Off"}
             </span>
-            {!p.available && <span className="dir-note">Not yet switched on by ExaCarib</span>}
+            {!p.available && <span className="dir-note">Not yet switched on by XaKore</span>}
           </button>
         ))}
       </div>
@@ -201,12 +201,12 @@ function Setup({ base, onChange }: { base: string; onChange: () => void }) {
       <p className="muted small">{g.summary}</p>
       {!g.available && (
         <p className="callout small">
-          ExaCarib has not switched {g.name} on yet. You can prepare and test everything now; Connect works once it is
+          XaKore has not switched {g.name} on yet. You can prepare and test everything now; Connect works once it is
           on.
         </p>
       )}
       {g.gateway.simulated && g.protocols.length > 0 && (
-        <p className="callout small">Sign-in connections are kept by a simulated gateway until ExaCarib connects the live one.</p>
+        <p className="callout small">Sign-in connections are kept by a simulated gateway until XaKore connects the live one.</p>
       )}
 
       <Details g={g} base={base} onSaved={() => (guide.reload(), onChange())} />
@@ -439,7 +439,7 @@ function Details({ g, base, onSaved }: { g: Guide; base: string; onSaved: () => 
             Client secret
             <input type="password" autoComplete="off" value={secret} onChange={(e) => setSecret(e.target.value)} />
           </label>
-          <p className="muted small wide">The secret goes to the sign-in gateway only. ExaCarib does not keep it.</p>
+          <p className="muted small wide">The secret goes to the sign-in gateway only. XaKore does not keep it.</p>
         </>
       )}
       {(mode === "pull" || mode === "ldap") && (
@@ -477,7 +477,7 @@ function Details({ g, base, onSaved }: { g: Guide; base: string; onSaved: () => 
             <textarea rows={3} value={caCert} onChange={(e) => setCaCert(e.target.value)} />
           </label>
           <p className="muted small wide">
-            LDAPS only. The password is kept in ExaCarib's encrypted store and never shown again.
+            LDAPS only. The password is kept in XaKore's encrypted store and never shown again.
           </p>
         </>
       )}
@@ -535,7 +535,7 @@ function ProviderFacts({ g }: { g: Guide }) {
           <table className="paths dt">
             <thead>
               <tr>
-                <th scope="col">ExaCarib (SCIM)</th>
+                <th scope="col">XaKore (SCIM)</th>
                 <th scope="col">{g.name} sends</th>
               </tr>
             </thead>
@@ -623,7 +623,7 @@ function Presets({ g, base, onSaved }: { g: Guide; base: string; onSaved: () => 
                 <tr key={r.group}>
                   <td>
                     <strong>{r.group}</strong>
-                    <span className="sub">{r.in_exacarib ? "In ExaCarib" : "Not arrived yet"}</span>
+                    <span className="sub">{r.in_exacarib ? "In XaKore" : "Not arrived yet"}</span>
                   </td>
                   <td data-label="Team">{r.team}</td>
                   <td data-label="Seat">{r.seat === "agent" ? "Replies to customers" : "Internal"}</td>

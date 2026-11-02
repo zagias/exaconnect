@@ -9,6 +9,8 @@ import { useCustomer } from "../customer";
 import { PortsForm, rowsFrom, toNetwork, type Row } from "../boxports";
 import { Card, PageHead, useAction } from "../ui";
 import { useCanManage } from "./org/common";
+import { useAuth } from "../auth";
+import { canOperateConnect } from "../permissions";
 
 interface Template {
   id: string;
@@ -72,7 +74,8 @@ function summary(n: Template["network"]): string {
 
 export function BoxTemplates() {
   const { current } = useCustomer();
-  const canManage = useCanManage();
+  const { user } = useAuth();
+  const canManage = useCanManage() && canOperateConnect(user);
   const q = current ? `?customer_id=${current.id}` : "";
   const data = useApi<{ templates: Template[]; boxes: BoxRow[] }>(
     current ? `/box-templates${q}` : null,
@@ -163,7 +166,7 @@ export function BoxTemplates() {
   return (
     <>
       <PageHead title="Box templates">
-        One port set-up for many ExaCarib boxes. Boxes that follow a template
+        One port set-up for many XaKore boxes. Boxes that follow a template
         get its ports now and whenever it changes, if they are managed from the
         cloud or both.
       </PageHead>
@@ -179,7 +182,7 @@ export function BoxTemplates() {
           </ul>
         </Card>
       )}
-      {editing && rows && (
+      {canManage && editing && rows && (
         <Card
           title={editing === "new" ? "New template" : `Change ${editing.name}`}
         >
@@ -352,7 +355,7 @@ export function BoxTemplates() {
         {!editing && act.error && <p className="pill bad">{act.error}</p>}
         {boxes.length === 0 && (
           <p className="muted small">
-            This organisation has no ExaCarib boxes in Connect yet.
+            This organisation has no XaKore boxes in Connect yet.
           </p>
         )}
       </Card>

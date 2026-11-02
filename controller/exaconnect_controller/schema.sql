@@ -529,6 +529,23 @@ CREATE TABLE IF NOT EXISTS assistant_plans (
   undone_at    timestamptz
 );
 CREATE INDEX IF NOT EXISTS assistant_plans_customer ON assistant_plans (customer_id, id DESC);
+-- Bind human authorisation to the exact reviewed proposal and configuration.
+-- Existing unexecuted drafts must be reviewed again after this migration.
+ALTER TABLE assistant_plans ADD COLUMN IF NOT EXISTS expires_at timestamptz;
+UPDATE assistant_plans SET expires_at = created_at + interval '30 minutes' WHERE expires_at IS NULL;
+ALTER TABLE assistant_plans ALTER COLUMN expires_at SET DEFAULT (now() + interval '30 minutes');
+ALTER TABLE assistant_plans ALTER COLUMN expires_at SET NOT NULL;
+ALTER TABLE assistant_plans ADD COLUMN IF NOT EXISTS approved_revision text;
+ALTER TABLE assistant_plans ADD COLUMN IF NOT EXISTS approved_actions jsonb;
+ALTER TABLE assistant_plans ADD COLUMN IF NOT EXISTS approved_by text;
+ALTER TABLE assistant_plans ADD COLUMN IF NOT EXISTS approved_at timestamptz;
+ALTER TABLE assistant_plans ADD COLUMN IF NOT EXISTS execution_key text;
+ALTER TABLE assistant_plans ADD COLUMN IF NOT EXISTS execution_revision text;
+-- Older applied plans have no trustworthy post-apply snapshot; do not backfill
+-- from today's configuration because it may have changed since application.
+ALTER TABLE assistant_plans ADD COLUMN IF NOT EXISTS post_apply_revision text;
+CREATE UNIQUE INDEX IF NOT EXISTS assistant_plans_execution_key
+  ON assistant_plans (customer_id, execution_key) WHERE execution_key IS NOT NULL;
 
 -- The directory starts with the clouds ExaConnect connects to, plus two
 -- clearly marked example service partners. Admins edit or unlist them.

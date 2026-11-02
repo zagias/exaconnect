@@ -213,7 +213,6 @@ function Profile({ base, data, onSaved }: { base: string; data: MySettingsData; 
 
 function Notifications({ base, data, onSaved }: { base: string; data: MySettingsData; onSaved: () => void }) {
   const [notify, setNotify] = useState(data.notify);
-  const [quiet, setQuiet] = useState(data.quiet_hours);
   const [saved, setSaved] = useState(false);
   const act = useAction();
   const feed = useApi<Notice[]>(`${base}/me/notifications`, 60_000);
@@ -221,66 +220,50 @@ function Notifications({ base, data, onSaved }: { base: string; data: MySettings
     e.preventDefault();
     setSaved(false);
     act.run(async () => {
-      await api(`${base}/me/settings`, { method: "PATCH", body: JSON.stringify({ notify, quiet_hours: quiet }) });
+      const inApp = Object.fromEntries((Object.keys(KIND_LABEL) as Kind[]).map((k) => [k, { in_app: notify[k].in_app }]));
+      await api(`${base}/me/settings`, { method: "PATCH", body: JSON.stringify({ notify: inApp }) });
       setSaved(true);
       onSaved();
       feed.reload();
     });
   };
-  const set = (k: Kind, way: "in_app" | "email", v: boolean) => setNotify({ ...notify, [k]: { ...notify[k], [way]: v } });
+  const set = (k: Kind, v: boolean) => setNotify({ ...notify, [k]: { ...notify[k], in_app: v } });
   return (
     <Section id="notifications" title="Notifications">
+      <p className="muted small">These notices appear in Jibsy. Email notifications are not available.</p>
       <form onSubmit={submit}>
         <div className="table-wrap">
           <table className="me-table">
-            <caption className="sr-only">Which notifications you get, and how</caption>
+            <caption className="sr-only">Which notices appear in Jibsy</caption>
             <thead>
               <tr>
                 <th scope="col">Tell me when</th>
-                <th scope="col">In the portal</th>
-                <th scope="col">By email</th>
+                <th scope="col">In Jibsy</th>
               </tr>
             </thead>
             <tbody>
               {(Object.keys(KIND_LABEL) as Kind[]).map((k) => (
                 <tr key={k}>
                   <th scope="row">{KIND_LABEL[k]}</th>
-                  {(["in_app", "email"] as const).map((way) => (
-                    <td key={way}>
-                      <input
-                        type="checkbox"
-                        aria-label={`${KIND_LABEL[k]}: ${way === "in_app" ? "in the portal" : "by email"}`}
-                        checked={notify[k][way]}
-                        onChange={(e) => set(k, way, e.target.checked)}
-                      />
-                    </td>
-                  ))}
+                  <td>
+                    <input
+                      type="checkbox"
+                      aria-label={`${KIND_LABEL[k]}: in Jibsy`}
+                      checked={notify[k].in_app}
+                      onChange={(e) => set(k, e.target.checked)}
+                    />
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        <fieldset className="me-quiet">
-          <legend>Quiet hours (no emails; portal notices wait for you)</legend>
-          <label>
-            From
-            <input type="time" value={quiet.start} onChange={(e) => setQuiet({ ...quiet, start: e.target.value })} />
-          </label>
-          <label>
-            Until
-            <input type="time" value={quiet.end} onChange={(e) => setQuiet({ ...quiet, end: e.target.value })} />
-          </label>
-          <button type="button" className="button secondary small" onClick={() => setQuiet({ start: "", end: "" })}>
-            No quiet hours
-          </button>
-        </fieldset>
         <div className="me-row">
           <button className="button" disabled={act.busy}>
             Save
           </button>
           <Saved show={saved} />
         </div>
-        <p className="muted small">Times are in {data.timezone}.</p>
       </form>
       <ErrorNote error={act.error} />
       <h3 className="me-sub">Recent notices</h3>

@@ -557,6 +557,16 @@ def monthly_charges(conn, customer_id, period: dt.date) -> None:
     """Monthly fees for every user and number that was billable during the
     month, pro rata by day: charges start at activation and stop at removal."""
     end = next_month(period)
+    if (
+        not providers.test_mode()
+        and conn.execute(
+            """SELECT 1 FROM voice_numbers WHERE customer_id = %s AND provider = 'simulated'
+           AND billing_from IS NOT NULL AND billing_from < %s
+           AND (billing_until IS NULL OR billing_until > %s) LIMIT 1""",
+            (customer_id, end, period),
+        ).fetchone()
+    ):
+        raise VoiceError("This period contains fictional test numbers. Review the test data before billing.", 409)
     card = card_at(conn, customer_id, min(now(), dt.datetime.combine(end, dt.time(), dt.UTC) - dt.timedelta(seconds=1)))
     days_in = (end - period).days
     for table, kind, unit, label in (
@@ -617,6 +627,58 @@ def _invoice_out(conn, inv: dict) -> dict:
     return {**inv, "total": s(inv["total"]), "lines": lines}
 
 
+def ensure_billable_charges(conn, customer_id, charge_ids: list) -> None:
+    """Only verified services priced on approved cards can become payable."""
+    if providers.test_mode() or not charge_ids:
+        return
+    simulated = conn.execute(
+        """SELECT 1 FROM voice_charges c
+           LEFT JOIN voice_cdrs d ON d.id = c.cdr_id AND d.customer_id = c.customer_id
+           WHERE c.customer_id = %s AND c.id = ANY(%s) AND (
+             d.call_id LIKE 'sim-%%' OR EXISTS (
+               SELECT 1 FROM voice_numbers n WHERE n.customer_id = c.customer_id AND n.provider = 'simulated'
+                 AND (c.ref = 'new_number:' || n.id::text OR c.ref LIKE 'monthly_number:' || n.id::text || ':%%')
+             ) OR EXISTS (
+               SELECT 1 FROM voice_port_orders p JOIN voice_numbers n ON n.id = p.number_id
+               WHERE p.customer_id = c.customer_id AND n.customer_id = c.customer_id
+                 AND n.provider = 'simulated' AND c.ref = 'port:' || p.id::text
+             )
+           ) LIMIT 1""",
+        (customer_id, charge_ids),
+    ).fetchone()
+    if simulated:
+        raise VoiceError(
+            "This document contains simulated telephone charges. Review the test data before billing.", 409
+        )
+    example_prices = conn.execute(
+        """SELECT 1 FROM voice_charges c LEFT JOIN voice_rate_cards r
+             ON r.id = c.rate_card_id AND r.customer_id = c.customer_id
+           WHERE c.customer_id = %s AND c.id = ANY(%s) AND (r.id IS NULL OR r.example) LIMIT 1""",
+        (customer_id, charge_ids),
+    ).fetchone()
+    if example_prices:
+        raise VoiceError(
+            "This document contains example or unapproved voice prices. Approve a real rate card and review "
+            "the existing charges before billing.",
+            409,
+        )
+
+
+def _check_invoice_sources(conn, customer_id, invoice_id) -> None:
+    if not providers.test_mode():
+        ensure_billable_charges(
+            conn,
+            customer_id,
+            [
+                r["charge_id"]
+                for r in conn.execute(
+                    "SELECT charge_id FROM voice_invoice_lines WHERE invoice_id = %s AND charge_id IS NOT NULL",
+                    (invoice_id,),
+                ).fetchall()
+            ],
+        )
+
+
 def draft_invoice(conn, customer_id, period: dt.date, actor: str) -> dict:
     """(Re)build the draft invoice for a month from charges not yet invoiced."""
     period = month_start(period)
@@ -642,6 +704,7 @@ def draft_invoice(conn, customer_id, period: dt.date, actor: str) -> dict:
            ORDER BY at, ref""",
         (inv["id"], customer_id, period, end),
     )
+    _check_invoice_sources(conn, customer_id, inv["id"])
     total = conn.execute(
         "SELECT coalesce(sum(amount), 0) AS t FROM voice_invoice_lines WHERE invoice_id = %s", (inv["id"],)
     ).fetchone()["t"]
@@ -682,6 +745,7 @@ def issue_invoice(conn, customer_id, invoice_id, actor: str) -> dict:
         raise VoiceError("Invoice not found.", 404)
     if inv["status"] == "issued":
         raise VoiceError("This invoice is already issued. Corrections go on a credit note.", 409)
+    _check_invoice_sources(conn, customer_id, invoice_id)
     taken = conn.execute(
         """SELECT 1 FROM voice_invoice_lines l JOIN voice_charges c ON c.id = l.charge_id
            WHERE l.invoice_id = %s AND (c.invoice_id IS NOT NULL OR c.bill_id IS NOT NULL) LIMIT 1""",

@@ -136,8 +136,7 @@ def ensure_card(conn: psycopg.Connection, customer_id: Any) -> None:
     )
 
 
-def card_at(conn: psycopg.Connection, customer_id: Any, at: dt.datetime | None = None) -> dict:
-    ensure_card(conn, customer_id)
+def _stored_card_at(conn: psycopg.Connection, customer_id: Any, at: dt.datetime | None = None) -> dict | None:
     row = conn.execute(
         """SELECT * FROM commai_rate_cards WHERE customer_id = %s AND effective_from <= coalesce(%s, now())
            ORDER BY version DESC LIMIT 1""",
@@ -149,6 +148,16 @@ def card_at(conn: psycopg.Connection, customer_id: Any, at: dt.datetime | None =
             "SELECT * FROM commai_rate_cards WHERE customer_id = %s ORDER BY version LIMIT 1", (customer_id,)
         ).fetchone()
     )
+
+
+def card_at(conn: psycopg.Connection, customer_id: Any, at: dt.datetime | None = None) -> dict:
+    ensure_card(conn, customer_id)
+    return _stored_card_at(conn, customer_id, at)
+
+
+def quote_card(conn: psycopg.Connection, customer_id: Any) -> dict:
+    """Budget estimates never initialise cards or hold billing locks during model IO."""
+    return _stored_card_at(conn, customer_id) or {"currency": "USD", "prices": EXAMPLE_PRICES}
 
 
 def cards(conn: psycopg.Connection, customer_id: Any) -> list[dict]:
@@ -189,7 +198,7 @@ def price_now(conn, customer_id: Any, meter: str) -> Decimal:
     """What one unit of `meter` costs today (0 when it isn't priced on this card)."""
     if family(meter) in ("voice", "other"):
         return Decimal(0)
-    return unit_price(card_at(conn, customer_id), meter) or Decimal(0)
+    return unit_price(quote_card(conn, customer_id), meter) or Decimal(0)
 
 
 # ---- rating ----------------------------------------------------------------------------
@@ -355,15 +364,55 @@ def _out(conn, bill: dict) -> dict:
     }
 
 
+def _check_charge_sources(conn, customer_id, bill_id) -> None:
+    from .voice import billing as voice_billing
+    from .voice import provider as providers
+    from .voice.common import VoiceError
+
+    if providers.test_mode():
+        return
+    try:
+        voice_billing.ensure_billable_charges(
+            conn,
+            customer_id,
+            [
+                r["voice_charge_id"]
+                for r in conn.execute(
+                    "SELECT voice_charge_id FROM commai_bill_lines WHERE bill_id = %s AND voice_charge_id IS NOT NULL",
+                    (bill_id,),
+                ).fetchall()
+            ],
+        )
+    except VoiceError as e:
+        raise BillError(str(e), e.code) from e
+    example_prices = conn.execute(
+        """SELECT 1 FROM commai_bill_lines l LEFT JOIN commai_rate_cards r
+             ON r.customer_id = l.customer_id AND r.version = l.rate_card_version
+           WHERE l.bill_id = %s AND l.customer_id = %s AND l.family <> 'voice'
+             AND (r.id IS NULL OR r.example) LIMIT 1""",
+        (bill_id, customer_id),
+    ).fetchone()
+    if example_prices:
+        raise BillError(
+            "This bill contains example or unapproved prices. Approve a real rate card and review "
+            "the existing charges before billing.",
+            409,
+        )
+
+
 def draft(conn: psycopg.Connection, customer_id: Any, period: dt.date, actor: str) -> dict:
     """(Re)build the draft bill for a month from every charge not yet on an issued document."""
     from .voice import billing as voice_billing
+    from .voice.common import VoiceError
 
     period = month_start(period)
     end = next_month(period)
     end_at = dt.datetime.combine(end, dt.time(), dt.UTC)
     rate_pending(conn, customer_id, end_at)
-    voice_billing.monthly_charges(conn, customer_id, period)
+    try:
+        voice_billing.monthly_charges(conn, customer_id, period)
+    except VoiceError as e:
+        raise BillError(str(e), e.code) from e
     card = card_at(conn, customer_id)
     bill = conn.execute(
         """SELECT * FROM commai_bills WHERE customer_id = %s AND period_start = %s AND status = 'draft'
@@ -409,6 +458,7 @@ def draft(conn: psycopg.Connection, customer_id: Any, period: dt.date, actor: st
              AND at >= %s AND at < %s ORDER BY at, ref""",
         (bill["id"], customer_id, period, end),
     )
+    _check_charge_sources(conn, customer_id, bill["id"])
     total = conn.execute(
         "SELECT coalesce(sum(amount), 0) AS t FROM commai_bill_lines WHERE bill_id = %s", (bill["id"],)
     ).fetchone()["t"]
@@ -448,6 +498,7 @@ def issue(conn: psycopg.Connection, customer_id: Any, bill_id: Any, actor: str) 
         raise BillError("Bill not found.", 404)
     if bill["status"] == "issued":
         raise BillError("This bill is already issued. Corrections go on a credit note.", 409)
+    _check_charge_sources(conn, customer_id, bill["id"])
     taken = conn.execute(
         """SELECT 1 FROM commai_bill_lines l JOIN voice_charges c ON c.id = l.voice_charge_id
            WHERE l.bill_id = %s AND (c.bill_id IS NOT NULL OR c.invoice_id IS NOT NULL) LIMIT 1""",

@@ -466,6 +466,7 @@ def test_ask_your_network(client, admin_headers, fake_llm):
     )
     assert client.get("/api/v1/ai/status", headers=admin_headers).json() == {
         "ask_enabled": True,
+        "ask_unavailable_reason": None,
         "model": "test-model",
         "storm_watch": True,
         "hazard_watch": True,

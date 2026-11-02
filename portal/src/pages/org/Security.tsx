@@ -9,7 +9,7 @@ export default function SecurityPage() {
   return (
     <>
       <PageHead title="Sign-in and security">
-        How your people sign in to ExaCarib Connect and Jibsy: your own single sign-on, and keeping people in step
+        How your people sign in to XaKore Connect and Jibsy: your own single sign-on, and keeping people in step
         with your directory. Each person&apos;s password and two-step sign-in are under Profile and sign-in.
       </PageHead>
       <Suspense fallback={<p className="muted">Loading…</p>}>

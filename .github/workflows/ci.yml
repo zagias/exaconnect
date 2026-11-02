@@ -102,6 +102,106 @@ jobs:
       - name: unit tests
         run: cd portal && npm test
 
+  controller-reliability:
+    # Keep the new failure/recovery checks visible without waiting for the
+    # full application suite, which still runs independently above.
+    runs-on: ubuntu-24.04
+    services:
+      db:
+        image: timescale/timescaledb:latest-pg16
+        env:
+          POSTGRES_USER: exa
+          POSTGRES_PASSWORD: ci-only
+          POSTGRES_DB: exatest
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U exa" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      EXA_TEST_DATABASE_URL: postgresql://exa:ci-only@127.0.0.1:5432/exatest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e 'controller[dev]'
+      - name: Database failure, isolation and recovery regressions
+        run: >-
+          pytest -q
+          controller/tests/test_routing_recovery.py
+          controller/tests/test_firewall_boundaries.py
+          controller/tests/test_firewall_api_boundaries.py
+          controller/tests/test_action_execution_permissions.py
+          controller/tests/test_commai_call_reliability.py
+          controller/tests/test_commai_call_billing_locks.py
+          controller/tests/test_commai_attachment_readiness.py
+          controller/tests/test_commai_quality.py
+          controller/tests/test_commai_ai.py::test_takeover_while_the_model_is_thinking_writes_nothing
+          controller/tests/test_commai_ai.py::test_browser_call_with_the_ai_agent
+          controller/tests/test_commai_ai.py::test_copilot_helps_but_never_sends
+          controller/tests/test_voice_sbc_robustness.py
+          controller/tests/test_voice_provider_readiness.py
+          controller/tests/test_jibsy_model_readiness.py
+          controller/tests/test_commai_presence_calls.py
+          controller/tests/test_commai_governance.py::test_daily_action_limits_per_role
+          controller/tests/test_portal_read_scope.py
+          controller/tests/test_account_email_delivery.py
+          controller/tests/test_platform_mailer.py
+          controller/tests/test_assistant.py
+          controller/tests/test_assistant_permissions.py
+          controller/tests/test_assistant_readiness.py
+          controller/tests/test_hub_assistant.py
+          controller/tests/test_hub_grounding.py
+          controller/tests/test_assistant_locking.py
+          controller/tests/test_assistant_undo_guard.py
+          controller/tests/test_assistant_secret_input.py
+          controller/tests/test_phone_dialplan_handover.py
+          controller/tests/test_phone_call_gate.py
+          controller/tests/test_phone_worker_runtime.py
+          controller/tests/test_phone_worker_transport.py
+          controller/tests/test_phone_sip_provisioning.py
+          controller/tests/test_phone_pbx_runtime_script.py
+          controller/tests/test_phone_runtime_mitigation.py
+          controller/tests/test_commai_voice_global.py::test_livekit_controller_contract_requires_measured_speech_and_real_scoped_transfer
+
+  phone-worker-sdk:
+    # SDK and audio lifecycle checks run on disposable Linux, without live
+    # speech credentials, public calls or a readiness flag in production.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build pinned phone worker and bundled VAD
+        run: docker build --tag exa-phone-sdk:ci deploy/livekit/agent
+      - name: Verify actual SDK and provider adapter signatures offline
+        run: docker run --rm --network none --entrypoint python exa-phone-sdk:ci check_sdk.py
+
+  firewall-packets:
+    # Explicit privileged checks on disposable namespaces. No host interfaces,
+    # routes, firewall or sysctls are changed; missing privileges fail this job.
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: agent/go.mod
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Linux namespace test tools
+        run: sudo apt-get update && sudo apt-get install -y nftables iproute2 conntrack
+      - name: Export production firewall rules and build routing regression
+        id: kernel_build
+        working-directory: agent
+        run: |
+          EXA_FIREWALL_FIXTURE_DIR="$RUNNER_TEMP/firewall-rules" go test ./internal/render -run '^TestExportFirewallPacketFixtures$' -count=1 -v
+          go test -c ./internal/agent -o "$RUNNER_TEMP/routing-kernel.test"
+      - name: Firewall isolation, NAT, established traffic and Internet Off
+        run: sudo env EXA_FIREWALL_PACKET_TESTS=1 python3 lab/ci/checks/firewall_packets.py check --fixtures "$RUNNER_TEMP/firewall-rules"
+      - name: Steering retry and BFD recovery against isolated kernel routes
+        if: ${{ !cancelled() && steps.kernel_build.outcome == 'success' }}
+        run: sudo env EXA_ROUTING_KERNEL_TESTS=1 "$RUNNER_TEMP/routing-kernel.test" -test.run '^TestRoutingRecoveryInIsolatedKernel$' -test.v
+
   lab:
     runs-on: ubuntu-24.04
     steps:
@@ -121,6 +221,72 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: shellcheck
-        run: shellcheck -x deploy/voice/*.sh deploy/kamailio/start.sh lab/ci/checks/voice-sbc.sh lab/ci/checks/voice-phone-app.sh lab/ci/checks/org-setup.sh lab/ci/checks/voice-trunks.sh lab/ci/checks/voice-push.sh lab/ci/checks/voice-platforms.sh
+        run: shellcheck -x deploy/voice/*.sh deploy/kamailio/start.sh deploy/freeswitch/start.sh deploy/freeswitch/phone-runtime.sh lab/ci/checks/voice-sbc.sh lab/ci/checks/voice-phone-app.sh lab/ci/checks/org-setup.sh lab/ci/checks/voice-trunks.sh lab/ci/checks/voice-push.sh lab/ci/checks/voice-platforms.sh
       - name: Kamailio and FreeSWITCH start with this config
         run: make voice-check
+
+  voice-rtp:
+    # A real local SIP/RTP endpoint, production media images and config. The
+    # disposable Docker network is internal; no ports or calls reach the public.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      EXA_VOICE_RTP_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Media oracle rejects silence and ringback
+        run: python3 deploy/voice/rtp_check_test.py
+      - name: Real PCMU media, endpoint refusal and fresh-call recovery
+        run: bash deploy/voice/rtp_check.sh
+
+  routing-frr-lab:
+    # Actual FRR/WireGuard/BFD acceptance checks, separate from fast kernel
+    # fixtures. An ephemeral Arm VM, no release/public/voice service scripts.
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    env:
+      EXA_EPHEMERAL_ROUTING_LAB: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: agent/go.mod
+      - name: Install disposable runner dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y jq wireguard-tools iproute2 kmod python3-yaml shellcheck curl openssl make ca-certificates
+          sudo modprobe -a wireguard sch_netem dummy
+          docker compose version
+          # Pinned upstream release with its published checksum; no installer
+          # script, cloud account or production credential is used.
+          mkdir -p "$RUNNER_TEMP/containerlab"
+          cd "$RUNNER_TEMP/containerlab"
+          archive=containerlab_0.72.0_linux_arm64.tar.gz
+          curl --fail --location --retry 3 --max-time 90 -O "https://github.com/srl-labs/containerlab/releases/download/v0.72.0/$archive"
+          curl --fail --location --retry 3 --max-time 30 -O "https://github.com/srl-labs/containerlab/releases/download/v0.72.0/checksums.txt"
+          grep "  $archive$" checksums.txt | sha256sum --check --strict
+          tar -xzf "$archive" containerlab
+          sudo install -m 0755 containerlab /usr/local/bin/containerlab
+          containerlab version
+      - name: Real routing failure, packet loss, recovery and controller outage
+        env:
+          EXA_ROUTING_CI_RUNNER: ${{ runner.environment }}
+        run: |
+          shellcheck -x lab/ci/routing-run.sh
+          # Leave time for diagnostics and cleanup before the hard job limit.
+          timeout --signal=TERM --kill-after=90s 24m bash lab/ci/routing-run.sh
+      - name: Remove only this job's disposable lab resources
+        if: always()
+        env:
+          EXA_ROUTING_CI_RUNNER: ${{ runner.environment }}
+        run: bash lab/ci/routing-run.sh --cleanup
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: routing-frr-arm64-diagnostics
+          path: lab/.state/routing-ci-diagnostics/
+          if-no-files-found: ignore
+          retention-days: 7

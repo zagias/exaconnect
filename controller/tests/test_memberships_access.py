@@ -143,6 +143,7 @@ def test_lists_never_include_another_organisation(client, world):
         "/api/v1/ca.pem",
         "/api/v1/commai/internal/voice/authorise",
         "/api/v1/commai/internal/voice/authorise-platform",
+        "/api/v1/commai/internal/voice/phone-authorise",
         "/api/v1/commai/internal/voice/ring",
     }
     checked = 0
@@ -568,17 +569,17 @@ def test_invite_into_a_single_sign_on_domain(client, world):
         )
 
 
-def test_invitation_notice_goes_to_the_simulated_outbox_without_the_link(client, world):
+def test_unconfigured_invitation_keeps_copyable_link_without_persisting_mail(client, world, monkeypatch):
+    monkeypatch.delenv("EXA_SMTP_HOST", raising=False)
     r = client.post(f"{API}/orgs/{world['a']}/invites", json={"email": "n@a.example"}, headers=world["h_a"])
     inv = r.json()
-    assert inv["emailed"] is False and inv["email_sender"] == "simulated"
+    assert inv["emailed"] is False and inv["email_sender"] == "unavailable"
     with db.tx() as conn:
         rows = conn.execute(
             "SELECT to_address, body, headers FROM sim_channel_outbox WHERE customer_id = %s", (world["a"],)
         ).fetchall()
-    assert len(rows) == 1 and rows[0]["to_address"] == "n@a.example"
-    assert inv["token"] not in rows[0]["body"] and inv["token"] not in str(rows[0]["headers"])
-    assert "Org A" in rows[0]["body"]
+    assert rows == []
+    assert client.get(f"{API}/invites/{inv['token']}").json()["organisation"] == "Org A"
 
 
 def test_migration_turns_legacy_accounts_into_memberships(client, world):

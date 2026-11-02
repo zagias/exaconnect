@@ -1,22 +1,22 @@
 import { useState, type FormEvent } from "react";
-import { NavLink, Navigate, Route, Routes } from "react-router-dom";
-import { api, useApi, type CustomerSettings } from "../api";
+import { Link, NavLink, Navigate, Route, Routes } from "react-router-dom";
+import { api, useApi, type CustomerSettings, type Loaded, type Overview } from "../api";
 import { ErrorNote, StatusPill, ago } from "../components";
 import { useCustomer, who } from "../customer";
 import { Card, PageHead, RowActions, Tabs, useAction } from "../ui";
 import { Classes, PRIORITY_LABEL, type Priority } from "./Classes";
+import { useAuth } from "../auth";
+import { canOperateConnect } from "../permissions";
+import "../traffic.css";
 
 // Traffic: what the network has seen leaving each site, the customer's own
 // rules for what goes in which class, and the classes themselves (ADR 0007).
 export default function Traffic() {
   return (
-    <>
-      <PageHead eyebrow="Traffic rules" title="Applications and priorities">
-        Decide which traffic matters most. Rules put applications into classes, and each class has a priority, an SLA and a
-        preferred path.
-      </PageHead>
+    <div className="traffic-workspace">
+      <PageHead eyebrow="Connect" title="Traffic">Set priorities for your applications.</PageHead>
       <Tabs label="Traffic sections">
-        <NavLink to="/traffic/applications">Seen on your network</NavLink>
+        <NavLink to="/traffic/applications">Applications</NavLink>
         <NavLink to="/traffic/rules">Your rules</NavLink>
         <NavLink to="/traffic/classes">Classes</NavLink>
       </Tabs>
@@ -26,7 +26,7 @@ export default function Traffic() {
         <Route path="rules" element={<Rules />} />
         <Route path="classes" element={<Classes />} />
       </Routes>
-    </>
+    </div>
   );
 }
 
@@ -51,16 +51,24 @@ interface Detection {
 }
 
 function Detections() {
+  const { user } = useAuth();
+  const canOperate = canOperateConnect(user);
   const { current, reload: reloadCustomer } = useCustomer();
   const [closed, setClosed] = useState(false);
   const q = closed ? "?include_closed=true" : "";
   const list = useApi<Detection[]>(current ? `/customers/${current.id}/applications${q}` : null, 30_000);
+  // Detection records cannot prove that flow reports exist. Only consult the
+  // existing site overview when this list is empty; heartbeat evidence is
+  // labelled as box reporting, never as application telemetry.
+  const reporting = useApi<Pick<Overview, "sites">>(current && list.data?.length === 0 && !list.error
+    ? `/overview?customer_id=${encodeURIComponent(current.id)}` : null, 30_000);
   const act = useAction();
   if (!current) return null;
   const post = (path: string, body?: unknown) =>
     act.run(async () => {
       await api(path, { method: "POST", body: body ? JSON.stringify(body) : undefined });
       list.reload();
+      reporting.reload();
     });
   const auto = (on: boolean) =>
     act.run(async () => {
@@ -72,38 +80,27 @@ function Detections() {
     });
   const items = list.data ?? [];
   return (
-    <Card
-      title="Seen on your network"
-      note={
-        <div className="form-actions">
-          <label className="small">
-            <input type="checkbox" checked={closed} onChange={(e) => setClosed(e.target.checked)} /> Include applied and
-            dismissed
-          </label>
-          <button className="button secondary small" disabled={act.busy} onClick={() => post(`/customers/${current.id}/applications/detect`)}>
-            Check now
-          </button>
+    <section className="traffic-applications" aria-label="Application priorities">
+      <div className="traffic-controls">
+        <div className={`traffic-auto${canOperate ? " editable" : ""}`}>
+          {canOperate ? <label className="check">
+            <input type="checkbox" checked={!!current.auto_prioritise} disabled={act.busy} onChange={(e) => auto(e.target.checked)} />
+            <span>Prioritise known applications automatically</span>
+          </label> : <span>Automatic application priorities: {current.auto_prioritise ? "On" : "Off"}</span>}
+          <span className="small muted">{current.auto_prioritise ? "Known applications get a rule; other suggestions wait for review." : "Review suggestions before creating a rule."}</span>
         </div>
-      }
-    >
-      <div className="card-inset" style={{ marginBottom: 16 }}>
-        <label className="check">
-          <input type="checkbox" checked={!!current.auto_prioritise} disabled={act.busy} onChange={(e) => auto(e.target.checked)} />{" "}
-          <strong>Prioritise known applications automatically.</strong>
-        </label>
-        <p className="small muted" style={{ margin: "4px 0 0" }}>
-          Applications the network recognises with confidence, such as Teams, Zoom or Citrix, get a rule without asking.
-          Anything less certain waits for you here. The network looks at addresses, ports and packet rates only, never at
-          content.
-        </p>
+        <div className="traffic-list-controls">
+          <label className="check small"><input type="checkbox" checked={closed} onChange={(e) => setClosed(e.target.checked)} />Include applied and dismissed</label>
+          {canOperate && <button className="button secondary small" disabled={act.busy || !list.data} onClick={() => post(`/customers/${current.id}/applications/detect`)}>Check now</button>}
+        </div>
       </div>
-      <ErrorNote error={list.error ?? act.error} />
-      {items.length === 0 ? (
-        <p className="muted">
-          Nothing to suggest. Sites report what they send every minute, and the network checks every five minutes.
-        </p>
-      ) : (
-        <ul className="insights">
+      <ErrorNote error={list.error} />
+      <ErrorNote error={act.error} />
+      {!list.data && !list.error && <p className="traffic-loading muted" role="status">Loading application suggestions…</p>}
+      {list.error ? <button className="button secondary small" onClick={list.reload}>Try again</button> : list.data && items.length === 0 ? (
+        <ApplicationsEmpty reporting={reporting} closed={closed} canOperate={canOperate} />
+      ) : items.length > 0 ? (
+        <ul className="insights traffic-detections">
           {items.map((d) => (
             <li key={d.id} className={d.status === "suggested" ? "warning" : "info"}>
               <div className="insight-head">
@@ -123,20 +120,55 @@ function Detections() {
               <p>{d.reason}</p>
               {d.status === "suggested" && (
                 <div className="form-actions">
-                  <button className="button small" disabled={act.busy} onClick={() => post(`/applications/${d.id}/apply`)}>
+                  {canOperate && <><button className="button small" disabled={act.busy} onClick={() => post(`/applications/${d.id}/apply`)}>
                     Put it in {d.suggested_class}
                   </button>
                   <button className="button secondary small" disabled={act.busy} onClick={() => post(`/applications/${d.id}/dismiss`)}>
                     Dismiss
-                  </button>
+                  </button></>}
                   <span className="small muted">Confidence {Math.round(d.confidence * 100)}%</span>
                 </div>
               )}
             </li>
           ))}
         </ul>
-      )}
-    </Card>
+      ) : null}
+      <details className="traffic-explanation">
+        <summary>How suggestions work</summary>
+        <p>Connect recognises applications from reported addresses, ports and packet rates. Existing rules may already cover them. Packet content is not inspected.</p>
+      </details>
+    </section>
+  );
+}
+
+function ApplicationsEmpty({ reporting, closed, canOperate }: {
+  reporting: Loaded<Pick<Overview, "sites">>; closed: boolean; canOperate: boolean;
+}) {
+  const sites = reporting.data?.sites?.filter((site) => site.kind === "site");
+  const reported = sites?.filter((site) => !!site.last_seen) ?? [];
+  const online = sites?.filter((site) => site.online === true) ?? [];
+  const noSites = sites?.length === 0;
+  const neverReported = !!sites?.length && reported.length === 0;
+  const stale = reported.length > 0 && sites?.every((site) => site.online === false || !site.last_seen);
+  const lastReport = reported.map((site) => site.last_seen!).sort().at(-1);
+  const title = noSites ? "Connect a site to get started" : neverReported ? "No box reports yet"
+    : stale ? "Box reports are out of date" : closed ? "No application records" : "No suggestions to review";
+  const detail = noSites ? "Application suggestions appear after a site's box reports traffic."
+    : neverReported ? `${sites.length} ${sites.length === 1 ? "site is" : "sites are"} configured. Check box connections before looking for application suggestions.`
+    : stale ? `Last box report ${ago(lastReport)}. Check site connections to restore reporting.`
+    : "This list shows proposed class changes. An empty list does not confirm that application traffic has been reported.";
+  return (
+    <div className="traffic-empty">
+      <strong>{title}</strong>
+      <p className="muted">{detail}</p>
+      {!reporting.data && !reporting.error && <p className="small muted" role="status">Checking site reporting…</p>}
+      {reporting.error && <p className="small muted">Site reporting could not be checked. <button className="linklike" onClick={reporting.reload}>Retry</button></p>}
+      {!!online.length && <p className="small muted">{online.length} of {sites?.length} {sites?.length === 1 ? "site" : "sites"} reporting to Connect.</p>}
+      <div className="traffic-empty-actions">
+        <Link className="button secondary small" to={noSites ? "/locations" : "/sites"}>{noSites ? "Connect a site" : "Check site connections"}</Link>
+        {canOperate && <Link to="/traffic/rules">Set a traffic rule</Link>}
+      </div>
+    </div>
   );
 }
 
@@ -174,6 +206,8 @@ interface ClassLite {
 }
 
 function Rules() {
+  const { user } = useAuth();
+  const canOperate = canOperateConnect(user);
   const { current } = useCustomer();
   const list = useApi<Rule[]>(current ? `/customers/${current.id}/rules` : null, 0);
   const catalogue = useApi<CatalogueApp[]>("/applications/catalogue", 0);
@@ -199,7 +233,7 @@ function Rules() {
     <Card
       title="Your rules"
       note={
-        <button className="button small" onClick={() => setEditing("new")}>
+        canOperate && <button className="button small" onClick={() => setEditing("new")}>
           Add a rule
         </button>
       }
@@ -209,7 +243,7 @@ function Rules() {
         within 10 seconds.
       </p>
       <ErrorNote error={list.error ?? act.error} />
-      {editing && (
+      {canOperate && editing && (
         <RuleForm
           customerId={current.id}
           rule={editing === "new" ? null : editing}
@@ -224,8 +258,8 @@ function Rules() {
       )}
       {(list.data ?? []).length === 0 ? (
         <div className="empty">
-          <p>No rules yet. Add one, or apply a suggestion from Seen on your network.</p>
-          {editing !== "new" && (
+          <p>{canOperate ? "No rules yet. Add one, or apply a suggestion from Applications." : "No traffic rules have been added yet."}</p>
+          {canOperate && editing !== "new" && (
             <button className="button small" onClick={() => setEditing("new")}>
               Add a rule
             </button>
@@ -240,9 +274,9 @@ function Rules() {
                 <th scope="col">Traffic</th>
                 <th scope="col">Class</th>
                 <th scope="col">Sites</th>
-                <th scope="col" className="actions">
+                {canOperate && <th scope="col" className="actions">
                   <span className="sr-only">Actions</span>
-                </th>
+                </th>}
               </tr>
             </thead>
             <tbody>
@@ -269,7 +303,7 @@ function Rules() {
                   <td data-label="Sites" className="small">
                     {r.site_ids.length ? r.site_ids.map(siteName).join(", ") : "All sites"}
                   </td>
-                  <td className="actions">
+                  {canOperate && <td className="actions">
                     <RowActions
                       label={r.name}
                       disabled={act.busy}
@@ -283,7 +317,7 @@ function Rules() {
                         { label: "Delete rule", danger: true, onSelect: () => remove(r) },
                       ]}
                     />
-                  </td>
+                  </td>}
                 </tr>
               ))}
             </tbody>

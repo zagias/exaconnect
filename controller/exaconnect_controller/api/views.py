@@ -17,6 +17,12 @@ router = APIRouter(tags=["portal"])
 ONLINE_SECONDS = 30
 
 
+def _read_scope(user, customer_id: uuid.UUID | None = None):
+    """Staff may narrow a read; customers always stay in their session's organisation."""
+    scope = customer_scope(user)
+    return customer_id if scope is None else scope
+
+
 def _health(m: dict | None, sla: dict | None) -> str:
     """ok / warn / bad for one path against the voice SLA (the strictest class)."""
     if m is None or m["received"] == 0:
@@ -82,9 +88,7 @@ def _pct(met: int, windows: int) -> float | None:
 
 @router.get("/overview")
 def overview(user: ViewerDep, customer_id: uuid.UUID | None = None) -> dict:
-    scope = customer_scope(user)
-    if scope is None and customer_id:
-        scope = customer_id  # an admin looking at one customer
+    scope = _read_scope(user, customer_id)
     with db.tx() as conn:
         sites = conn.execute(
             f"""SELECT s.id, s.customer_id, s.name, s.kind, s.location, s.timezone, s.storm_mode,
@@ -191,8 +195,8 @@ def overview(user: ViewerDep, customer_id: uuid.UUID | None = None) -> dict:
     }
 
 
-def _site(conn, site_id: str, user) -> dict:
-    scope = customer_scope(user)
+def _site(conn, site_id: str, user, customer_id: uuid.UUID | None = None) -> dict:
+    scope = _read_scope(user, customer_id)
     s = conn.execute(
         """SELECT s.*, n.id AS node_id, n.name AS node_name, n.last_seen, n.applied_version, n.apply_ok,
                   n.apply_error, n.agent_version,
@@ -208,8 +212,8 @@ def _site(conn, site_id: str, user) -> dict:
 
 
 @router.get("/sites")
-def list_sites(user: ViewerDep) -> list[dict]:
-    scope = customer_scope(user)
+def list_sites(user: ViewerDep, customer_id: uuid.UUID | None = None) -> list[dict]:
+    scope = _read_scope(user, customer_id)
     with db.tx() as conn:
         return conn.execute(
             """SELECT id, customer_id, name, kind, location, timezone, asn, lan_prefixes::text[] AS lan_prefixes
@@ -219,9 +223,9 @@ def list_sites(user: ViewerDep) -> list[dict]:
 
 
 @router.get("/sites/{site_id}")
-def site_detail(site_id: str, user: ViewerDep) -> dict:
+def site_detail(site_id: str, user: ViewerDep, customer_id: uuid.UUID | None = None) -> dict:
     with db.tx() as conn:
-        s = _site(conn, site_id, user)
+        s = _site(conn, site_id, user, customer_id)
         s["lan_prefixes"] = [str(p) for p in s["lan_prefixes"]]
         sla = _voice_slas(conn).get(s["customer_id"])
         s["paths"] = [
@@ -259,9 +263,14 @@ def site_detail(site_id: str, user: ViewerDep) -> dict:
 
 
 @router.get("/sites/{site_id}/metrics")
-def site_metrics(site_id: str, user: ViewerDep, minutes: int = Query(default=15, ge=1, le=24 * 60)) -> dict:
+def site_metrics(
+    site_id: str,
+    user: ViewerDep,
+    minutes: int = Query(default=15, ge=1, le=24 * 60),
+    customer_id: uuid.UUID | None = None,
+) -> dict:
     with db.tx() as conn:
-        s = _site(conn, site_id, user)
+        s = _site(conn, site_id, user, customer_id)
         if s["node_id"] is None:
             return {"site_id": site_id, "points": []}
         # Raw 10 s windows up to an hour; one-minute averages beyond that.
@@ -286,9 +295,12 @@ def site_metrics(site_id: str, user: ViewerDep, minutes: int = Query(default=15,
 
 @router.get("/events")
 def list_events(
-    user: ViewerDep, site_id: str | None = None, limit: int = Query(default=50, ge=1, le=500)
+    user: ViewerDep,
+    site_id: str | None = None,
+    limit: int = Query(default=50, ge=1, le=500),
+    customer_id: uuid.UUID | None = None,
 ) -> list[dict]:
-    scope = customer_scope(user)
+    scope = _read_scope(user, customer_id)
     with db.tx() as conn:
         return conn.execute(
             """SELECT e.time, e.kind, e.detail, n.name AS node
@@ -307,9 +319,10 @@ def list_decisions(
     class_name: str | None = None,
     include_holds: bool = True,
     limit: int = Query(default=100, ge=1, le=1000),
+    customer_id: uuid.UUID | None = None,
 ) -> list[dict]:
     """Routing decisions, newest first, each with its reason and inputs."""
-    scope = customer_scope(user)
+    scope = _read_scope(user, customer_id)
     with db.tx() as conn:
         return conn.execute(
             """SELECT d.id, d.time, d.customer_id, d.site_id, s.name AS site, d.class_name, d.kind,
