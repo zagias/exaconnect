@@ -23,12 +23,30 @@ cleanup() {
   set +e
   mkdir -p "$diagnostics"
   if [[ -f $override && -f .env ]]; then
-    timeout 15s "${compose[@]}" logs --no-color --tail 100 controller proxy db >"$diagnostics/controller.log" 2>&1
+    timeout 15s "${compose[@]}" logs --no-color --tail 5000 controller proxy db >"$diagnostics/controller.log" 2>&1
     timeout 10s "${compose[@]}" ps >"$diagnostics/containers.txt" 2>&1
     timeout 10s docker compose -f deploy/docker-compose.yml --env-file .env exec -T db \
       psql -U exaconnect -d exaconnect -AtX -c \
       "SELECT time, class_name, kind, from_path, to_path, reason FROM decisions ORDER BY time DESC LIMIT 50" \
       >"$diagnostics/decisions.txt" 2>&1
+    # Preserve replayable example telemetry before destroying this disposable
+    # database. Decision text alone cannot explain a late confidence/persistence
+    # boundary: the sent counts, timestamps and forecasts must remain inspectable.
+    timeout 15s "${compose[@]}" exec -T db psql -U exaconnect -d exaconnect -AtX -v ON_ERROR_STOP=1 -c \
+      "SELECT coalesce(json_agg(x), '[]'::json) FROM (
+         SELECT s.name AS site, m.time, m.path, m.sent, m.received, m.rtt_avg_ms, m.jitter_ms
+         FROM path_metrics m JOIN nodes n ON n.id = m.node_id JOIN sites s ON s.id = n.site_id
+         WHERE m.time > now() - interval '20 minutes' ORDER BY s.name, m.path, m.time) x" \
+      >"$diagnostics/path-metrics.json" 2>&1
+    timeout 15s "${compose[@]}" exec -T db psql -U exaconnect -d exaconnect -AtX -v ON_ERROR_STOP=1 -c \
+      "SELECT coalesce(json_agg(x), '[]'::json) FROM (
+         SELECT s.name AS site, d.time, d.class_name, d.kind, d.from_path, d.to_path, d.reason, d.engine, d.inputs
+         FROM decisions d JOIN sites s ON s.id = d.site_id
+         WHERE d.time > now() - interval '20 minutes' ORDER BY d.time, s.name, d.class_name) x" \
+      >"$diagnostics/decision-inputs.json" 2>&1
+    timeout 15s "${compose[@]}" exec -T controller python -c \
+      'import json; from dataclasses import asdict; from exaconnect_controller.routing.engine import Policy, STORM_POLICY; print(json.dumps({"example_data":True,"policy":asdict(Policy()),"storm_policy":asdict(STORM_POLICY)}))' \
+      >"$diagnostics/routing-policy.json" 2>&1
   fi
   for name in site-a site-b pop-miami; do
     node="clab-$LAB_NAME-$name"

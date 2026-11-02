@@ -27,7 +27,7 @@ public = APIRouter(prefix="/internal/voice", tags=["commai: voice PBX (internal)
 class PhoneRuntimeIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     instance_id: Literal["main"]
-    version: str = Field(min_length=1, max_length=160)
+    version: str = Field(min_length=1, max_length=320)
     transfer_enabled: bool
     checked_at: str = Field(min_length=20, max_length=40)
     nonce: UUID

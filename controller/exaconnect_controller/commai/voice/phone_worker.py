@@ -21,7 +21,7 @@ from psycopg.types.json import Jsonb
 
 from .. import inbox, jobs
 from ..ai import voice as ai_voice
-from . import livekit
+from . import livekit, pbx_runtime
 from . import provider as providers
 from .common import VoiceError, domain
 
@@ -53,9 +53,7 @@ def pbx_receipt(conn, body: dict, authorization: str | None) -> dict:
     # CVE/GHSA-xjxm-9qx6-w3fj: REFER variable injection is fixed in 1.11.2.
     # Unknown versions fail closed; the running binary's version is checked
     # here independently of the probe's transfer-enabled observation.
-    match = re.fullmatch(r"(?:FreeSWITCH Version )?(\d+)\.(\d+)\.(\d+)(?:-release)?(?:[+ ].*)?", body["version"])
-    prerelease = re.search(r"(?i)(dev|rc|alpha|beta|snapshot)", body["version"])
-    secure = bool(match and not prerelease and tuple(map(int, match.groups())) >= (1, 11, 2))
+    _, secure = pbx_runtime.version(body["version"])
     conn.execute(
         """INSERT INTO voice_ai_phone_pbx_runtime
            (instance_id, version, version_secure, transfer_enabled, checked_at, nonce, expires_at)

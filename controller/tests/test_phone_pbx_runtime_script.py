@@ -23,6 +23,14 @@ ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "deploy/freeswitch/phone-runtime.sh"
 START = ROOT / "deploy/freeswitch/start.sh"
 SECRET = "fictional-runtime-signing-secret-for-tests"
+UNSAFE_VERSION = (
+    "FreeSWITCH Version 1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit "
+    "(-release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit)"
+)
+SAFE_VERSION = (
+    "FreeSWITCH Version 1.11.2-release+git~20260802T210227Z~a88d069d6f~64bit (git a88d069 2026-08-02 21:02:27Z 64bit)"
+)
+VERSION_CASES = json.loads(Path(__file__).with_name("phone_runtime_versions.json").read_text())
 PROFILE = """<profile name="internal">
   <!-- <param name="disable-transfer" value="false"/> -->
   <settings>
@@ -55,8 +63,8 @@ def runtime(tmp_path):
     env = {
         **os.environ,
         "PATH": str(binary) + os.pathsep + "/usr/bin:/bin",
-        "TEST_FS_VERSION": "FreeSWITCH Version 1.10.12-release+git~test~64bit",
-        "TEST_RUNNING_VERSION": "FreeSWITCH Version 1.10.12-release+git~test~64bit",
+        "TEST_FS_VERSION": UNSAFE_VERSION,
+        "TEST_RUNNING_VERSION": UNSAFE_VERSION,
         "TEST_CAPTURE": str(capture),
         "TEST_COMMANDS": str(commands),
         "EXA_PBX_SECRET": SECRET,
@@ -65,10 +73,11 @@ def runtime(tmp_path):
         "http_proxy": "http://outside.example.invalid",
         "https_proxy": "http://outside.example.invalid",
     }
-    _executable(binary / "freeswitch", '#!/bin/sh\nprintf "%s\\n" "$TEST_FS_VERSION"\n')
+    _executable(binary / "freeswitch", '#!/bin/sh\nprintf "%s\\n" "$TEST_FS_VERSION"\nexit "${TEST_FS_EXIT:-0}"\n')
     _executable(
         binary / "fs_cli",
-        '#!/bin/sh\nprintf "%s\\n" "$*" >> "$TEST_COMMANDS"\nprintf "%s\\n" "$TEST_RUNNING_VERSION"\n',
+        '#!/bin/sh\nprintf "%s\\n" "$*" >> "$TEST_COMMANDS"\nprintf "%s\\n" "$TEST_RUNNING_VERSION"\n'
+        'exit "${TEST_RUNNING_EXIT:-0}"\n',
     )
     _executable(binary / "timeout", '#!/bin/sh\nshift\nexec "$@"\n')
     return SimpleNamespace(
@@ -93,7 +102,7 @@ def _run(runtime, mode):
 @pytest.mark.parametrize(
     "version",
     [
-        "FreeSWITCH Version 1.10.12-release+git~test~64bit",
+        UNSAFE_VERSION,
         "1.11.1",
         "unknown",
         "1.11.2-rc1",
@@ -116,7 +125,7 @@ def test_unsafe_and_unknown_binaries_disable_every_profile_before_start(runtime,
     assert runtime.profile.read_text().count('value="true"') == 1
 
 
-@pytest.mark.parametrize("version", ["1.11.2", "FreeSWITCH Version 1.11.3-release+git~abc~64bit", "2.0.0"])
+@pytest.mark.parametrize("version", ["1.11.2", SAFE_VERSION, "2.0.0"])
 def test_patched_versions_preserve_configuration(runtime, version):
     runtime.env["TEST_FS_VERSION"] = version
     before = runtime.profile.read_bytes()
@@ -124,6 +133,41 @@ def test_patched_versions_preserve_configuration(runtime, version):
     assert result.returncode == 0, result.stderr
     assert runtime.profile.read_bytes() == before
     assert runtime.state.joinpath("guard").read_text().splitlines()[1] == "true"
+
+
+def test_nonzero_binary_exit_cannot_claim_a_patched_startup(runtime):
+    runtime.env["TEST_FS_VERSION"] = SAFE_VERSION
+    runtime.env["TEST_FS_EXIT"] = "1"
+    assert _run(runtime, "guard").returncode == 0
+    assert runtime.state.joinpath("guard").read_text().splitlines() == ["unknown", "false"]
+    assert 'value="true"' in runtime.profile.read_text()
+
+
+def test_oversized_binary_output_is_unknown_and_mitigated(runtime):
+    runtime.env["TEST_FS_VERSION"] = "1.11.2" + "a" * 8192
+    assert _run(runtime, "guard").returncode == 0
+    assert runtime.state.joinpath("guard").read_text().splitlines() == ["unknown", "false"]
+
+
+@pytest.mark.parametrize("case", VERSION_CASES, ids=[f"version-{i}" for i in range(len(VERSION_CASES))])
+def test_guard_parser_matches_shared_official_release_matrix(case):
+    # Run the exact portable functions without the command dispatcher or a PBX.
+    functions = SCRIPT.read_text().split("parse_version() {", 1)[1].split("# This intentionally", 1)[0]
+    command = (
+        "parse_version() {"
+        + functions
+        + '\nvalue=$(parse_version) || exit 1\nprintf "%s\\n" "$value"\npatched "$value"\n'
+    )
+    result = subprocess.run(
+        ["/bin/sh", "-c", command],
+        input=case["value"],
+        text=True,
+        capture_output=True,
+        timeout=5,
+        env={**os.environ, "LC_ALL": "C"},
+    )
+    assert (result.stdout.rstrip("\n") or "unknown") == case["normalised"]
+    assert (result.returncode == 0) is case["secure"]
 
 
 @pytest.mark.parametrize(
@@ -201,13 +245,25 @@ def _verify_receipt(runtime):
 
 
 def test_python_probe_signs_actual_running_version_and_guard_marker(runtime):
-    runtime.env["TEST_FS_VERSION"] = runtime.env["TEST_RUNNING_VERSION"] = "FreeSWITCH Version 1.11.2-release+git~test"
+    runtime.env["TEST_FS_VERSION"] = runtime.env["TEST_RUNNING_VERSION"] = SAFE_VERSION
     _python_transport(runtime)
     assert _run(runtime, "guard").returncode == 0
     result = _run(runtime, "probe")
     assert result.returncode == 0, result.stderr
     payload = _verify_receipt(runtime)
-    assert payload["version"] == "1.11.2-release+git~test" and payload["transfer_enabled"] is True
+    assert (
+        payload["version"] == SAFE_VERSION.removeprefix("FreeSWITCH Version ") and payload["transfer_enabled"] is True
+    )
+    assert SECRET not in result.stdout + result.stderr
+
+
+def test_nonzero_running_command_exit_never_sends_a_receipt(runtime):
+    runtime.env["TEST_FS_VERSION"] = runtime.env["TEST_RUNNING_VERSION"] = SAFE_VERSION
+    _python_transport(runtime)
+    assert _run(runtime, "guard").returncode == 0
+    runtime.env["TEST_RUNNING_EXIT"] = "1"
+    result = _run(runtime, "probe")
+    assert result.returncode != 0 and not runtime.capture.exists()
     assert SECRET not in result.stdout + result.stderr
 
 
@@ -281,7 +337,7 @@ def test_start_wrapper_guards_before_stock_entrypoint_and_refreshes_every_minute
 
 
 def test_busybox_only_guard_works_but_signing_dependencies_fail_closed(runtime):
-    for name in ("awk", "sed", "mkdir", "mktemp", "mv", "rm", "cp"):
+    for name in ("awk", "sed", "mkdir", "mktemp", "mv", "rm", "cp", "wc"):
         (runtime.binary / name).symlink_to(shutil.which(name))
     runtime.env["PATH"] = str(runtime.binary)
     assert _run(runtime, "guard").returncode == 0

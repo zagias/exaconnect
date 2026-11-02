@@ -18,7 +18,7 @@ from exaconnect_controller.routing.engine import (
     evaluate,
     score,
 )
-from exaconnect_controller.routing.forecast import Holt, LastValue, Series, TrendForecaster
+from exaconnect_controller.routing.forecast import Forecast, Holt, LastValue, Series, TrendForecaster
 
 VOICE = Sla(latency_ms=150, jitter_ms=30, loss_pct=1)
 BULK = Sla(loss_pct=5)
@@ -123,6 +123,81 @@ def test_steady_breach_moves_after_persistence():
     st, d = decide("voice", ev, ["carrier-a", "carrier-b"], st, POLICY, now + 10)
     assert d.kind == "move" and d.to_path == "carrier-b"
     assert d.reason == "Moved voice from Carrier A to Carrier B: loss on Carrier A is 2.0% against a 1% SLA."
+
+
+@pytest.mark.parametrize("clear_between", [False, True])
+def test_forecast_persistence_and_action_confidence_are_separate_gates(clear_between):
+    class Evidence:
+        name = "test"
+        ahead = 1.1
+
+        def forecast(self, s, horizon_s, window_s):
+            if not any(s.values):
+                return Forecast(now=0, ahead=0, slope_per_min=0, se=0)
+            return Forecast(now=0.5, ahead=self.ahead, slope_per_min=0.6, se=0.2)
+
+    evidence = Evidence()
+    state = None
+    now = 1000.0
+
+    def tick():
+        nonlocal state, now
+        paths = _eval(_paths(now, a_loss=0.5), Sla(loss_pct=1), now, f=evidence)
+        state, decision = decide("voice", paths, list(paths), state, POLICY, now)
+        now += 10
+        return decision
+
+    assert tick() is None
+    assert state.breach_streak == 1  # Point forecast crosses; confidence lower bound does not.
+    assert tick() is None
+    assert state.breach_streak == 2  # Persistence alone never authorises a move.
+    if clear_between:
+        evidence.ahead = 0.9
+        assert tick() is None
+        assert state.breach_streak == 0  # The predicted-breach episode actually ended.
+    evidence.ahead = 1.4  # Lower bound 1.2% now confidently exceeds the unchanged 1% SLA.
+    decision = tick()
+    if clear_between:
+        assert decision is None and state.breach_streak == 1
+        decision = tick()
+    assert decision.kind == "move" and decision.to_path == "carrier-b"
+    assert "forecast" in decision.reason
+
+
+@pytest.mark.parametrize("unavailable", ["stale", "insufficient", "invalid"])
+def test_unavailable_forecast_breaks_prediction_persistence(unavailable):
+    now = 1000.0
+    paths = _paths(now, a_loss=2)
+    forecaster = TrendForecaster()
+    if unavailable == "stale":
+        paths["carrier-a"] = replace(paths["carrier-a"], windows=_windows(now - 60, 30, loss=2))
+    elif unavailable == "insufficient":
+        paths["carrier-a"] = replace(paths["carrier-a"], windows=_windows(now, 2, loss=2))
+    else:
+
+        class Invalid(TrendForecaster):
+            def forecast(self, s, horizon_s, window_s):
+                return Forecast(now=0.5, ahead=float("nan"), slope_per_min=1, se=0.2)
+
+        forecaster = Invalid()
+    evaluations = _eval(paths, Sla(loss_pct=1), now, f=forecaster)
+    prior = State("carrier-a", since=0, breach_streak=1, last_evaluated=now - 10)
+    state, decision = decide("voice", evaluations, list(paths), prior, POLICY, now)
+    assert decision is None and state.breach_streak == 0
+
+
+@pytest.mark.parametrize("field,value", [("now", float("nan")), ("ahead", float("inf")), ("se", -1.0)])
+def test_invalid_forecast_cannot_mark_an_alternative_healthy(field, value):
+    class Invalid:
+        name = "invalid"
+
+        def forecast(self, s, horizon_s, window_s):
+            return replace(Forecast(now=0.1, ahead=0.1, slope_per_min=0, se=0.1), **{field: value})
+
+    now = 1000.0
+    evaluated = _eval(_paths(now), Sla(loss_pct=1), now, f=Invalid())
+    assert not evaluated["carrier-b"].metrics_complete
+    assert not evaluated["carrier-b"].healthy
 
 
 def test_no_alternative_logs_one_hold_note():
@@ -256,7 +331,7 @@ def _simulate(engine, seed, ramp_s=180, peak=3.0, sla=VOICE, probes_per_window=2
     return moved, breached, reason
 
 
-@pytest.mark.parametrize("seed", range(20))
+@pytest.mark.parametrize("seed", [*range(20), 39, 141, 227])
 def test_brownout_predictive_moves_before_breach(seed):
     moved, breached, reason = _simulate("trend", seed)
     assert moved is not None and breached is not None

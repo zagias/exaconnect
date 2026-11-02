@@ -14,15 +14,63 @@ fail() { echo "xakore: phone runtime $1" >&2; return 1; }
 # or an image tag for the actual running binary's version.
 parse_version() {
   awk '
-    /^[ \t\r]*$/ { next }
+    function decimal(s, width) {
+      return s ~ /^[0-9]+$/ && length(s) <= width && (s == "0" || substr(s,1,1) != "0")
+    }
+    function hex(s) { return s ~ /^[0-9a-f]+$/ && length(s) >= 7 && length(s) <= 40 }
+    function stamp(s, year, month, day, days) {
+      if (length(s) != 16 || s !~ /^20[0-9]+T[0-9]+Z$/ || substr(s,9,1) != "T") return 0
+      year=substr(s,1,4)+0; month=substr(s,5,2)+0; day=substr(s,7,2)+0
+      if (month < 1 || month > 12) return 0
+      days=31
+      if (month == 4 || month == 6 || month == 9 || month == 11) days=30
+      if (month == 2) days=(year % 4 == 0 ? 29 : 28)
+      return day >= 1 && day <= days && substr(s,10,2)+0 <= 23 && substr(s,12,2)+0 <= 59 && substr(s,14,2)+0 <= 59
+    }
+    function valid(s, compact, human, p, bits, date, sha, release, meta, n, words, candidate, expected) {
+      sub(/^FreeSWITCH [Vv]ersion:? /, "", s)
+      normalised=s; compact=s; human=""; bits=""; date=""; sha=""; release=""
+      p=index(s," (")
+      if (p) {
+        compact=substr(s,1,p-1); human=substr(s,p+2)
+        if (substr(human,length(human),1) != ")") return 0
+        human=substr(human,1,length(human)-1)
+        if (index(human,"(") || index(human,")")) return 0
+      }
+      if (compact ~ /~(32bit|64bit)$/) {
+        bits=substr(compact,length(compact)-4); sub(/~(32bit|64bit)$/, "", compact)
+      }
+      n=index(compact,"+git~")
+      if (n) {
+        if (split(substr(compact,n+5),meta,"~") != 2 || !stamp(meta[1]) || !hex(meta[2])) return 0
+        date=meta[1]; sha=meta[2]; compact=substr(compact,1,n-1)
+      }
+      n=index(compact,"-release")
+      if (n) {
+        release=substr(compact,n); compact=substr(compact,1,n-1)
+        if (release != "-release") {
+          if (split(release,meta,"-") != 4 || meta[2] != "release" || meta[3] !~ /^[0-9]+$/ || length(meta[3]) > 20 || !hex(meta[4])) return 0
+          if (date && meta[4] != sha) return 0
+        }
+      }
+      if (split(compact,numbers,/[.]/) != 3 || !decimal(numbers[1],3) || !decimal(numbers[2],3) || !decimal(numbers[3],6)) return 0
+      if (p) {
+        if (!bits) return 0
+        if (date) {
+          candidate=human
+          if (substr(candidate,1,4) != "git " && release && substr(candidate,1,length(release)) == release) candidate=substr(candidate,length(release)+1)
+          if (split(candidate,words," ") != 5 || words[1] != "git" || !hex(words[2]) || substr(sha,1,length(words[2])) != words[2]) return 0
+          expected="git " words[2] " " substr(date,1,4) "-" substr(date,5,2) "-" substr(date,7,2) " " substr(date,10,2) ":" substr(date,12,2) ":" substr(date,14,2) "Z " bits
+          if (candidate != expected) return 0
+        } else if (human != " " bits && human != release " " bits) return 0
+      }
+      return 1
+    }
     {
       if (++lines != 1) { bad=1; next }
-      sub(/\r$/, ""); sub(/^FreeSWITCH [Vv]ersion:? /, "")
-      if ($0 !~ /^[0-9]+\.[0-9]+\.[0-9]+(-release)?([+ ][A-Za-z0-9._~+() -]+)?$/) { bad=1; next }
-      if (length($0) > 160 || tolower($0) ~ /(dev|alpha|beta|rc[0-9]*|snapshot)/) { bad=1; next }
-      split($0, n, /[.+ -]/)
-      if (length(n[1]) > 3 || length(n[2]) > 3 || length(n[3]) > 6) { bad=1; next }
-      version=$0
+      sub(/\r$/, "")
+      if (length($0) > 320 || $0 ~ /[[:cntrl:]]/ || !valid($0)) { bad=1; next }
+      version=normalised
     }
     END { if (bad || !version) exit 1; print version }
   '
@@ -33,6 +81,20 @@ patched() {
     { exit !(($1+0 > 1) || ($1+0 == 1 && ($2+0 > 11 || ($2+0 == 11 && $3+0 >= 2)))) }
   '
 }
+
+runtime_version() (
+  # POSIX pipelines cannot report a failed binary when the parser succeeds.
+  # Preserve its exit status and exact output (including extra blank lines).
+  version_file=$(mktemp /tmp/xakore-phone-version.XXXXXX) || exit 1
+  trap 'rm -f "$version_file"' 0 1 2 15
+  # One filesystem block is ample for the <=320-byte line plus CR/LF. A noisy
+  # command cannot fill the container filesystem before the timeout expires.
+  ulimit -f 1 || exit 1
+  if ! timeout 5 "$@" > "$version_file" 2>/dev/null; then exit 1; fi
+  version_bytes=$(wc -c < "$version_file") || exit 1
+  [ "$version_bytes" -le 322 ] || exit 1
+  parse_version < "$version_file"
+)
 
 # This intentionally supports the shipped, line-oriented profile XML. Any
 # ambiguous/multiline transfer parameter or settings element fails closed.
@@ -92,7 +154,7 @@ guard() {
   rm -f "$state_dir/guard" || return 1
   version=unknown
   if command -v timeout >/dev/null 2>&1; then
-    version=$(timeout 5 freeswitch -version 2>/dev/null | parse_version) || version=unknown
+    version=$(runtime_version freeswitch -version) || version=unknown
   fi
   transfer_enabled=true
   safe=false
@@ -228,7 +290,7 @@ probe() {
     fail "probe has no startup guard"; return 1
   fi
   command -v timeout >/dev/null 2>&1 || { fail "probe needs a command timeout"; return 1; }
-  version=$(timeout 5 fs_cli -x version 2>/dev/null | parse_version) || { fail "cannot verify running version"; return 1; }
+  version=$(runtime_version fs_cli -x version) || { fail "cannot verify running version"; return 1; }
   startup_version=$(sed -n '1p' "$state_dir/guard")
   transfer_enabled=$(sed -n '2p' "$state_dir/guard")
   case "$transfer_enabled" in true|false) ;; *) fail "has an invalid startup guard"; return 1 ;; esac

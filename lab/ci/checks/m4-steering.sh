@@ -105,7 +105,7 @@ else
     else
       bad "moved at measured loss ${measured:-?}%, not before the 1% SLA"
       # Why it waited: the first hold note and how each path looked then.
-      note "$(sql "SELECT reason || ' | ' || coalesce(inputs->'paths'::text, '') FROM decisions
+      note "$(sql "SELECT reason || ' | ' || coalesce((inputs->'paths')::text, '') FROM decisions
                    WHERE customer_id = '$cid' AND site_id = '$site_a' AND class_name = 'voice' AND kind = 'hold' AND time > to_timestamp($t0) ORDER BY time LIMIT 1" | cut -c1-1500)"
     fi
     if wait_for 15 voice_on_b; then
