@@ -6,6 +6,7 @@ import hmac
 import importlib.util
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -84,8 +85,9 @@ def test_official_release_grammar_is_identical_in_controller_and_direct_checker(
     assert check.version(case["value"]) == expected
     # This also exercises matching guard receipts and the runtime profile gate,
     # not just the parser. No binary, container, provider or network is contacted.
-    result = check.validate(case["value"], case["normalised"] + "\nfalse\n", STATUS, profiles())
-    assert result["version_secure"] is case["secure"]
+    if "\n" not in case["value"] and "\r" not in case["value"]:
+        result = check.validate(case["value"], case["normalised"] + "\nfalse\n", STATUS, profiles())
+        assert result["version_secure"] is case["secure"]
 
 
 @pytest.mark.parametrize("case", VERSIONS)
@@ -129,3 +131,36 @@ def test_oversized_runtime_version_is_rejected_at_both_adapter_and_api_boundarie
             checked_at=dt.datetime.now(dt.UTC).isoformat(),
             nonce=uuid4(),
         )
+
+
+CLI_VERSIONS = json.loads((Path(__file__).parent / "phone_runtime_cli_versions.json").read_text())
+
+
+@pytest.mark.parametrize("case", CLI_VERSIONS)
+def test_actual_cli_framing_is_normalised_only_at_its_command_boundary(case):
+    record = check.cli_record(case["stdout"], fs_cli=case["command"] == "fs_cli")
+    assert check.version(record) == (case["normalised"], case["secure"])
+    assert pbx_runtime.version(case["stdout"]) == ("unknown", False)
+    if case["command"] == "fs_cli":
+        result = check.validate(case["stdout"], case["normalised"] + "\nfalse\n", STATUS, profiles())
+        assert result["version_secure"] is case["secure"]
+
+
+def test_raw_version_diagnostics_are_bounded_escaped_and_never_print_unexpected_output():
+    raw = CLI_VERSIONS[0]["stdout"]
+    assert check.version_diagnostic(raw)["stdout"] == raw
+    for raw in ("unexpected secret body", "<xml>private</xml>", "FreeSWITCH Version 1.11.2\nprivate", "x" * 1000):
+        assert check.version_diagnostic(raw)["stdout"] == "suppressed: unexpected version output"
+
+
+def test_failed_version_command_keeps_safe_diagnostics_but_cannot_establish_a_version(monkeypatch):
+    def run(command, **kwargs):
+        assert command == ["docker", "exec", "disposable", "fs_cli", "-x", "version"]
+        assert kwargs["timeout"] == 10 and kwargs["check"] is False
+        return SimpleNamespace(returncode=1, stdout=CLI_VERSIONS[6]["stdout"], stderr="fictional private error body")
+
+    monkeypatch.setattr(check.subprocess, "run", run)
+    raw, evidence = check.version_command("disposable", "fs_cli", "-x", "version")
+    assert raw is None and evidence["exit_code"] == 1
+    assert evidence["stdout"] == CLI_VERSIONS[6]["stdout"]
+    assert "fictional private error body" not in json.dumps(evidence)

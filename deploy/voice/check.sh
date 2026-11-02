@@ -72,6 +72,7 @@ cat "$tmp/sofia"
 [[ $(grep -c RUNNING "$tmp/sofia") == 2 ]]
 
 echo "-- running PBX version, startup guard and loaded SIP transfer mitigation"
+python3 voice/phone_parser_check.py --container exa-sbc-fs
 python3 voice/phone_runtime_check.py --container exa-sbc-fs
 
 echo "-- freeswitch can ask the controller before outside calls"

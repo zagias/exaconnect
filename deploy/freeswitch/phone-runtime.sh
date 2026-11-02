@@ -13,7 +13,7 @@ fail() { echo "xakore: phone runtime $1" >&2; return 1; }
 # Accept released versions only. Do not mistake rc/dev builds, arbitrary output
 # or an image tag for the actual running binary's version.
 parse_version() {
-  awk '
+  awk -v framing="${1:-single}" '
     function decimal(s, width) {
       return s ~ /^[0-9]+$/ && length(s) <= width && (s == "0" || substr(s,1,1) != "0")
     }
@@ -67,8 +67,13 @@ parse_version() {
       return 1
     }
     {
-      if (++lines != 1) { bad=1; next }
       sub(/\r$/, "")
+      if (++lines != 1) {
+        # fs_cli -x version appends one empty terminal record. Only that
+        # command boundary enables it; a second nonempty version never passes.
+        if (framing == "fs_cli" && lines == 2 && $0 == "") next
+        bad=1; next
+      }
       if (length($0) > 320 || $0 ~ /[[:cntrl:]]/ || !valid($0)) { bad=1; next }
       version=normalised
     }
@@ -93,7 +98,9 @@ runtime_version() (
   if ! timeout 5 "$@" > "$version_file" 2>/dev/null; then exit 1; fi
   version_bytes=$(wc -c < "$version_file") || exit 1
   [ "$version_bytes" -le 322 ] || exit 1
-  parse_version < "$version_file"
+  framing=single
+  if [ "$#" -eq 3 ] && [ "$1" = fs_cli ] && [ "$2" = -x ] && [ "$3" = version ]; then framing=fs_cli; fi
+  parse_version "$framing" < "$version_file"
 )
 
 # This intentionally supports the shipped, line-oriented profile XML. Any

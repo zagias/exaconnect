@@ -21,10 +21,9 @@ VERSION = re.compile(
 
 def version(value: str) -> tuple[str, bool]:
     """Return the validated version text and patched-release status."""
-    lines = value.splitlines()
-    if len(lines) != 1 or len(lines[0]) > 320:
+    if len(value) > 320:
         return "unknown", False
-    normalised = re.sub(r"^FreeSWITCH [Vv]ersion:? ", "", lines[0])
+    normalised = re.sub(r"^FreeSWITCH [Vv]ersion:? ", "", value)
     compact, separator, human = normalised.partition(" (")
     if separator:
         if not human.endswith(")") or "(" in human or ")" in human[:-1]:

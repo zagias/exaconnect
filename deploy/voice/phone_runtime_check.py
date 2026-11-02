@@ -10,6 +10,7 @@ import argparse
 import json
 import re
 import subprocess
+import sys
 from pathlib import PurePosixPath
 from xml.etree import ElementTree as ET
 
@@ -29,10 +30,9 @@ VERSION = re.compile(
 
 def version(value: str) -> tuple[str, bool]:
     """Return the validated version text and patched-release status."""
-    lines = value.splitlines()
-    if len(lines) != 1 or len(lines[0]) > 320:
+    if len(value) > 320:
         return "unknown", False
-    normalised = re.sub(r"^FreeSWITCH [Vv]ersion:? ", "", lines[0])
+    normalised = re.sub(r"^FreeSWITCH [Vv]ersion:? ", "", value)
     compact, separator, human = normalised.partition(" (")
     if separator:
         if not human.endswith(")") or "(" in human or ")" in human[:-1]:
@@ -91,10 +91,31 @@ def version(value: str) -> tuple[str, bool]:
     return normalised, numbers >= (1, 11, 2)
 
 
+def cli_record(value: str, *, fs_cli: bool) -> str:
+    """Remove only the proven command framing, never a second version record."""
+    endings = ("\r\n\r\n", "\n\n", "\r\n", "\n") if fs_cli else ("\r\n", "\n")
+    for ending in endings:
+        if value.endswith(ending):
+            return value[: -len(ending)]
+    return value
+
+
+def version_diagnostic(value: str) -> dict:
+    """Print only bounded, version-shaped command output, with framing escaped."""
+    safe = len(value) <= 640 and re.fullmatch(
+        r"FreeSWITCH [Vv]ersion:? [0-9]+\.[0-9]+\.[0-9]+[A-Za-z0-9._~+() :/-]*[\r\n]*",
+        value,
+    )
+    return {
+        "stdout_bytes": len(value.encode()),
+        "stdout": value if safe else "suppressed: unexpected version output",
+    }
+
+
 def validate(
     actual_version: str, guard: str, sofia_status: str, profiles: dict[str, str]
 ) -> dict:
-    actual, patched = version(actual_version)
+    actual, patched = version(cli_record(actual_version, fs_cli=True))
     guard_lines = guard.splitlines()
     if len(guard_lines) != 2 or guard_lines[1] not in ("true", "false"):
         raise CheckError("The startup guard receipt is missing or malformed")
@@ -174,6 +195,32 @@ def docker(container: str, *args: str) -> str:
     return result.stdout
 
 
+def version_command(container: str, *args: str) -> tuple[str | None, dict]:
+    """Retain exit status and safe framing evidence before a proof can fail."""
+    if args not in (("fs_cli", "-x", "version"), ("freeswitch", "-version")):
+        raise CheckError("Unexpected PBX version command")
+    try:
+        result = subprocess.run(
+            ["docker", "exec", container, *args],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (subprocess.SubprocessError, OSError, UnicodeError):
+        return None, {"exit_code": None, "stdout": "unavailable"}
+    evidence = {
+        **version_diagnostic(result.stdout),
+        "exit_code": result.returncode,
+        "stderr_bytes": len(result.stderr.encode()),
+    }
+    return (
+        result.stdout
+        if result.returncode == 0 and len(result.stdout) <= 1_000_000
+        else None
+    ), evidence
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--container", required=True)
@@ -181,7 +228,19 @@ def main() -> None:
     if not re.fullmatch(r"[A-Za-z0-9_.-]{1,100}", args.container):
         raise SystemExit("Invalid CI container identity")
     try:
-        actual = docker(args.container, "fs_cli", "-x", "version")
+        actual, cli_evidence = version_command(
+            args.container, "fs_cli", "-x", "version"
+        )
+        _, binary_evidence = version_command(args.container, "freeswitch", "-version")
+        print(
+            "PBX version command evidence: "
+            + json.dumps(
+                {"fs_cli": cli_evidence, "binary": binary_evidence}, sort_keys=True
+            ),
+            file=sys.stderr,
+        )
+        if actual is None:
+            raise CheckError("The bounded running PBX version command failed")
         guard = docker(args.container, "cat", "/run/xakore-phone-runtime/guard")
         status = docker(args.container, "fs_cli", "-x", "sofia status")
         paths = docker(
@@ -202,10 +261,8 @@ def main() -> None:
             ):
                 raise CheckError("Unexpected SIP profile path")
             profiles[path] = docker(args.container, "cat", path)
-        print(
-            "PBX transfer mitigation: "
-            + json.dumps(validate(actual, guard, status, profiles), sort_keys=True)
-        )
+        proof = validate(actual, guard, status, profiles)
+        print("PBX transfer mitigation: " + json.dumps(proof, sort_keys=True))
     except CheckError as error:
         raise SystemExit(str(error)) from None
 

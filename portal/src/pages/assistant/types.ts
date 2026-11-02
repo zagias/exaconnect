@@ -1,5 +1,26 @@
 import type { Product } from "../../api";
 
+export interface AssistantProductAccess {
+  organisation_access: boolean;
+  member_access: boolean;
+  operator_access: boolean;
+  access_source: "legacy_unspecified_products" | "organisation_products";
+  active_subscription_recorded: boolean;
+  scheduled_subscription_recorded: boolean;
+  payment_verified: false;
+  provider_readiness: "not_checked";
+}
+
+export interface AssistantFeature {
+  id: string;
+  product: Product;
+  name: string;
+  description: string;
+  path: string | null;
+  source: string;
+  availability: AssistantProductAccess & { implemented: boolean; permitted_now: boolean };
+}
+
 export interface AssistantContext {
   account: {
     customer_id: string;
@@ -9,7 +30,9 @@ export interface AssistantContext {
     products: Product[];
     accessible_products: Product[];
     subscriptions: { product: Product; plan: string; state: string }[];
+    product_access?: Partial<Record<Product, AssistantProductAccess>>;
   };
+  verified_features?: AssistantFeature[];
   tools: {
     connect_read: boolean;
     connect_changes: boolean;
@@ -47,7 +70,10 @@ export interface AssistantAnswer {
   answer: string;
   plan: Plan | null;
   model?: string | null;
-  based_on?: { sites?: number; decisions?: number; events?: number; insights?: number; sources?: string[] };
+  based_on?: {
+    sites?: number; decisions?: number; events?: number; insights?: number; sources?: string[];
+    grounding?: "reviewed_typed_proposal" | "verified_advisory_selection" | "unverified_advice_replaced_with_grounded_facts";
+  };
 }
 
 /** Old bookmarks open the same workspace, retaining a drafted question. */

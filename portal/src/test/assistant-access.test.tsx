@@ -4,7 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { User } from "../api";
 import Ask from "../pages/Ask";
-import { assistantAddress, type AssistantContext, type Plan } from "../pages/assistant/types";
+import { assistantAddress, type AssistantAnswer, type AssistantContext, type Plan } from "../pages/assistant/types";
 import { accountGroups, navGroups } from "../nav";
 
 const auth = vi.hoisted(() => ({ user: null as User | null }));
@@ -31,7 +31,7 @@ function context(): AssistantContext {
   };
 }
 
-function responses(options: { context?: AssistantContext; plan?: Plan; failExecutionOnce?: boolean; failedContext?: boolean } = {}) {
+function responses(options: { context?: AssistantContext; plan?: Plan; failExecutionOnce?: boolean; failedContext?: boolean; grounding?: NonNullable<AssistantAnswer["based_on"]>["grounding"] } = {}) {
   let plan = options.plan ?? draft;
   let attempts = 0;
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
@@ -40,7 +40,7 @@ function responses(options: { context?: AssistantContext; plan?: Plan; failExecu
     if (url.includes("/assistant/context")) {
       if (options.failedContext) return new Response(JSON.stringify({ detail: "Account context unavailable" }), { status: 503 });
       data = options.context ?? context();
-    } else if (url.endsWith("/assistant/ask") && !url.includes("/commai/")) data = { answer: "Voice stayed on the measured fibre connection.", plan, based_on: { sites: 2, decisions: 3 } };
+    } else if (url.endsWith("/assistant/ask") && !url.includes("/commai/")) data = { answer: "Voice stayed on the measured fibre connection.", plan, based_on: { sites: 2, decisions: 3, grounding: options.grounding } };
     else if (url.endsWith("/assistant/plans/1/approve")) {
       plan = { ...plan, approval: { revision: plan.revision!, approved_by: "user:person@example.org", approved_at: new Date().toISOString() }, can_execute: true };
       data = plan;
@@ -136,6 +136,36 @@ describe("reviewed proposal execution", () => {
 });
 
 describe("shared account and Jibsy guidance", () => {
+  it("shows access evidence without treating a product as purchased or exposing unavailable Jibsy tools", async () => {
+    const c = context();
+    c.account.products = ["connect", "commai"];
+    c.account.accessible_products = ["connect", "commai"];
+    const access = { organisation_access: true, member_access: false, operator_access: false, access_source: "organisation_products" as const,
+      active_subscription_recorded: false, scheduled_subscription_recorded: false, payment_verified: false as const, provider_readiness: "not_checked" as const };
+    c.account.product_access = { commai: access };
+    c.verified_features = [{ id: "jibsy_diagnostics", product: "commai", name: "Jibsy diagnostics and approved repairs", description: "Checks configured channels.",
+      path: null, source: "commai/automation/assistant.py", availability: { ...access, implemented: true, permitted_now: false } }];
+    c.sources = ["installed_feature_registry"];
+    responses({ context: c });show("/assistant");
+    await screen.findByText("Access restricted");
+    expect(screen.getByText("Access enabled")).toBeTruthy();
+    expect(screen.queryByText("Not on your plan")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Jibsy checks" })).toBeNull();
+    expect(screen.queryByRole("link", { name: /Jibsy|diagnostics/i })).toBeNull();
+    fireEvent.click(screen.getByText("Context and sources"));
+    expect(screen.getByText("Implemented product features")).toBeTruthy();
+    expect(screen.queryByText("Available product features")).toBeNull();
+  });
+
+  it.each(["unverified_advice_replaced_with_grounded_facts", "verified_advisory_selection", "reviewed_typed_proposal"] as const)("identifies a substituted recommendation only for %s", async (grounding) => {
+    responses({ grounding });show("/assistant");
+    fireEvent.change(await screen.findByRole("textbox", { name: "Your account question" }), { target: { value: "What can this account access?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText("Voice stayed on the measured fibre connection.");
+    const notice = screen.queryByText("I couldn’t verify that recommendation. Here are the facts I can confirm.");
+    expect(Boolean(notice)).toBe(grounding === "unverified_advice_replaced_with_grounded_facts");
+  });
+
   it("lets a Jibsy-only member ask account questions without calling network or administrator tools", async () => {
     auth.user = { ...auth.user!, products: ["commai"], apps: ["commai"] };
     const c = context();
@@ -148,7 +178,7 @@ describe("shared account and Jibsy guidance", () => {
     await screen.findByRole("textbox", { name: "Your account question" });
     expect(screen.queryByRole("button", { name: "Connect network" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Jibsy checks" })).toBeNull();
-    expect(screen.getByText("Not on your plan")).toBeTruthy();
+    expect(screen.getByText("Not enabled")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "What is included in our plan?" }));
     await screen.findByText("Voice stayed on the measured fibre connection.");
     expect(JSON.parse(String(posts(fetch, "/assistant/ask")[0][1]?.body)).scope).toBe("account");

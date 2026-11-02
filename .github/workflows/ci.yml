@@ -150,6 +150,7 @@ jobs:
           controller/tests/test_assistant_permissions.py
           controller/tests/test_assistant_readiness.py
           controller/tests/test_hub_assistant.py
+          controller/tests/test_hub_grounding.py
           controller/tests/test_assistant_locking.py
           controller/tests/test_assistant_undo_guard.py
           controller/tests/test_assistant_secret_input.py

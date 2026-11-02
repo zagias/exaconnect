@@ -1,41 +1,197 @@
 [
-  {"value":"1.11.2","normalised":"1.11.2","secure":true},
-  {"value":"FreeSWITCH Version 1.11.2-release","normalised":"1.11.2-release","secure":true},
-  {"value":"FreeSWITCH version: 1.11.2-release~64bit ( 64bit)\n","normalised":"1.11.2-release~64bit ( 64bit)","secure":true},
-  {"value":"FreeSWITCH Version 1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit (-release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit)","normalised":"1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit (-release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit)","secure":false},
-  {"value":"FreeSWITCH Version 1.11.2-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit (-release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit)","normalised":"1.11.2-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit (-release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit)","secure":true},
-  {"value":"FreeSWITCH Version 1.11.2-release+git~20260802T210227Z~a88d069d6f~64bit (git a88d069 2026-08-02 21:02:27Z 64bit)","normalised":"1.11.2-release+git~20260802T210227Z~a88d069d6f~64bit (git a88d069 2026-08-02 21:02:27Z 64bit)","secure":true},
-  {"value":"FreeSWITCH Version 1.11.2-release-24-4cb05e7f4a~64bit (-release-24-4cb05e7f4a 64bit)","normalised":"1.11.2-release-24-4cb05e7f4a~64bit (-release-24-4cb05e7f4a 64bit)","secure":true},
-  {"value":"1.11.2+git~20240229T235959Z~abcdef0123~32bit (git abcdef0 2024-02-29 23:59:59Z 32bit)","normalised":"1.11.2+git~20240229T235959Z~abcdef0123~32bit (git abcdef0 2024-02-29 23:59:59Z 32bit)","secure":true},
-  {"value":"FreeSWITCH Version 1.11.2-release-10222002881-abcdef01abcdef01abcdef01abcdef01abcdef01+git~20260802T210227Z~abcdef01abcdef01abcdef01abcdef01abcdef01~64bit (-release-10222002881-abcdef01abcdef01abcdef01abcdef01abcdef01git abcdef0 2026-08-02 21:02:27Z 64bit)","normalised":"1.11.2-release-10222002881-abcdef01abcdef01abcdef01abcdef01abcdef01+git~20260802T210227Z~abcdef01abcdef01abcdef01abcdef01abcdef01~64bit (-release-10222002881-abcdef01abcdef01abcdef01abcdef01abcdef01git abcdef0 2026-08-02 21:02:27Z 64bit)","secure":true},
-  {"value":"2.0.0","normalised":"2.0.0","secure":true},
-  {"value":"1.11.1-release~64bit (-release 64bit)","normalised":"1.11.1-release~64bit (-release 64bit)","secure":false},
-  {"value":"1.11.2-rc1","normalised":"unknown","secure":false},
-  {"value":"1.11.2-dev","normalised":"unknown","secure":false},
-  {"value":"1.11.2-alpha","normalised":"unknown","secure":false},
-  {"value":"1.11.2-beta","normalised":"unknown","secure":false},
-  {"value":"1.11.2+snapshot","normalised":"unknown","secure":false},
-  {"value":"1.11.2+git~test~64bit","normalised":"unknown","secure":false},
-  {"value":"1.11.2-release+git~20260802T210227Z~a88d069d6f~64bit (dev)","normalised":"unknown","secure":false},
-  {"value":"1.11.2-release+git~20260802T210227Z~a88d069d6f~64bit (git deadbee 2026-08-02 21:02:27Z 64bit)","normalised":"unknown","secure":false},
-  {"value":"1.11.2-release+git~20260802T210227Z~a88d069d6f~64bit (git a88d069 2026-08-03 21:02:27Z 64bit)","normalised":"unknown","secure":false},
-  {"value":"1.11.2-release+git~20260802T210227Z~a88d069d6f~64bit (git a88d069 2026-08-02 21:02:27Z 32bit)","normalised":"unknown","secure":false},
-  {"value":"1.11.2-release-123-deadbee+git~20260802T210227Z~a88d069d6f~64bit","normalised":"unknown","secure":false},
-  {"value":"1.11.2+git~20230229T120000Z~abcdef0123","normalised":"unknown","secure":false},
-  {"value":"1.11.2+git~20261301T120000Z~abcdef0123","normalised":"unknown","secure":false},
-  {"value":"1.11.2+git~20260230T120000Z~abcdef0123","normalised":"unknown","secure":false},
-  {"value":"1.11.2+git~20260802T250000Z~abcdef0123","normalised":"unknown","secure":false},
-  {"value":"1.11.2-release-123-abcdef0123;touch /tmp/not-a-command","normalised":"unknown","secure":false},
-  {"value":"1.11.2+git~20260802T210227Z~abcdef0123+unclean~20260802T210228Z","normalised":"unknown","secure":false},
-  {"value":"1.11.2 +unknown","normalised":"unknown","secure":false},
-  {"value":"1.11.2 (1.10.12 release)","normalised":"unknown","secure":false},
-  {"value":"1.11.2\n1.10.12","normalised":"unknown","secure":false},
-  {"value":"1.11.2\n\n","normalised":"unknown","secure":false},
-  {"value":"\n1.11.2","normalised":"unknown","secure":false},
-  {"value":"1.11.2\u000b1.10.12","normalised":"unknown","secure":false},
-  {"value":"01.11.2","normalised":"unknown","secure":false},
-  {"value":"1.011.2","normalised":"unknown","secure":false},
-  {"value":"1.11.000002","normalised":"unknown","secure":false},
-  {"value":"1000.11.2","normalised":"unknown","secure":false},
-  {"value":"unknown","normalised":"unknown","secure":false}
+  {
+    "value": "1.11.2",
+    "normalised": "1.11.2",
+    "secure": true
+  },
+  {
+    "value": "FreeSWITCH Version 1.11.2-release",
+    "normalised": "1.11.2-release",
+    "secure": true
+  },
+  {
+    "value": "FreeSWITCH version: 1.11.2-release~64bit ( 64bit)",
+    "normalised": "1.11.2-release~64bit ( 64bit)",
+    "secure": true
+  },
+  {
+    "value": "FreeSWITCH Version 1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit (-release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit)",
+    "normalised": "1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit (-release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit)",
+    "secure": false
+  },
+  {
+    "value": "FreeSWITCH Version 1.11.2-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit (-release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit)",
+    "normalised": "1.11.2-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit (-release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit)",
+    "secure": true
+  },
+  {
+    "value": "FreeSWITCH Version 1.11.2-release+git~20260802T210227Z~a88d069d6f~64bit (git a88d069 2026-08-02 21:02:27Z 64bit)",
+    "normalised": "1.11.2-release+git~20260802T210227Z~a88d069d6f~64bit (git a88d069 2026-08-02 21:02:27Z 64bit)",
+    "secure": true
+  },
+  {
+    "value": "FreeSWITCH Version 1.11.2-release-24-4cb05e7f4a~64bit (-release-24-4cb05e7f4a 64bit)",
+    "normalised": "1.11.2-release-24-4cb05e7f4a~64bit (-release-24-4cb05e7f4a 64bit)",
+    "secure": true
+  },
+  {
+    "value": "1.11.2+git~20240229T235959Z~abcdef0123~32bit (git abcdef0 2024-02-29 23:59:59Z 32bit)",
+    "normalised": "1.11.2+git~20240229T235959Z~abcdef0123~32bit (git abcdef0 2024-02-29 23:59:59Z 32bit)",
+    "secure": true
+  },
+  {
+    "value": "FreeSWITCH Version 1.11.2-release-10222002881-abcdef01abcdef01abcdef01abcdef01abcdef01+git~20260802T210227Z~abcdef01abcdef01abcdef01abcdef01abcdef01~64bit (-release-10222002881-abcdef01abcdef01abcdef01abcdef01abcdef01git abcdef0 2026-08-02 21:02:27Z 64bit)",
+    "normalised": "1.11.2-release-10222002881-abcdef01abcdef01abcdef01abcdef01abcdef01+git~20260802T210227Z~abcdef01abcdef01abcdef01abcdef01abcdef01~64bit (-release-10222002881-abcdef01abcdef01abcdef01abcdef01abcdef01git abcdef0 2026-08-02 21:02:27Z 64bit)",
+    "secure": true
+  },
+  {
+    "value": "2.0.0",
+    "normalised": "2.0.0",
+    "secure": true
+  },
+  {
+    "value": "1.11.1-release~64bit (-release 64bit)",
+    "normalised": "1.11.1-release~64bit (-release 64bit)",
+    "secure": false
+  },
+  {
+    "value": "1.11.2-rc1",
+    "normalised": "unknown",
+    "secure": false
+  },
+  {
+    "value": "1.11.2-dev",
+    "normalised": "unknown",
+    "secure": false
+  },
+  {
+    "value": "1.11.2-alpha",
+    "normalised": "unknown",
+    "secure": false
+  },
+  {
+    "value": "1.11.2-beta",
+    "normalised": "unknown",
+    "secure": false
+  },
+  {
+    "value": "1.11.2+snapshot",
+    "normalised": "unknown",
+    "secure": false
+  },
+  {
+    "value": "1.11.2+git~test~64bit",
+    "normalised": "unknown",
+    "secure": false
+  },
+  {
+    "value": "1.11.2-release+git~20260802T210227Z~a88d069d6f~64bit (dev)",
+    "normalised": "unknown",
+    "secure": false
+  },
+  {
+    "value": "1.11.2-release+git~20260802T210227Z~a88d069d6f~64bit (git deadbee 2026-08-02 21:02:27Z 64bit)",
+    "normalised": "unknown",
+    "secure": false
+  },
+  {
+    "value": "1.11.2-release+git~20260802T210227Z~a88d069d6f~64bit (git a88d069 2026-08-03 21:02:27Z 64bit)",
+    "normalised": "unknown",
+    "secure": false
+  },
+  {
+    "value": "1.11.2-release+git~20260802T210227Z~a88d069d6f~64bit (git a88d069 2026-08-02 21:02:27Z 32bit)",
+    "normalised": "unknown",
+    "secure": false
+  },
+  {
+    "value": "1.11.2-release-123-deadbee+git~20260802T210227Z~a88d069d6f~64bit",
+    "normalised": "unknown",
+    "secure": false
+  },
+  {
+    "value": "1.11.2+git~20230229T120000Z~abcdef0123",
+    "normalised": "unknown",
+    "secure": false
+  },
+  {
+    "value": "1.11.2+git~20261301T120000Z~abcdef0123",
+    "normalised": "unknown",
+    "secure": false
+  },
+  {
+    "value": "1.11.2+git~20260230T120000Z~abcdef0123",
+    "normalised": "unknown",
+    "secure": false
+  },
+  {
+    "value": "1.11.2+git~20260802T250000Z~abcdef0123",
+    "normalised": "unknown",
+    "secure": false
+  },
+  {
+    "value": "1.11.2-release-123-abcdef0123;touch /tmp/not-a-command",
+    "normalised": "unknown",
+    "secure": false
+  },
+  {
+    "value": "1.11.2+git~20260802T210227Z~abcdef0123+unclean~20260802T210228Z",
+    "normalised": "unknown",
+    "secure": false
+  },
+  {
+    "value": "1.11.2 +unknown",
+    "normalised": "unknown",
+    "secure": false
+  },
+  {
+    "value": "1.11.2 (1.10.12 release)",
+    "normalised": "unknown",
+    "secure": false
+  },
+  {
+    "value": "1.11.2\n1.10.12",
+    "normalised": "unknown",
+    "secure": false
+  },
+  {
+    "value": "1.11.2\n\n",
+    "normalised": "unknown",
+    "secure": false
+  },
+  {
+    "value": "\n1.11.2",
+    "normalised": "unknown",
+    "secure": false
+  },
+  {
+    "value": "1.11.2\u000b1.10.12",
+    "normalised": "unknown",
+    "secure": false
+  },
+  {
+    "value": "01.11.2",
+    "normalised": "unknown",
+    "secure": false
+  },
+  {
+    "value": "1.011.2",
+    "normalised": "unknown",
+    "secure": false
+  },
+  {
+    "value": "1.11.000002",
+    "normalised": "unknown",
+    "secure": false
+  },
+  {
+    "value": "1000.11.2",
+    "normalised": "unknown",
+    "secure": false
+  },
+  {
+    "value": "unknown",
+    "normalised": "unknown",
+    "secure": false
+  }
 ]

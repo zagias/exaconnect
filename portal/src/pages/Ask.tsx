@@ -22,7 +22,7 @@ interface Turn extends Partial<AssistantAnswer> {
 
 const PRODUCT: Record<Product, string> = { connect: "Connect", commai: "Jibsy" };
 const SOURCES: Record<string, string> = {
-  installed_feature_registry: "Available product features", active_product_catalogue: "Current catalogue",
+  installed_feature_registry: "Implemented product features", active_product_catalogue: "Current catalogue",
   organisation_access: "Organisation access", subscriptions: "Account plans",
   network_snapshot: "Network observations", connect_snapshot: "Network observations",
 };
@@ -78,12 +78,17 @@ export default function Ask() {
             {c.account.example && <ExampleTag />}
             <p className="small muted assistant-role">{c.account.role === "viewer" ? "Viewer · read only" : c.account.role.replaceAll("_", " ")}</p>
             <dl className="assistant-account">
-              {(["connect", "commai"] as Product[]).map((product) => (
+              {(["connect", "commai"] as Product[]).map((product) => {
+                const access = c.account.product_access?.[product];
+                const enabled = access?.organisation_access ?? c.account.products.includes(product);
+                const assigned = access?.member_access ?? c.account.accessible_products.includes(product);
+                return (
                 <div key={product}>
                   <dt>{PRODUCT[product]}</dt>
-                  <dd>{!c.account.products.includes(product) ? "Not on your plan" : c.account.accessible_products.includes(product) ? "Available to you" : "Access not assigned"}</dd>
+                  <dd>{!enabled ? "Not enabled" : assigned ? "Access enabled" : "Access restricted"}</dd>
                 </div>
-              ))}
+                );
+              })}
             </dl>
             <Link to="/account/apps">Apps and plans</Link>
             <details className="assistant-details">
@@ -165,6 +170,9 @@ function Advice({ context, scope }: { context: AssistantContext; scope: Scope })
             <p className="assistant-question"><span className="small muted">You</span>{t.q}</p>
             {t.answer !== undefined ? (
               <>
+                {t.based_on?.grounding === "unverified_advice_replaced_with_grounded_facts" && (
+                  <p className="small muted">I couldn’t verify that recommendation. Here are the facts I can confirm.</p>
+                )}
                 <div className="assistant-answer">{t.answer}</div>
                 <p className="small muted assistant-source">{t.based_on?.sources?.length === 0 ? "No account data was queried for this reply." : t.scope === "connect" ? `Network observations${t.based_on?.sites !== undefined ? ` · ${t.based_on.sites} sites` : ""}${t.based_on?.decisions !== undefined ? ` · ${t.based_on.decisions} decisions in 7 days` : ""}` : "Account access, plans and current catalogue"}</p>
                 {t.plan && <PlanReview plan={t.plan} canOperate={canOperate} onChange={update} />}

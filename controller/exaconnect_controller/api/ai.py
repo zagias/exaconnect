@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from .. import audit, db
-from ..ai import act, hazards, hub, runner, storms
+from ..ai import act, guidance, hazards, hub, runner, storms
 from ..ai import ask as ask_mod
 from .deps import VIEWER_ONLY, AdminDep, UserDep, can_manage_org, check_customer, check_product, require_org_manager
 
@@ -77,7 +77,6 @@ def _hub_context(conn, customer_id, user, settings) -> dict:
     from ..commai import access
 
     read, write = _network_access(user)
-    out = hub.context(conn, customer_id, user, connect_read=read, connect_write=write)
     can_check_jibsy = False
     try:
         check_product(user, "commai")
@@ -89,7 +88,9 @@ def _hub_context(conn, customer_id, user, settings) -> dict:
         can_check_jibsy = access.seat(conn, diagnostic_user, customer_id) != "internal"
     except HTTPException:
         pass
-    out["tools"]["jibsy_diagnostics_path"] = "/assistant?scope=jibsy" if can_check_jibsy else None
+    out = hub.context(
+        conn, customer_id, user, connect_read=read, connect_write=write, jibsy_diagnostics=can_check_jibsy
+    )
     out.update(
         ask_enabled=bool(settings.llm_api_key),
         ask_unavailable_reason=None if settings.llm_api_key else "The assistant is not connected to an AI service yet.",
@@ -272,6 +273,8 @@ async def _answer(body: AskIn, user, request: Request, *, shared_mode: bool) -> 
                     context["sources"].append("network_snapshot")
             if shared_mode:
                 context["tools"]["connect_changes"] = network_write and include_network
+                context["assistant_scope"] = body.scope
+                guidance.attach_evidence(context)
             return context, act.config(conn, customer_id) if include_network else {}
 
     context, config = await asyncio.to_thread(prepare)
@@ -282,7 +285,7 @@ async def _answer(body: AskIn, user, request: Request, *, shared_mode: bool) -> 
     try:
         text = await asyncio.to_thread(
             ask_mod.chat,
-            (hub.SYSTEM + "\n" if shared_mode else "") + act.SYSTEM,
+            act.SYSTEM + ("\n" + hub.SYSTEM if shared_mode else ""),
             act.prompt(body.question, {**context, "configuration": config}, [t.model_dump() for t in body.history]),
             api_key=s.llm_api_key,
             base_url=s.llm_base_url,
@@ -296,6 +299,9 @@ async def _answer(body: AskIn, user, request: Request, *, shared_mode: bool) -> 
     # The model cannot turn an advice-only scope into an available tool.
     if shared_mode and (not include_network or not network_write):
         actions = []
+    grounding = None
+    if shared_mode:
+        answer, actions, grounding = guidance.render(text, answer, actions, context, body.scope)
 
     def propose():
         with db.tx() as conn:
@@ -306,6 +312,8 @@ async def _answer(body: AskIn, user, request: Request, *, shared_mode: bool) -> 
             return plan
 
     plan = await asyncio.to_thread(propose) if actions else None
+    if shared_mode and plan:
+        answer = guidance.proposal_answer(plan, context)
     return {
         "answer": answer,
         "plan": plan,
@@ -316,6 +324,7 @@ async def _answer(body: AskIn, user, request: Request, *, shared_mode: bool) -> 
             "insights": len(context.get("open_insights", [])),
             "sites": len(context.get("sites", [])),
             "sources": context.get("sources", ["tenant_network_snapshot"]),
+            **({"grounding": grounding} if grounding else {}),
         },
     }
 

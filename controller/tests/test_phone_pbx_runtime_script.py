@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import importlib.util
 import json
 import os
 import shutil
@@ -31,6 +32,12 @@ SAFE_VERSION = (
     "FreeSWITCH Version 1.11.2-release+git~20260802T210227Z~a88d069d6f~64bit (git a88d069 2026-08-02 21:02:27Z 64bit)"
 )
 VERSION_CASES = json.loads(Path(__file__).with_name("phone_runtime_versions.json").read_text())
+CLI_CASES = json.loads(Path(__file__).with_name("phone_runtime_cli_versions.json").read_text())
+PARSER_SPEC = importlib.util.spec_from_file_location(
+    "phone_image_parser_check", ROOT / "deploy/voice/phone_parser_check.py"
+)
+image_parser = importlib.util.module_from_spec(PARSER_SPEC)
+PARSER_SPEC.loader.exec_module(image_parser)
 PROFILE = """<profile name="internal">
   <!-- <param name="disable-transfer" value="false"/> -->
   <settings>
@@ -168,6 +175,43 @@ def test_guard_parser_matches_shared_official_release_matrix(case):
     )
     assert (result.stdout.rstrip("\n") or "unknown") == case["normalised"]
     assert (result.returncode == 0) is case["secure"]
+
+
+@pytest.mark.parametrize("case", CLI_CASES)
+def test_real_version_command_framing_keeps_receipts_strict_and_rejects_multiple_records(runtime, case):
+    _executable(runtime.binary / "freeswitch", '#!/bin/sh\nprintf "%s" "$TEST_FS_VERSION"\n')
+    _executable(runtime.binary / "fs_cli", '#!/bin/sh\nprintf "%s" "$TEST_RUNNING_VERSION"\n')
+    if case["command"] == "binary":
+        runtime.env["TEST_FS_VERSION"] = case["stdout"]
+        result = _run(runtime, "guard")
+        assert result.returncode == 0, result.stderr
+        assert runtime.state.joinpath("guard").read_text().splitlines() == [
+            case["normalised"],
+            str(case["secure"]).lower(),
+        ]
+    else:
+        startup = case["normalised"] if case["normalised"] != "unknown" else SAFE_VERSION
+        runtime.env["TEST_FS_VERSION"] = startup + "\n"
+        runtime.env["TEST_RUNNING_VERSION"] = case["stdout"]
+        assert _run(runtime, "guard").returncode == 0
+        _python_transport(runtime)
+        result = _run(runtime, "probe")
+        if case["normalised"] == "unknown":
+            assert result.returncode != 0 and not runtime.capture.exists()
+        else:
+            assert result.returncode == 0, result.stderr
+            payload = json.loads(json.loads(runtime.capture.read_text())["body"])
+            assert payload["version"] == case["normalised"]
+            assert payload["transfer_enabled"] is case["secure"]
+
+
+def test_actual_image_matrix_driver_executes_the_guard_functions_with_bounded_command_stubs(runtime):
+    source, summary = image_parser.script()
+    result = subprocess.run(
+        ["/bin/sh", "-s"], input=source, env=runtime.env, check=False, text=True, capture_output=True, timeout=10
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == summary + "\n"
 
 
 @pytest.mark.parametrize(
