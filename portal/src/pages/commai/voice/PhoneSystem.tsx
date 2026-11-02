@@ -1,5 +1,5 @@
-import { Link } from "react-router-dom";
-import { useState, type FormEvent, type ReactNode } from "react";
+import { Link, useLocation } from "react-router-dom";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { api, download, useApi } from "../../../api";
 import { ErrorNote } from "../../../components";
 import { Card, RowActions, useAction } from "../../../ui";
@@ -606,6 +606,10 @@ function Devices({ base, v, propose }: { base: string; v: VoiceOverview; propose
 // ---- call routing -------------------------------------------------------------------------
 
 export function Routing({ v, propose }: { v: VoiceOverview; propose: Propose }) {
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (hash === "#ai-rules") document.getElementById("ai-rules")?.scrollIntoView({ block: "start" });
+  }, [hash]);
   return (
     <>
       <GroupCard kind="ring_group" v={v} propose={propose} />
@@ -891,12 +895,13 @@ function AiRulesCard({ v, propose }: { v: VoiceOverview; propose: Propose }) {
   const [f, setF] = useState({ name: "", condition: "after_hours", hours: "", number: "", fallback: "voicemail" });
   const COND: Record<string, string> = { after_hours: "Outside business hours", no_answer: "When nobody answers", busy: "When everyone is busy", always: "Always" };
   return (
-    <Card title="AI agent rules">
+    <section id="ai-rules" className="phone-ai-rules"><Card title="AI agent rules">
       <p className="muted small">
         {v.ai_phone_ready
           ? "Choose when the AI answers and where callers go if it is unavailable."
-          : "Telephone AI is not available yet. Existing rules send callers directly to their configured fallback."}
+          : "Prepare your call rules now. Saved rules use their fallback until telephone AI checks pass."}
       </p>
+      <p className="small"><Link to="/commai/voice/ai">View telephone AI setup and readiness</Link></p>
       <ul className="plain-list">
         {(v.ai_rules ?? []).map((r) => (
           <li key={r.id} className="row-between">
@@ -910,14 +915,14 @@ function AiRulesCard({ v, propose }: { v: VoiceOverview; propose: Propose }) {
           </li>
         ))}
       </ul>
-      {v.ai_phone_ready && <form
+      <form
         className="form"
         onSubmit={(e) => {
           e.preventDefault();
-          const op: Op = { op: "save_ai_rule", name: f.name, condition: f.condition, fallback: f.fallback };
+          const op: Op = { op: "save_ai_rule", name: f.name, condition: f.condition, fallback: f.fallback, enabled: true };
           if (f.hours) op.hours = f.hours;
           if (f.number) op.number = f.number;
-          propose([op], `add rule ${f.name}`);
+          propose([op], `${v.ai_phone_ready ? "add" : "prepare"} rule ${f.name}`);
         }}
       >
         <Field label="Name">
@@ -955,15 +960,15 @@ function AiRulesCard({ v, propose }: { v: VoiceOverview; propose: Propose }) {
         <Field label="If the AI agent is unavailable">
           <select value={f.fallback} onChange={(e) => setF({ ...f, fallback: e.target.value })}>
             <option value="voicemail">Voicemail</option>
-            <option value="ring_group">Ring group</option>
-            <option value="queue">Queue</option>
+            <option value="ring_group" disabled={!(v.ring_groups ?? []).length}>Ring group</option>
+            <option value="queue" disabled={!(v.queues ?? []).length}>Queue</option>
           </select>
         </Field>
         <div className="actions wide">
-          <button className="button">Check rule</button>
+          <button className="button">{v.ai_phone_ready ? "Check rule" : "Prepare rule"}</button>
         </div>
-      </form>}
-    </Card>
+      </form>
+    </Card></section>
   );
 }
 

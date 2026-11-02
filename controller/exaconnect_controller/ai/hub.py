@@ -61,7 +61,10 @@ Choose the contract using snapshot.assistant_scope:
   Do not include feature_ids, offer_codes or account_topics; actions MUST be empty.
 - connect, diagnosis of measured state: kind analysis, selecting actual scoped_evidence IDs.
 - connect, an explicitly requested configuration change: kind proposal and the allowed typed actions.
-Use arrays of exact IDs within advice_contract limits; omit unused arrays or use [].
+Prefer arrays within advice_contract display limits; put the most useful IDs first.
+The server validates every supplied ID, then removes duplicates and keeps the first allowed number.
+Unknown IDs anywhere reject the selection; never invent IDs or include prose in a selector.
+Omit unused arrays or use []. Do not put advice_contract's selection_policy in your advice object.
 Valid account example:
 {"answer":"","actions":[],"advice":{"kind":"account","account_topics":["access","subscriptions","offers"],
 "feature_ids":["network_health","network_plans"]}}

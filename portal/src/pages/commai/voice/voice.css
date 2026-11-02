@@ -22,6 +22,27 @@
 .voice-credit { width: 90px; }
 .voice-say { display: flex; gap: 8px; }
 .voice-say input { flex: 1; min-width: 0; }
+.phone-ai-setup { max-width: 920px; }
+.phone-ai-heading { display: flex; justify-content: space-between; align-items: start; gap: 16px; }
+.phone-ai-heading h2 { margin: 0; font-size: 20px; }
+.phone-ai-heading p { margin: 6px 0 0; font-size: 14px; }
+.phone-ai-status { margin: 20px 0; }
+.phone-ai-status p { margin: 8px 0; font-size: 14px; }
+.phone-ai-checklist { list-style: none; padding: 0; margin: 0; border-top: 1px solid var(--line); }
+.phone-ai-checklist > li { padding: 16px 0; border-bottom: 1px solid var(--line); }
+.phone-ai-step-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.phone-ai-step-heading h3 { font-size: 15px; margin: 0; font-weight: 600; }
+.phone-ai-checklist p { font-size: 14px; margin: 7px 0; max-width: 760px; }
+.phone-ai-step-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin-top: 8px; font-size: 14px; }
+.phone-ai-detail, .phone-ai-evidence { font-size: 13px; color: var(--ink-muted); margin-top: 8px; }
+.phone-ai-detail summary, .phone-ai-evidence summary { cursor: pointer; width: fit-content; }
+.phone-ai-evidence dl { margin: 8px 0; }
+.phone-ai-evidence dl > div { display: grid; grid-template-columns: 145px 1fr; gap: 12px; margin: 4px 0; }
+.phone-ai-evidence dd { margin: 0; overflow-wrap: anywhere; }
+.phone-ai-evidence code { overflow-wrap: anywhere; }
+.phone-ai-footer { margin: 20px 0; font-size: 14px; }
+.phone-ai-footer .row-actions { gap: 16px; }
+.phone-ai-rules { scroll-margin-top: 24px; }
 /* Calling platforms (ADR 0056). */
 .platform-list { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 8px; }
 .platform-list li { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; }
@@ -32,6 +53,8 @@
 .platform-guide { margin: 16px 0; }
 .platform-guide pre { white-space: pre-wrap; word-break: break-all; background: var(--page); border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
 @media (max-width: 640px) {
+  .phone-ai-heading { flex-direction: column; gap: 12px; }
+  .phone-ai-evidence dl > div { grid-template-columns: 1fr; gap: 2px; margin: 8px 0; }
   .platform-kv { grid-template-columns: 1fr; }
   .platform-list li { flex-direction: column; align-items: flex-start; }
   .voice-order-row { grid-template-columns: 1fr 1fr; }

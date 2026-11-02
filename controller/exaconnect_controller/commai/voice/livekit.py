@@ -34,6 +34,7 @@ from typing import Any
 
 import psycopg
 
+from . import pbx_runtime
 from .common import VoiceError, digits
 
 SETTINGS = ("EXA_LIVEKIT_URL", "EXA_LIVEKIT_API_KEY", "EXA_LIVEKIT_API_SECRET", "EXA_LIVEKIT_AGENT_SECRET")
@@ -48,13 +49,35 @@ def missing() -> list[str]:
     return [n for n in SETTINGS if not os.environ.get(n)]
 
 
+def valid_url() -> bool:
+    """Validate the supported server root without returning its private value."""
+    value = os.environ.get("EXA_LIVEKIT_URL", "")
+    if len(value) > 2048 or any(ord(char) <= 32 for char in value):
+        return False
+    try:
+        url = urllib.parse.urlsplit(value)
+        return bool(
+            url.scheme in ("http", "https", "ws", "wss")
+            and url.hostname
+            and not url.username
+            and not url.password
+            and not url.query
+            and not url.fragment
+            and url.path in ("", "/")
+            and (url.port is None or 1 <= url.port <= 65535)
+        )
+    except ValueError:
+        return False
+
+
 def status() -> dict:
     m = missing()
+    configured = not m and valid_url()
     ready = phone_ready()
     return {
-        "configured": not m,
+        "configured": configured,
         "missing": m,
-        "url": os.environ.get("EXA_LIVEKIT_URL", "") if not m else "",
+        "url": os.environ.get("EXA_LIVEKIT_URL", "") if configured else "",
         "phone_ready": ready,
         "phone_reason": (
             "Telephone AI has fresh speech, patched PBX and SIP handover evidence."
@@ -71,23 +94,28 @@ def phone_ready(customer_id: Any = None, *, conn: psycopg.Connection | None = No
     loopback and a successful real SIP transfer. No environment readiness flag
     exists. A missing database, stale check or missing configuration fails shut.
     """
-    if missing():
+    if missing() or not valid_url():
         return False
     from ... import db
 
     def ready(connection) -> bool:
-        return (
-            connection.execute(
-                """SELECT 1 FROM voice_ai_phone_runtime WHERE NOT lab_only AND expires_at > now()
+        row = connection.execute(
+            """SELECT (SELECT version FROM voice_ai_phone_pbx_runtime WHERE instance_id = 'main') AS version
+                   FROM voice_ai_phone_runtime WHERE NOT lab_only AND expires_at > now()
                    AND speech_verified_at > now() - interval '90 seconds'
                    AND transfer_verified_at > now() - interval '24 hours'
                    AND (%s::uuid IS NULL OR customer_id = %s)
+                   AND NOT EXISTS (SELECT 1 FROM commai_entitlements e
+                       WHERE e.customer_id = voice_ai_phone_runtime.customer_id
+                       AND e.module IN ('voice', 'ai_agents') AND NOT e.enabled)
                    AND EXISTS (SELECT 1 FROM voice_ai_phone_pbx_runtime WHERE instance_id = 'main'
                                AND version_secure AND transfer_enabled AND expires_at > now()) LIMIT 1""",
-                (customer_id, customer_id),
-            ).fetchone()
-            is not None
-        )
+            (customer_id, customer_id),
+        ).fetchone()
+        # Re-evaluate the stored binary against this controller's current floor.
+        # An older controller may have signed version_secure for 1.11.2; a
+        # still-fresh receipt must not survive a stricter security baseline.
+        return row is not None and pbx_runtime.version(row["version"])[1]
 
     try:
         if conn is not None:
@@ -155,9 +183,9 @@ def service_request(service: str, method: str, body: dict, *, room: str = "", ti
         raise ValueError("Unsupported LiveKit operation")
     if missing():
         raise VoiceError("LiveKit is not configured.", 503)
-    url = urllib.parse.urlsplit(os.environ["EXA_LIVEKIT_URL"])
-    if url.scheme not in ("http", "https", "ws", "wss") or not url.hostname or url.username or url.password:
+    if not valid_url():
         raise VoiceError("LiveKit URL is invalid.", 503)
+    url = urllib.parse.urlsplit(os.environ["EXA_LIVEKIT_URL"])
     scheme = "https" if url.scheme in ("https", "wss") else "http"
     base = urllib.parse.urlunsplit((scheme, url.netloc, "", "", ""))
     now = int(time.time())

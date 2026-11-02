@@ -9,6 +9,7 @@ from __future__ import annotations
 import copy
 import json
 from contextlib import nullcontext
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -36,6 +37,7 @@ NETWORK = {
     ],
     "customer": {"shadow_mode": True},
 }
+RECORDED_DESIGN = json.loads(Path(__file__).with_name("hub_advice_replay.json").read_text())
 
 
 @pytest.fixture
@@ -145,7 +147,7 @@ def shared_grounding(monkeypatch, account_context):
 
     def chat(system, prompt, **_):
         state.prompts.append((system, prompt))
-        return json.dumps(state.response)
+        return state.response if isinstance(state.response, str) else json.dumps(state.response)
 
     def create(_conn, _customer, _question, answer, actions, *_args, **_kwargs):
         state.plans.append({"answer": answer, "actions": actions})
@@ -325,3 +327,106 @@ def test_replies_are_brief_and_account_topics_avoid_repeated_boilerplate(shared_
         "observations": ["inventory", "satellite"],
     }
     assert len(ask(s)["answer"].split()) <= 140
+
+
+def test_recorded_valid_six_control_response_keeps_grounded_priority_instead_of_fallback(shared_grounding):
+    s = shared_grounding
+    s.response = RECORDED_DESIGN["content"]
+    response = s.client.post(
+        "/api/v1/assistant/ask", json={"scope": "connect", "question": RECORDED_DESIGN["question"]}
+    )
+    assert response.status_code == 200
+    result = response.json()
+    assert result["based_on"]["grounding"] == "verified_advisory_selection"
+    assert result["based_on"]["advice_selection"] == {
+        "normalised": True,
+        "changes": [{"field": "controls", "supplied": 6, "selected": 3}],
+    }
+    answer = result["answer"]
+    for control in ("diversity", "power", "application_sla"):
+        assert guidance.DESIGN[control]["advice"] in answer
+    for control in ("pos_security", "storm_mode", "satellite_costs"):
+        assert guidance.DESIGN[control]["advice"] not in answer
+    questions = ["pos_sessions", "voice_failover", "commissioning", "failure_validation"]
+    assert [answer.index(guidance.DESIGN[key]["question"]) for key in questions] == sorted(
+        answer.index(guidance.DESIGN[key]["question"]) for key in questions
+    )
+    assert "0 configured paths" in answer and "0 configured satellite paths" in answer
+    assert result["plan"] is None and s.plans == []
+
+
+@pytest.mark.parametrize("name", guidance.SELECTION_LIMITS)
+def test_every_selector_validates_unknown_tail_before_bounding(name):
+    allowed = {f"id-{index}" for index in range(guidance.SELECTION_LIMITS[name] + 2)}
+    values = sorted(allowed) + ["unknown-id"]
+    with pytest.raises(ValueError, match="unverified selection"):
+        guidance._selection({name: values}, name, allowed)
+
+
+def test_duplicate_valid_choices_are_bounded_without_reordering():
+    advice = {"controls": ["power", "power", "diversity", "pos_sessions", "storm_mode"]}
+    assert guidance._selection(advice, "controls", guidance.DESIGN) == ["power", "diversity", "pos_sessions"]
+    assert guidance.selection_metadata(json.dumps({"advice": advice})) == {
+        "normalised": True,
+        "changes": [{"field": "controls", "supplied": 5, "selected": 3}],
+    }
+
+
+@pytest.mark.parametrize("bad", ["power", [None], [{"endpoint": "/arbitrary"}], ["power"] * 65])
+def test_malformed_or_oversized_choices_keep_safe_fallback(shared_grounding, bad):
+    s = shared_grounding
+    s.response = {"answer": BAD_DESIGN, "actions": [], "advice": {"kind": "design", "controls": bad}}
+    result = ask(s)
+    assert result["based_on"]["grounding"] == "unverified_advice_replaced_with_grounded_facts"
+    assert "advice_selection" not in result["based_on"]
+    assert "not satellite" not in result["answer"] and result["plan"] is None
+
+
+def test_unknown_control_after_valid_display_limit_rejects_whole_advice(shared_grounding):
+    s = shared_grounding
+    s.response = json.loads(RECORDED_DESIGN["content"])
+    s.response["advice"]["controls"].append("pin_path")
+    result = ask(s)
+    assert result["based_on"]["grounding"] == "unverified_advice_replaced_with_grounded_facts"
+    assert "advice_selection" not in result["based_on"]
+    assert result["plan"] is None and s.plans == []
+
+
+def test_bounded_account_features_do_not_grant_jibsy_or_claim_a_purchase(shared_grounding):
+    s = shared_grounding
+    s.response = {
+        "answer": BAD_ACCOUNT,
+        "actions": [],
+        "advice": {
+            "kind": "account",
+            "feature_ids": ["jibsy_diagnostics", "network_health", "network_plans", "network_orders"],
+            "account_topics": ["access", "subscriptions"],
+        },
+    }
+    result = ask(s, "account")
+    assert result["based_on"]["grounding"] == "verified_advisory_selection"
+    assert "isn't available with your access and permissions" in result["answer"]
+    assert "Jibsy isn't enabled" in result["answer"] and "No active subscription is recorded" in result["answer"]
+    assert result["based_on"]["advice_selection"]["changes"] == [{"field": "feature_ids", "supplied": 4, "selected": 2}]
+    assert s.reads == [] and s.plans == []
+
+
+def test_advice_with_valid_extras_cannot_smuggle_a_configuration_action(shared_grounding):
+    s = shared_grounding
+    s.response = json.loads(RECORDED_DESIGN["content"])
+    s.response["actions"] = [{"action": "storm_mode", "on": True, "sites": ["fictional-01"]}]
+    result = ask(s)
+    assert result["based_on"]["grounding"] == "verified_advisory_selection"
+    assert result["plan"] is None and s.plans == []
+
+
+def test_bounded_choices_do_not_bypass_account_scope_or_customer_access(shared_grounding):
+    s = shared_grounding
+    s.response = RECORDED_DESIGN["content"]
+    assert ask(s, "account")["based_on"]["grounding"] == "unverified_advice_replaced_with_grounded_facts"
+    s.prompts.clear()
+    response = s.client.post(
+        "/api/v1/assistant/ask",
+        json={"scope": "connect", "question": "Review this design.", "customer_id": "another-customer"},
+    )
+    assert response.status_code == 403 and s.prompts == []

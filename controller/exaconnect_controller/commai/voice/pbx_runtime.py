@@ -64,4 +64,4 @@ def version(value: str) -> tuple[str, bool]:
         elif human not in {prefix + " " + bits for prefix in suffixes}:
             return "unknown", False
     numbers = tuple(int(match[name]) for name in ("major", "minor", "patch"))
-    return normalised, numbers >= (1, 11, 2)
+    return normalised, numbers >= (1, 11, 3)

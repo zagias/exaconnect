@@ -1,0 +1,9 @@
+{
+  "source": "Recorded fictional-tenant design validation; replay only, not a new provider request.",
+  "source_sha256": "ae2822e9d28525849862110934883768d5a7a26733a9a5334ed1f6eba4839cb7",
+  "provider_model": "deepseek-ai/DeepSeek-V4-Flash",
+  "finish_reason": "stop",
+  "completion_tokens": 72,
+  "question": "Fictional Caribbean retailer: 20 branches, critical POS and VoIP; considering two independent terrestrial links and LEO backup per branch. The recorded sites have no commissioned links or agents. Explain the supported design and ask key questions about diversity, power, capacity/SLA, security, failover, Storm Mode and satellite costs. Advice only; propose no configuration actions.",
+  "content": "{\"answer\":\"\",\"actions\":[],\"advice\":{\"kind\":\"design\",\"controls\":[\"diversity\",\"power\",\"application_sla\",\"pos_security\",\"storm_mode\",\"satellite_costs\"],\"questions\":[\"pos_sessions\",\"voice_failover\",\"commissioning\",\"failure_validation\"],\"observations\":[\"inventory\",\"satellite\"]}}"
+}

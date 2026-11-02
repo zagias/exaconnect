@@ -300,8 +300,13 @@ async def _answer(body: AskIn, user, request: Request, *, shared_mode: bool) -> 
     if shared_mode and (not include_network or not network_write):
         actions = []
     grounding = None
+    selection = None
     if shared_mode:
         answer, actions, grounding = guidance.render(text, answer, actions, context, body.scope)
+        if grounding == "verified_advisory_selection":
+            details = guidance.selection_metadata(text)
+            if details["normalised"]:
+                selection = details
 
     def propose():
         with db.tx() as conn:
@@ -325,6 +330,7 @@ async def _answer(body: AskIn, user, request: Request, *, shared_mode: bool) -> 
             "sites": len(context.get("sites", [])),
             "sources": context.get("sources", ["tenant_network_snapshot"]),
             **({"grounding": grounding} if grounding else {}),
+            **({"advice_selection": selection} if selection else {}),
         },
     }
 

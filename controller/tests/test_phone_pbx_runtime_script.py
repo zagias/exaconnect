@@ -29,7 +29,7 @@ UNSAFE_VERSION = (
     "(-release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit)"
 )
 SAFE_VERSION = (
-    "FreeSWITCH Version 1.11.2-release+git~20260802T210227Z~a88d069d6f~64bit (git a88d069 2026-08-02 21:02:27Z 64bit)"
+    "FreeSWITCH Version 1.11.3-release+git~20260802T210227Z~a88d069d6f~64bit (git a88d069 2026-08-02 21:02:27Z 64bit)"
 )
 VERSION_CASES = json.loads(Path(__file__).with_name("phone_runtime_versions.json").read_text())
 CLI_CASES = json.loads(Path(__file__).with_name("phone_runtime_cli_versions.json").read_text())
@@ -111,11 +111,12 @@ def _run(runtime, mode):
     [
         UNSAFE_VERSION,
         "1.11.1",
+        "1.11.2",
         "unknown",
-        "1.11.2-rc1",
-        "1.11.2-dev",
-        "1.11.2+snapshot",
-        "1.11.20\n1.10.12",
+        "1.11.3-rc1",
+        "1.11.3-dev",
+        "1.11.3+snapshot",
+        "1.11.30\n1.10.12",
     ],
 )
 def test_unsafe_and_unknown_binaries_disable_every_profile_before_start(runtime, version):
@@ -124,7 +125,8 @@ def test_unsafe_and_unknown_binaries_disable_every_profile_before_start(runtime,
     result = _run(runtime, "guard")
     assert result.returncode == 0, result.stderr
     for profile in runtime.profile.parent.glob("*.xml"):
-        assert '    <param name="disable-transfer" value="true"/>\n  </settings>' in profile.read_text()
+        assert '    <param name="disable-transfer" value="true"/>\n' in profile.read_text()
+        assert '    <param name="enable-chat" value="false"/>\n  </settings>' in profile.read_text()
     assert runtime.state.joinpath("guard").read_text().splitlines()[1] == "false"
     assert runtime.profile.stat().st_mode & 0o777 == 0o640
     # Repeat startup is idempotent: one active mitigation per profile.
@@ -132,7 +134,7 @@ def test_unsafe_and_unknown_binaries_disable_every_profile_before_start(runtime,
     assert runtime.profile.read_text().count('value="true"') == 1
 
 
-@pytest.mark.parametrize("version", ["1.11.2", SAFE_VERSION, "2.0.0"])
+@pytest.mark.parametrize("version", ["1.11.3", SAFE_VERSION, "2.0.0"])
 def test_patched_versions_preserve_configuration(runtime, version):
     runtime.env["TEST_FS_VERSION"] = version
     before = runtime.profile.read_bytes()
@@ -151,7 +153,7 @@ def test_nonzero_binary_exit_cannot_claim_a_patched_startup(runtime):
 
 
 def test_oversized_binary_output_is_unknown_and_mitigated(runtime):
-    runtime.env["TEST_FS_VERSION"] = "1.11.2" + "a" * 8192
+    runtime.env["TEST_FS_VERSION"] = "1.11.3" + "a" * 8192
     assert _run(runtime, "guard").returncode == 0
     assert runtime.state.joinpath("guard").read_text().splitlines() == ["unknown", "false"]
 
@@ -245,6 +247,11 @@ def test_actual_image_matrix_driver_executes_the_guard_functions_with_bounded_co
         PROFILE.replace("  </settings>", ""),
         PROFILE.replace("</profile>", ""),
         PROFILE.replace('<param name="sip-port" value="5060"/>', '<param name="disable-transfer"\n value="false"/>'),
+        PROFILE.replace('<param name="sip-port" value="5060"/>', '<param name="enable-chat"\n value="false"/>'),
+        PROFILE.replace('<param name="sip-port" value="5060"/>', '<param name="enable-chat" value="maybe"/>'),
+        PROFILE.replace(
+            '<param name="sip-port" value="5060"/>', '<param name="enable-chat-api-proto"\n value="true"/>'
+        ),
     ],
 )
 def test_ambiguous_or_invalid_xml_refuses_startup_without_guard_marker(runtime, xml):
@@ -266,6 +273,32 @@ def test_existing_transfer_permission_is_replaced_and_read_only_failure_aborts(r
     _executable(runtime.binary / "mv", "#!/bin/sh\nexit 1\n")
     assert _run(runtime, "guard").returncode != 0
     assert not runtime.state.joinpath("guard").exists()
+
+
+def test_chat_workaround_replaces_duplicates_and_does_not_trust_api_proto_on_patched_build(runtime):
+    runtime.profile.write_text(
+        PROFILE.replace(
+            '    <param name="sip-port" value="5060"/>',
+            '    <param name="enable-chat" value="true"/>\n'
+            '    <param name="enable-chat" value="false"/>\n'
+            '    <param name="enable-chat-api-proto" value="true"/>',
+        )
+    )
+    assert _run(runtime, "guard").returncode == 0
+    xml = runtime.profile.read_text()
+    assert xml.count('<param name="enable-chat"') == 1
+    assert '<param name="enable-chat" value="false"/>' in xml
+    assert '<param name="enable-chat-api-proto" value="false"/>' in xml
+    # Patched binaries may preserve explicit operator configuration, but unsafe
+    # opt-in cannot obtain a transfer-ready receipt.
+    runtime.env["TEST_FS_VERSION"] = SAFE_VERSION
+    runtime.profile.write_text(
+        PROFILE.replace(
+            '    <param name="sip-port" value="5060"/>', '    <param name="enable-chat-api-proto" value="true"/>'
+        )
+    )
+    assert _run(runtime, "guard").returncode == 0
+    assert runtime.state.joinpath("guard").read_text().splitlines()[1] == "false"
 
 
 def _python_transport(runtime):
@@ -441,6 +474,7 @@ def test_stock_first_boot_uses_guarded_templates_without_copying_defaults(runtim
     provided.write_text("provided configuration must stay unchanged")
     assert _run(runtime, "guard").returncode == 0
     assert 'value="true"' in template.read_text()
+    assert '<param name="enable-chat" value="false"/>' in template.read_text()
     assert not runtime.profile.exists() and not (runtime.config / "freeswitch.xml").exists()
     assert provided.read_text() == "provided configuration must stay unchanged"
     assert runtime.state.joinpath("guard").read_text().splitlines()[1] == "false"

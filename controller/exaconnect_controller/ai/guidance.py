@@ -112,6 +112,17 @@ CONSTRAINTS = {
     "supply": {"catalogue_or_partner_implies_supply": False, "coverage_price_fulfilment_guaranteed": False},
 }
 
+SELECTION_LIMITS = {
+    "feature_ids": 2,
+    "controls": 3,
+    "questions": 4,
+    "observations": 2,
+    "offer_codes": 2,
+    "evidence_ids": 6,
+    "account_topics": 4,
+}
+MAX_SELECTION_ITEMS = 64
+
 CONTRACT = {
     "kind": "account | design | analysis | proposal",
     "feature_ids": "up to 2 verified feature IDs relevant to the question",
@@ -121,16 +132,36 @@ CONTRACT = {
     "offer_codes": "up to 2 exact live catalogue codes; empty if no relevant verified offer",
     "evidence_ids": "for analysis: 1 to 6 exact scoped_evidence IDs relevant to the question",
     "account_topics": "choose relevant unresolved topics: access, subscriptions, configuration, offers",
+    "selection_policy": {
+        "display_limits": SELECTION_LIMITS,
+        "maximum_supplied_per_field": MAX_SELECTION_ITEMS,
+        "order": "Most relevant IDs first. Validate all IDs before removing duplicates or valid extras.",
+        "unknown_ids": "The whole advisory selection is rejected; unsupported IDs are never silently dropped.",
+    },
 }
 
 
-def _selection(advice: dict, name: str, allowed, maximum: int) -> list[str]:
+def _selection(advice: dict, name: str, allowed) -> list[str]:
     values = advice.get(name, [])
-    if not isinstance(values, list) or len(values) > maximum:
+    if not isinstance(values, list) or len(values) > MAX_SELECTION_ITEMS:
         raise ValueError("invalid selection")
-    if any(not isinstance(value, str) or value not in allowed for value in values) or len(set(values)) != len(values):
+    # Validate the complete selection before bounding it: an unknown ID at the
+    # end must not disappear behind the presentation limit.
+    if any(not isinstance(value, str) or value not in allowed for value in values):
         raise ValueError("unverified selection")
-    return values
+    return list(dict.fromkeys(values))[: SELECTION_LIMITS[name]]
+
+
+def selection_metadata(text: str) -> dict:
+    """Counts only, for an advisory selection already validated by render()."""
+    advice = json.loads(text)["advice"]
+    changes = []
+    for name, maximum in SELECTION_LIMITS.items():
+        values = advice.get(name, [])
+        selected = min(len(dict.fromkeys(values)), maximum)
+        if selected != len(values):
+            changes.append({"field": name, "supplied": len(values), "selected": selected})
+    return {"normalised": bool(changes), "changes": changes}
 
 
 def account_facts(context: dict, feature_ids: list[str], offer_codes: list[str], topics=None) -> list[str]:
@@ -320,14 +351,14 @@ def render(text: str, answer: str, actions: list[dict], context: dict, scope: st
             raise ValueError("unknown advice field")
         features = {feature["id"] for feature in context.get("verified_features", [])}
         offers = {offer["code"] for offer in context.get("catalogue", [])}
-        feature_ids = _selection(advice, "feature_ids", features, 2)
-        offer_codes = _selection(advice, "offer_codes", offers, 2)
-        controls = _selection(advice, "controls", DESIGN, 3)
-        questions = _selection(advice, "questions", DESIGN, 4)
-        selected = _selection(advice, "observations", {"inventory", "satellite", "shadow_mode"}, 2)
+        feature_ids = _selection(advice, "feature_ids", features)
+        offer_codes = _selection(advice, "offer_codes", offers)
+        controls = _selection(advice, "controls", DESIGN)
+        questions = _selection(advice, "questions", DESIGN)
+        selected = _selection(advice, "observations", {"inventory", "satellite", "shadow_mode"})
         evidence = {record["id"]: record["text"] for record in context.get("scoped_evidence", [])}
-        evidence_ids = _selection(advice, "evidence_ids", evidence, 6)
-        topics = _selection(advice, "account_topics", {"access", "subscriptions", "configuration", "offers"}, 4)
+        evidence_ids = _selection(advice, "evidence_ids", evidence)
+        topics = _selection(advice, "account_topics", {"access", "subscriptions", "configuration", "offers"})
         if kind == "account":
             if controls or questions or selected or evidence_ids:
                 raise ValueError("account scope does not include network data")
