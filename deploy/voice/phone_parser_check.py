@@ -54,7 +54,7 @@ def script() -> tuple[str, str]:
             lines.extend(
                 [
                     f"EXA_PHONE_PARSER_FIXTURE={raw}; export EXA_PHONE_PARSER_FIXTURE",
-                    f"if value=$(runtime_version {command}); then :; else value=unknown; fi",
+                    f'if value=$(runtime_version "$fixture_dir" {command}); then :; else value=unknown; fi',
                 ]
             )
         else:

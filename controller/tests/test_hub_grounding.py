@@ -15,7 +15,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from exaconnect_controller.ai import guidance, hub
+from exaconnect_controller.ai import act, guidance, hub
 from exaconnect_controller.api import ai
 from exaconnect_controller.api.deps import User, current_user
 
@@ -188,6 +188,23 @@ def test_rejected_account_sample_cannot_claim_purchase_or_jibsy_access(shared_gr
     assert "are purchased" not in result["answer"] and "none configured" not in result["answer"]
     assert "isn't a verified offer or price" in result["answer"]
     assert result["plan"] is None and s.reads == [] and s.plans == []
+
+
+def test_shared_prompt_has_one_selector_contract_and_preserves_typed_action_catalogue(shared_grounding):
+    s = shared_grounding
+    s.response = {"answer": "", "actions": [], "advice": {"kind": "account", "account_topics": ["access"]}}
+    assert ask(s, "account")["based_on"]["grounding"] == "verified_advisory_selection"
+    system = s.prompts[-1][0]
+    assert system.startswith(hub.SYSTEM)
+    assert system.endswith(act.ACTION_SYSTEM)
+    assert '"advice":{"kind":"account"' in system
+    assert '"advice":{"kind":"design"' in system
+    assert '"actions": [ ... ]' not in system
+    assert "Lead with the answer, then the evidence" not in system
+    assert "with the answer citing" not in system
+    assert act.SYSTEM.endswith(act.ACTION_SYSTEM)
+    for action in act.ACTION_FIELDS:
+        assert '"action":"' + action + '"' in act.ACTION_SYSTEM
 
 
 @pytest.mark.parametrize("kind", [None, "analysis", "proposal", "design"])

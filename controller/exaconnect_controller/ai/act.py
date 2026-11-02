@@ -96,6 +96,10 @@ missing its SLA, prefer what the snapshot supports: a rule, Storm Mode for a sit
 suggestion. Paths are steered by the routing engine, so do not promise to pin a path. At most 8 actions. \
 Never include passwords, keys or secrets."""
 
+# Reuse the typed action catalogue without the legacy answer-only response
+# contract. The shared assistant supplies its own selector response contract.
+ACTION_SYSTEM = SYSTEM[SYSTEM.index("\nActions (") + 1 :]
+
 
 class PlanError(ValueError):
     """A plan can't be applied or undone; the message is safe to show."""

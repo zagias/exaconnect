@@ -156,6 +156,31 @@ def test_oversized_binary_output_is_unknown_and_mitigated(runtime):
     assert runtime.state.joinpath("guard").read_text().splitlines() == ["unknown", "false"]
 
 
+def test_version_capture_uses_private_guard_state_before_stock_tmp_exists(runtime):
+    # The real base image has no /tmp before its entrypoint. Refuse the former
+    # absolute template without removing or changing the host's temporary dir.
+    capture_paths = runtime.tmp / "capture-paths"
+    runtime.env["TEST_CAPTURE_PATHS"] = str(capture_paths)
+    runtime.env["TEST_REAL_MKTEMP"] = shutil.which("mktemp")
+    assert runtime.env["TEST_REAL_MKTEMP"]
+    _executable(
+        runtime.binary / "mktemp",
+        '#!/bin/sh\ncase "$1" in /tmp/xakore-phone-version.*) exit 1;; esac\n'
+        'printf "%s\\n" "$1" >> "$TEST_CAPTURE_PATHS"\nexec "$TEST_REAL_MKTEMP" "$@"\n',
+    )
+    result = _run(runtime, "guard")
+    assert result.returncode == 0, result.stderr
+    normalised = UNSAFE_VERSION.removeprefix("FreeSWITCH Version ")
+    assert runtime.state.joinpath("guard").read_text().splitlines() == [normalised, "false"]
+    assert runtime.state.stat().st_mode & 0o777 == 0o700
+    _python_transport(runtime)
+    result = _run(runtime, "probe")
+    assert result.returncode == 0, result.stderr
+    captures = [line for line in capture_paths.read_text().splitlines() if "/version." in line]
+    assert captures == [str(runtime.state / "version.XXXXXX")] * 2
+    assert sorted(path.name for path in runtime.state.iterdir()) == ["guard"]
+
+
 @pytest.mark.parametrize("case", VERSION_CASES, ids=[f"version-{i}" for i in range(len(VERSION_CASES))])
 def test_guard_parser_matches_shared_official_release_matrix(case):
     # Run the exact portable functions without the command dispatcher or a PBX.

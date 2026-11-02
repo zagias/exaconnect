@@ -90,7 +90,11 @@ patched() {
 runtime_version() (
   # POSIX pipelines cannot report a failed binary when the parser succeeds.
   # Preserve its exit status and exact output (including extra blank lines).
-  version_file=$(mktemp /tmp/xakore-phone-version.XXXXXX) || exit 1
+  # The shipped image has no /tmp before its stock entrypoint. The guard has
+  # already created its private state directory; probes use that same directory.
+  version_parent=$1
+  shift
+  version_file=$(mktemp "$version_parent/version.XXXXXX") || exit 1
   trap 'rm -f "$version_file"' 0 1 2 15
   # One filesystem block is ample for the <=320-byte line plus CR/LF. A noisy
   # command cannot fill the container filesystem before the timeout expires.
@@ -161,7 +165,7 @@ guard() {
   rm -f "$state_dir/guard" || return 1
   version=unknown
   if command -v timeout >/dev/null 2>&1; then
-    version=$(runtime_version freeswitch -version) || version=unknown
+    version=$(runtime_version "$state_dir" freeswitch -version) || version=unknown
   fi
   transfer_enabled=true
   safe=false
@@ -297,7 +301,7 @@ probe() {
     fail "probe has no startup guard"; return 1
   fi
   command -v timeout >/dev/null 2>&1 || { fail "probe needs a command timeout"; return 1; }
-  version=$(runtime_version fs_cli -x version) || { fail "cannot verify running version"; return 1; }
+  version=$(runtime_version "$state_dir" fs_cli -x version) || { fail "cannot verify running version"; return 1; }
   startup_version=$(sed -n '1p' "$state_dir/guard")
   transfer_enabled=$(sed -n '2p' "$state_dir/guard")
   case "$transfer_enabled" in true|false) ;; *) fail "has an invalid startup guard"; return 1 ;; esac

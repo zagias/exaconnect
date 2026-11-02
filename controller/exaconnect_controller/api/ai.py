@@ -285,7 +285,7 @@ async def _answer(body: AskIn, user, request: Request, *, shared_mode: bool) -> 
     try:
         text = await asyncio.to_thread(
             ask_mod.chat,
-            act.SYSTEM + ("\n" + hub.SYSTEM if shared_mode else ""),
+            hub.SYSTEM + "\n" + act.ACTION_SYSTEM if shared_mode else act.SYSTEM,
             act.prompt(body.question, {**context, "configuration": config}, [t.model_dump() for t in body.history]),
             api_key=s.llm_api_key,
             base_url=s.llm_base_url,
