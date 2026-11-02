@@ -143,6 +143,7 @@ def test_lists_never_include_another_organisation(client, world):
         "/api/v1/ca.pem",
         "/api/v1/commai/internal/voice/authorise",
         "/api/v1/commai/internal/voice/authorise-platform",
+        "/api/v1/commai/internal/voice/phone-authorise",
         "/api/v1/commai/internal/voice/ring",
     }
     checked = 0
