@@ -286,7 +286,7 @@ async def _answer(body: AskIn, user, request: Request, *, shared_mode: bool) -> 
             "answer": answer,
             "plan": None,
             "model": "rules",
-            "scope": "connect" if site_request == "status" else body.scope,
+            "answer_scope": "connect" if site_request == "status" else body.scope,
             "based_on": {
                 "decisions": 0,
                 "events": 0,

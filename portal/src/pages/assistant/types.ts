@@ -69,7 +69,7 @@ export interface Plan {
 export interface AssistantAnswer {
   answer: string;
   plan: Plan | null;
-  scope?: "account" | "connect";
+  answer_scope?: "account" | "connect";
   model?: string | null;
   based_on?: {
     sites?: number; decisions?: number; events?: number; insights?: number; sources?: string[];

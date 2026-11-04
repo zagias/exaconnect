@@ -248,7 +248,7 @@ describe("one assistant entry", () => {
 });
 
 describe("direct site checks", () => {
-  const status: AssistantAnswer = { answer: "2 sites have no recorded report.", plan: null, model: "rules", scope: "connect", based_on: { sites: 2, sources: ["network_snapshot"], grounding: "verified_read_only_status" } };
+  const status: AssistantAnswer = { answer: "2 sites have no recorded report.", plan: null, model: "rules", answer_scope: "connect", based_on: { sites: 2, sources: ["network_snapshot"], grounding: "verified_read_only_status" } };
 
   it("keeps a network answer visible in Account and excludes it from account advice history", async () => {
     const fetch = responses({ answer: status });
@@ -293,7 +293,7 @@ describe("direct site checks", () => {
   });
 
   it("shows restore clarification without a configuration plan", async () => {
-    responses({ answer: { answer: "Get sites reporting again, or recover deleted records?", plan: null, model: "rules", scope: "account", based_on: { sources: ["organisation_access"] } } });
+    responses({ answer: { answer: "Get sites reporting again, or recover deleted records?", plan: null, model: "rules", answer_scope: "account", based_on: { sources: ["organisation_access"] } } });
     show("/assistant");
     fireEvent.change(await screen.findByRole("textbox", { name: "Your account question" }), { target: { value: "How do I restore my sites?" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));

@@ -450,7 +450,8 @@ def test_site_status_reads_without_model_or_actions(shared_grounding, monkeypatc
     response = s.client.post("/api/v1/assistant/ask", json={"question": question, "scope": scope})
     assert response.status_code == 200
     result = response.json()
-    assert result["model"] == "rules" and result["plan"] is None and result["scope"] == "connect"
+    assert result["model"] == "rules" and result["plan"] is None and result["answer_scope"] == "connect"
+    assert "scope" not in result  # Older portal tabs spread replies into their originating turn.
     assert result["answer"].startswith("Example data.")
     assert "20 sites" in result["answer"] and "20 with no report recorded" in result["answer"]
     assert "0 of 0 configured paths" in result["answer"] and "Connectivity is unverified" in result["answer"]

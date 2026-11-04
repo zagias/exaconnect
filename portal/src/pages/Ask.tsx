@@ -138,7 +138,7 @@ function Advice({ context, scope }: { context: AssistantContext; scope: Scope })
       const out = await api<AssistantAnswer>("/assistant/ask", {
         method: "POST", body: JSON.stringify({ question: q, customer_id: current.id, history, scope }),
       });
-      const { scope: answerScope, ...fields } = out;
+      const { answer_scope: answerScope, ...fields } = out;
       setTurns((t) => t.map((turn) => turn.id === id ? { ...turn, ...fields, answerScope: answerScope ?? turn.scope } : turn));
       if (out.plan) recent.reload();
     } catch (e) {
