@@ -1,8 +1,10 @@
 import { useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { api, useApi } from "../../api";
 import { ErrorNote } from "../../components";
 import { Card, PageHead, useAction } from "../../ui";
 import { useCommaiBase } from "./lib";
+import { ManagementControls, ManagementNote, useJibsyManagement } from "./management";
 import "./automation.css";
 
 /* Shapes from controller/exaconnect_controller/commai/api/automation.py (ADR 0020). */
@@ -50,6 +52,7 @@ const CHANNELS: [string, string][] = [
 
 export default function Onboarding() {
   const base = useCommaiBase();
+  const access = useJibsyManagement(base);
   const batch = useApi<Batch>(base && `${base}/onboarding`, 0);
   const [dropped, setDropped] = useState<string[]>([]);
   const [note, setNote] = useState<string | null>(null);
@@ -60,11 +63,12 @@ export default function Onboarding() {
         Tell Jibsy about your business. It drafts a profile, teams, knowledge, routing and starter workflows; you review and approve each one before
         anything goes live.
       </PageHead>
-      <SetupForm base={base} onDone={(d, n) => {
+      <ManagementNote access={access} />
+      <ManagementControls canManage={access.canManage}><SetupForm base={base} onDone={(d, n) => {
         setDropped(d);
         setNote(n);
         batch.reload();
-      }} />
+      }} /></ManagementControls>
       {note && (
         <p className="auto-banner" role="status">
           {note}
@@ -81,7 +85,8 @@ export default function Onboarding() {
         </div>
       )}
       <ErrorNote error={batch.error} />
-      {batch.data?.drafts.length ? <Drafts base={base} drafts={batch.data.drafts} reload={batch.reload} /> : null}
+      {batch.error && <button className="button secondary" onClick={batch.reload}>Reload saved drafts</button>}
+      {batch.data?.drafts.length ? <Drafts base={base} drafts={batch.data.drafts} reload={batch.reload} canManage={access.canManage} /> : null}
     </>
   );
 }
@@ -224,7 +229,7 @@ function SetupForm({ base, onDone }: { base: string; onDone: (dropped: string[],
   );
 }
 
-function Drafts({ base, drafts, reload }: { base: string; drafts: Draft[]; reload: () => void }) {
+function Drafts({ base, drafts, reload, canManage }: { base: string; drafts: Draft[]; reload: () => void; canManage: boolean }) {
   const act = useAction();
   const [editing, setEditing] = useState<Record<string, string>>({});
   const decide = (d: Draft, verb: "approve" | "reject") =>
@@ -248,6 +253,16 @@ function Drafts({ base, drafts, reload }: { base: string; drafts: Draft[]; reloa
         {pending ? `${pending} draft(s) waiting for your review. Approve teams before their routing rules.` : "Everything has been reviewed."}
         {drafts[0]?.source === "model" ? " Drafted with the AI." : " Drafted by Jibsy's rules."}
       </div>
+      {pending === 0 && (
+        <div className="auto-banner" role="status">
+          <strong>Review complete.</strong> Approved workflows still need to be checked and published, and channels may need connection steps.
+          <div className="row-actions">
+            <Link to="/commai/channels">Review channels</Link>
+            <Link to="/commai/workflows">Review workflows</Link>
+            <Link to="/commai">Open Inbox</Link>
+          </div>
+        </div>
+      )}
       <ErrorNote error={act.error} />
       {kinds.map((k) => {
         const list = drafts.filter((d) => d.kind === k);
@@ -256,7 +271,7 @@ function Drafts({ base, drafts, reload }: { base: string; drafts: Draft[]; reloa
           <Card key={k} title={KIND_LABEL[k]}>
             <div className="auto-grid">
               {list.map((d) => {
-                const editable = d.kind === "knowledge" || d.kind === "profile";
+                const editable = canManage && (d.kind === "knowledge" || d.kind === "profile");
                 const key = d.kind === "knowledge" ? "body" : "summary";
                 return (
                   <section key={d.id} className="auto-draft" aria-label={d.title}>
@@ -278,7 +293,7 @@ function Drafts({ base, drafts, reload }: { base: string; drafts: Draft[]; reloa
                     ) : (
                       <pre>{summary(d)}</pre>
                     )}
-                    {d.status === "draft" && (
+                    {canManage && d.status === "draft" && (
                       <div className="auto-row">
                         <button className="button small" disabled={act.busy} onClick={() => decide(d, "approve")}>
                           Approve
@@ -288,10 +303,11 @@ function Drafts({ base, drafts, reload }: { base: string; drafts: Draft[]; reloa
                         </button>
                       </div>
                     )}
-                    {d.kind === "workflow" && d.status === "approved" && <span className="small muted">Added to Workflows as a draft to publish.</span>}
+                    {d.kind === "workflow" && d.status === "approved" && <span className="small muted">Added as a draft. <Link to="/commai/workflows">Review and publish in Workflows</Link>.</span>}
                     {d.kind === "channel" && d.status === "approved" && (
                       <span className="small muted">
-                        {d.content.channel === "web" ? "Website chat key created: see Channels." : "Set-up steps saved: finish them on Channels."}
+                        {d.content.channel === "web" ? "Website chat key created. " : "Set-up steps saved. "}
+                        <Link to="/commai/channels">Finish channel setup</Link>.
                       </span>
                     )}
                   </section>

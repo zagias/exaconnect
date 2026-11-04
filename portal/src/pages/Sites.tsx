@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useCustomer, useStormToggle } from "../customer";
 import { useAuth } from "../auth";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import { num, useApi, type EventRow, type MetricPoint, type SiteDetail, type OverviewSite, type SteeringRow } from "../api";
 import { ErrorNote, Eyebrow, LineChart, Stamp, StatusPill, ago, fmt, when, type Series } from "../components";
 import { BoxManagedNote, ManagedFrom } from "../box";
@@ -57,6 +57,10 @@ const WINDOWS = [
 
 export function SitePage() {
   const { id } = useParams();
+  const location = useLocation();
+  const previousList = typeof location.state?.siteList === "string" ? location.state.siteList : "";
+  const back = /^(?:\/sites|\/)(?:\?[^#]*)?$/.test(previousList) ? previousList : "/sites";
+  const backLabel = back === "/" || back.startsWith("/?") ? "Back to overview" : "Back to sites";
   const { current } = useCustomer();
   const { user } = useAuth();
   const [minutes, setMinutes] = useState(15);
@@ -73,6 +77,8 @@ export function SitePage() {
         <Eyebrow>Site</Eyebrow>
         <h1>{site.error ? "We couldn't load this site" : "Loading"}</h1>
         <ErrorNote error={site.error} />
+        <Link to={back}>{backLabel}</Link>
+        {site.error && <button className="button secondary" onClick={site.reload}>Try again</button>}
       </div>
     );
   }
@@ -100,6 +106,7 @@ export function SitePage() {
   return (
     <>
       <div className="page-head">
+        <Link className="small" to={back}>{backLabel}</Link>
         <Eyebrow>{s.kind === "pop" ? "Network hub" : "Site"}</Eyebrow>
         <h1>{s.name}</h1>
         {s.location && <p className="muted">{s.location}</p>}

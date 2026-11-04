@@ -1,7 +1,7 @@
 import { NavLink, Route, Routes, useLocation } from "react-router-dom";
 import { useApi } from "../../api";
 import { ErrorNote } from "../../components";
-import { PageHead, Tabs } from "../../ui";
+import { SectionNotFound, PageHead, Tabs } from "../../ui";
 import { useCommaiBase } from "./lib";
 import Billing from "./voice/Billing";
 import { Carriers, Emergency, EmergencyNotice, Fraud, Numbers, Ports, VoiceNotices } from "./voice/Global";
@@ -112,7 +112,8 @@ export default function Voice() {
           <Route path="/fraud" element={<Fraud base={base} v={v} />} />
           {v.is_exacarib && <Route path="/carriers" element={<Carriers customerId={base.split("/").pop() ?? ""} />} />}
           <Route path="/phone" element={<Dialer base={base} />} />
-        </Routes>
+        <Route path="*" element={<SectionNotFound to="/commai/voice" label="Open phone system" />} />
+      </Routes>
       )}
     </>
   );

@@ -110,14 +110,18 @@ export default function Inbox() {
           )}
         </div>
         <ErrorNote error={list.error} />
-        {list.data && items.length === 0 && (
+        {list.data && !list.error && items.length === 0 && (
           query || Object.keys(extra).length > 0 ? (
-            <EmptyState title="No conversations match">Try another search, or clear the filters.</EmptyState>
-          ) : view !== "open" && view !== "all" ? (
-            <EmptyState title="Nothing in this view">Conversations that fit it appear here. Choose All to see every conversation.</EmptyState>
+            <EmptyState title="No conversations match" action={<button type="button" className="button secondary small" onClick={() => { setQ(""); setQuery(""); setExtra({}); }}>Clear search and filters</button>}>
+              Try another search, or clear the filters.
+            </EmptyState>
+          ) : view !== "all" ? (
+            <EmptyState title={view === "open" ? "No open conversations" : "Nothing in this view"} action={<button type="button" className="button secondary small" onClick={() => setView("all")}>View all conversations</button>}>
+              {view === "open" ? "You're up to date. Choose All to see conversations in every state." : "Conversations that fit this view appear here."}
+            </EmptyState>
           ) : (
-            <EmptyState title="No conversations yet" action={<Link className="button small" to="/commai/channels">Set up a channel</Link>}>
-              Website chats, WhatsApp messages and emails arrive in this list.
+            <EmptyState title="No conversations yet" action={<Link className="button small" to="/commai/channels">View channels</Link>}>
+              Messages from your connected channels appear here. Review Channels if you need to connect one.
             </EmptyState>
           )
         )}

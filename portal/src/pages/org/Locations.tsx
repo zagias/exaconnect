@@ -17,6 +17,9 @@ interface Locations {
   hub_ready: boolean;
 }
 
+type LocationRef = Pick<OrgLocation, "id" | "name">;
+type Installation = Install & { place: string; locationId: string };
+
 type Draft = Pick<
   OrgLocation,
   "name" | "address_line1" | "address_line2" | "city" | "island" | "country" | "postcode" | "timezone"
@@ -48,8 +51,9 @@ export default function LocationsPage() {
   const manage = useCanManage();
   const data = useApi<Locations>(cid ? `/orgs/${cid}/locations` : null, 15_000);
   const [editing, setEditing] = useState<OrgLocation | "new" | null>(null);
-  const [connecting, setConnecting] = useState<OrgLocation | null>(null);
-  const [install, setInstall] = useState<(Install & { place?: string }) | null>(null);
+  const [connecting, setConnecting] = useState<LocationRef | null>(null);
+  const [install, setInstall] = useState<Installation | null>(null);
+  const [formBusy, setFormBusy] = useState(false);
   const act = useAction();
   const [query, setQuery] = useState("");
   const [connection, setConnection] = useState("all");
@@ -67,6 +71,22 @@ export default function LocationsPage() {
   const currentPage = Math.min(page, pages - 1);
   const shown = locations.slice(currentPage * 10, (currentPage + 1) * 10);
 
+  const editLocation = (next: OrgLocation | "new") => {
+    if (act.busy || formBusy) return;
+    const same = next === "new" ? editing === "new" : editing !== "new" && editing?.id === next.id;
+    if (!connecting && same) return;
+    if ((editing || connecting) && !window.confirm("Discard the changes in the open location form?")) return;
+    setConnecting(null);
+    setEditing(next);
+  };
+  const connectLocation = (next: LocationRef) => {
+    if (act.busy || formBusy) return;
+    if (!editing && connecting?.id === next.id) return;
+    if ((editing || connecting) && !window.confirm("Discard the changes in the open location form?")) return;
+    setEditing(null);
+    setConnecting(next);
+  };
+
   const remove = (l: OrgLocation) => {
     if (!window.confirm(`Delete ${l.name}? Its opening hours in Jibsy go too.`)) return;
     act.run(async () => {
@@ -77,7 +97,7 @@ export default function LocationsPage() {
   const newCode = (l: OrgLocation) =>
     act.run(async () => {
       const code = await api<Install>(`/orgs/${cid}/sites/${l.connect?.id}/install-code`, { method: "POST" });
-      setInstall({ ...code, place: l.name });
+      setInstall({ ...code, place: l.name, locationId: l.id });
       window.scrollTo({ top: 0, behavior: "smooth" });
     });
 
@@ -88,32 +108,46 @@ export default function LocationsPage() {
       </PageHead>
       <ErrorNote error={data.error ?? act.error} />
 
-      {install && <InstallCode install={install} onClose={() => setInstall(null)} hubReady={d?.hub_ready ?? true} />}
+      {install && <InstallCode key={`${install.locationId}:${install.expires_at}`} install={install} onClose={() => setInstall(null)} hubReady={d?.hub_ready ?? false}
+        connection={d?.locations.find((location) => location.id === install.locationId)?.connect} statusUnavailable={!!data.error} onRefresh={data.reload} />}
 
       {manage && !editing && !connecting && (
         <p>
-          <button className="button" onClick={() => setEditing("new")}>
+          <button className="button" disabled={act.busy || formBusy} onClick={() => editLocation("new")}>
             Add a location
           </button>
         </p>
       )}
       {editing && (
         <LocationForm
+          key={editing === "new" ? "new" : editing.id}
           cid={cid}
           loc={editing === "new" ? null : editing}
-          onDone={() => {
+          connectNext={editing === "new" && connect && manage && operate}
+          onBusyChange={setFormBusy}
+          onCancel={() => setEditing(null)}
+          onDone={(saved) => {
+            const connectNext = editing === "new" && connect && manage && operate;
             setEditing(null);
+            if (connectNext) {
+              setConnecting(saved);
+              setQuery(saved.name);
+              setConnection("all");
+              setPage(0);
+            }
             data.reload();
           }}
         />
       )}
       {connecting && (
         <ConnectForm
+          key={connecting.id}
           cid={cid}
           loc={connecting}
+          onBusyChange={setFormBusy}
           onDone={(out) => {
             setConnecting(null);
-            if (out) setInstall({ ...out, place: connecting.name });
+            if (out) setInstall({ ...out, place: connecting.name, locationId: connecting.id });
             data.reload();
           }}
         />
@@ -144,11 +178,11 @@ export default function LocationsPage() {
               </div>
               {manage && (
                 <div className="form-actions">
-                  <button className="button secondary small" onClick={() => setEditing(l)} disabled={act.busy}>
+                  <button className="button secondary small" onClick={() => editLocation(l)} disabled={act.busy || formBusy}>
                     Edit
                   </button>
                   {!l.connect && !l.phone && (
-                    <button className="button secondary small" onClick={() => remove(l)} disabled={act.busy}>
+                    <button className="button secondary small" onClick={() => remove(l)} disabled={act.busy || formBusy || !!editing || !!connecting}>
                       Delete
                     </button>
                   )}
@@ -186,7 +220,7 @@ export default function LocationsPage() {
                       <span>
                         <StatusPill health="warn">Waiting for the box to be installed</StatusPill>{" "}
                         {manage && operate && (
-                          <button className="link" onClick={() => newCode(l)} disabled={act.busy}>
+                          <button className="link" onClick={() => newCode(l)} disabled={act.busy || formBusy}>
                             Get a new install code
                           </button>
                         )}
@@ -195,7 +229,7 @@ export default function LocationsPage() {
                   ) : manage && operate ? (
                     <span>
                       Not connected.{" "}
-                      <button className="button small" onClick={() => setConnecting(l)} disabled={act.busy}>
+                      <button className="button small" onClick={() => connectLocation(l)} disabled={act.busy || formBusy}>
                         Connect this location
                       </button>
                     </span>
@@ -251,18 +285,26 @@ export default function LocationsPage() {
   );
 }
 
-function LocationForm({ cid, loc, onDone }: { cid: string; loc: OrgLocation | null; onDone: () => void }) {
+function LocationForm({ cid, loc, connectNext, onDone, onCancel, onBusyChange }: {
+  cid: string; loc: OrgLocation | null; connectNext: boolean;
+  onDone: (saved: LocationRef) => void; onCancel: () => void; onBusyChange: (busy: boolean) => void;
+}) {
   const [f, setF] = useState<Draft>(loc ?? EMPTY);
   const act = useAction();
   const set = (k: keyof Draft) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
   const submit = (e: FormEvent) => {
     e.preventDefault();
     act.run(async () => {
-      await api(loc ? `/orgs/${cid}/locations/${loc.id}` : `/orgs/${cid}/locations`, {
-        method: loc ? "PUT" : "POST",
-        body: JSON.stringify(f),
-      });
-      onDone();
+      onBusyChange(true);
+      try {
+        const saved = await api<LocationRef>(loc ? `/orgs/${cid}/locations/${loc.id}` : `/orgs/${cid}/locations`, {
+          method: loc ? "PUT" : "POST",
+          body: JSON.stringify(f),
+        });
+        onDone(saved);
+      } finally {
+        onBusyChange(false);
+      }
     });
   };
   return (
@@ -310,9 +352,9 @@ function LocationForm({ cid, loc, onDone }: { cid: string; loc: OrgLocation | nu
         </p>
         <div className="actions wide">
           <button className="button" disabled={act.busy}>
-            {act.busy ? "Saving…" : loc ? "Save location" : "Add location"}
+            {act.busy ? "Saving…" : loc ? "Save location" : connectNext ? "Add and connect location" : "Add location"}
           </button>
-          <button type="button" className="button secondary" onClick={onDone}>
+          <button type="button" className="button secondary" disabled={act.busy} onClick={onCancel}>
             Cancel
           </button>
         </div>
@@ -336,7 +378,9 @@ const TYPES: [string, string][] = [
   ["geo", "Satellite, geostationary"],
 ];
 
-function ConnectForm({ cid, loc, onDone }: { cid: string; loc: OrgLocation; onDone: (i: Install | null) => void }) {
+function ConnectForm({ cid, loc, onDone, onBusyChange }: {
+  cid: string; loc: LocationRef; onDone: (i: Install | null) => void; onBusyChange: (busy: boolean) => void;
+}) {
   const [links, setLinks] = useState<LinkDraft[]>([{ carrier: "", underlay_type: "fibre", commit_mbps: "" }]);
   const [lan, setLan] = useState("");
   const act = useAction();
@@ -345,14 +389,19 @@ function ConnectForm({ cid, loc, onDone }: { cid: string; loc: OrgLocation; onDo
   const submit = (e: FormEvent) => {
     e.preventDefault();
     act.run(async () => {
-      const out = await api<{ install: Install }>(`/orgs/${cid}/locations/${loc.id}/connect`, {
-        method: "POST",
-        body: JSON.stringify({
-          links: links.map((l) => ({ carrier: l.carrier, underlay_type: l.underlay_type, commit_mbps: Number(l.commit_mbps) || 0 })),
-          lan_prefixes: lan.split(",").map((p) => p.trim()).filter(Boolean),
-        }),
-      });
-      onDone(out.install);
+      onBusyChange(true);
+      try {
+        const out = await api<{ install: Install }>(`/orgs/${cid}/locations/${loc.id}/connect`, {
+          method: "POST",
+          body: JSON.stringify({
+            links: links.map((l) => ({ carrier: l.carrier, underlay_type: l.underlay_type, commit_mbps: Number(l.commit_mbps) || 0 })),
+            lan_prefixes: lan.split(",").map((p) => p.trim()).filter(Boolean),
+          }),
+        });
+        onDone(out.install);
+      } finally {
+        onBusyChange(false);
+      }
     });
   };
   return (
@@ -413,7 +462,7 @@ function ConnectForm({ cid, loc, onDone }: { cid: string; loc: OrgLocation; onDo
           <button className="button" disabled={act.busy}>
             {act.busy ? "Connecting…" : "Connect and get the install code"}
           </button>
-          <button type="button" className="button secondary" onClick={() => onDone(null)}>
+          <button type="button" className="button secondary" disabled={act.busy} onClick={() => onDone(null)}>
             Cancel
           </button>
         </div>
@@ -427,9 +476,14 @@ function InstallCode({
   install,
   onClose,
   hubReady,
+  connection,
+  statusUnavailable,
+  onRefresh,
 }: {
-  install: Install & { place?: string };
-  onClose: () => void; hubReady: boolean }) {
+  install: Installation;
+  onClose: () => void; hubReady: boolean;
+  connection: OrgLocation["connect"] | undefined; statusUnavailable: boolean; onRefresh: () => void;
+}) {
   const [copied, setCopied] = useState("");
   const url = install.public_agent_url || install.agent_url;
   const command = `EXA_ENROL_TOKEN=${install.token} bash install.sh \\\n  --controller ${url} \\\n  --ca-fingerprint ${install.ca_fingerprint} \\\n  --name ${install.site}`;
@@ -444,9 +498,21 @@ function InstallCode({
       <div className="card-head">
         <h2 id="install-title">Install the XaKore box at {install.place ?? install.site}</h2>
         <button className="button secondary small" onClick={onClose}>
-          Done
+          Close instructions
         </button>
       </div>
+      <p className="small" role="status" aria-live="polite">
+        <StatusPill health={!statusUnavailable && connection?.online ? "ok" : "warn"}>
+          {statusUnavailable ? "Registration status unavailable" : connection?.online ? "Box online" : connection?.node_id
+            ? connection.last_seen ? "Box registered; currently offline" : "Box registered; waiting for its first report"
+            : "Waiting for box registration"}
+        </StatusPill>{" "}Status checks every 15 seconds.
+      </p>
+      <p className="form-actions">
+        {connection && <Link className="button small" to={`/sites/${connection.id}`}>Check site connection</Link>}
+        <button className="button secondary small" onClick={onRefresh}>Refresh status</button>
+      </p>
+      {connection?.node_id && <p className="small muted">The box is registered. Open the site to check its connection measurements and traffic classes.</p>}
       <ol className="install-steps">
         <li>Plug the box into each internet link and into the office network.</li>
         <li>

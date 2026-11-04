@@ -20,7 +20,7 @@ import {
 import { useAuth } from "../auth";
 import { ErrorNote, Eyebrow, ExampleTag, when } from "../components";
 import { useCustomer } from "../customer";
-import { Card, PageHead, RowActions, useAction } from "../ui";
+import { SectionNotFound, Card, PageHead, RowActions, useAction } from "../ui";
 import { ContractCard } from "./Commercial";
 import "./billing.css";
 
@@ -32,7 +32,8 @@ export default function Billing() {
     <Routes>
       <Route index element={<BillingHome />} />
       <Route path="invoices/:id" element={<InvoicePage />} />
-    </Routes>
+    <Route path="*" element={<SectionNotFound to="/billing" label="Back to billing" />} />
+      </Routes>
   );
 }
 

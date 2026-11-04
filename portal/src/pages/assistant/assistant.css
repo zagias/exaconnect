@@ -1,4 +1,6 @@
 .assistant-workspace { max-width: 1220px; }
+.assistant-workspace button.linklike { background: none; border: 0; padding: 0; color: var(--blue-strong); text-decoration: underline; cursor: pointer; font: inherit; }
+.assistant-workspace button.linklike:disabled { cursor: default; opacity: .6; }
 .assistant-layout { display: grid; grid-template-columns: minmax(0, 1fr) 240px; background: var(--card); border: 1px solid var(--line); }
 .assistant-main { min-width: 0; padding: 0 28px 28px; }
 .assistant-scopes { display: flex; gap: 24px; border-bottom: 1px solid var(--line); overflow-x: auto; }
@@ -7,6 +9,15 @@
 .assistant-intro { padding: 28px 0 12px; }
 .assistant-intro h2 { font-size: 20px; }
 .assistant-intro p { margin: 6px 0; font-size: 14px; }
+.assistant-brief-import { margin: 8px 0 20px; }
+.assistant-brief-import h3 { font-size: 17px; margin: 12px 0 8px; }
+.assistant-brief-import form { display: grid; gap: 10px; }
+.assistant-brief-import textarea { width: 100%; padding: 10px; border: 1px solid var(--line-strong); border-radius: 3px; background: var(--card); color: var(--ink); font: inherit; }
+.assistant-brief-import details, .assistant-imported-brief details { max-height: 300px; overflow: auto; margin: 10px 0; }
+.assistant-brief-import dd { margin: 0 0 12px; overflow-wrap: anywhere; }
+.assistant-brief-import dt { font-weight: 600; }
+.assistant-imported-brief { display: grid; gap: 6px; padding: 12px 0; border-block: 1px solid var(--line); margin-bottom: 18px; }
+.assistant-imported-brief .linklike { justify-self: start; }
 .assistant-context { border-left: 1px solid var(--line); padding: 24px 20px; font-size: 14px; background: var(--page); }
 .assistant-context h2 { margin-top: 8px; font-size: 18px; overflow-wrap: anywhere; }
 .assistant-role { text-transform: capitalize; margin-top: 4px; }

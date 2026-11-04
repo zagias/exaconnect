@@ -2,20 +2,23 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, NavLink, Route, Routes } from "react-router-dom";
 import { api, useApi } from "../../api";
 import { ErrorNote } from "../../components";
-import { Card, PageHead, RowActions, Tabs, useAction } from "../../ui";
+import { Card, EmptyState, PageHead, RowActions, Tabs, useAction } from "../../ui";
 import { useCommaiBase, when } from "./lib";
+import { ManagementControls, ManagementNote, useJibsyManagement } from "./management";
 import "./ai.css";
 
 /** AI agents (ADR 0019): the customer AI agent's profile and mode, the tools
  * each AI role may use, approved knowledge, knowledge gaps and a browser call. */
 export default function AiAgents() {
   const base = useCommaiBase();
-  if (!base) return null;
+  const access = useJibsyManagement(base);
+  if (!base) return <p className="muted">Choose an organisation first.</p>;
   return (
     <>
       <PageHead title="AI agents">
         How the AI answers your customers, what it may do, and what it knows.
       </PageHead>
+      <ManagementNote access={access} />
       <Tabs label="AI agent sections">
         <NavLink to="/commai/ai" end>
           Agent profile and mode
@@ -26,11 +29,12 @@ export default function AiAgents() {
         <NavLink to="/commai/ai/call">Try a browser call</NavLink>
       </Tabs>
       <Routes>
-        <Route path="/" element={<Profile base={base} />} />
-        <Route path="/tools" element={<Tools base={base} />} />
-        <Route path="/knowledge" element={<Knowledge base={base} />} />
-        <Route path="/gaps" element={<Gaps base={base} />} />
+        <Route path="/" element={<Profile base={base} canManage={access.canManage} />} />
+        <Route path="/tools" element={<Tools base={base} canManage={access.canManage} />} />
+        <Route path="/knowledge" element={<Knowledge base={base} canManage={access.canManage} />} />
+        <Route path="/gaps" element={<Gaps base={base} canManage={access.canManage} />} />
         <Route path="/call" element={<TryCall base={base} />} />
+        <Route path="*" element={<EmptyState title="AI agent page not found" action={<Link className="button secondary" to="/commai/ai">Open agent profile</Link>}>Choose an AI agent section above.</EmptyState>} />
       </Routes>
     </>
   );
@@ -153,7 +157,8 @@ function ModelStatus({ s }: { s: AiStatus }) {
   );
 }
 
-function Profile({ base }: { base: string }) {
+function Profile({ base, canManage }: { base: string; canManage: boolean }) {
+  const modeAccess = useJibsyManagement(base, "manage_teams");
   const status = useApi<AiStatus>(`${base}/ai/status`, 0);
   const prof = useApi<AiProfile>(`${base}/ai/profile`, 0);
   const save = useAction();
@@ -202,7 +207,8 @@ function Profile({ base }: { base: string }) {
 
   return (
     <>
-      <Card title="Who answers first">
+      <ManagementNote access={modeAccess} />
+      <ManagementControls canManage={modeAccess.canManage}><Card title="Who answers first">
         {status.data && <ModelStatus s={status.data} />}
         <fieldset className="ai-modes" disabled={saveMode.busy}>
           <legend className="sr-only">New conversations go to</legend>
@@ -217,9 +223,9 @@ function Profile({ base }: { base: string }) {
           ))}
         </fieldset>
         <ErrorNote error={saveMode.error ?? status.error} />
-      </Card>
+      </Card></ManagementControls>
 
-      <Card title="Agent profile">
+      <ManagementControls canManage={canManage}><Card title="Agent profile">
         <form className="form" onSubmit={submit}>
           <label className="check wide">
             <input type="checkbox" checked={d.enabled} onChange={(e) => set({ enabled: e.target.checked })} />
@@ -322,14 +328,14 @@ function Profile({ base }: { base: string }) {
           </div>
         </form>
         <ErrorNote error={save.error} />
-      </Card>
+      </Card></ManagementControls>
     </>
   );
 }
 
 // ---- tools ----------------------------------------------------------------------------
 
-function Tools({ base }: { base: string }) {
+function Tools({ base, canManage }: { base: string; canManage: boolean }) {
   const { data, error, reload } = useApi<{ roles: RoleInfo[]; catalogue: CatalogueTool[] }>(`${base}/ai/roles`, 0);
   if (!data) return <ErrorNote error={error} />;
   return (
@@ -340,7 +346,7 @@ function Tools({ base }: { base: string }) {
         actions always wait for a person to approve.
       </p>
       {data.roles.map((r) => (
-        <RoleTools key={r.role} base={base} role={r} catalogue={data.catalogue.filter((t) => t.roles.includes(r.role))} onSaved={reload} />
+        <RoleTools key={r.role} base={base} role={r} catalogue={data.catalogue.filter((t) => t.roles.includes(r.role))} onSaved={reload} canManage={canManage} />
       ))}
     </>
   );
@@ -351,11 +357,13 @@ function RoleTools({
   role,
   catalogue,
   onSaved,
+  canManage,
 }: {
   base: string;
   role: RoleInfo;
   catalogue: CatalogueTool[];
   onSaved: () => void;
+  canManage: boolean;
 }) {
   const save = useAction();
   const [picked, setPicked] = useState<string[] | null>(null);
@@ -377,7 +385,7 @@ function RoleTools({
     });
   };
   return (
-    <Card title={role.label}>
+    <ManagementControls canManage={canManage}><Card title={role.label}>
       <dl className="ai-role">
         <dt>Serves</dt>
         <dd>{role.serves}</dd>
@@ -415,13 +423,13 @@ function RoleTools({
         </form>
       )}
       <ErrorNote error={save.error} />
-    </Card>
+    </Card></ManagementControls>
   );
 }
 
 // ---- knowledge --------------------------------------------------------------------------
 
-function Knowledge({ base }: { base: string }) {
+function Knowledge({ base, canManage }: { base: string; canManage: boolean }) {
   const list = useApi<Source[]>(`${base}/ai/knowledge`, 0);
   const act = useAction();
   const [editing, setEditing] = useState<SourceDetail | null>(null);
@@ -454,7 +462,7 @@ function Knowledge({ base }: { base: string }) {
         <ErrorNote error={list.error ?? act.error} />
         {list.data && sources.length === 0 && (
           <div className="empty">
-            <p>No knowledge yet. Add your opening hours, prices and policies below.</p>
+            <p>{canManage ? "No knowledge yet. Add your opening hours, prices and policies below." : "No knowledge yet. An organisation owner or admin can add approved sources."}</p>
           </div>
         )}
         {sources.length > 0 && (
@@ -497,13 +505,13 @@ function Knowledge({ base }: { base: string }) {
                       <RowActions
                         label={`source ${s.title}`}
                         disabled={act.busy}
-                        items={[
+                        items={canManage ? [
                           s.approved
                             ? { label: "Withdraw approval", onSelect: () => approve(s, false) }
                             : { label: "Approve", onSelect: () => approve(s, true) },
                           { label: "Edit", onSelect: () => edit(s) },
                           { label: "Delete", danger: true, onSelect: () => remove(s) },
-                        ]}
+                        ] : [{ label: "View source", onSelect: () => edit(s) }]}
                       />
                     </td>
                   </tr>
@@ -517,6 +525,7 @@ function Knowledge({ base }: { base: string }) {
         key={editing?.id ?? "new"}
         base={base}
         editing={editing}
+        canManage={canManage}
         onDone={() => {
           setEditing(null);
           list.reload();
@@ -527,7 +536,7 @@ function Knowledge({ base }: { base: string }) {
   );
 }
 
-function SourceForm({ base, editing, onDone }: { base: string; editing: SourceDetail | null; onDone: () => void }) {
+function SourceForm({ base, editing, onDone, canManage }: { base: string; editing: SourceDetail | null; onDone: () => void; canManage: boolean }) {
   const save = useAction();
   const [title, setTitle] = useState(editing?.title ?? "");
   const [url, setUrl] = useState(editing?.source_url ?? "");
@@ -554,6 +563,13 @@ function SourceForm({ base, editing, onDone }: { base: string; editing: SourceDe
       onDone();
     });
   };
+  if (!canManage) return editing ? (
+    <Card title={`Source: ${editing.title}`}>
+      {editing.source_url && <p><a href={editing.source_url} target="_blank" rel="noreferrer">{editing.source_url}</a></p>}
+      <p style={{ whiteSpace: "pre-wrap" }}>{editing.body}</p>
+      <button type="button" className="button secondary" onClick={onDone}>Close source</button>
+    </Card>
+  ) : null;
   return (
     <Card title={editing ? `Edit "${editing.title}"` : "Add a source"}>
       <form className="form" onSubmit={submit}>
@@ -637,7 +653,7 @@ function SearchTest({ base }: { base: string }) {
 
 // ---- gaps -----------------------------------------------------------------------------
 
-function Gaps({ base }: { base: string }) {
+function Gaps({ base, canManage }: { base: string; canManage: boolean }) {
   const [status, setStatus] = useState<"open" | "resolved" | "all">("open");
   const list = useApi<Gap[]>(`${base}/ai/gaps?status=${status}`, 30_000);
   const act = useAction();
@@ -661,7 +677,7 @@ function Gaps({ base }: { base: string }) {
       }
     >
       <p className="muted small ai-intro">
-        Each one went to a person. Add or fix a source in Knowledge, then mark the gap resolved.
+        Review the approved sources in Knowledge. An organisation owner or admin can add or fix a source, then mark the gap resolved.
       </p>
       <ErrorNote error={list.error ?? act.error} />
       {list.data && gaps.length === 0 && (
@@ -708,7 +724,7 @@ function Gaps({ base }: { base: string }) {
                   </td>
                   <td className="actions">
                     {g.status === "open" ? (
-                      <button type="button" className="button secondary small" disabled={act.busy} onClick={() => resolve(g)}>
+                      <button type="button" className="button secondary small" disabled={!canManage || act.busy} onClick={() => resolve(g)}>
                         Mark resolved
                       </button>
                     ) : (

@@ -85,6 +85,7 @@ export default function Decisions() {
               : "No routing decisions to show yet. Decisions appear here when the network records them."}
           </p>
         )}
+        {data && data.length >= 200 && <p className="small muted" role="status">Showing the latest 200 decisions. Filter by site and class to narrow the history.</p>}
         <ol className="timeline">
           {(data ?? []).map((d) => (
             <li key={d.id} className={`decision ${d.kind}`}>

@@ -38,7 +38,7 @@ import {
 import { useAuth } from "../auth";
 import { ErrorNote, ExampleTag } from "../components";
 import { useCustomer, who } from "../customer";
-import { Card, EmptyState, PageHead, RowActions, useAction } from "../ui";
+import { Card, EmptyState, SectionNotFound, PageHead, RowActions, useAction } from "../ui";
 import "./billing.css";
 
 /* Catalogue, quotes (CPQ), sales orders and contracts (ADR 0055).
@@ -80,6 +80,7 @@ export default function QuotesAndOrders() {
       <Route path="new" element={<QuoteBuilder />} />
       <Route path=":id" element={<QuotePage />} />
       <Route path=":id/edit" element={<QuoteBuilder />} />
+    <Route path="*" element={<SectionNotFound to="/quotes" label="Back to quotes" />} />
     </Routes>
   );
 }
@@ -89,6 +90,7 @@ export function Orders() {
     <Routes>
       <Route index element={<OrderList />} />
       <Route path=":id" element={<OrderPage />} />
+    <Route path="*" element={<SectionNotFound to="/orders" label="Back to orders" />} />
     </Routes>
   );
 }
@@ -257,6 +259,11 @@ function fromLine(l: QuoteLine): Draft {
 /** Build or change a quote, priced live by the rating engine as you type. */
 function QuoteBuilder() {
   const { id } = useParams();
+  return <QuoteBuilderForm key={id ?? "new"} />;
+}
+
+function QuoteBuilderForm() {
+  const { id } = useParams();
   const { staff, base } = useRoles();
   const { current } = useCustomer();
   const navigate = useNavigate();
@@ -311,11 +318,18 @@ function QuoteBuilder() {
   const set = (k: number, patch: Partial<Draft>) => setLines((ls) => ls.map((l) => (l.key === k ? { ...l, ...patch } : l)));
   const save = (e: FormEvent) => {
     e.preventDefault();
+    if (id && (!q || !loaded || existing.error)) return;
     act.run(async () => {
       const saved = id ? await updateQuote(id, body()) : await createQuote(body());
       navigate(`${base}/quotes/${saved.id}`);
     });
   };
+  if (id && (!q || !loaded || existing.error)) return <>
+    <Head title={existing.error ? "We couldn't load this quote" : "Loading quote…"} />
+    <ErrorNote error={existing.error} />
+    {existing.error && <button className="button secondary" onClick={existing.reload}>Try again</button>}
+    <p><Link to={`${base}/quotes`}>Back to quotes</Link></p>
+  </>;
   if (id && q && !["draft", "pending_approval", "approved"].includes(q.status))
     return <p className="muted">{q.number} has been sent and can't be changed. Copy it instead.</p>;
   const pricedLine = (i: number) => priced?.lines[i];
@@ -506,7 +520,12 @@ function QuotePage() {
   const [name, setName] = useState("");
   const [note, setNote] = useState("");
   const q = quote.data;
-  if (!q) return <ErrorNote error={quote.error} />;
+  if (!q) return <>
+    <Head title={quote.error ? "We couldn't load this quote" : "Loading quote…"} />
+    <ErrorNote error={quote.error} />
+    {quote.error && <button className="button secondary" onClick={quote.reload}>Try again</button>}
+    <p><Link to={`${base}/quotes`}>Back to quotes</Link></p>
+  </>;
   const done = (m: string) => {
     setMsg(m);
     quote.reload();

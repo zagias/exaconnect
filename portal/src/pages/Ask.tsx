@@ -9,6 +9,7 @@ import { canOperateConnect } from "../permissions";
 import { JibsyChecks } from "./commai/Assistant";
 import { SpeechButton, speechAvailable } from "./commai/voice/SpeechInput";
 import { PlanReview } from "./assistant/PlanReview";
+import { PlanningBriefImport, type PlanningBrief } from "./assistant/PlanningBrief";
 import type { AssistantAnswer, AssistantContext, Plan } from "./assistant/types";
 import "./assistant/assistant.css";
 
@@ -116,9 +117,10 @@ function Advice({ context, scope }: { context: AssistantContext; scope: Scope })
   const recent = useApi<Plan[]>(scope === "connect" && context.tools.connect_read && current ? `/assistant/plans?customer_id=${encodeURIComponent(current.id)}&limit=10` : null, 0);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [changedPlans, setChangedPlans] = useState<Record<number, Plan>>({});
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const draftQuestion = params.get("q");
   const [question, setQuestion] = useState(draftQuestion?.slice(0, 500) ?? "");
+  const [importedBrief, setImportedBrief] = useState<PlanningBrief | null>(null);
   const [busy, setBusy] = useState(false);
   const sequence = useRef(0);
   const pending = useRef(false);
@@ -136,7 +138,7 @@ function Advice({ context, scope }: { context: AssistantContext; scope: Scope })
     setTurns((t) => [...t, { id, q, scope }]);
     try {
       const out = await api<AssistantAnswer>("/assistant/ask", {
-        method: "POST", body: JSON.stringify({ question: q, customer_id: current.id, history, scope }),
+        method: "POST", body: JSON.stringify({ question: q, customer_id: current.id, history, scope, brief: importedBrief ?? undefined }),
       });
       const { answer_scope: answerScope, ...fields } = out;
       setTurns((t) => t.map((turn) => turn.id === id ? { ...turn, ...fields, answerScope: answerScope ?? turn.scope } : turn));
@@ -165,6 +167,14 @@ function Advice({ context, scope }: { context: AssistantContext; scope: Scope })
         <h2>{scope === "account" ? "What would you like to work through?" : "Ask about your network"}</h2>
         <p className="muted">{scope === "account" ? "Advice uses your account, available features and the current catalogue." : canOperate ? "Check real network observations or ask for a configuration proposal." : "Check your sites, routing decisions and usage. Your access is read only."}</p>
       </div>
+      <PlanningBriefImport organisation={context.account.organisation} initialOpen={params.get("from") === "website"} onUse={(brief) => {
+        setImportedBrief(brief);
+        setQuestion((q) => q || "Review these planning notes against our account. What should we do next?");
+        if ((brief.offer === "Connect" || brief.offer === "Network operations") && context.tools.connect_read) {
+          const next = new URLSearchParams(params); next.set("scope", "connect"); setParams(next, { replace: true });
+        }
+      }} />
+      {importedBrief && <div className="assistant-imported-brief" role="status"><strong>Planning brief attached</strong><span className="small muted">For {context.account.organisation}. Notes stay only in this assistant view.</span><details><summary>View notes</summary><ul>{importedBrief.facts.map((f, i) => <li key={i}>{f.label}: {f.value}</li>)}</ul>{importedBrief.gaps.length > 0 && <ul>{importedBrief.gaps.map((g, i) => <li key={i}>Open: {g}</li>)}</ul>}</details><button type="button" className="linklike" disabled={busy} onClick={() => setImportedBrief(null)}>Remove notes</button></div>}
       {!context.ask_enabled && <p className="assistant-notice" role="status">{context.tools.connect_read ? "Site status checks are available. Other advice needs an AI connection." : context.ask_unavailable_reason ?? "The assistant is not connected to an AI service yet."}</p>}
       {visible.length === 0 && !context.ask_enabled && context.tools.connect_read && <button className="linklike" disabled={busy} onClick={() => send("Check the status of my sites")}>Check my sites</button>}
       {visible.length === 0 && context.ask_enabled && <div className="assistant-suggestions" role="group" aria-label="Suggested questions">{suggestions.map((s) => <button key={s} className="linklike" disabled={busy} onClick={() => send(s)}>{s}</button>)}</div>}

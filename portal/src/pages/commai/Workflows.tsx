@@ -4,6 +4,7 @@ import { api, useApi } from "../../api";
 import { ErrorNote } from "../../components";
 import { Card, EmptyState, PageHead, useAction } from "../../ui";
 import { useCommaiBase, when } from "./lib";
+import { ManagementControls, ManagementNote, useJibsyManagement } from "./management";
 import "./automation.css";
 
 /* Shapes from controller/exaconnect_controller/commai/api/automation.py (ADR 0020). */
@@ -127,15 +128,21 @@ const EXAMPLE =
   "When a new customer asks for a quote, collect their requirements, create a lead, assign it to Sales and remind the owner if nobody responds";
 
 export default function Workflows() {
+  const base = useCommaiBase();
+  const access = useJibsyManagement(base);
   return (
-    <Routes>
-      <Route index element={<List />} />
-      <Route path=":id" element={<Editor />} />
-    </Routes>
+    <>
+      <ManagementNote access={access} />
+      <Routes>
+        <Route index element={<List canManage={access.canManage} />} />
+        <Route path=":id" element={<Editor canManage={access.canManage} />} />
+        <Route path="*" element={<EmptyState title="Workflow page not found" action={<Link className="button secondary" to="/commai/workflows">View workflows</Link>}>Choose a workflow from the list.</EmptyState>} />
+      </Routes>
+    </>
   );
 }
 
-function List() {
+function List({ canManage }: { canManage: boolean }) {
   const base = useCommaiBase();
   const list = useApi<Summary[]>(base && `${base}/workflows`, 20_000);
   const packs = useApi<Pack[]>(base && `${base}/workflows/packs`, 0);
@@ -149,7 +156,7 @@ function List() {
       <PageHead title="Workflows">
         Describe what should happen in plain English. Jibsy turns it into steps you can edit, test and switch on.
       </PageHead>
-      <Card title="Describe a workflow">
+      <ManagementControls canManage={canManage}><Card title="Describe a workflow">
         <label className="sr-only" htmlFor="wf-text">
           What should happen
         </label>
@@ -203,11 +210,11 @@ function List() {
             </button>
           </div>
         )}
-      </Card>
+      </Card></ManagementControls>
 
       <Card title="Your workflows">
         <ErrorNote error={list.error} />
-        {list.data && list.data.length === 0 && <EmptyState title="No workflows yet">Describe one above in plain English, or start from a starter pack below.</EmptyState>}
+        {list.data && list.data.length === 0 && <EmptyState title="No workflows yet">{canManage ? "Describe one above in plain English, or start from a starter pack below." : "An organisation owner or admin can create workflows. They will appear here when added."}</EmptyState>}
         {list.data && list.data.length > 0 && (
           <div className="table-wrap">
             <table className="paths dt stack">
@@ -251,7 +258,7 @@ function List() {
         )}
       </Card>
 
-      <Card title="Starter packs">
+      <ManagementControls canManage={canManage}><Card title="Starter packs">
         <p className="muted small">Templates for common industries. They are added as drafts for you to check and publish.</p>
         <div className="auto-grid">
           {(packs.data ?? []).map((p) => (
@@ -282,7 +289,7 @@ function List() {
             </section>
           ))}
         </div>
-      </Card>
+      </Card></ManagementControls>
     </>
   );
 }
@@ -298,7 +305,7 @@ function Notes({ items, cls }: { items: string[]; cls: string }) {
   );
 }
 
-function Editor() {
+function Editor({ canManage }: { canManage: boolean }) {
   const { id = "" } = useParams();
   const base = useCommaiBase();
   const wf = useApi<Detail>(base && `${base}/workflows/${id}`, 0);
@@ -311,7 +318,11 @@ function Editor() {
     if (wf.data) setDef(wf.data.definition);
   }, [wf.data]);
   if (!base) return <p className="muted">Choose an organisation first.</p>;
-  if (!wf.data || !def) return <ErrorNote error={wf.error} />;
+  if (!wf.data || !def) return <>
+    <ErrorNote error={wf.error} />
+    {!wf.error && <p className="muted" role="status">Loading workflow…</p>}
+    <p><Link to="/commai/workflows">Back to workflows</Link></p>
+  </>;
   const w = wf.data;
   const preview = check?.preview ?? w.preview;
   const problems = check?.problems ?? w.problems;
@@ -343,19 +354,19 @@ function Editor() {
           Live version {w.live_version ?? "none"} · latest {w.latest_version}
         </span>
         {w.status === "live" && (
-          <button className="button small secondary" disabled={act.busy} onClick={() => post("/pause")}>
+          <button className="button small secondary" disabled={!canManage || act.busy} onClick={() => post("/pause")}>
             Pause
           </button>
         )}
         {w.status === "paused" && (
-          <button className="button small" disabled={act.busy} onClick={() => post("/resume")}>
+          <button className="button small" disabled={!canManage || act.busy} onClick={() => post("/resume")}>
             Resume
           </button>
         )}
       </div>
       <ErrorNote error={act.error} />
 
-      <Card title="Trigger">
+      <ManagementControls canManage={canManage}><Card title="Trigger">
         <div className="auto-fields">
           <label>
             Name
@@ -406,10 +417,10 @@ function Editor() {
             {w.schedule.last_at ? ` · last ran ${when(w.schedule.last_at)}` : ""} (business time zone)
           </p>
         )}
-      </Card>
+      </Card></ManagementControls>
       {w.status === "live" && def.trigger.type === "manual" && <RunNow base={base} id={id} done={wf.reload} />}
 
-      <Card title="Steps">
+      <ManagementControls canManage={canManage}><Card title="Steps">
         <ol className="auto-steps" aria-label="Steps">
           {def.steps.map((s, i) => (
             <li key={i} className="auto-step">
@@ -505,7 +516,7 @@ function Editor() {
           </label>
         </div>
         <p className="small muted">They get a mention on the conversation and the failure event goes to your webhooks. To handle a failure, give a step an id and choose it under “If it fails” on an earlier step.</p>
-      </Card>
+      </Card></ManagementControls>
 
       <Card title="Preview">
         <ul className="auto-preview" aria-live="polite">
@@ -517,7 +528,7 @@ function Editor() {
         <Notes items={warnings} cls="auto-warnings" />
       </Card>
 
-      <Card title="Publish">
+      <ManagementControls canManage={canManage}><Card title="Publish">
         <p className="muted small">Publishing makes the latest saved version live. The live version keeps running until then.</p>
         {w.tools_needed.length > 0 && (
           <label className="check" style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
@@ -528,9 +539,9 @@ function Editor() {
         <button className="button" disabled={act.busy} onClick={() => post("/publish", { grant_tools: grant })}>
           Publish version {w.latest_version}
         </button>
-      </Card>
+      </Card></ManagementControls>
 
-      <TestRun base={base} id={id} />
+      <ManagementControls canManage={canManage}><TestRun base={base} id={id} /></ManagementControls>
       <Runs base={base} id={id} />
 
       <Card title="Versions">

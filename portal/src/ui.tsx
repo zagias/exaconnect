@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { Eyebrow, ExampleTag } from "./components";
 import { useCustomer } from "./customer";
 import { groupOf } from "./nav";
@@ -121,4 +121,9 @@ export function EmptyState({ title, children, action }: { title: string; childre
       {action}
     </div>
   );
+}
+
+/** A stale or shared section address always has a way back. */
+export function SectionNotFound({ to, label }: { to: string; label: string }) {
+  return <EmptyState title="Section not found" action={<Link className="button secondary" to={to}>{label}</Link>}>This address does not match a page in this section.</EmptyState>;
 }

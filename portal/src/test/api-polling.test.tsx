@@ -33,10 +33,10 @@ describe("bounded API polling", () => {
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(fetch.mock.calls[1][1]?.signal?.aborted).toBe(true);
     expect(result.current.data?.value).toBe("last known");
-    expect(result.current.error).toBe("Connect did not respond in time. Try again.");
+    expect(result.current.error).toBe("XaKore Hub did not respond in time. Try again.");
     // A fetch implementation that ignores abort cannot turn that failure green.
     await act(async () => hung.resolve(response({ value: "late stale success" })));
-    expect(result.current.error).toBe("Connect did not respond in time. Try again.");
+    expect(result.current.error).toBe("XaKore Hub did not respond in time. Try again.");
     expect(result.current.data?.value).toBe("last known");
 
     fetch.mockResolvedValue(response({ value: "fresh" }));
@@ -54,7 +54,7 @@ describe("bounded API polling", () => {
     await advance(15_000);
     expect(fetch.mock.calls[0][1]?.signal?.aborted).toBe(true);
     expect(result.current.data).toBeNull();
-    expect(result.current.error).toBe("Connect did not respond in time. Try again.");
+    expect(result.current.error).toBe("XaKore Hub did not respond in time. Try again.");
     await act(async () => body.resolve({ healthy: true }));
     expect(result.current.data).toBeNull();
     expect(result.current.error).toBeTruthy();

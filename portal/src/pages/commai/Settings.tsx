@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Navigate, NavLink, Route, Routes } from "react-router-dom";
 import { api, useApi } from "../../api";
 import { ErrorNote } from "../../components";
-import { Card, PageHead, RowActions, Tabs, useAction } from "../../ui";
+import { SectionNotFound, Card, PageHead, RowActions, Tabs, useAction } from "../../ui";
 import { CHANNEL_LABEL, useCommaiBase, when } from "./lib";
 import Data from "./settings/Data";
 import Organisation from "./settings/Organisation";
@@ -44,6 +44,7 @@ export default function Settings() {
         <Route path="/security" element={<Security base={base} />} />
         <Route path="/data" element={<Data base={base} />} />
         <Route path="/help-centre" element={<HelpAdmin />} />
+      <Route path="*" element={<SectionNotFound to="/commai/settings" label="Open Jibsy settings" />} />
       </Routes>
     </>
   );
@@ -65,7 +66,11 @@ function Service({ base }: { base: string }) {
   const [draft, setDraft] = useState<ServiceSettings | null>(null);
   const [saved, setSaved] = useState(false);
   const d = draft ?? s.data;
-  if (!d) return <ErrorNote error={s.error} />;
+  if (!d) return <>
+    <ErrorNote error={s.error} />
+    {!s.error && <p className="muted" role="status">Loading service settings…</p>}
+    {s.error && <button className="button secondary" onClick={s.reload}>Try again</button>}
+  </>;
 
   const submit = (e: FormEvent) => {
     e.preventDefault();

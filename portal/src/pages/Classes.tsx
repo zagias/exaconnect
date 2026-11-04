@@ -49,6 +49,13 @@ export function Classes() {
   const paths = useApi<PathOption[]>(current ? `/customers/${current.id}/paths` : null, 0);
   const [editing, setEditing] = useState<ClassRow | "new" | null>(null);
   const act = useAction();
+  const [formBusy, setFormBusy] = useState(false);
+  const edit = (next: ClassRow | "new") => {
+    if (act.busy || formBusy) return;
+    if (editing === next || (editing && editing !== "new" && next !== "new" && editing.name === next.name)) return;
+    if (editing && !window.confirm("Discard the changes in the open traffic class?")) return;
+    setEditing(next);
+  };
   if (!current) return null;
   const remove = (c: ClassRow) => {
     if (!window.confirm(`Delete the ${c.name} class? Its traffic goes back to normal priority and routing.`)) return;
@@ -62,7 +69,7 @@ export function Classes() {
     <Card
       title={`Classes for ${current.name}`}
       note={
-        canOperate && <button className="button small" onClick={() => setEditing("new")}>
+        canOperate && <button className="button small" disabled={act.busy || formBusy} onClick={() => edit("new")}>
           Add a class
         </button>
       }
@@ -74,9 +81,11 @@ export function Classes() {
       <ErrorNote error={list.error ?? act.error} />
       {canOperate && editing && (
         <ClassForm
+          key={editing === "new" ? "new" : editing.name}
           customerId={current.id}
           cls={editing === "new" ? null : editing}
           paths={paths.data ?? []}
+          onBusyChange={setFormBusy}
           onDone={() => {
             setEditing(null);
             list.reload();
@@ -134,9 +143,9 @@ export function Classes() {
                 {canOperate && <td className="actions">
                   <RowActions
                     label={`the ${c.name} class`}
-                    disabled={act.busy}
+                    disabled={act.busy || formBusy}
                     primary={
-                      <button className="button secondary small" aria-label={`Edit ${c.name}`} onClick={() => setEditing(c)}>
+                      <button className="button secondary small" disabled={act.busy || formBusy} aria-label={`Edit ${c.name}`} onClick={() => edit(c)}>
                         Edit
                       </button>
                     }
@@ -162,11 +171,13 @@ function ClassForm({
   cls,
   paths,
   onDone,
+  onBusyChange,
 }: {
   customerId: string;
   cls: ClassRow | null;
   paths: PathOption[];
   onDone: () => void;
+  onBusyChange: (busy: boolean) => void;
 }) {
   const num = (v: string | number | null | undefined) => (v == null ? "" : String(Number(v)));
   const [f, setF] = useState({
@@ -194,20 +205,25 @@ function ClassForm({
   const submit = (e: FormEvent) => {
     e.preventDefault();
     act.run(async () => {
-      await api(`/customers/${customerId}/classes/${encodeURIComponent(f.name)}`, {
-        method: "PUT",
-        body: JSON.stringify({
-          description: f.description,
-          dscp: list(f.dscp).map(Number),
-          ports: f.ports.trim(),
-          subnets: list(f.subnets),
-          ordinal: Number(f.ordinal),
-          priority: f.priority,
-          preferred_path: f.preferred_path || null,
-          sla: { max_latency_ms: opt(f.latency), max_jitter_ms: opt(f.jitter), max_loss_pct: opt(f.loss), allow_satellite: f.allow_satellite },
-        }),
-      });
-      onDone();
+      onBusyChange(true);
+      try {
+        await api(`/customers/${customerId}/classes/${encodeURIComponent(f.name)}`, {
+          method: "PUT",
+          body: JSON.stringify({
+            description: f.description,
+            dscp: list(f.dscp).map(Number),
+            ports: f.ports.trim(),
+            subnets: list(f.subnets),
+            ordinal: Number(f.ordinal),
+            priority: f.priority,
+            preferred_path: f.preferred_path || null,
+            sla: { max_latency_ms: opt(f.latency), max_jitter_ms: opt(f.jitter), max_loss_pct: opt(f.loss), allow_satellite: f.allow_satellite },
+          }),
+        });
+        onDone();
+      } finally {
+        onBusyChange(false);
+      }
     });
   };
   return (
@@ -278,7 +294,7 @@ function ClassForm({
         <button className="button" disabled={act.busy}>
           Save class
         </button>
-        <button type="button" className="button secondary" onClick={onDone}>
+        <button type="button" className="button secondary" disabled={act.busy} onClick={onDone}>
           Cancel
         </button>
         <ErrorNote error={act.error} />

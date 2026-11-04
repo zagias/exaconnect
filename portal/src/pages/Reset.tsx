@@ -30,7 +30,7 @@ function Frame({ title, children }: { title: string; children: ReactNode }) {
             width={168}
             height={45}
           />
-          <span className="signin-product">Connect</span>
+          <span className="signin-product">Hub</span>
         </div>
         <section className="card signin" aria-labelledby="reset-title">
           <h1 id="reset-title">{title}</h1>

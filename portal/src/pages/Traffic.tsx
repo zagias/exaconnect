@@ -3,7 +3,7 @@ import { Link, NavLink, Navigate, Route, Routes } from "react-router-dom";
 import { api, useApi, type CustomerSettings, type Loaded, type Overview } from "../api";
 import { ErrorNote, StatusPill, ago } from "../components";
 import { useCustomer, who } from "../customer";
-import { Card, PageHead, RowActions, Tabs, useAction } from "../ui";
+import { SectionNotFound, Card, PageHead, RowActions, Tabs, useAction } from "../ui";
 import { Classes, PRIORITY_LABEL, type Priority } from "./Classes";
 import { useAuth } from "../auth";
 import { canOperateConnect } from "../permissions";
@@ -25,6 +25,7 @@ export default function Traffic() {
         <Route path="applications" element={<Detections />} />
         <Route path="rules" element={<Rules />} />
         <Route path="classes" element={<Classes />} />
+      <Route path="*" element={<SectionNotFound to="/traffic/applications" label="Open traffic priorities" />} />
       </Routes>
     </div>
   );
@@ -214,6 +215,13 @@ function Rules() {
   const classes = useApi<ClassLite[]>(current ? `/classes?customer_id=${current.id}` : null, 0);
   const [editing, setEditing] = useState<Rule | "new" | null>(null);
   const act = useAction();
+  const [formBusy, setFormBusy] = useState(false);
+  const edit = (next: Rule | "new") => {
+    if (act.busy || formBusy) return;
+    if (editing === next || (editing && editing !== "new" && next !== "new" && editing.id === next.id)) return;
+    if (editing && !window.confirm("Discard the changes in the open traffic rule?")) return;
+    setEditing(next);
+  };
   if (!current) return null;
   const appName = (id: string) => catalogue.data?.find((a) => a.id === id)?.name ?? id;
   const siteName = (id: string) => current.sites.find((s) => s.id === id)?.name ?? "another site";
@@ -233,7 +241,7 @@ function Rules() {
     <Card
       title="Your rules"
       note={
-        canOperate && <button className="button small" onClick={() => setEditing("new")}>
+        canOperate && <button className="button small" disabled={act.busy || formBusy} onClick={() => edit("new")}>
           Add a rule
         </button>
       }
@@ -245,11 +253,13 @@ function Rules() {
       <ErrorNote error={list.error ?? act.error} />
       {canOperate && editing && (
         <RuleForm
+          key={editing === "new" ? "new" : editing.id}
           customerId={current.id}
           rule={editing === "new" ? null : editing}
           catalogue={catalogue.data ?? []}
           classes={classes.data ?? []}
           sites={current.sites}
+          onBusyChange={setFormBusy}
           onDone={() => {
             setEditing(null);
             list.reload();
@@ -260,7 +270,7 @@ function Rules() {
         <div className="empty">
           <p>{canOperate ? "No rules yet. Add one, or apply a suggestion from Applications." : "No traffic rules have been added yet."}</p>
           {canOperate && editing !== "new" && (
-            <button className="button small" onClick={() => setEditing("new")}>
+            <button className="button small" disabled={act.busy || formBusy} onClick={() => edit("new")}>
               Add a rule
             </button>
           )}
@@ -306,9 +316,9 @@ function Rules() {
                   {canOperate && <td className="actions">
                     <RowActions
                       label={r.name}
-                      disabled={act.busy}
+                      disabled={act.busy || formBusy}
                       primary={
-                        <button className="button secondary small" aria-label={`Edit ${r.name}`} onClick={() => setEditing(r)}>
+                        <button className="button secondary small" disabled={act.busy || formBusy} aria-label={`Edit ${r.name}`} onClick={() => edit(r)}>
                           Edit
                         </button>
                       }
@@ -341,6 +351,7 @@ function RuleForm({
   classes,
   sites,
   onDone,
+  onBusyChange,
 }: {
   customerId: string;
   rule: Rule | null;
@@ -348,6 +359,7 @@ function RuleForm({
   classes: ClassLite[];
   sites: { id: string; name: string }[];
   onDone: () => void;
+  onBusyChange: (busy: boolean) => void;
 }) {
   const [f, setF] = useState({
     name: rule?.name ?? "",
@@ -369,25 +381,30 @@ function RuleForm({
   const submit = (e: FormEvent) => {
     e.preventDefault();
     act.run(async () => {
-      const body = {
-        name: f.name,
-        class_name: f.class_name,
-        apps: f.apps,
-        domains: split(f.domains),
-        dst_subnets: split(f.dst),
-        src_subnets: split(f.src),
-        ports: f.ports.trim(),
-        vlans: split(f.vlans).map(Number),
-        dscp: split(f.dscp).map(Number),
-        site_ids: f.site_ids,
-        ordinal: Number(f.ordinal),
-        enabled: rule?.enabled ?? true,
-      };
-      await api(rule ? `/customers/${customerId}/rules/${rule.id}` : `/customers/${customerId}/rules`, {
-        method: rule ? "PUT" : "POST",
-        body: JSON.stringify(body),
-      });
-      onDone();
+      onBusyChange(true);
+      try {
+        const body = {
+          name: f.name,
+          class_name: f.class_name,
+          apps: f.apps,
+          domains: split(f.domains),
+          dst_subnets: split(f.dst),
+          src_subnets: split(f.src),
+          ports: f.ports.trim(),
+          vlans: split(f.vlans).map(Number),
+          dscp: split(f.dscp).map(Number),
+          site_ids: f.site_ids,
+          ordinal: Number(f.ordinal),
+          enabled: rule?.enabled ?? true,
+        };
+        await api(rule ? `/customers/${customerId}/rules/${rule.id}` : `/customers/${customerId}/rules`, {
+          method: rule ? "PUT" : "POST",
+          body: JSON.stringify(body),
+        });
+        onDone();
+      } finally {
+        onBusyChange(false);
+      }
     });
   };
   const categories = [...new Set(catalogue.map((a) => a.category))];
@@ -465,7 +482,7 @@ function RuleForm({
         <button className="button" disabled={act.busy}>
           Save rule
         </button>
-        <button type="button" className="button secondary" onClick={onDone}>
+        <button type="button" className="button secondary" disabled={act.busy} onClick={onDone}>
           Cancel
         </button>
         <ErrorNote error={act.error} />

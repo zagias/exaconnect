@@ -49,7 +49,7 @@ export interface Loaded<T> {
 }
 
 const READ_TIMEOUT_MS = 15_000;
-const READ_TIMEOUT_ERROR = "Connect did not respond in time. Try again.";
+const READ_TIMEOUT_ERROR = "XaKore Hub did not respond in time. Try again.";
 
 /** One read at a time, with a deadline covering both the response and its body. */
 function useBoundedRead<T>(

@@ -1284,8 +1284,8 @@ export function Access({ base, v, reload }: { base: string; v: VoiceOverview; re
       </Card>
       <Card title="Phone system configuration">
         <p className="muted small">
-          The PBX (FreeSWITCH) configuration is written from these settings after every change. Not live yet: there is no SIP provider account (phase
-          3), so outside calls don't connect. Calls between extensions, menus and queues work once the PBX runs.
+          Phone system configuration is generated from these settings after each change. Outside calls also need a connected phone service.
+          {" "}<Link to="/commai/voice/ai">Review telephone AI setup and readiness</Link> before choosing AI call routing.
         </p>
         <p className="small">
           {v.pbx ? (

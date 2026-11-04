@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from dataclasses import dataclass, field, replace
 from typing import Literal
 from uuid import UUID
@@ -14,6 +15,7 @@ from pydantic import BaseModel, Field
 from .. import audit, db
 from ..ai import act, guidance, hazards, hub, runner, storms
 from ..ai import ask as ask_mod
+from ..ai.brief import PlanningBrief
 from .deps import VIEWER_ONLY, AdminDep, UserDep, can_manage_org, check_customer, check_product, require_org_manager
 
 router = APIRouter(tags=["ai"])
@@ -265,6 +267,7 @@ class AskIn(BaseModel):
     # The last few turns, so "yes, do that" follows on from the answer before it.
     history: list[Turn] = Field(default_factory=list, max_length=act.MAX_HISTORY)
     scope: Literal["account", "connect"] = "account"
+    brief: PlanningBrief | None = None
 
 
 @router.post("/ai/ask")
@@ -283,6 +286,8 @@ async def _answer(body: AskIn, user, request: Request, *, shared_mode: bool) -> 
     s = request.app.state.settings
     if user.role == "carrier":
         raise HTTPException(403, "Not available for this account.")
+    if body.brief is not None and not shared_mode:
+        raise HTTPException(400, "Open XaKore assistant to review a website brief.")
     site_request = guidance.site_intent(body.question) if shared_mode else None
     customer_id = _customer(user, body.customer_id)
     network_read, network_write = _network_access(user)
@@ -293,7 +298,12 @@ async def _answer(body: AskIn, user, request: Request, *, shared_mode: bool) -> 
     # sending a question/history to an external model service.
     from ..commai.automation.assistant import NO_SECRETS, SECRET_HINT
 
-    if any(SECRET_HINT.search(text) for text in [body.question, *[t.q + "\n" + t.a for t in body.history]]):
+    brief_texts = body.brief.texts() if body.brief else []
+    brief_sensitive = any(
+        re.search(r"(?i)\b(?:\d[ -]?){13,19}\b|\bprivate[_ -]?key\s*(?:is\b|[:=])\s*\S+", text) for text in brief_texts
+    )
+    supplied_text = [body.question, *[t.q + "\n" + t.a for t in body.history], *brief_texts]
+    if brief_sensitive or any(SECRET_HINT.search(text) for text in supplied_text):
         return {
             "answer": NO_SECRETS,
             "plan": None,
@@ -371,6 +381,10 @@ async def _answer(body: AskIn, user, request: Request, *, shared_mode: bool) -> 
             return context, act.config(conn, customer_id) if include_network else {}
 
     context, config = await asyncio.to_thread(prepare)
+    if body.brief is not None:
+        # Keep the current tenant's evidence authoritative. Imported requirements
+        # do not add products, prices, permissions, site IDs or execution rights.
+        context["visitor_requirements"] = body.brief.context()
     config["assistant_permissions"] = {
         "can_apply_changes": network_write and include_network,
         "can_change_shadow_mode": can_manage_org(user) and network_write and include_network,
