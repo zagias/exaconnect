@@ -138,7 +138,15 @@ def test_stale_agent_or_configured_paths_do_not_establish_operational_readiness(
 @pytest.fixture
 def shared_grounding(monkeypatch, account_context):
     state = SimpleNamespace(response={}, prompts=[], plans=[], reads=[], context=account_context.make())
-    conn = SimpleNamespace(execute=lambda *_: SimpleNamespace(fetchone=lambda: {"n": 0}))
+    conn = SimpleNamespace(
+        execute=lambda *_: SimpleNamespace(
+            fetchone=lambda: {
+                "n": 0,
+                "name": "Fictional retailer",
+                "example": state.context["account"].get("example", False),
+            }
+        )
+    )
     monkeypatch.setattr(ai.db, "tx", lambda: nullcontext(conn))
     monkeypatch.setattr(ai.audit, "record", lambda *_: None)
     monkeypatch.setattr(ai, "_hub_context", lambda *_: copy.deepcopy(state.context))
@@ -430,3 +438,95 @@ def test_bounded_choices_do_not_bypass_account_scope_or_customer_access(shared_g
         json={"scope": "connect", "question": "Review this design.", "customer_id": "another-customer"},
     )
     assert response.status_code == 403 and s.prompts == []
+
+
+@pytest.mark.parametrize("scope", ["account", "connect"])
+@pytest.mark.parametrize("question", ["check the status of my sites?", "Are my sites online?"])
+def test_site_status_reads_without_model_or_actions(shared_grounding, monkeypatch, scope, question):
+    s = shared_grounding
+    s.context["account"]["example"] = True
+    monkeypatch.setattr(ai.act, "config", lambda *_: pytest.fail("Status must not read action configuration"))
+    s.client.app.state.settings.llm_api_key = ""
+    response = s.client.post("/api/v1/assistant/ask", json={"question": question, "scope": scope})
+    assert response.status_code == 200
+    result = response.json()
+    assert result["model"] == "rules" and result["plan"] is None and result["scope"] == "connect"
+    assert result["answer"].startswith("Example data.")
+    assert "20 sites" in result["answer"] and "20 with no report recorded" in result["answer"]
+    assert "0 of 0 configured paths" in result["answer"] and "Connectivity is unverified" in result["answer"]
+    assert "15 more sites" in result["answer"] and "fictional-06:" not in result["answer"]
+    assert result["based_on"]["sources"] == ["network_snapshot"]
+    assert s.reads == ["network"] and s.prompts == [] and s.plans == []
+
+
+def test_restore_clarifies_without_model_snapshot_or_plan(shared_grounding):
+    s = shared_grounding
+    s.client.app.state.settings.llm_api_key = ""
+    response = s.client.post(
+        "/api/v1/assistant/ask", json={"question": "how do i restore my sites?", "scope": "account"}
+    )
+    assert response.status_code == 200
+    result = response.json()
+    assert "getting disconnected sites reporting again" in result["answer"]
+    assert "recovering deleted site records or configuration" in result["answer"]
+    assert result["plan"] is None and result["model"] == "rules"
+    assert s.reads == [] and s.prompts == [] and s.plans == []
+
+
+@pytest.mark.parametrize("other_tenant", [False, True])
+def test_site_status_keeps_access_and_tenant_gates(shared_grounding, account_context, other_tenant):
+    s = shared_grounding
+    body = {"question": "Check the status of my sites", "scope": "account"}
+    if other_tenant:
+        body["customer_id"] = "other-org"
+    else:
+        account_context.user.products = ("commai",)
+        account_context.user.apps = ("commai",)
+        account_context.user.scopes = ("commai:read",)
+    assert s.client.post("/api/v1/assistant/ask", json=body).status_code == 403
+    assert s.reads == [] and s.prompts == [] and s.plans == []
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "Delete my sites",
+        "Reset all site configuration",
+        "What does our plan include?",
+        "Where is voice now?",
+        "Why did voice move?",
+        "Why were my sites offline yesterday?",
+        "What is the voice service status at my sites?",
+        "Show site health last week",
+        "Restore voice service at my sites",
+        "Set my site status to offline",
+        "How do I keep my sites online?",
+        "Can my sites stay online if a carrier fails?",
+        "Will our sites be online tomorrow?",
+    ],
+)
+def test_site_shortcut_does_not_capture_changes_or_historical_diagnosis(question):
+    assert guidance.site_intent(question) is None
+
+
+def test_site_status_distinguishes_reports_from_connectivity():
+    answer = guidance.site_status_answer(
+        {
+            "now_utc": "2026-11-03T12:00:00+00:00",
+            "sites": [
+                {"name": "Reporting", "last_seen": "2026-11-03T12:00:00Z", "online": True, "paths": []},
+                {
+                    "name": "Stale",
+                    "last_seen": "2020-01-01T00:00:00Z",
+                    "online": False,
+                    "paths": [{"path": "carrier-a"}],
+                },
+                {"name": "Never", "last_seen": None, "online": None, "paths": []},
+            ],
+        }
+    )
+    assert "1 reporting within 30 seconds" in answer and "1 with older reports" in answer
+    assert "1 with no report recorded" in answer and "0 of 1 configured paths" in answer
+    assert "Never: no agent report recorded" in answer and "Connectivity is unverified" in answer
+    assert "site down" not in answer.lower() and "healthy" not in answer.lower()
+    assert "03 Nov 2026 at 12:00 UTC" in answer

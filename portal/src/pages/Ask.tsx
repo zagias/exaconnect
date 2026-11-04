@@ -17,6 +17,7 @@ interface Turn extends Partial<AssistantAnswer> {
   id: number;
   q: string;
   scope: Scope;
+  answerScope?: Scope;
   error?: string;
 }
 
@@ -36,7 +37,7 @@ export default function Ask() {
   const [params, setParams] = useSearchParams();
   const context = useApi<AssistantContext>(current ? `/assistant/context?customer_id=${encodeURIComponent(current.id)}` : null, 0);
   const selected = params.get("scope") ?? "account";
-  const c = context.error ? null : context.data;
+  const c = context.error || context.data?.account.customer_id !== current?.id ? null : context.data;
   const scope = selected === "connect" || selected === "jibsy" ? selected : "account";
   const allowed = scope === "account" || (scope === "connect" ? c?.tools.connect_read === true : !!c?.tools.jibsy_diagnostics_path);
   const choose = (next: string) => {
@@ -110,6 +111,7 @@ export default function Ask() {
 function Advice({ context, scope }: { context: AssistantContext; scope: Scope }) {
   const { current } = useCustomer();
   const { user } = useAuth();
+  const canAsk = context.ask_enabled || context.tools.connect_read;
   const canOperate = scope === "connect" && context.tools.connect_changes && canOperateConnect(user);
   const recent = useApi<Plan[]>(scope === "connect" && context.tools.connect_read && current ? `/assistant/plans?customer_id=${encodeURIComponent(current.id)}&limit=10` : null, 0);
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -125,18 +127,19 @@ function Advice({ context, scope }: { context: AssistantContext; scope: Scope })
 
   const send = async (input: string) => {
     const q = input.trim();
-    if (q.length < 2 || pending.current || !context.ask_enabled || !current) return;
+    if (q.length < 2 || pending.current || !canAsk || !current || context.account.customer_id !== current.id) return;
     pending.current = true;
     setBusy(true);
     setQuestion("");
     const id = ++sequence.current;
-    const history = turns.filter((t) => t.scope === scope && t.answer).slice(-4).map((t) => ({ q: t.q, a: t.answer ?? "" }));
+    const history = turns.filter((t) => (t.answerScope ?? t.scope) === scope && t.answer).slice(-4).map((t) => ({ q: t.q, a: t.answer ?? "" }));
     setTurns((t) => [...t, { id, q, scope }]);
     try {
       const out = await api<AssistantAnswer>("/assistant/ask", {
         method: "POST", body: JSON.stringify({ question: q, customer_id: current.id, history, scope }),
       });
-      setTurns((t) => t.map((turn) => turn.id === id ? { ...turn, ...out } : turn));
+      const { scope: answerScope, ...fields } = out;
+      setTurns((t) => t.map((turn) => turn.id === id ? { ...turn, ...fields, answerScope: answerScope ?? turn.scope } : turn));
       if (out.plan) recent.reload();
     } catch (e) {
       setTurns((t) => t.map((turn) => turn.id === id ? { ...turn, error: (e as Error).message } : turn));
@@ -162,7 +165,8 @@ function Advice({ context, scope }: { context: AssistantContext; scope: Scope })
         <h2>{scope === "account" ? "What would you like to work through?" : "Ask about your network"}</h2>
         <p className="muted">{scope === "account" ? "Advice uses your account, available features and the current catalogue." : canOperate ? "Check real network observations or ask for a configuration proposal." : "Check your sites, routing decisions and usage. Your access is read only."}</p>
       </div>
-      {!context.ask_enabled && <p className="assistant-notice" role="status">{context.ask_unavailable_reason ?? "The assistant is not connected to an AI service yet."}</p>}
+      {!context.ask_enabled && <p className="assistant-notice" role="status">{context.tools.connect_read ? "Site status checks are available. Other advice needs an AI connection." : context.ask_unavailable_reason ?? "The assistant is not connected to an AI service yet."}</p>}
+      {visible.length === 0 && !context.ask_enabled && context.tools.connect_read && <button className="linklike" disabled={busy} onClick={() => send("Check the status of my sites")}>Check my sites</button>}
       {visible.length === 0 && context.ask_enabled && <div className="assistant-suggestions" role="group" aria-label="Suggested questions">{suggestions.map((s) => <button key={s} className="linklike" disabled={busy} onClick={() => send(s)}>{s}</button>)}</div>}
       <div className="assistant-conversation" aria-live="polite" aria-busy={busy}>
         {visible.map((t) => (
@@ -174,7 +178,8 @@ function Advice({ context, scope }: { context: AssistantContext; scope: Scope })
                   <p className="small muted">I couldn’t verify that recommendation. Here are the facts I can confirm.</p>
                 )}
                 <div className="assistant-answer">{t.answer}</div>
-                <p className="small muted assistant-source">{t.based_on?.sources?.length === 0 ? "No account data was queried for this reply." : t.scope === "connect" ? `Network observations${t.based_on?.sites !== undefined ? ` · ${t.based_on.sites} sites` : ""}${t.based_on?.decisions !== undefined ? ` · ${t.based_on.decisions} decisions in 7 days` : ""}` : "Account access, plans and current catalogue"}</p>
+                <p className="small muted assistant-source">{t.based_on?.sources?.length === 0 ? "No account data was queried for this reply." : (t.answerScope ?? t.scope) === "connect" ? `Network observations${t.based_on?.sites !== undefined ? ` · ${t.based_on.sites} sites` : ""}${t.model !== "rules" && t.based_on?.decisions !== undefined ? ` · ${t.based_on.decisions} decisions in 7 days` : ""}` : t.model === "rules" ? "Organisation context" : "Account access, plans and current catalogue"}</p>
+                {t.based_on?.sources?.includes("network_snapshot") && context.tools.connect_read && <Link to="/sites">View sites</Link>}
                 {t.plan && <PlanReview plan={t.plan} canOperate={canOperate} onChange={update} />}
               </>
             ) : t.error ? <ErrorNote error={t.error} /> : <p className="muted" role="status">{t.scope === "connect" ? "Checking your network…" : "Checking your account and available services…"}</p>}
@@ -183,12 +188,12 @@ function Advice({ context, scope }: { context: AssistantContext; scope: Scope })
       </div>
       <form className="assistant-composer" onSubmit={submit}>
         <label htmlFor="assistant-question">{scope === "connect" ? canOperate ? "Your question or request" : "Your question" : "Your account question"}</label>
-        <textarea id="assistant-question" rows={3} value={question} onChange={(e) => setQuestion(e.target.value)} maxLength={500} disabled={!context.ask_enabled} placeholder={scope === "connect" ? "Why did voice move to the backup path?" : "Tell me what you need, or what you want to improve."} />
+        <textarea id="assistant-question" rows={3} value={question} onChange={(e) => setQuestion(e.target.value)} maxLength={500} disabled={!canAsk} placeholder={scope === "connect" ? "Why did voice move to the backup path?" : "Tell me what you need, or what you want to improve."} />
         <div className="assistant-composer-foot">
           <span className="small muted">{scope === "connect" && canOperate ? "Proposals need your approval before they can run." : "Advice does not change your account."}</span>
           <div className="assistant-actions">
-            {context.ask_enabled && <SpeechButton onText={setQuestion} label="Dictate your question into the text box" />}
-            <button className="button" disabled={!context.ask_enabled || busy || question.trim().length < 2}>{busy ? "Checking…" : "Send"}</button>
+            {canAsk && <SpeechButton onText={setQuestion} label="Dictate your question into the text box" />}
+            <button className="button" disabled={!canAsk || busy || question.trim().length < 2}>{busy ? "Checking…" : "Send"}</button>
           </div>
         </div>
         {hasSpeech && <p className="small muted">Speak fills the text box. Check the words, then send.</p>}

@@ -7,7 +7,93 @@ diagnosis selects actual scoped evidence; it does not emit model capability pros
 
 from __future__ import annotations
 
+import datetime as dt
 import json
+import re
+
+
+def site_intent(question: str) -> str | None:
+    """Direct site checks never authorise configuration changes."""
+    if not re.search(r"\b(?:sites?|branches?)\b", question, re.I):
+        return None
+    if re.search(
+        r"\b(?:voice|voip|sip|calls?|phone|video|teams|zoom|applications?|services?|routing|latency|jitter|loss|sla)\b",
+        question,
+        re.I,
+    ):
+        return None
+    if re.search(r"\b(?:restore|recover)\b", question, re.I):
+        return "restore"
+    if re.search(
+        r"\b(?:yesterday|previous|historical|history|ago|were|was|since|during|why|explain)\b|\blast\s+(?:week|month|night|year)\b",
+        question,
+        re.I,
+    ):
+        return None
+    if re.search(
+        r"\b(?:keep|stay|remain|ensure|design|prevent|avoid|plan|propose|improve)\b|\b(?:will|would|should)\s+(?:my|our|the)\s+(?:sites?|branches?)\b",
+        question,
+        re.I,
+    ):
+        return None
+    if re.search(
+        r"\b(?:delete|reset|disable|enable|apply|create|configure|set|change|update|remove)\b", question, re.I
+    ):
+        return None
+    if re.search(
+        r"\b(?:status|health|online|offline|reporting|reachable|unreachable)\b|\b(?:are|is)\b.*\b(?:up|down|working)\b",
+        question,
+        re.I,
+    ):
+        return "status"
+    return None
+
+
+def site_status_answer(context: dict) -> str:
+    sites = context.get("sites", [])
+    facts = example_note(context)
+    organisation = str(context.get("account", {}).get("organisation") or "this organisation").replace("\n", " ")[:120]
+    checked_at = context.get("now_utc")
+    when = (
+        dt.datetime.fromisoformat(str(checked_at)).astimezone(dt.UTC).strftime("%d %b %Y at %H:%M UTC")
+        if checked_at
+        else None
+    )
+    facts.append(f"Checked site records for {organisation}" + (f" on {when}." if when else "."))
+    if not sites:
+        return "\n\n".join(
+            facts
+            + ["No sites are recorded here. Check that you have selected the right organisation. Nothing has changed."]
+        )
+    reporting = sum(site.get("last_seen") is not None and site.get("online") is True for site in sites)
+    never = sum(site.get("last_seen") is None for site in sites)
+    stale = len(sites) - reporting - never
+    facts.append(
+        f"{len(sites)} sites: {reporting} reporting within 30 seconds, "
+        f"{stale} with older reports, {never} with no report recorded."
+    )
+    paths = [path for site in sites for path in site.get("paths", [])]
+    measured = sum(
+        any(path.get(key) is not None for key in ("latency_ms_last_min", "jitter_ms_last_min", "loss_pct_last_min"))
+        for path in paths
+    )
+    facts.append(f"{measured} of {len(paths)} configured paths have measurements from the last minute.")
+    attention = [site for site in sites if site.get("last_seen") is None or site.get("online") is not True]
+    details = []
+    for site in attention[:5]:
+        name = str(site.get("name") or "Unnamed site").replace("\n", " ")[:120]
+        status = "no agent report recorded" if site.get("last_seen") is None else f"last report {site['last_seen']}"
+        details.append(f"{name}: {status}.")
+    if details:
+        facts.append("\n".join(details))
+    if len(attention) > 5:
+        facts.append(f"{len(attention) - 5} more sites need a reporting check; open Sites for the full list.")
+    facts.append(
+        "Connectivity is unverified where reports are missing. "
+        "Agent reports alone do not confirm every service is working. Nothing has changed."
+    )
+    return "\n\n".join(facts)
+
 
 DESIGN = {
     "diversity": {

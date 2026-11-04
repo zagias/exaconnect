@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { User } from "../api";
@@ -8,8 +8,9 @@ import { assistantAddress, type AssistantAnswer, type AssistantContext, type Pla
 import { accountGroups, navGroups } from "../nav";
 
 const auth = vi.hoisted(() => ({ user: null as User | null }));
+const customer = vi.hoisted(() => ({ current: { id: "org-a", name: "Coral" } }));
 vi.mock("../auth", () => ({ useAuth: () => ({ user: auth.user }) }));
-vi.mock("../customer", () => ({ useCustomer: () => ({ current: { id: "org-a", name: "Coral" } }) }));
+vi.mock("../customer", () => ({ useCustomer: () => customer }));
 
 const revision = "a".repeat(64);
 const draft: Plan = {
@@ -24,14 +25,14 @@ const applied: Plan = { ...draft, id: 2, status: "applied", question: "What chan
 function context(): AssistantContext {
   const limited = auth.user?.org_role === "viewer" || !!auth.user?.scopes && !auth.user.scopes.includes("connect");
   return {
-    account: { customer_id: "org-a", organisation: "Coral", role: auth.user?.org_role ?? "member", products: ["connect"], accessible_products: ["connect"], subscriptions: [] },
+    account: { customer_id: customer.current.id, organisation: customer.current.name, role: auth.user?.org_role ?? "member", products: ["connect"], accessible_products: ["connect"], subscriptions: [] },
     tools: { connect_read: true, connect_changes: !limited, jibsy_changes: false, subscription_changes: false, jibsy_diagnostics_path: null },
     upgrade_guidance: { path: "/account/apps", quote_path: "/quotes", can_request: false, policy: "Separate review required" },
     generated_at: new Date().toISOString(), sources: ["organisation_access", "active_product_catalogue"], ask_enabled: true, model: "Test assistant",
   };
 }
 
-function responses(options: { context?: AssistantContext; plan?: Plan; failExecutionOnce?: boolean; failedContext?: boolean; grounding?: NonNullable<AssistantAnswer["based_on"]>["grounding"] } = {}) {
+function responses(options: { context?: AssistantContext; plan?: Plan; answer?: AssistantAnswer | Promise<AssistantAnswer>; failExecutionOnce?: boolean; failedContext?: boolean; grounding?: NonNullable<AssistantAnswer["based_on"]>["grounding"] } = {}) {
   let plan = options.plan ?? draft;
   let attempts = 0;
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
@@ -40,7 +41,7 @@ function responses(options: { context?: AssistantContext; plan?: Plan; failExecu
     if (url.includes("/assistant/context")) {
       if (options.failedContext) return new Response(JSON.stringify({ detail: "Account context unavailable" }), { status: 503 });
       data = options.context ?? context();
-    } else if (url.endsWith("/assistant/ask") && !url.includes("/commai/")) data = { answer: "Voice stayed on the measured fibre connection.", plan, based_on: { sites: 2, decisions: 3, grounding: options.grounding } };
+    } else if (url.endsWith("/assistant/ask") && !url.includes("/commai/")) data = options.answer ? await options.answer : { answer: "Voice stayed on the measured fibre connection.", plan, based_on: { sites: 2, decisions: 3, grounding: options.grounding } };
     else if (url.endsWith("/assistant/plans/1/approve")) {
       plan = { ...plan, approval: { revision: plan.revision!, approved_by: "user:person@example.org", approved_at: new Date().toISOString() }, can_execute: true };
       data = plan;
@@ -66,7 +67,7 @@ function posts(fetch: ReturnType<typeof responses>, suffix: string) {
   return fetch.mock.calls.filter(([url, init]) => String(url).endsWith(suffix) && init?.method === "POST");
 }
 
-beforeEach(() => { auth.user = { email: "person@example.org", role: "customer", customer_id: "org-a", org_role: "member" }; });
+beforeEach(() => { customer.current = { id: "org-a", name: "Coral" }; auth.user = { email: "person@example.org", role: "customer", customer_id: "org-a", org_role: "member" }; });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe.each([
@@ -221,6 +222,7 @@ describe("shared account and Jibsy guidance", () => {
 
   it("shows an unavailable reason without enabling requests", async () => {
     const c = context(); c.ask_enabled = false; c.ask_unavailable_reason = "The AI service is not configured.";
+    c.tools.connect_read = false;
     const fetch = responses({ context: c });
     show("/assistant");
     await screen.findByText("The AI service is not configured.");
@@ -242,5 +244,61 @@ describe("one assistant entry", () => {
     }
     expect(accountGroups({ carrier: false, jibsy: false }).flatMap((g) => g.items).some((i) => i.to === "/assistant")).toBe(true);
     expect(navGroups("carrier").flatMap((g) => g.items).some((i) => i.to === "/assistant")).toBe(false);
+  });
+});
+
+describe("direct site checks", () => {
+  const status: AssistantAnswer = { answer: "2 sites have no recorded report.", plan: null, model: "rules", scope: "connect", based_on: { sites: 2, sources: ["network_snapshot"], grounding: "verified_read_only_status" } };
+
+  it("keeps a network answer visible in Account and excludes it from account advice history", async () => {
+    const fetch = responses({ answer: status });
+    show("/assistant");
+    fireEvent.change(await screen.findByRole("textbox", { name: "Your account question" }), { target: { value: "Check the status of my sites" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText(status.answer);
+    expect(screen.getByText("Network observations · 2 sites")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "View sites" }).getAttribute("href")).toBe("/sites");
+    expect(screen.queryByRole("button", { name: /Approve|Apply/ })).toBeNull();
+    fireEvent.change(screen.getByRole("textbox", { name: "Your account question" }), { target: { value: "What does my plan include?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(posts(fetch, "/assistant/ask")).toHaveLength(2));
+    expect(JSON.parse(String(posts(fetch, "/assistant/ask")[1][1]?.body))).toMatchObject({ customer_id: "org-a", scope: "account", history: [] });
+  });
+
+  it("allows read-only site checks when the model is unavailable", async () => {
+    const c = context(); c.ask_enabled = false;
+    const fetch = responses({ context: c, answer: status });
+    show("/assistant");
+    fireEvent.click(await screen.findByRole("button", { name: "Check my sites" }));
+    await screen.findByText(status.answer);
+    expect(screen.getByText("Site status checks are available. Other advice needs an AI connection.")).toBeTruthy();
+    expect(posts(fetch, "/assistant/ask")).toHaveLength(1);
+    expect(fetch.mock.calls.some(([url, init]) => /\/plans\/\d+\//.test(String(url)) && init?.method === "POST")).toBe(false);
+  });
+
+  it("clears pending account replies when the organisation changes", async () => {
+    let resolve!: (answer: AssistantAnswer) => void;
+    const answer = new Promise<AssistantAnswer>((done) => { resolve = done; });
+    const fetch = responses({ answer });
+    const view = show("/assistant");
+    fireEvent.change(await screen.findByRole("textbox", { name: "Your account question" }), { target: { value: "Check the status of my sites" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(posts(fetch, "/assistant/ask")).toHaveLength(1));
+    customer.current = { id: "org-b", name: "Harbour" };
+    view.rerender(<MemoryRouter initialEntries={["/assistant"]}><Ask /></MemoryRouter>);
+    await screen.findByRole("textbox", { name: "Your account question" });
+    resolve({ ...status, answer: "Private organisation A result." });
+    await waitFor(() => expect(screen.queryByText("Private organisation A result.")).toBeNull());
+    expect(screen.queryByText("Check the status of my sites")).toBeNull();
+  });
+
+  it("shows restore clarification without a configuration plan", async () => {
+    responses({ answer: { answer: "Get sites reporting again, or recover deleted records?", plan: null, model: "rules", scope: "account", based_on: { sources: ["organisation_access"] } } });
+    show("/assistant");
+    fireEvent.change(await screen.findByRole("textbox", { name: "Your account question" }), { target: { value: "How do I restore my sites?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText("Get sites reporting again, or recover deleted records?");
+    expect(screen.getByText("Organisation context")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Approve|Apply/ })).toBeNull();
   });
 });

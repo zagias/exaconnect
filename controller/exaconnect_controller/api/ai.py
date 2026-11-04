@@ -235,7 +235,8 @@ async def _answer(body: AskIn, user, request: Request, *, shared_mode: bool) -> 
     s = request.app.state.settings
     if user.role == "carrier":
         raise HTTPException(403, "Not available for this account.")
-    if not s.llm_api_key:
+    site_request = guidance.site_intent(body.question) if shared_mode else None
+    if not s.llm_api_key and site_request is None:
         raise HTTPException(503, "Ask your network is switched off: no AI service key is configured.")
     customer_id = _customer(user, body.customer_id)
     network_read, network_write = _network_access(user)
@@ -252,6 +253,48 @@ async def _answer(body: AskIn, user, request: Request, *, shared_mode: bool) -> 
             "plan": None,
             "model": "rules",
             "based_on": {"decisions": 0, "events": 0, "insights": 0, "sites": 0, "sources": []},
+        }
+
+    if site_request is not None:
+        if not network_read:
+            raise HTTPException(403, "Network data is not available with this account's product access and scope.")
+
+        def read_site_context():
+            with db.tx() as conn:
+                conn.execute("SET TRANSACTION READ ONLY")
+                org = conn.execute("SELECT name, example FROM customers WHERE id = %s", (customer_id,)).fetchone()
+                if org is None:
+                    raise HTTPException(404, "Customer not found.")
+                context = ask_mod.build_context(conn, customer_id) if site_request == "status" else {}
+                context["account"] = {"example": bool(org.get("example")), "organisation": org.get("name")}
+                return context
+
+        site_context = await asyncio.to_thread(read_site_context)
+        answer = (
+            "\n\n".join(
+                guidance.example_note(site_context)
+                + [
+                    "Do you mean getting disconnected sites reporting again, "
+                    "or recovering deleted site records or configuration?",
+                    "Nothing has been changed or restored.",
+                ]
+            )
+            if site_request == "restore"
+            else guidance.site_status_answer(site_context)
+        )
+        return {
+            "answer": answer,
+            "plan": None,
+            "model": "rules",
+            "scope": "connect" if site_request == "status" else body.scope,
+            "based_on": {
+                "decisions": 0,
+                "events": 0,
+                "insights": 0,
+                "sites": len(site_context.get("sites", [])),
+                "sources": ["network_snapshot" if site_request == "status" else "organisation_access"],
+                "grounding": "verified_read_only_status",
+            },
         }
 
     def prepare():
