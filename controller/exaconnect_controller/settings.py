@@ -56,6 +56,12 @@ class Settings:
     )
     llm_model: str = field(default_factory=lambda: _env("EXA_LLM_MODEL", "deepseek-ai/DeepSeek-V4-Flash"))
     llm_questions_per_hour: int = field(default_factory=lambda: int(_env("EXA_LLM_QUESTIONS_PER_HOUR", "30")))
+    # Hub-only override. All three values are required; global providers stay independent.
+    assistant_llm_api_key: str = field(default_factory=lambda: _env("EXA_ASSISTANT_LLM_API_KEY"), repr=False)
+    assistant_llm_base_url: str = field(
+        default_factory=lambda: _env("EXA_ASSISTANT_LLM_BASE_URL").rstrip("/"), repr=False
+    )
+    assistant_llm_model: str = field(default_factory=lambda: _env("EXA_ASSISTANT_LLM_MODEL"), repr=False)
     # Sign-in (ADR 0017). The session cookie is Secure unless this is "0" (plain-HTTP tests only).
     cookie_secure: bool = field(default_factory=lambda: _env("EXA_COOKIE_SECURE", "1") not in ("0", "false", "no"))
     # The sign-in gateway (Keycloak) over OpenID Connect. Off until the issuer and client are set.

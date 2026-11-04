@@ -468,6 +468,7 @@ def test_ask_your_network(client, admin_headers, fake_llm):
         "ask_enabled": True,
         "ask_unavailable_reason": None,
         "model": "test-model",
+        "provider": "compatible",
         "storm_watch": True,
         "hazard_watch": True,
     }
