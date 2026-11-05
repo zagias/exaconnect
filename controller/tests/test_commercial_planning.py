@@ -26,7 +26,6 @@ CID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 KEY = uuid.UUID("00000000-0000-0000-0000-000000000002")
 
 
-
 @pytest.mark.parametrize(
     "module",
     [
