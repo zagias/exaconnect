@@ -14,12 +14,13 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from .. import db
+from ..ai.brief import PlanningBrief
 from ..billing.core import BillingError
 from ..billing.service import jsonable
-from ..commercial import catalogue, contract, orders, quotes, rating
+from ..commercial import catalogue, contract, orders, planning, quotes, rating
 from .deps import AdminDep, ViewerDep, can_manage_org, check_customer
 
 router = APIRouter(tags=["commercial"])
@@ -168,6 +169,13 @@ class LineIn(BaseModel):
     config: dict = {}
     description: str = Field(default="", max_length=200)
 
+    @field_validator("quantity", mode="before")
+    @classmethod
+    def numeric_quantity(cls, value):
+        if isinstance(value, bool):
+            raise ValueError("A quantity must be a number, not true or false.")
+        return value
+
 
 class QuoteIn(BaseModel):
     customer_id: uuid.UUID | None = None
@@ -177,6 +185,33 @@ class QuoteIn(BaseModel):
     valid_until: str | None = None
     notes: str = Field(default="", max_length=4000)
     lines: list[LineIn] = Field(default=[], max_length=quotes.MAX_LINES)
+    planning_source: PlanningBrief | None = None
+    creation_key: uuid.UUID | None = None
+
+    @field_validator("planning_source")
+    @classmethod
+    def safe_source(cls, value):
+        if value is not None:
+            planning.clean_source(value)
+        return value
+
+    @model_validator(mode="after")
+    def planning_identity(self):
+        if self.planning_source is not None and self.creation_key is None:
+            raise ValueError("A planning draft needs its creation key.")
+        if self.creation_key is not None and self.planning_source is None:
+            raise ValueError("A creation key is only used with a planning brief.")
+        return self
+
+
+class QuotePreviewIn(QuoteIn):
+    """Pricing requires source validation, but no creation identity."""
+
+    @model_validator(mode="after")
+    def planning_identity(self):
+        if self.creation_key is not None and self.planning_source is None:
+            raise ValueError("A creation key is only used with a planning brief.")
+        return self
 
 
 class QuotePatch(BaseModel):
@@ -186,6 +221,31 @@ class QuotePatch(BaseModel):
     valid_until: str | None = None
     notes: str | None = Field(default=None, max_length=4000)
     lines: list[LineIn] | None = Field(default=None, max_length=quotes.MAX_LINES)
+    planning_source: PlanningBrief | None = None
+
+    @field_validator("planning_source")
+    @classmethod
+    def safe_source(cls, value):
+        if value is not None:
+            planning.clean_source(value)
+        return value
+
+
+class DesignOptionsIn(BaseModel):
+    customer_id: uuid.UUID | None = None
+    brief: PlanningBrief
+    currency: str = Field(pattern=r"^[A-Za-z]{3}$")
+
+    @field_validator("brief")
+    @classmethod
+    def safe_source(cls, value):
+        planning.clean_source(value)
+        return value
+
+
+class DesignReviewIn(BaseModel):
+    digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    note: str = Field(min_length=10, max_length=1000)
 
 
 def _quote_customer(user, customer_id: uuid.UUID | None) -> Any:
@@ -199,11 +259,25 @@ def _quote_customer(user, customer_id: uuid.UUID | None) -> Any:
 
 
 def _values(body: BaseModel) -> dict:
-    return body.model_dump(exclude_none=True, exclude={"customer_id"})
+    values = body.model_dump(exclude_none=True, exclude={"customer_id"})
+    # Preserve input presence: planning quotes cannot inherit LineIn's manual-quote quantity default.
+    if getattr(body, "lines", None) is not None:
+        for raw, line in zip(values["lines"], body.lines, strict=True):
+            if "quantity" not in line.model_fields_set:
+                raw.pop("quantity", None)
+    if "planning_source" in body.model_fields_set:
+        values["planning_source"] = body.planning_source.model_dump() if body.planning_source else None
+    return values
+
+
+@router.post("/quotes/design-options")
+def design_options(body: DesignOptionsIn, user: ViewerDep) -> dict:
+    cid = _quote_customer(user, body.customer_id)
+    return _call(planning.options, cid, body.brief, body.currency)
 
 
 @router.post("/quotes/preview")
-def preview_quote(body: QuoteIn, user: ViewerDep) -> dict:
+def preview_quote(body: QuotePreviewIn, user: ViewerDep) -> dict:
     cid = body.customer_id if _staff(user) else _scope(user, body.customer_id)
     if cid is None:
         raise HTTPException(422, "Choose the organisation the quote is for.")
@@ -261,6 +335,11 @@ def _manage_quote(user) -> Any | None:
 def update_quote(quote_id: str, body: QuotePatch, user: ViewerDep) -> dict:
     cid = _manage_quote(user)
     return _call(quotes.update, quote_id, _values(body), user.actor, _staff(user), cid)
+
+
+@router.post("/quotes/{quote_id}/design-review")
+def design_review(quote_id: str, body: DesignReviewIn, user: AdminDep) -> dict:
+    return _call(quotes.design_review, quote_id, body.digest, body.note, user.actor)
 
 
 @router.post("/quotes/{quote_id}/copy", status_code=201)

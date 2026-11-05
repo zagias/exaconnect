@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import type { PlanningBrief } from "./pages/assistant/PlanningBrief";
 
 // Sessions live in a secure, HttpOnly cookie set by the controller (ADR 0017);
 // the portal never sees or stores the token. Every call carries the
@@ -1904,6 +1905,37 @@ export interface QuoteTotals {
   example: boolean;
 }
 
+export interface DesignReview {
+  required: boolean;
+  status: "pending" | "approved";
+  current_digest: string | null;
+  approved_digest: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  note: string | null;
+}
+
+export interface DesignQuoteOption extends CatalogueItem {
+  planning_match: { reason: string; price_available: boolean; price_text: string; blocked_reason?: string };
+}
+
+export interface DesignQuoteOptions {
+  customer_id: string;
+  source: PlanningBrief;
+  product: Product | null;
+  items: DesignQuoteOption[];
+  warnings: string[];
+  questions: string[];
+}
+
+export interface QuotePreview extends QuoteTotals {
+  lines: QuoteLine[];
+  planning_source?: PlanningBrief | null;
+  design_review?: DesignReview | null;
+  pricing_status?: "priced" | "pending";
+  pricing_complete?: boolean;
+}
+
 export interface Quote extends QuoteTotals {
   id: string;
   number: string;
@@ -1928,6 +1960,11 @@ export interface Quote extends QuoteTotals {
   decline_reason: string | null;
   lines: QuoteLine[];
   order: { id: string; number: string; status: SalesOrderStatus } | null;
+  planning_source?: PlanningBrief | null;
+  creation_key?: string | null;
+  design_review?: DesignReview | null;
+  pricing_status?: "priced" | "pending";
+  pricing_complete?: boolean;
 }
 
 export interface QuoteRow extends Omit<Quote, "lines" | "order"> {
@@ -2036,8 +2073,15 @@ export interface QuoteIn {
   valid_until?: string;
   notes?: string;
   lines: QuoteLineIn[];
+  planning_source?: PlanningBrief | null;
+  creation_key?: string;
 }
-export const previewQuote = (body: QuoteIn) => post<QuoteTotals & { lines: QuoteLine[] }>("/quotes/preview", body);
+export const previewQuote = (body: QuoteIn, signal?: AbortSignal) =>
+  api<QuotePreview>("/quotes/preview", { method: "POST", body: JSON.stringify(body), signal });
+export const findDesignQuoteOptions = (body: { customer_id: string; brief: PlanningBrief; currency: string }, signal?: AbortSignal) =>
+  api<DesignQuoteOptions>("/quotes/design-options", { method: "POST", body: JSON.stringify(body), signal });
+export const reviewQuoteDesign = (id: string, digest: string, note: string) =>
+  post<Quote>(`${commercialPaths.quote(id)}/design-review`, { digest, note });
 export const createQuote = (body: QuoteIn) => post<Quote>(commercialPaths.quotes, body);
 export const updateQuote = (id: string, body: QuoteIn) => api<Quote>(commercialPaths.quote(id), { method: "PUT", body: JSON.stringify(body) });
 export const quoteAction = (id: string, action: "submit" | "send" | "cancel" | "copy") => post<Quote>(`${commercialPaths.quote(id)}/${action}`, {});

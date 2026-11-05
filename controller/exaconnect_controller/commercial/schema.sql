@@ -98,6 +98,17 @@ CREATE TABLE IF NOT EXISTS quotes (
 );
 CREATE INDEX IF NOT EXISTS quotes_customer ON quotes (customer_id, created_at DESC);
 
+-- Planning provenance is separate from the short printable notes (ADR 0059).
+ALTER TABLE quotes ADD COLUMN IF NOT EXISTS planning_source jsonb;
+ALTER TABLE quotes ADD COLUMN IF NOT EXISTS creation_key uuid;
+ALTER TABLE quotes ADD COLUMN IF NOT EXISTS creation_request_hash text;
+ALTER TABLE quotes ADD COLUMN IF NOT EXISTS design_review_digest text;
+ALTER TABLE quotes ADD COLUMN IF NOT EXISTS design_reviewed_by text;
+ALTER TABLE quotes ADD COLUMN IF NOT EXISTS design_reviewed_at timestamptz;
+ALTER TABLE quotes ADD COLUMN IF NOT EXISTS design_review_note text;
+CREATE UNIQUE INDEX IF NOT EXISTS quotes_planning_creation ON quotes (customer_id, creation_key)
+  WHERE creation_key IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS quote_lines (
   id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   quote_id          uuid NOT NULL REFERENCES quotes(id) ON DELETE CASCADE,
@@ -120,6 +131,82 @@ CREATE TABLE IF NOT EXISTS quote_lines (
   rating            jsonb NOT NULL DEFAULT '{}',           -- the rating engine's breakdown
   UNIQUE (quote_id, position)
 );
+
+-- These guards survive a code-only rollback. Legacy create/copy is deliberately
+-- unavailable: an old copy must not strip the source and become an ordinary quote.
+-- The protocol marker is compatibility signalling, not authentication.
+CREATE OR REPLACE FUNCTION guard_quote_design() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF current_setting('xakore.quote_write_protocol', true) IS DISTINCT FROM 'design_review_v1' THEN
+      RAISE EXCEPTION 'Quote creation requires the current quote workflow' USING ERRCODE = 'check_violation';
+    END IF;
+    IF (NEW.planning_source IS NULL) IS DISTINCT FROM (NEW.creation_key IS NULL)
+       OR (NEW.planning_source IS NULL) IS DISTINCT FROM (NEW.creation_request_hash IS NULL) THEN
+      RAISE EXCEPTION 'Planning creation identity is required' USING ERRCODE = 'check_violation';
+    END IF;
+    NEW.design_review_digest := NULL;
+    NEW.design_reviewed_by := NULL;
+    NEW.design_reviewed_at := NULL;
+    NEW.design_review_note := NULL;
+  ELSE
+    IF ROW(NEW.planning_source, NEW.creation_key, NEW.creation_request_hash)
+       IS DISTINCT FROM ROW(OLD.planning_source, OLD.creation_key, OLD.creation_request_hash)
+       OR (OLD.planning_source IS NOT NULL AND NEW.customer_id IS DISTINCT FROM OLD.customer_id) THEN
+      RAISE EXCEPTION 'The original planning brief and creation identity are immutable'
+        USING ERRCODE = 'check_violation';
+    END IF;
+    IF OLD.planning_source IS NOT NULL AND
+       ROW(NEW.title, NEW.currency, NEW.term_months, NEW.valid_until, NEW.notes,
+           NEW.one_off_total, NEW.monthly_total, NEW.contract_total, NEW.needs_approval, NEW.example)
+       IS DISTINCT FROM
+       ROW(OLD.title, OLD.currency, OLD.term_months, OLD.valid_until, OLD.notes,
+           OLD.one_off_total, OLD.monthly_total, OLD.contract_total, OLD.needs_approval, OLD.example) THEN
+      NEW.design_review_digest := NULL;
+      NEW.design_reviewed_by := NULL;
+      NEW.design_reviewed_at := NULL;
+      NEW.design_review_note := NULL;
+    END IF;
+  END IF;
+  IF NEW.planning_source IS NOT NULL AND NEW.status IN ('sent', 'accepted') THEN
+    IF NEW.design_review_digest IS NULL OR NEW.design_review_digest !~ '^[0-9a-f]{64}$'
+       OR NEW.design_reviewed_by IS NULL OR NEW.design_reviewed_at IS NULL
+       OR length(trim(coalesce(NEW.design_review_note, ''))) NOT BETWEEN 10 AND 1000
+       OR NEW.example OR NOT EXISTS (SELECT 1 FROM quote_lines WHERE quote_id = NEW.id) THEN
+      RAISE EXCEPTION 'Current planning design review is required before sending or accepting'
+        USING ERRCODE = 'check_violation';
+    END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS quotes_design_guard ON quotes;
+CREATE TRIGGER quotes_design_guard BEFORE INSERT OR UPDATE ON quotes
+  FOR EACH ROW EXECUTE FUNCTION guard_quote_design();
+
+CREATE OR REPLACE FUNCTION invalidate_quote_line_design() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  parent quotes%ROWTYPE;
+  parent_id uuid;
+BEGIN
+  IF TG_OP = 'UPDATE' AND NEW.quote_id IS DISTINCT FROM OLD.quote_id THEN
+    RAISE EXCEPTION 'A quote line cannot move to another quote' USING ERRCODE = 'check_violation';
+  END IF;
+  IF TG_OP = 'DELETE' THEN parent_id := OLD.quote_id; ELSE parent_id := NEW.quote_id; END IF;
+  SELECT * INTO parent FROM quotes WHERE id = parent_id FOR UPDATE;
+  IF NOT FOUND THEN
+    -- A parent/customer deletion cascades after the parent row has gone.
+    IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+    RAISE EXCEPTION 'Quote not found' USING ERRCODE = 'foreign_key_violation';
+  END IF;
+  IF parent.planning_source IS NOT NULL THEN
+    UPDATE quotes SET design_review_digest = NULL, design_reviewed_by = NULL,
+      design_reviewed_at = NULL, design_review_note = NULL WHERE id = parent_id;
+  END IF;
+  IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
+END $$;
+DROP TRIGGER IF EXISTS quote_lines_design_guard ON quote_lines;
+CREATE TRIGGER quote_lines_design_guard BEFORE INSERT OR UPDATE OR DELETE ON quote_lines
+  FOR EACH ROW EXECUTE FUNCTION invalidate_quote_line_design();
 
 CREATE TABLE IF NOT EXISTS sales_orders (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),

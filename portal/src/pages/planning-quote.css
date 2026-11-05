@@ -1,0 +1,11 @@
+.planning-quote-source,.planning-quote-options,.planning-quote-confirm{padding:18px 20px;margin:0 0 20px;border:1px solid var(--line);background:var(--card)}
+.planning-quote-source h3,.planning-quote-options h3{margin:0 0 8px}
+.planning-quote-source h4{margin:16px 0 6px}
+.planning-quote-source details{margin-top:10px;max-height:320px;overflow:auto}
+.planning-quote-source dt{font-weight:600;margin-top:10px}.planning-quote-source dd{margin:4px 0 12px;overflow-wrap:anywhere;white-space:pre-wrap}
+.planning-quote-review,.planning-quote-pending{padding:10px 12px;background:var(--page);border-left:3px solid var(--accent);margin-top:14px}
+.planning-quote-option{padding:16px 0;border-top:1px solid var(--line)}.planning-quote-option:first-of-type{margin-top:14px}.planning-quote-option h4{margin:0 0 6px}.planning-quote-option p{margin:6px 0}
+.planning-quote-confirm label{display:flex;align-items:flex-start;gap:10px}.planning-quote-confirm input{margin-top:4px}
+.planning-quote-source ul{padding-left:20px}.planning-quote-review-form{display:grid;gap:12px}.planning-quote-review-form textarea{width:100%;min-height:100px}
+.planning-quote-fields{border:0;padding:0;margin:0;min-width:0}
+.quote-line-scope{margin:8px 0}.quote-line-scope>div{display:flex;gap:8px;flex-wrap:wrap}.quote-line-scope dt{font-weight:600}.quote-line-scope dd{margin:0;overflow-wrap:anywhere;white-space:pre-wrap}

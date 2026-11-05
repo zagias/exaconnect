@@ -1,0 +1,13 @@
+# 0059: Planning briefs prepare scoped draft quotes
+
+Visitor-reviewed requirements remain unverified input. The commercial API validates the existing strict planning-brief schema and rejects sensitive material before storage. The full bounded source is stored separately from printable notes. Source, organisation and creation identity are immutable; revised requirements begin a new draft.
+
+`POST /quotes/design-options` uses the existing organisation manager gate and current tenant/currency prices. It returns real active non-example catalogue options, their pricing eligibility, questions and explicit limitations. It supplies no quantities or fulfilment defaults. Unsupported offers and telephone-only Jibsy scopes require XaKore review. Options do not attest supplier availability or service readiness.
+
+Planning creation requires a UUID creation key. A tenant/key transaction lock and unique index prevent duplicate creation; a hash of canonical intended input permits replay before repricing. Changed payloads with the same key return 409. The original actor and audit remain unchanged. Creation never sends, accepts or runs an order. Empty-line scope drafts are allowed and display “Pricing pending — no price agreed”.
+
+Every planning line has an explicit quantity; links have an explicit underlay. Staff alone may record commercial/technical design attestation, with a note and the digest of the current persisted source, quote header, canonical lines, configuration and price snapshots. Review requires actual non-example priced lines, named sites and complete link details. Sending and accepting both recheck this attestation. Edits, repricing and copies require fresh design review. Existing discount approval is a separate gate.
+
+Database triggers preserve provenance, invalidate review on header/line changes and reject unreviewed planning sends/acceptances even through legacy SQL. A transaction-local quote-write protocol marker is required for **all** new quote inserts. It is compatibility signalling, not authentication; the existing role, scope and tenant gates remain authoritative.
+
+Consequently a pristine 5209 code-only rollback is intentionally degraded: reads and ordinary existing workflows remain, but quote creation/copy is blocked because old copying could strip planning origin. Planning sends/acceptances remain guarded. This is not full write compatibility; restoring an old database would lose new customer data and is not a rollback procedure. Deployments must qualify these triggers using a disposable PostgreSQL database before release; offline unit tests cannot prove PostgreSQL trigger semantics.

@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
-import { Link, Route, Routes, useNavigate, useParams } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { Link, Route, Routes, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   acceptQuote,
   addCataloguePrice,
@@ -11,12 +11,14 @@ import {
   createQuote,
   declineQuote,
   endContractItem,
+  findDesignQuoteOptions,
   orderItemCancel,
   orderItemDone,
   orderItemRetry,
   previewQuote,
   quoteAction,
   quoteDocumentUrl,
+  reviewQuoteDesign,
   updateCatalogueItem,
   updateQuote,
   useApi,
@@ -24,12 +26,14 @@ import {
   type CatalogueItem,
   type ChargeType,
   type Contract,
+  type DesignQuoteOptions,
   type OrderRow,
   type PriceModel,
   type Product,
   type Quote,
   type QuoteIn,
   type QuoteLine,
+  type QuotePreview,
   type QuoteRow,
   type QuoteState,
   type QuoteTotals,
@@ -40,6 +44,9 @@ import { ErrorNote, ExampleTag } from "../components";
 import { useCustomer, who } from "../customer";
 import { Card, EmptyState, SectionNotFound, PageHead, RowActions, useAction } from "../ui";
 import "./billing.css";
+import { PlanningSource } from "./assistant/PlanningSource";
+import { canBuildPlanningQuote, planningQuoteActor, readPlanningQuote, clearPlanningQuoteHandoff } from "./assistant/planningQuoteHandoff";
+import "./planning-quote.css";
 
 /* Catalogue, quotes (CPQ), sales orders and contracts (ADR 0055).
    XaKore staff see them under Operations (/admin/...); an organisation sees
@@ -172,6 +179,7 @@ function QuoteList() {
                     <td>
                       <Link to={`${base}/quotes/${q.id}`}>{q.number}</Link> {q.example && <ExampleTag />}
                       {q.title && <div className="muted small">{q.title}</div>}
+                      {planningPricingPending(q) && <div className="small muted">Scope draft — pricing pending</div>}
                     </td>
                     {staff && <td data-label="Organisation">{q.customer}</td>}
                     <td data-label="State">
@@ -183,14 +191,13 @@ function QuoteList() {
                       )}
                     </td>
                     <td className="num mono" data-label="Monthly">
-                      {q.currency} {amount(q.monthly_total)}
+                      {planningPricingPending(q) ? "Needs pricing" : `${q.currency} ${amount(q.monthly_total)}`}
                     </td>
                     <td className="num mono" data-label="Once">
-                      {amount(q.one_off_total)}
+                      {planningPricingPending(q) ? "—" : amount(q.one_off_total)}
                     </td>
                     <td className="num mono" data-label="Contract value">
-                      {amount(q.contract_total)}
-                      <div className="muted small">{q.term_months} months</div>
+                      {planningPricingPending(q) ? "—" : <>{amount(q.contract_total)}<div className="muted small">{q.term_months} months</div></>}
                     </td>
                     <td data-label="Valid until" className="nowrap">
                       {day(q.valid_until)}
@@ -219,51 +226,241 @@ interface Draft {
 }
 
 let nextKey = 1;
-const blankLine = (item = ""): Draft => ({
+const blankLine = (item = "", planning = false): Draft => ({
   key: nextKey++,
   item,
-  quantity: "1",
+  quantity: planning ? "" : "1",
   discount_pct: "0",
   locations: "",
   location: "",
   carrier: "",
-  underlay_type: "fibre",
+  underlay_type: planning ? "" : "fibre",
   note: "",
 });
 
-function toLine(d: Draft, item: CatalogueItem | undefined): QuoteIn["lines"][number] {
+function toLine(d: Draft, item: CatalogueItem | undefined, planning = false): QuoteIn["lines"][number] {
   const config: Record<string, unknown> = {};
   if (item?.fulfilment === "site") {
     const names = d.locations.split(",").map((s) => s.trim()).filter(Boolean);
     if (names.length) config.locations = names;
   } else if (item?.fulfilment === "link") {
-    Object.assign(config, { location: d.location.trim(), carrier: d.carrier.trim(), underlay_type: d.underlay_type });
+    if (!planning || d.location.trim()) config.location = d.location.trim();
+    if (!planning || d.carrier.trim()) config.carrier = d.carrier.trim();
+    if (!planning || d.underlay_type) config.underlay_type = d.underlay_type;
   } else if (d.note.trim()) config.note = d.note.trim();
-  return { item: d.item, quantity: d.quantity || "1", discount_pct: Number(d.discount_pct) || 0, config };
+  return { item: d.item, quantity: planning ? d.quantity.trim() : d.quantity || "1", discount_pct: Number(d.discount_pct) || 0, config };
 }
 
-function fromLine(l: QuoteLine): Draft {
+function fromLine(l: QuoteLine, planning = false): Draft {
   const c = l.config as Record<string, string | string[] | undefined>;
   return {
-    ...blankLine(l.code),
+    ...blankLine(l.code, planning),
     quantity: qty(l.quantity),
     discount_pct: String(Number(l.discount_pct)),
     locations: Array.isArray(c.locations) ? c.locations.join(", ") : "",
     location: (c.location as string) ?? "",
     carrier: (c.carrier as string) ?? "",
-    underlay_type: (c.underlay_type as string) ?? "fibre",
+    underlay_type: (c.underlay_type as string) ?? (planning ? "" : "fibre"),
     note: (c.note as string) ?? "",
   };
+}
+
+function positiveQuantity(value: string) {
+  return value.trim() !== "" && Number.isFinite(Number(value)) && Number(value) > 0;
+}
+
+function planningPricingPending(q: { planning_source?: unknown; pricing_status?: string; lines?: unknown[]; line_count?: number }) {
+  return !!q.planning_source && (q.pricing_status === "pending" || (q.lines ? q.lines.length === 0 : q.line_count === 0));
 }
 
 /** Build or change a quote, priced live by the rating engine as you type. */
 function QuoteBuilder() {
   const { id } = useParams();
-  return <QuoteBuilderForm key={id ?? "new"} />;
+  const [params] = useSearchParams();
+  const { user } = useAuth();
+  const { current } = useCustomer();
+  const actor = planningQuoteActor(user, current?.id);
+  return !id && params.get("from") === "planning"
+    ? <PlanningQuoteBuilder key={`planning:${actor}`} />
+    : <QuoteBuilderForm key={`${id ?? "new"}:${actor}`} />;
+}
+
+function PlanningQuoteBuilder() {
+  const { user } = useAuth();
+  const { current } = useCustomer();
+  const navigate = useNavigate();
+  const [source] = useState(() => readPlanningQuote(user, current?.id));
+  const [creationKey] = useState(() => crypto.randomUUID());
+  const [confirmedFor, setConfirmedFor] = useState<string | null>(null);
+  const [head, setHead] = useState({ title: source ? `${source.offer} planning scope` : "", currency: "USD", term_months: "12", valid_until: isoIn(30), notes: "" });
+  const [lines, setLines] = useState<Draft[]>([]);
+  const [selectedItems, setSelectedItems] = useState<Record<string, CatalogueItem>>({});
+  const [found, setFound] = useState<{ key: string; data: DesignQuoteOptions } | null>(null);
+  const [finding, setFinding] = useState(false);
+  const [matchError, setMatchError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{ key: string; data: QuotePreview } | null>(null);
+  const [priceError, setPriceError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const alive = useRef(true), savePending = useRef(false), matchSequence = useRef(0);
+  const matchRequest = useRef<AbortController | null>(null);
+  const cid = current?.id;
+  const permitted = canBuildPlanningQuote(user);
+  const confirmed = !!cid && confirmedFor === cid;
+  const currency = head.currency.toUpperCase();
+  const validHead = /^[A-Z]{3}$/.test(currency) && Number.isInteger(Number(head.term_months)) && Number(head.term_months) >= 1 && Number(head.term_months) <= 120 && !!head.valid_until;
+  const quantitiesReady = lines.every((line) => positiveQuantity(line.quantity));
+  const body: QuoteIn = {
+    customer_id: cid, title: head.title.trim(), currency, term_months: Number(head.term_months),
+    valid_until: head.valid_until, notes: head.notes,
+    ...(source ? { planning_source: source, creation_key: creationKey } : {}),
+    lines: lines.map((line) => toLine(line, selectedItems[line.item], true)),
+  };
+  const previewKey = JSON.stringify(body);
+  const matchingKey = JSON.stringify([cid, currency, source]);
+  const latestPreview = useRef(previewKey), latestMatch = useRef(matchingKey);
+  latestPreview.current = previewKey; latestMatch.current = matchingKey;
+  const priced = preview?.key === previewKey ? preview.data : null;
+  const options = found?.key === matchingKey ? found.data : null;
+  const saveReady = !!source && permitted && confirmed && validHead && quantitiesReady && !finding
+    && (!lines.length || (!!priced && !priceError && priced.pricing_complete !== false));
+
+  useEffect(() => {
+    alive.current = true;
+    clearPlanningQuoteHandoff();
+    return () => { alive.current = false; matchRequest.current?.abort(); };
+  }, []);
+  useEffect(() => {
+    matchSequence.current++; matchRequest.current?.abort(); setFinding(false); setFound(null); setMatchError(null);
+  }, [matchingKey]);
+  useEffect(() => {
+    setPreview(null); setPriceError(null);
+    if (!source || !permitted || !confirmed || !validHead || !quantitiesReady) return;
+    const controller = new AbortController(); let active = true;
+    const timer = setTimeout(() => {
+      previewQuote(JSON.parse(previewKey), controller.signal).then((data) => {
+        if (active && alive.current && latestPreview.current === previewKey) setPreview({ key: previewKey, data });
+      }).catch((error: Error) => {
+        if (active && !controller.signal.aborted && latestPreview.current === previewKey) setPriceError(error.message);
+      });
+    }, 300);
+    return () => { active = false; clearTimeout(timer); controller.abort(); };
+  }, [previewKey, permitted, confirmed, validHead, quantitiesReady, source]);
+
+  const find = async () => {
+    if (!source || !cid || !permitted || !confirmed || !/^[A-Z]{3}$/.test(currency) || finding) return;
+    const sequence = ++matchSequence.current, controller = new AbortController();
+    matchRequest.current?.abort(); matchRequest.current = controller;
+    setFinding(true); setMatchError(null); setFound(null);
+    try {
+      const data = await findDesignQuoteOptions({ customer_id: cid, brief: source, currency }, controller.signal);
+      if (!alive.current || sequence !== matchSequence.current || latestMatch.current !== matchingKey) return;
+      if (data.customer_id !== cid || JSON.stringify(data.source) !== JSON.stringify(source)) throw new Error("The returned organisation or requirements changed. Review this draft before trying again.");
+      setFound({ key: matchingKey, data });
+    } catch (error) {
+      if (alive.current && !controller.signal.aborted && sequence === matchSequence.current && latestMatch.current === matchingKey) setMatchError((error as Error).message);
+    } finally {
+      if (alive.current && sequence === matchSequence.current) setFinding(false);
+    }
+  };
+  const add = (item: CatalogueItem) => {
+    setSelectedItems((old) => ({ ...old, [item.code]: item }));
+    setLines((old) => [...old, blankLine(item.code, true)]);
+  };
+  const change = (key: number, patch: Partial<Draft>) => setLines((old) => old.map((line) => line.key === key ? { ...line, ...patch } : line));
+  const save = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!saveReady || savePending.current) return;
+    savePending.current = true; setSaving(true); setSaveError(null);
+    try {
+      const saved = await createQuote(body);
+      if (!alive.current) return;
+      if (saved.customer_id !== cid) throw new Error("The saved quote belongs to a different organisation. Check Quotes before continuing.");
+      navigate(`${user?.role === "admin" ? "/admin" : ""}/quotes/${saved.id}`);
+    } catch (error) {
+      if (alive.current) setSaveError(`${(error as Error).message} You can retry this same draft. Check Quotes before starting another.`);
+    } finally {
+      savePending.current = false;
+      if (alive.current) setSaving(false);
+    }
+  };
+  if (!source || !cid || !permitted) return <>
+    <Head title="Planning quote unavailable" />
+    <p className="muted">Return to the assistant and use the reviewed brief for this organisation. Only an organisation owner, admin or XaKore staff member with commercial access can create this draft.</p>
+    <Link to="/assistant">Open assistant</Link>
+  </>;
+  return <>
+    <Head title="Build draft quote">Review the requirements and choose what to price. Saving creates a draft for XaKore scope review.</Head>
+    <PlanningSource brief={source} review={priced?.design_review} />
+    <form onSubmit={save}>
+      <fieldset className="planning-quote-fields" disabled={saving}>
+      <div className="planning-quote-confirm">
+        <label><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmedFor(event.target.checked ? cid : null)} />
+          <span>Quote for <strong>{current?.name}</strong>. I have checked these requirements for this organisation.</span>
+        </label>
+      </div>
+      <section className="card" style={{ marginBottom: 20 }}>
+        <div className="form">
+          <label>Title<input value={head.title} maxLength={120} onChange={(event) => setHead({ ...head, title: event.target.value })} /></label>
+          <label>Currency<input value={head.currency} maxLength={3} pattern="[A-Za-z]{3}" required onChange={(event) => setHead({ ...head, currency: event.target.value })} /></label>
+          <label>Contract term (months)<input type="number" min={1} max={120} required value={head.term_months} onChange={(event) => setHead({ ...head, term_months: event.target.value })} /></label>
+          <label>Valid until<input type="date" required value={head.valid_until} onChange={(event) => setHead({ ...head, valid_until: event.target.value })} /></label>
+        </div>
+      </section>
+      <section className="planning-quote-options" aria-label="Matching catalogue items">
+        <h3>Choose what to include</h3>
+        <p className="small muted">Catalogue options do not confirm availability or a final design. Enter each quantity and fulfilment detail yourself.</p>
+        <button type="button" className="button secondary" disabled={!confirmed || finding || !/^[A-Z]{3}$/.test(currency)} onClick={() => void find()}>{finding ? "Finding items…" : "Find matching items"}</button>
+        <ErrorNote error={matchError} />
+        {options && <>
+          {options.warnings.map((warning, index) => <p className="small muted" key={`warning-${index}`}>{warning}</p>)}
+          {options.questions.length > 0 && <details><summary>Questions for commercial review</summary><ul>{options.questions.map((question, index) => <li key={index}>{question}</li>)}</ul></details>}
+          {options.items.filter((item) => item.active && !item.example && !item.price?.example).map((item) => {
+            const available = item.planning_match.price_available && !item.planning_match.blocked_reason;
+            return <article className="planning-quote-option" key={item.code}>
+              <h4>{item.name}</h4><p>{item.planning_match.reason}</p>
+              <p className="small muted">{available ? item.planning_match.price_text : item.planning_match.blocked_reason || "Needs XaKore pricing."}</p>
+              <button type="button" className="button secondary small" disabled={!available} onClick={() => add(item)}>Add {item.name}</button>
+            </article>;
+          })}
+          {!options.items.some((item) => item.active && !item.example && !item.price?.example && item.planning_match.price_available && !item.planning_match.blocked_reason) && <p className="planning-quote-pending">No priced match is ready. You can save the original scope for XaKore to review.</p>}
+        </>}
+      </section>
+      {lines.map((line, index) => {
+        const item = selectedItems[line.item];
+        return <fieldset className="card form" key={line.key} style={{ marginBottom: 16 }}>
+          <legend>{item?.name ?? line.item}</legend>
+          <label>{item?.fulfilment === "link" ? "Commit (Mbps)" : `Quantity${item ? ` (${item.unit})` : ""}`}<input type="number" min="0.000001" step="any" required aria-label={`Quantity for ${item?.name ?? line.item} ${index + 1}`} value={line.quantity} onChange={(event) => change(line.key, { quantity: event.target.value })} /></label>
+          {item?.fulfilment === "site" && <label className="wide">Names of the billed new sites (comma separated)<input value={line.locations} onChange={(event) => change(line.key, { locations: event.target.value })} /></label>}
+          {item?.fulfilment === "link" && <>
+            <label>Location<input value={line.location} onChange={(event) => change(line.key, { location: event.target.value })} /></label>
+            <label>Carrier<input value={line.carrier} onChange={(event) => change(line.key, { carrier: event.target.value })} /></label>
+            <label>Link type<select value={line.underlay_type} onChange={(event) => change(line.key, { underlay_type: event.target.value })}><option value="">Choose link type…</option>{["fibre", "broadband", "lte", "leo", "geo"].map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
+          </>}
+          {item && !["site", "link", "subscription"].includes(item.fulfilment) && <label className="wide">Item note<input maxLength={300} value={line.note} onChange={(event) => change(line.key, { note: event.target.value })} /></label>}
+          <p className="small muted wide">All quantities and required location, carrier and link details need review before approval. Saving this draft does not order or configure anything.</p>
+          <button type="button" className="button secondary small" onClick={() => setLines((old) => old.filter((value) => value.key !== line.key))}>Remove {item?.name ?? line.item}</button>
+        </fieldset>;
+      })}
+      <label className="form">Notes on the quote<textarea rows={3} maxLength={4000} value={head.notes} onChange={(event) => setHead({ ...head, notes: event.target.value })} /></label>
+      <ErrorNote error={saveError ?? priceError} />
+      {!lines.length ? <p className="planning-quote-pending">Scope draft — pricing pending. No priced items have been selected.</p>
+        : !quantitiesReady ? <p className="planning-quote-pending">Enter each quantity to check prices. Quantities have not been inferred from the brief.</p>
+        : priced ? <Totals t={priced} currency={currency} term={Number(head.term_months)} />
+        : confirmed && <p className="small muted" role="status">Checking catalogue prices…</p>}
+      <div className="form-actions">
+        <button className="button" disabled={!saveReady || saving}>{saving ? "Saving…" : `Save draft for ${current?.name}`}</button>
+        <Link className="button secondary" to="/assistant">Back to assistant</Link>
+        <Link to={user?.role === "admin" ? "/admin/quotes" : "/quotes"}>Check existing quotes</Link>
+      </div>
+      </fieldset>
+    </form>
+  </>;
 }
 
 function QuoteBuilderForm() {
   const { id } = useParams();
+  const { user } = useAuth();
   const { staff, base } = useRoles();
   const { current } = useCustomer();
   const navigate = useNavigate();
@@ -274,54 +471,63 @@ function QuoteBuilderForm() {
   const [head, setHead] = useState({ title: "", currency: "USD", term_months: "12", valid_until: isoIn(30), notes: "" });
   const [lines, setLines] = useState<Draft[]>([blankLine()]);
   const [loaded, setLoaded] = useState(false);
-  const [priced, setPriced] = useState<(QuoteTotals & { lines: QuoteLine[] }) | null>(null);
+  const [priced, setPriced] = useState<{ key: string; data: QuotePreview } | null>(null);
   const [priceError, setPriceError] = useState<string | null>(null);
+  const [confirmedFor, setConfirmedFor] = useState<string | null>(null);
+  const live = useRef(true);
+  useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
   const act = useAction();
   const q = existing.data;
   const cid = q?.customer_id ?? current?.id;
+  const planningSource = q?.planning_source ?? null;
+  const planningAllowed = !planningSource || canBuildPlanningQuote(user);
+  const confirmed = !planningSource || (!!cid && confirmedFor === cid);
+  const quantitiesReady = !planningSource || lines.filter((line) => line.item).every((line) => positiveQuantity(line.quantity));
+  const metadataReady = lines.every((line) => !line.item || !!byCode[line.item]);
 
   useEffect(() => {
     if (!q || loaded) return;
     setHead({ title: q.title, currency: q.currency, term_months: String(q.term_months), valid_until: q.valid_until, notes: q.notes });
-    setLines(q.lines.length ? q.lines.map(fromLine) : [blankLine()]);
+    setLines(q.lines.length ? q.lines.map((line) => fromLine(line, !!q.planning_source)) : q.planning_source ? [] : [blankLine()]);
     setLoaded(true);
   }, [q, loaded]);
 
   const body = (): QuoteIn => ({
-    customer_id: staff ? cid : undefined,
+    customer_id: staff || planningSource ? cid : undefined,
     title: head.title.trim(),
     currency: head.currency.toUpperCase(),
     term_months: Number(head.term_months) || 12,
     valid_until: head.valid_until,
     notes: head.notes,
-    lines: lines.filter((l) => l.item).map((l) => toLine(l, byCode[l.item])),
+    ...(planningSource ? { planning_source: planningSource } : {}),
+    lines: lines.filter((l) => l.item).map((l) => toLine(l, byCode[l.item], !!planningSource)),
   });
   const key = JSON.stringify(body());
-
+  const latestPrice = useRef(key);
+  latestPrice.current = key;
+  const currentPriced = priced?.key === key ? priced.data : null;
   useEffect(() => {
-    if (!cid || !lines.some((l) => l.item)) {
-      setPriced(null);
-      return;
-    }
-    const t = setTimeout(() => {
-      previewQuote(JSON.parse(key))
-        .then((p) => {
-          setPriced(p);
-          setPriceError(null);
-        })
-        .catch((e: Error) => setPriceError(e.message));
+    setPriced(null); setPriceError(null);
+    if (!cid || !planningAllowed || !confirmed || !quantitiesReady || !metadataReady || (!planningSource && !lines.some((line) => line.item))) return;
+    const controller = new AbortController(); let active = true;
+    const timer = setTimeout(() => {
+      previewQuote(JSON.parse(key), controller.signal).then((data) => {
+        if (active && live.current && latestPrice.current === key) setPriced({ key, data });
+      }).catch((error: Error) => {
+        if (active && !controller.signal.aborted && latestPrice.current === key) setPriceError(error.message);
+      });
     }, 300);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, cid]);
+    return () => { active = false; clearTimeout(timer); controller.abort(); };
+  }, [key, cid, planningAllowed, confirmed, quantitiesReady, metadataReady, planningSource]);
 
   const set = (k: number, patch: Partial<Draft>) => setLines((ls) => ls.map((l) => (l.key === k ? { ...l, ...patch } : l)));
   const save = (e: FormEvent) => {
     e.preventDefault();
     if (id && (!q || !loaded || existing.error)) return;
+    if (!planningAllowed || !confirmed || !quantitiesReady || !metadataReady || (planningSource && lines.some((line) => line.item) && (!currentPriced || !!priceError))) return;
     act.run(async () => {
       const saved = id ? await updateQuote(id, body()) : await createQuote(body());
-      navigate(`${base}/quotes/${saved.id}`);
+      if (live.current) navigate(`${base}/quotes/${saved.id}`);
     });
   };
   if (id && (!q || !loaded || existing.error)) return <>
@@ -332,7 +538,7 @@ function QuoteBuilderForm() {
   </>;
   if (id && q && !["draft", "pending_approval", "approved"].includes(q.status))
     return <p className="muted">{q.number} has been sent and can't be changed. Copy it instead.</p>;
-  const pricedLine = (i: number) => priced?.lines[i];
+  const pricedLine = (i: number) => currentPriced?.lines[i];
   const chosen = lines.filter((l) => l.item);
 
   return (
@@ -341,7 +547,16 @@ function QuoteBuilderForm() {
         Pick items from the catalogue; prices come from the catalogue and your plan's price list.
       </Head>
       <ErrorNote error={existing.error ?? catalogue.error ?? act.error} />
+      {!metadataReady && <p className="planning-quote-pending" role="status">
+        {!catalogue.data && !catalogue.error ? "Loading the selected item details…" : "Some selected items are unavailable. Retry the catalogue, remove them or choose a replacement before saving."}
+        {<button type="button" className="linklike" onClick={catalogue.reload}>Retry catalogue</button>}
+      </p>}
+      {planningSource && <>
+        <PlanningSource brief={planningSource} review={q?.design_review} />
+        <div className="planning-quote-confirm"><label><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmedFor(event.target.checked ? cid ?? null : null)} /><span>Quote for <strong>{q?.customer ?? current?.name}</strong>. I have checked these requirements for this organisation.</span></label></div>
+      </>}
       <form className="card" onSubmit={save} style={{ marginBottom: 24 }}>
+        <fieldset className="planning-quote-fields" disabled={act.busy}>
         <div className="card-head">
           <h2>{id ? `${q?.number ?? ""} for ${q?.customer ?? ""}` : `Quote for ${current?.name ?? "…"}`}</h2>
           {items.some((i) => i.example) && <ExampleTag />}
@@ -373,12 +588,13 @@ function QuoteBuilderForm() {
             <div key={l.key} className="form card-inset" style={{ marginBottom: 12 }}>
               <label className="wide">
                 Item
-                <select value={l.item} onChange={(e) => set(l.key, { item: e.target.value })} aria-label={`Item ${i + 1}`}>
+                <select value={l.item} onChange={(e) => set(l.key, planningSource ? { ...blankLine(e.target.value, true), key: l.key } : { item: e.target.value })} aria-label={`Item ${i + 1}`}>
                   <option value="">Choose…</option>
+                  {l.item && !it && <option value={l.item}>Saved item — catalogue details unavailable</option>}
                   {(["connect", "commai"] as Product[]).map((prod) => (
                     <optgroup key={prod} label={PRODUCT_NAMES[prod]}>
                       {items
-                        .filter((x) => x.product === prod)
+                        .filter((x) => x.product === prod && (!planningSource || (x.active && !x.example && !x.price?.example)))
                         .map((x) => (
                           <option key={x.code} value={x.code}>
                             {x.name} ({CHARGED[x.charge_type].toLowerCase()})
@@ -391,7 +607,7 @@ function QuoteBuilderForm() {
               </label>
               <label>
                 {it?.fulfilment === "link" ? "Commit (Mbps)" : it?.charge_type === "usage" ? `Expected ${it.unit}s a month` : `Quantity${it ? ` (${it.unit})` : ""}`}
-                <input type="number" min={0} step="any" value={l.quantity} onChange={(e) => set(l.key, { quantity: e.target.value })} required />
+                <input type="number" min={planningSource ? 0.000001 : 0} step="any" value={l.quantity} onChange={(e) => set(l.key, { quantity: e.target.value })} required />
               </label>
               {staff && (
                 <label>
@@ -418,6 +634,7 @@ function QuoteBuilderForm() {
                   <label>
                     Link type
                     <select value={l.underlay_type} onChange={(e) => set(l.key, { underlay_type: e.target.value })}>
+                      {planningSource && <option value="">Choose link type…</option>}
                       {["fibre", "broadband", "lte", "leo", "geo"].map((u) => (
                         <option key={u}>{u}</option>
                       ))}
@@ -443,14 +660,14 @@ function QuoteBuilderForm() {
                     ""
                   )}
                 </span>
-                <button type="button" className="button secondary small" onClick={() => setLines((ls) => (ls.length > 1 ? ls.filter((x) => x.key !== l.key) : [blankLine()]))}>
+                <button type="button" className="button secondary small" onClick={() => setLines((ls) => (ls.length > 1 ? ls.filter((x) => x.key !== l.key) : planningSource ? [] : [blankLine()]))}>
                   Remove
                 </button>
               </div>
             </div>
           );
         })}
-        <button type="button" className="button secondary small" onClick={() => setLines((ls) => [...ls, blankLine()])}>
+        <button type="button" className="button secondary small" onClick={() => setLines((ls) => [...ls, blankLine("", !!planningSource)])}>
           Add an item
         </button>
 
@@ -462,15 +679,17 @@ function QuoteBuilderForm() {
         </div>
 
         <ErrorNote error={priceError} />
-        {priced && <Totals t={priced} currency={head.currency.toUpperCase()} term={Number(head.term_months) || 12} />}
+        {planningSource && !chosen.length ? <p className="planning-quote-pending">Scope draft — pricing pending. No priced items have been selected.</p>
+          : currentPriced && <Totals t={currentPriced} currency={head.currency.toUpperCase()} term={Number(head.term_months) || 12} />}
         <div className="form-actions">
-          <button className="button" disabled={act.busy || !cid || !chosen.length}>
-            {id ? "Save changes" : "Save draft"}
+          <button className="button" disabled={act.busy || !cid || !planningAllowed || !confirmed || !quantitiesReady || !metadataReady || (!planningSource && !chosen.length) || (!!planningSource && !!chosen.length && (!currentPriced || !!priceError))}>
+            {planningSource ? `Save draft for ${q?.customer ?? current?.name}` : id ? "Save changes" : "Save draft"}
           </button>
           <Link className="button secondary" to={id ? `${base}/quotes/${id}` : `${base}/quotes`}>
             Cancel
           </Link>
         </div>
+        </fieldset>
       </form>
     </>
   );
@@ -511,7 +730,13 @@ function Totals({ t, currency, term }: { t: QuoteTotals; currency: string; term:
 }
 
 function QuotePage() {
+  const { id } = useParams();
+  return <QuotePageBody key={id} />;
+}
+
+function QuotePageBody() {
   const { id = "" } = useParams();
+  const { user } = useAuth();
   const { staff, manager, base } = useRoles();
   const navigate = useNavigate();
   const quote = useApi<Quote>(commercialPaths.quote(id), 0);
@@ -519,13 +744,19 @@ function QuotePage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [note, setNote] = useState("");
+  const [designNote, setDesignNote] = useState("");
+  const [designAttested, setDesignAttested] = useState(false);
   const q = quote.data;
+  useEffect(() => { setDesignAttested(false); setDesignNote(""); }, [q?.design_review?.current_digest]);
   if (!q) return <>
     <Head title={quote.error ? "We couldn't load this quote" : "Loading quote…"} />
     <ErrorNote error={quote.error} />
     {quote.error && <button className="button secondary" onClick={quote.reload}>Try again</button>}
     <p><Link to={`${base}/quotes`}>Back to quotes</Link></p>
   </>;
+  const pricingPending = planningPricingPending(q);
+  const designPending = !!q.planning_source && !(q.design_review?.status === "approved"
+    && !!q.design_review.current_digest && q.design_review.approved_digest === q.design_review.current_digest);
   const done = (m: string) => {
     setMsg(m);
     quote.reload();
@@ -574,7 +805,9 @@ function QuotePage() {
         )}
         {q.declined_at && <p className="small">Declined on {day(q.declined_at)}{q.decline_reason ? `: ${q.decline_reason}` : "."}</p>}
         <LinesTable lines={q.lines} currency={q.currency} />
-        <Totals t={q} currency={q.currency} term={q.term_months} />
+        {pricingPending ? <p className="planning-quote-pending">Scope draft — pricing pending. No priced offer is ready.</p>
+          : <Totals t={q} currency={q.currency} term={q.term_months} />}
+        {q.planning_source && <PlanningSource brief={q.planning_source} review={q.design_review} />}
         {q.notes && <p className="muted">{q.notes}</p>}
         <div className="form-actions no-print">
           <a className="button secondary" href={quoteDocumentUrl(q.id)} target="_blank" rel="noopener">
@@ -590,7 +823,7 @@ function QuotePage() {
               Ask for approval
             </button>
           )}
-          {(staff || ownDraft) && manager && open && (q.status === "approved" || (q.status === "draft" && !q.needs_approval)) && (
+          {(staff || ownDraft) && manager && open && !designPending && !pricingPending && (q.status === "approved" || (q.status === "draft" && !q.needs_approval)) && (
             <button className="button" disabled={act.busy} onClick={() => run(() => quoteAction(q.id, "send"), staff ? `Sent to ${q.customer}.` : "Ready to accept.")}>
               {staff ? "Send to the organisation" : "Finish quote"}
             </button>
@@ -617,6 +850,25 @@ function QuotePage() {
         </div>
       </section>
 
+      {q.planning_source && designPending && staff && canBuildPlanningQuote(user) && open
+        && ["draft", "pending_approval", "approved"].includes(q.status) && <Card title="Review design scope">
+          <p className="small muted">Confirm the original requirements, selected items, quantities, prices and fulfilment details. This review does not send or accept the quote.</p>
+          {pricingPending && <p className="planning-quote-pending">Add real priced items before approving this scope.</p>}
+          <form className="planning-quote-review-form" onSubmit={(event) => {
+            event.preventDefault();
+            const digest = q.design_review?.current_digest;
+            if (!designAttested || designNote.trim().length < 10 || designNote.trim().length > 1000 || !digest || pricingPending) return;
+            act.run(async () => {
+              await reviewQuoteDesign(q.id, digest, designNote.trim());
+              setDesignAttested(false); setDesignNote(""); done("Design scope reviewed. Send the quote when ready.");
+            });
+          }}>
+            <label>Commercial review note<textarea rows={3} minLength={10} maxLength={1000} required value={designNote} onChange={(event) => setDesignNote(event.target.value)} /></label>
+            <label><input type="checkbox" checked={designAttested} onChange={(event) => setDesignAttested(event.target.checked)} /> I have reviewed these requirements, quantities, prices and fulfilment details.</label>
+            <button className="button" disabled={act.busy || pricingPending || !designAttested || designNote.trim().length < 10 || designNote.trim().length > 1000 || !q.design_review?.current_digest}>Approve design scope</button>
+          </form>
+        </Card>}
+
       {staff && q.status === "pending_approval" && (
         <Card title="Approve the discounts">
           <p className="muted small">Some discounts are above what the items allow. Say why you approve or refuse; it goes on record.</p>
@@ -637,7 +889,7 @@ function QuotePage() {
         </Card>
       )}
 
-      {manager && q.status === "sent" && open && (
+      {manager && q.status === "sent" && open && !designPending && !pricingPending && (
         <Card title={staff ? "Accept for the organisation" : "Accept this quote"}>
           <p className="muted small">
             {staff
@@ -705,7 +957,16 @@ function LinesTable({ lines, currency }: { lines: QuoteLine[]; currency: string 
           {lines.map((l, i) => (
             <tr key={l.id ?? i}>
               <td>
-                {l.description}
+                <strong>{l.name || l.code}</strong>
+                <div className="small muted">Catalogue item: {l.code}</div>
+                <div>Quantity: {qty(l.quantity)} {l.unit}</div>
+                {l.description && <p className="small">{l.description}</p>}
+                {Object.entries(l.config ?? {}).length > 0 && <dl className="quote-line-scope small">
+                  {Object.entries(l.config).map(([key, value]) => <div key={key}>
+                    <dt>{({ locations: "New site names", location: "Location", carrier: "Carrier", underlay_type: "Link type", note: "Fulfilment note" } as Record<string, string>)[key] ?? key}</dt>
+                    <dd>{Array.isArray(value) ? value.map(String).join(", ") : typeof value === "object" && value !== null ? JSON.stringify(value) : String(value ?? "")}</dd>
+                  </div>)}
+                </dl>}
                 <div className="muted small">{l.price_text}</div>
                 {l.needs_approval && <span className="pill warn small">Above the {Number(l.max_discount_pct)}% limit</span>}
               </td>

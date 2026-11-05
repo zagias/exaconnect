@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, useApi, type Product } from "../api";
 import { ErrorNote, ExampleTag } from "../components";
 import { PageHead } from "../ui";
@@ -10,6 +10,7 @@ import { JibsyChecks } from "./commai/Assistant";
 import { SpeechButton, speechAvailable } from "./commai/voice/SpeechInput";
 import { PlanReview } from "./assistant/PlanReview";
 import { PlanningBriefImport, type PlanningBrief } from "./assistant/PlanningBrief";
+import { canBuildPlanningQuote, clearPlanningQuoteHandoff, planningQuoteActor, queuePlanningQuote } from "./assistant/planningQuoteHandoff";
 import type { AssistantAnswer, AssistantContext, Plan } from "./assistant/types";
 import "./assistant/assistant.css";
 
@@ -112,6 +113,7 @@ export default function Ask() {
 function Advice({ context, scope }: { context: AssistantContext; scope: Scope }) {
   const { current } = useCustomer();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const canAsk = context.ask_enabled || context.tools.connect_read;
   const canOperate = scope === "connect" && context.tools.connect_changes && canOperateConnect(user);
   const recent = useApi<Plan[]>(scope === "connect" && context.tools.connect_read && current ? `/assistant/plans?customer_id=${encodeURIComponent(current.id)}&limit=10` : null, 0);
@@ -121,11 +123,28 @@ function Advice({ context, scope }: { context: AssistantContext; scope: Scope })
   const draftQuestion = params.get("q");
   const [question, setQuestion] = useState(draftQuestion?.slice(0, 500) ?? "");
   const [importedBrief, setImportedBrief] = useState<PlanningBrief | null>(null);
+  const [quoteError, setQuoteError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const sequence = useRef(0);
   const pending = useRef(false);
   const [hasSpeech] = useState(speechAvailable);
+  const quoteActor = planningQuoteActor(user, current?.id);
   useEffect(() => { if (draftQuestion !== null) setQuestion(draftQuestion.slice(0, 500)); }, [draftQuestion]);
+  useEffect(() => {
+    clearPlanningQuoteHandoff();
+    setImportedBrief(null);
+    setQuoteError(null);
+  }, [quoteActor]);
+
+  const buildQuote = () => {
+    if (!importedBrief || !current || !canBuildPlanningQuote(user)) return;
+    try {
+      queuePlanningQuote(user, current.id, importedBrief);
+      navigate(`${user?.role === "admin" ? "/admin" : ""}/quotes/new?from=planning`);
+    } catch (error) {
+      setQuoteError((error as Error).message);
+    }
+  };
 
   const send = async (input: string) => {
     const q = input.trim();
@@ -168,13 +187,27 @@ function Advice({ context, scope }: { context: AssistantContext; scope: Scope })
         <p className="muted">{scope === "account" ? "Advice uses your account, available features and the current catalogue." : canOperate ? "Check real network observations or ask for a configuration proposal." : "Check your sites, routing decisions and usage. Your access is read only."}</p>
       </div>
       <PlanningBriefImport organisation={context.account.organisation} initialOpen={params.get("from") === "website"} onUse={(brief) => {
+        clearPlanningQuoteHandoff();
+        setQuoteError(null);
         setImportedBrief(brief);
         setQuestion((q) => q || "Review these planning notes against our account. What should we do next?");
         if ((brief.offer === "Connect" || brief.offer === "Network operations") && context.tools.connect_read) {
           const next = new URLSearchParams(params); next.set("scope", "connect"); setParams(next, { replace: true });
         }
       }} />
-      {importedBrief && <div className="assistant-imported-brief" role="status"><strong>Planning brief attached</strong><span className="small muted">For {context.account.organisation}. Notes stay only in this assistant view.</span><details><summary>View notes</summary><ul>{importedBrief.facts.map((f, i) => <li key={i}>{f.label}: {f.value}</li>)}</ul>{importedBrief.gaps.length > 0 && <ul>{importedBrief.gaps.map((g, i) => <li key={i}>Open: {g}</li>)}</ul>}</details><button type="button" className="linklike" disabled={busy} onClick={() => setImportedBrief(null)}>Remove notes</button></div>}
+      {importedBrief && <div className="assistant-imported-brief" role="status">
+        <strong>Planning brief attached</strong>
+        <span className="small muted">For {context.account.organisation}. These notes will be attached if you save a quote draft.</span>
+        <details><summary>View notes</summary><ul>{importedBrief.facts.map((f, i) => <li key={i}>{f.label}: {f.value}</li>)}</ul>{importedBrief.gaps.length > 0 && <ul>{importedBrief.gaps.map((g, i) => <li key={i}>Open: {g}</li>)}</ul>}</details>
+        <div className="actions">
+          {canBuildPlanningQuote(user) && <button type="button" className="button secondary" disabled={busy} onClick={buildQuote}>Build draft quote</button>}
+          <button type="button" className="linklike" disabled={busy} onClick={() => {
+            clearPlanningQuoteHandoff(); setImportedBrief(null); setQuoteError(null);
+          }}>Remove notes</button>
+        </div>
+        {!canBuildPlanningQuote(user) && <p className="small muted">An organisation owner or admin with commercial access can turn these notes into a quote draft.</p>}
+      </div>}
+      <ErrorNote error={quoteError} />
       {!context.ask_enabled && <p className="assistant-notice" role="status">{context.tools.connect_read ? "Site status checks are available. Other advice needs an AI connection." : context.ask_unavailable_reason ?? "The assistant is not connected to an AI service yet."}</p>}
       {visible.length === 0 && !context.ask_enabled && context.tools.connect_read && <button className="linklike" disabled={busy} onClick={() => send("Check the status of my sites")}>Check my sites</button>}
       {visible.length === 0 && context.ask_enabled && <div className="assistant-suggestions" role="group" aria-label="Suggested questions">{suggestions.map((s) => <button key={s} className="linklike" disabled={busy} onClick={() => send(s)}>{s}</button>)}</div>}
