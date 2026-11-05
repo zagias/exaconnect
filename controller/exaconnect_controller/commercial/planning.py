@@ -13,8 +13,19 @@ from pydantic import ValidationError
 
 from ..ai.brief import PlanningBrief
 from ..billing.core import BillingError, dec
-from ..commai.automation.assistant import SECRET_HINT
 from . import catalogue, rating
+
+# Keep the pure secure-entry predicate local: importing the Jibsy assistant
+# bootstraps the API package and creates a commercial-module import cycle.
+SECRET_HINT = re.compile(
+    r"(?i)\b(password|passcode|api[_ -]?key|(?:client[_ -]?)?secret|(?:access[_ -]?|refresh[_ -]?)?token)"
+    r"\b[\"']?\s*(is\b|=|:)\s*\S+|"
+    r"\b(?:authorization\s*:\s*)?(?:bearer|basic)\s+[A-Za-z0-9_+/=.-]{8,}|"
+    r"-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----|"
+    r"[a-z][a-z0-9+.-]*://[^\s/:@]+:[^\s/@]+@|"
+    r"\b(sk|pk|pat|xox[bp])-[A-Za-z0-9-]{8,}|"
+    r"\bEAA[A-Za-z0-9]{20,}|\b(?=[A-Za-z0-9]*\d)(?=[A-Za-z0-9]*[A-Z])(?=[A-Za-z0-9]*[a-z])[A-Za-z0-9]{32,}\b"
+)
 
 
 def clean_source(value) -> dict:

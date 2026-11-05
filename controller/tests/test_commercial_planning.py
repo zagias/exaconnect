@@ -6,6 +6,8 @@ uses only an explicitly supplied disposable database and its own random schema.
 
 import datetime as dt
 import os
+import subprocess
+import sys
 import uuid
 from decimal import Decimal
 from pathlib import Path
@@ -22,6 +24,28 @@ from exaconnect_controller.commercial import planning, quotes
 
 CID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 KEY = uuid.UUID("00000000-0000-0000-0000-000000000002")
+
+
+
+@pytest.mark.parametrize(
+    "module",
+    [
+        "exaconnect_controller.commercial.quotes",
+        "exaconnect_controller.commercial.planning",
+        "exaconnect_controller.api.commercial",
+    ],
+)
+def test_commercial_modules_import_in_fresh_process_without_application_bootstrap(module):
+    # Pytest's normal API-first collection masked a quotes-first import cycle.
+    env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "EXA_ROUTING_INTERVAL_S": "0"}
+    result = subprocess.run(
+        [sys.executable, "-B", "-c", f"import importlib; importlib.import_module({module!r})"],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def brief(**changes):
