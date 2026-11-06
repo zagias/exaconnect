@@ -3,6 +3,7 @@ impact and spend permission, scheduled changes, rollback, bulk CSV,
 self-service limits, the "say what you want" parser and FreeSWITCH rendering."""
 
 import datetime as dt
+from xml.etree import ElementTree as ET
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -471,10 +472,16 @@ def test_freeswitch_render_is_deterministic_and_complete(client, tmp_path):
         "dialplan.xml",
         "directory.xml",
         "ivr.xml",
+        "owned-public.xml",
+        "protected.xml",
         "public.xml",
         "queues.xml",
         "tiers.xml",
     ]
+    # Managed-number rendering must not install a private carrier route or public deny fragment.
+    for fragment in ("owned-public.xml", "protected.xml"):
+        root = ET.fromstring(files[f"{tenant}/{fragment}"])
+        assert root.tag == "include" and len(root) == 0
     d = files[f"{tenant}/directory.xml"]
     assert '<user id="201">' in d and 'name="a1-hash"' in d and "sip_password" not in d
     # The browser phone may place calls (mod_verto refuses verto.invite otherwise) and rings with desk phones.
