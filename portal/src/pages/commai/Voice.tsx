@@ -1,7 +1,7 @@
 import { NavLink, Route, Routes, useLocation } from "react-router-dom";
 import { useApi } from "../../api";
 import { ErrorNote } from "../../components";
-import { PageHead, Tabs } from "../../ui";
+import { SectionNotFound, PageHead, Tabs } from "../../ui";
 import { useCommaiBase } from "./lib";
 import Billing from "./voice/Billing";
 import { Carriers, Emergency, EmergencyNotice, Fraud, Numbers, Ports, VoiceNotices } from "./voice/Global";
@@ -10,6 +10,7 @@ import MySettings from "./voice/MySettings";
 import Orders from "./voice/Orders";
 import Platforms from "./voice/Platforms";
 import Trunks from "./voice/Trunks";
+import PhoneAISetup from "./voice/PhoneAISetup";
 import { Access, Changes, PeopleAndNumbers, PendingChange, Routing, usePending } from "./voice/PhoneSystem";
 import type { VoiceOverview } from "./voice/types";
 import "./voice/voice.css";
@@ -85,6 +86,7 @@ export default function Voice() {
               People and numbers
             </NavLink>
             <NavLink to="/commai/voice/routing">Call routing</NavLink>
+            <NavLink to="/commai/voice/ai">Telephone AI</NavLink>
             <NavLink to="/commai/voice/changes">Scheduled, history and bulk</NavLink>
             <NavLink to="/commai/voice/access">Access</NavLink>
             <span className="muted small">Version {v.version ?? 0}</span>
@@ -96,6 +98,7 @@ export default function Voice() {
         <Routes>
           <Route path="/" element={<PeopleAndNumbers base={base} v={v} propose={pending.propose} />} />
           <Route path="/routing" element={<Routing v={v} propose={pending.propose} />} />
+          <Route path="/ai" element={<PhoneAISetup base={base} v={v} onRefresh={ov.reload} />} />
           <Route path="/changes" element={<Changes base={base} v={v} reload={ov.reload} />} />
           <Route path="/access" element={<Access base={base} v={v} reload={ov.reload} />} />
           <Route path="/orders" element={<Orders base={base} v={v} />} />
@@ -109,7 +112,8 @@ export default function Voice() {
           <Route path="/fraud" element={<Fraud base={base} v={v} />} />
           {v.is_exacarib && <Route path="/carriers" element={<Carriers customerId={base.split("/").pop() ?? ""} />} />}
           <Route path="/phone" element={<Dialer base={base} />} />
-        </Routes>
+        <Route path="*" element={<SectionNotFound to="/commai/voice" label="Open phone system" />} />
+      </Routes>
       )}
     </>
   );

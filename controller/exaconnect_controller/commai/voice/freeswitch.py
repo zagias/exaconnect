@@ -41,7 +41,7 @@ import psycopg
 from psycopg.types.json import Jsonb
 
 from .. import jobs
-from . import emergency, livekit, pbx, platforms
+from . import emergency, livekit, pbx, platforms, protected_ingress, trunk_media
 from . import provider as providers
 from .billing import EMERGENCY, fraud_limits
 from .common import domain as tenant_domain
@@ -51,6 +51,7 @@ from .files import write_files
 WDAY = {"sun": 1, "mon": 2, "tue": 3, "wed": 4, "thu": 5, "fri": 6, "sat": 7}  # FreeSWITCH numbering
 GATEWAY = "exacarib_sip"
 AI_GATEWAY = "exacarib_ai"
+PROTECTED_GATEWAY = "exacarib_sip_protected"
 PLUS = "^\\+?"  # an optional leading + in a dial plan expression
 
 
@@ -72,6 +73,29 @@ def gather(conn: psycopg.Connection, cid: Any) -> dict:
            WHERE v.customer_id = %s AND v.status = 'active' ORDER BY v.extension"""
     )
     tz = conn.execute("SELECT timezone FROM commai_settings WHERE customer_id = %s", (cid,)).fetchone()
+    own_trunks = rows("SELECT adapter, outbound FROM voice_carriers WHERE customer_id = %s AND platform IS NULL")
+    numbers = rows(
+        """SELECT n.id::text AS id, n.customer_id, n.source, n.carrier, n.e164,
+                  n.target_type, n.target_id::text AS target_id,
+                  c.id AS trunk_id, c.key AS trunk_key, c.customer_id AS trunk_customer_id,
+                  c.platform AS trunk_platform, c.enabled AS trunk_enabled, c.inbound AS trunk_inbound,
+                  c.set_id AS trunk_set_id,
+                  c.outbound AS trunk_outbound, c.adapter AS trunk_adapter
+           FROM voice_numbers n LEFT JOIN voice_carriers c
+             ON c.key = n.carrier AND c.customer_id = n.customer_id AND c.platform IS NULL
+           WHERE n.customer_id = %s AND n.status = 'active' AND (%s OR n.provider <> 'simulated') ORDER BY n.e164""",
+        providers.test_mode(),
+    )
+    for number in numbers:
+        carrier = {
+            key: number.pop("trunk_" + key)
+            for key in ("id", "key", "customer_id", "platform", "enabled", "inbound", "outbound", "adapter", "set_id")
+        }
+        number["protected_ingress"] = protected_ingress.describe(number, carrier)
+        try:
+            number["carrier_media_policy"] = trunk_media.mode(carrier["outbound"] or {}, carrier["adapter"] or "")
+        except trunk_media.PolicyError:
+            number["carrier_media_policy"] = "BLOCKED"
     return {
         "customer_id": str(cid),
         "domain": dom,
@@ -85,11 +109,8 @@ def gather(conn: psycopg.Connection, cid: Any) -> dict:
             }  # noqa: S324 - SIP digest needs MD5
             for u in users
         ],
-        "numbers": rows(
-            """SELECT id::text AS id, e164, target_type, target_id::text AS target_id FROM voice_numbers
-               WHERE customer_id = %s AND status = 'active' AND (%s OR provider <> 'simulated') ORDER BY e164""",
-            providers.test_mode(),
-        ),
+        "numbers": numbers,
+        "outbound_media_v2": any((t["outbound"] or {}).get("srtp_required", False) is not False for t in own_trunks),
         "ring_groups": rows(
             """SELECT id::text AS id, name, extension, strategy, members::text[] AS members, ring_seconds
                FROM voice_ring_groups WHERE customer_id = %s ORDER BY extension"""
@@ -615,6 +636,7 @@ FROM_PLATFORM_OUTSIDE = "^exa-plat-in-(\\d{7,15})$"
 PLATFORM_DIALLED = "^\\+?(\\d{2,15})$"
 PLATFORM_LINK = "^org-[0-9a-f]{8}-[0-9a-f]{8}$"
 AUTH_OK = r"OK (?:none|[1-9]\d*(?:,[1-9]\d*)*) (?:none|\+\d{7,15})"
+AUTH_OK_V2 = AUTH_OK + r" (?:LEGACY|SRTP_REQUIRED)"
 
 
 def _outbound(data: dict, platform: bool = False) -> list[str]:
@@ -627,6 +649,8 @@ def _outbound(data: dict, platform: bool = False) -> list[str]:
     The PBX's secret never appears here: ${exa_pbx_secret} is FreeSWITCH's own
     global variable, from EXA_PBX_SECRET in its environment (vars.xml)."""
     t = data["tenant"]
+    media_v2 = data.get("outbound_media_v2", False)
+    auth_ok = AUTH_OK_V2 if media_v2 else AUTH_OK
     if platform:
         # A call from someone on Teams, Zoom or the like (ADR 0056): the link and their number,
         # both set in public.xml from what Kamailio checked, stand for the extension.
@@ -637,6 +661,8 @@ def _outbound(data: dict, platform: bool = False) -> list[str]:
         dest, prefix, path = OUTSIDE, "", "authorise"
         fields = f"{t}:${{user_name}}:${{exa_forwarded_by}}:$1:${{uuid}}"
         query = f"tenant={t}&ext=${{user_name}}&fwd=${{exa_forwarded_by}}&to=$1&call=${{uuid}}"
+    if media_v2:
+        path += "-v2"
     digest = f"${{md5(${{exa_pbx_secret}}:{fields}:${{exa_pbx_secret}})}}"
     url = f"{data['controller_url']}/api/v1/commai/internal/voice/{path}?{query}"
     ask = f"exa_auth=${{curl({url} connect-timeout 2 timeout 4 append_headers {pbx.HEADER}:{digest} get)}}"
@@ -681,7 +707,7 @@ def _outbound(data: dict, platform: bool = False) -> list[str]:
         ),
         *ext(
             "outbound-unavailable",
-            "^(?!" + AUTH_OK + "$)",
+            "^(?!" + auth_ok + "$)",
             [
                 '<action application="log" data="WARNING outside call refused: no answer from the controller"/>',
                 '<action application="set" data="exa_refused=controller_unreachable"/>',
@@ -703,14 +729,55 @@ def _outbound(data: dict, platform: bool = False) -> list[str]:
         ),
         *ext(
             "outbound",
-            "^" + AUTH_OK + "$",
+            "^" + AUTH_OK + (" LEGACY" if media_v2 else "") + "$",
             [f'<action application="bridge" data={a("sofia/gateway/" + GATEWAY + "/+${exa_dest}")}/>'],
+        ),
+        *(
+            ext(
+                "outbound-srtp",
+                "^" + AUTH_OK + " SRTP_REQUIRED$",
+                [
+                    '<action application="bridge" data='
+                    + a(
+                        "{rtp_secure_media_outbound=mandatory:"
+                        + trunk_media.SUITE
+                        + ",sip_h_X-Exa-Media-Policy=SRTP_REQUIRED}"
+                        + "sofia/gateway/"
+                        + PROTECTED_GATEWAY
+                        + "/+${exa_dest}"
+                    )
+                    + "/>"
+                ],
+            )
+            if media_v2
+            else []
         ),
     ]
 
 
 def _public(data: dict) -> str:
     out = ["<include>"]
+    for n in data["numbers"]:
+        digits = n["e164"].lstrip("+")
+        if (
+            n.get("source") == "trunk"
+            or n.get("protected_ingress") is not None
+            or n.get("carrier_media_policy", trunk_media.LEGACY) != trunk_media.LEGACY
+        ):
+            # Only the approved local bundle may admit an owned-trunk DID.
+            # Candidate changes cannot replace its policy or bypass the private
+            # authenticated ingress context using caller-supplied headers.
+            out += [
+                f"  <extension name={a('in-' + digits)}>",
+                f'    <condition field="destination_number" expression={a(PLUS + digits + "$")}>',
+                '      <action application="set" data='
+                + a("rtp_secure_media_inbound=mandatory:" + trunk_media.SUITE)
+                + "/>",
+                '      <action application="set" data="exa_secure_ingress=blocked_unverified_transport"/>',
+                '      <action application="hangup" data="SERVICE_UNAVAILABLE"/>',
+                "    </condition>",
+                "  </extension>",
+            ]
     # Calls from a calling platform (ADR 0056): Kamailio names the link in X-Exa-Link once it has
     # checked the call came from the platform to this organisation's SIP address.
     for lk in data.get("platform_links", ()):
@@ -732,6 +799,12 @@ def _public(data: dict) -> str:
         ]
     for n in data["numbers"]:
         digits = n["e164"].lstrip("+")
+        if (
+            n.get("source") == "trunk"
+            or n.get("protected_ingress") is not None
+            or n.get("carrier_media_policy", trunk_media.LEGACY) != trunk_media.LEGACY
+        ):
+            continue
         rule = next((r for r in data.get("ai_rules", ()) if r.get("number_id") in (None, n["id"])), None)
         fallback = _fallback_target(data, rule["fallback"]) if rule else "exa-voicemail-main"
         out += [
@@ -812,6 +885,8 @@ def render(data: dict) -> dict[str, str]:
         f"{t}/directory.xml": _directory(data),
         f"{t}/dialplan.xml": _dialplan(data),
         f"{t}/public.xml": _public(data),
+        f"{t}/protected.xml": protected_ingress.render_private(data),
+        f"{t}/owned-public.xml": protected_ingress.render_owned_public(data),
         f"{t}/ivr.xml": _ivr(data),
     }
     files.update({f"{t}/{k}": v for k, v in _callcenter(data).items()})

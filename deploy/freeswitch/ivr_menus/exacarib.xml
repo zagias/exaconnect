@@ -1,4 +1,5 @@
 <!-- Jibsy voice (ADR 0021): every business's voice menus. -->
 <include>
+  <X-PRE-PROCESS cmd="include" data="/exacarib/voice-approved/current/ivr/routes.xml"/>
   <X-PRE-PROCESS cmd="include" data="/exacarib/freeswitch/*/ivr.xml"/>
 </include>

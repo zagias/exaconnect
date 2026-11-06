@@ -28,9 +28,17 @@ docker run --rm --entrypoint kamailio "${kam[@]}" "$KAM_IMAGE" -c -f /etc/kamail
 docker run --rm --entrypoint kamailio "${kam[@]}" "$KAM_IMAGE" -c -f /etc/kamailio/kamailio.cfg >/dev/null 2>&1
 
 echo "-- kamailio refuses an unlisted caller"
-docker run -d --name exa-sbc-kam --entrypoint kamailio "${kam[@]}" "$KAM_IMAGE" -DD -E -f /etc/kamailio/kamailio.cfg >/dev/null
+docker run -d --name exa-sbc-kam --entrypoint /bin/sh "${kam[@]}" \
+  -v "$PWD/kamailio/start.sh:/exacarib-start.sh:ro" "$KAM_IMAGE" /exacarib-start.sh >/dev/null
 ip=$(docker inspect exa-sbc-kam --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
-python3 voice/sip_probe.py "$ip" 5060 | tee "$tmp/answer"
+# Exercise the production watcher, which initialises the legacy gate when no
+# approved protected generation exists. Do not flip the gate from the test.
+for _ in $(seq 15); do
+  python3 voice/sip_probe.py "$ip" 5060 >"$tmp/answer" || true
+  grep -q "^SIP/2.0 403" "$tmp/answer" && break
+  sleep 1
+done
+cat "$tmp/answer"
 grep -q "^SIP/2.0 403" "$tmp/answer"
 
 echo "-- real SIP policy and carrier failover regressions"

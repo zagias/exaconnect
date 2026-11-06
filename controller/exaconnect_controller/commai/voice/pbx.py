@@ -45,7 +45,7 @@ import psycopg
 from psycopg.types.json import Jsonb
 
 from ... import audit
-from . import billing, carriers
+from . import billing, carriers, trunk_media
 from . import provider as providers
 from .common import VoiceError, digits, domain, now
 
@@ -66,6 +66,8 @@ CODES = {
     "intl_daily_cap": "Today's international spend cap is reached.",
     "intl_spike": "International calling was suspended after a sudden rise.",
     "no_carrier": "No carrier can take the call.",
+    "media_policy_mismatch": "Carrier media policies do not permit this route.",
+    "media_policy_required": "This route requires the versioned carrier media policy.",
     "refused": "Refused.",
 }
 TENANT = re.compile(r"^c[0-9a-f]{12}$")
@@ -132,7 +134,21 @@ def _record(conn, cid, call: str, vu: Any, to: str, verdict: dict, sets: list[in
     )
 
 
-def authorise(conn: psycopg.Connection, tenant: str, ext: str, fwd: str, to: str, call: str) -> str:
+def _media_verdict(conn, cid, verdict: dict, media_v2: bool) -> tuple[dict, str]:
+    if not verdict["allowed"]:
+        return verdict, trunk_media.LEGACY
+    try:
+        mode = carriers.media_policy(conn, cid, verdict.get("route"))
+    except trunk_media.PolicyError as error:
+        return billing.refused("media_policy_mismatch", str(error)), trunk_media.LEGACY
+    if mode == trunk_media.SRTP_REQUIRED and not media_v2:
+        return billing.refused("media_policy_required", CODES["media_policy_required"]), mode
+    return verdict, mode
+
+
+def authorise(
+    conn: psycopg.Connection, tenant: str, ext: str, fwd: str, to: str, call: str, *, media_v2: bool = False
+) -> str:
     """The answer line for the dial plan. Refusals are kept as blocked calls, as for simulated calls."""
     from .. import entitlements
 
@@ -164,6 +180,7 @@ def authorise(conn: psycopg.Connection, tenant: str, ext: str, fwd: str, to: str
         sets = [by_key[k] for k in verdict["route"] if k in by_key]
         if not sets:  # carriers chosen, but none is in Kamailio's list
             verdict = billing.refused("no_carrier", "No carrier in the edge proxy's list can take the call.")
+    verdict, media_mode = _media_verdict(conn, cid, verdict, media_v2)
     _record(conn, cid, call, vu_id, number, verdict, sets, cli)
     if not verdict["allowed"]:
         at = now()
@@ -188,10 +205,13 @@ def authorise(conn: psycopg.Connection, tenant: str, ext: str, fwd: str, to: str
         audit.record(conn, "system:pbx", "commai.voice.pbx_refused", call, cid, {"code": code})
         return f"NO {code if code in CODES else 'refused'}"
     audit.record(conn, "system:pbx", "commai.voice.pbx_authorised", call, cid, {"sets": sets})
-    return f"OK {','.join(map(str, sets)) or 'none'} {cli or 'none'}"
+    answer = f"OK {','.join(map(str, sets)) or 'none'} {cli or 'none'}"
+    return answer + (f" {media_mode}" if media_v2 else "")
 
 
-def authorise_platform(conn: psycopg.Connection, tenant: str, link: str, frm: str, to: str, call: str) -> str:
+def authorise_platform(
+    conn: psycopg.Connection, tenant: str, link: str, frm: str, to: str, call: str, *, media_v2: bool = False
+) -> str:
     """The answer line for an outside call made in a calling platform's app (ADR 0056).
 
     The dial plan sends the link Kamailio named (it checked the call came from the platform to
@@ -221,6 +241,7 @@ def authorise_platform(conn: psycopg.Connection, tenant: str, link: str, frm: st
         sets = [by_key[k] for k in verdict["route"] if k in by_key]
         if not sets:
             verdict = billing.refused("no_carrier", "No carrier in the edge proxy's list can take the call.")
+    verdict, media_mode = _media_verdict(conn, cid, verdict, media_v2)
     _record(conn, cid, call, None, number, verdict, sets, cli)
     if not verdict["allowed"]:
         at = now()
@@ -245,7 +266,8 @@ def authorise_platform(conn: psycopg.Connection, tenant: str, link: str, frm: st
         audit.record(conn, "system:pbx", "commai.voice.pbx_refused", call, cid, {"code": code, "link": link})
         return f"NO {code if code in CODES else 'refused'}"
     audit.record(conn, "system:pbx", "commai.voice.pbx_authorised", call, cid, {"sets": sets, "link": link})
-    return f"OK {','.join(map(str, sets)) or 'none'} {cli or 'none'}"
+    answer = f"OK {','.join(map(str, sets)) or 'none'} {cli or 'none'}"
+    return answer + (f" {media_mode}" if media_v2 else "")
 
 
 def emergency_sets(conn: psycopg.Connection, cid: Any) -> list[int]:

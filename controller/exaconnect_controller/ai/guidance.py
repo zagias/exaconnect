@@ -7,7 +7,93 @@ diagnosis selects actual scoped evidence; it does not emit model capability pros
 
 from __future__ import annotations
 
+import datetime as dt
 import json
+import re
+
+
+def site_intent(question: str) -> str | None:
+    """Direct site checks never authorise configuration changes."""
+    if not re.search(r"\b(?:sites?|branches?)\b", question, re.I):
+        return None
+    if re.search(
+        r"\b(?:voice|voip|sip|calls?|phone|video|teams|zoom|applications?|services?|routing|latency|jitter|loss|sla)\b",
+        question,
+        re.I,
+    ):
+        return None
+    if re.search(r"\b(?:restore|recover)\b", question, re.I):
+        return "restore"
+    if re.search(
+        r"\b(?:yesterday|previous|historical|history|ago|were|was|since|during|why|explain)\b|\blast\s+(?:week|month|night|year)\b",
+        question,
+        re.I,
+    ):
+        return None
+    if re.search(
+        r"\b(?:keep|stay|remain|ensure|design|prevent|avoid|plan|propose|improve)\b|\b(?:will|would|should)\s+(?:my|our|the)\s+(?:sites?|branches?)\b",
+        question,
+        re.I,
+    ):
+        return None
+    if re.search(
+        r"\b(?:delete|reset|disable|enable|apply|create|configure|set|change|update|remove)\b", question, re.I
+    ):
+        return None
+    if re.search(
+        r"\b(?:status|health|online|offline|reporting|reachable|unreachable)\b|\b(?:are|is)\b.*\b(?:up|down|working)\b",
+        question,
+        re.I,
+    ):
+        return "status"
+    return None
+
+
+def site_status_answer(context: dict) -> str:
+    sites = context.get("sites", [])
+    facts = example_note(context)
+    organisation = str(context.get("account", {}).get("organisation") or "this organisation").replace("\n", " ")[:120]
+    checked_at = context.get("now_utc")
+    when = (
+        dt.datetime.fromisoformat(str(checked_at)).astimezone(dt.UTC).strftime("%d %b %Y at %H:%M UTC")
+        if checked_at
+        else None
+    )
+    facts.append(f"Checked site records for {organisation}" + (f" on {when}." if when else "."))
+    if not sites:
+        return "\n\n".join(
+            facts
+            + ["No sites are recorded here. Check that you have selected the right organisation. Nothing has changed."]
+        )
+    reporting = sum(site.get("last_seen") is not None and site.get("online") is True for site in sites)
+    never = sum(site.get("last_seen") is None for site in sites)
+    stale = len(sites) - reporting - never
+    facts.append(
+        f"{len(sites)} sites: {reporting} reporting within 30 seconds, "
+        f"{stale} with older reports, {never} with no report recorded."
+    )
+    paths = [path for site in sites for path in site.get("paths", [])]
+    measured = sum(
+        any(path.get(key) is not None for key in ("latency_ms_last_min", "jitter_ms_last_min", "loss_pct_last_min"))
+        for path in paths
+    )
+    facts.append(f"{measured} of {len(paths)} configured paths have measurements from the last minute.")
+    attention = [site for site in sites if site.get("last_seen") is None or site.get("online") is not True]
+    details = []
+    for site in attention[:5]:
+        name = str(site.get("name") or "Unnamed site").replace("\n", " ")[:120]
+        status = "no agent report recorded" if site.get("last_seen") is None else f"last report {site['last_seen']}"
+        details.append(f"{name}: {status}.")
+    if details:
+        facts.append("\n".join(details))
+    if len(attention) > 5:
+        facts.append(f"{len(attention) - 5} more sites need a reporting check; open Sites for the full list.")
+    facts.append(
+        "Connectivity is unverified where reports are missing. "
+        "Agent reports alone do not confirm every service is working. Nothing has changed."
+    )
+    return "\n\n".join(facts)
+
 
 DESIGN = {
     "diversity": {
@@ -112,6 +198,17 @@ CONSTRAINTS = {
     "supply": {"catalogue_or_partner_implies_supply": False, "coverage_price_fulfilment_guaranteed": False},
 }
 
+SELECTION_LIMITS = {
+    "feature_ids": 2,
+    "controls": 3,
+    "questions": 4,
+    "observations": 2,
+    "offer_codes": 2,
+    "evidence_ids": 6,
+    "account_topics": 4,
+}
+MAX_SELECTION_ITEMS = 64
+
 CONTRACT = {
     "kind": "account | design | analysis | proposal",
     "feature_ids": "up to 2 verified feature IDs relevant to the question",
@@ -121,16 +218,36 @@ CONTRACT = {
     "offer_codes": "up to 2 exact live catalogue codes; empty if no relevant verified offer",
     "evidence_ids": "for analysis: 1 to 6 exact scoped_evidence IDs relevant to the question",
     "account_topics": "choose relevant unresolved topics: access, subscriptions, configuration, offers",
+    "selection_policy": {
+        "display_limits": SELECTION_LIMITS,
+        "maximum_supplied_per_field": MAX_SELECTION_ITEMS,
+        "order": "Most relevant IDs first. Validate all IDs before removing duplicates or valid extras.",
+        "unknown_ids": "The whole advisory selection is rejected; unsupported IDs are never silently dropped.",
+    },
 }
 
 
-def _selection(advice: dict, name: str, allowed, maximum: int) -> list[str]:
+def _selection(advice: dict, name: str, allowed) -> list[str]:
     values = advice.get(name, [])
-    if not isinstance(values, list) or len(values) > maximum:
+    if not isinstance(values, list) or len(values) > MAX_SELECTION_ITEMS:
         raise ValueError("invalid selection")
-    if any(not isinstance(value, str) or value not in allowed for value in values) or len(set(values)) != len(values):
+    # Validate the complete selection before bounding it: an unknown ID at the
+    # end must not disappear behind the presentation limit.
+    if any(not isinstance(value, str) or value not in allowed for value in values):
         raise ValueError("unverified selection")
-    return values
+    return list(dict.fromkeys(values))[: SELECTION_LIMITS[name]]
+
+
+def selection_metadata(text: str) -> dict:
+    """Counts only, for an advisory selection already validated by render()."""
+    advice = json.loads(text)["advice"]
+    changes = []
+    for name, maximum in SELECTION_LIMITS.items():
+        values = advice.get(name, [])
+        selected = min(len(dict.fromkeys(values)), maximum)
+        if selected != len(values):
+            changes.append({"field": name, "supplied": len(values), "selected": selected})
+    return {"normalised": bool(changes), "changes": changes}
 
 
 def account_facts(context: dict, feature_ids: list[str], offer_codes: list[str], topics=None) -> list[str]:
@@ -320,14 +437,14 @@ def render(text: str, answer: str, actions: list[dict], context: dict, scope: st
             raise ValueError("unknown advice field")
         features = {feature["id"] for feature in context.get("verified_features", [])}
         offers = {offer["code"] for offer in context.get("catalogue", [])}
-        feature_ids = _selection(advice, "feature_ids", features, 2)
-        offer_codes = _selection(advice, "offer_codes", offers, 2)
-        controls = _selection(advice, "controls", DESIGN, 3)
-        questions = _selection(advice, "questions", DESIGN, 4)
-        selected = _selection(advice, "observations", {"inventory", "satellite", "shadow_mode"}, 2)
+        feature_ids = _selection(advice, "feature_ids", features)
+        offer_codes = _selection(advice, "offer_codes", offers)
+        controls = _selection(advice, "controls", DESIGN)
+        questions = _selection(advice, "questions", DESIGN)
+        selected = _selection(advice, "observations", {"inventory", "satellite", "shadow_mode"})
         evidence = {record["id"]: record["text"] for record in context.get("scoped_evidence", [])}
-        evidence_ids = _selection(advice, "evidence_ids", evidence, 6)
-        topics = _selection(advice, "account_topics", {"access", "subscriptions", "configuration", "offers"}, 4)
+        evidence_ids = _selection(advice, "evidence_ids", evidence)
+        topics = _selection(advice, "account_topics", {"access", "subscriptions", "configuration", "offers"})
         if kind == "account":
             if controls or questions or selected or evidence_ids:
                 raise ValueError("account scope does not include network data")

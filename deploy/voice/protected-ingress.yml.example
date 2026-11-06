@@ -1,0 +1,19 @@
+# Unapplied operator override. This separate host directory must NOT be inside
+# controller-data or any controller-writable parent/mount. No SIP publication.
+services:
+  freeswitch:
+    volumes:
+      - type: bind
+        source: /etc/exaconnect/voice-approved
+        target: /exacarib/voice-approved
+        read_only: true
+        bind:
+          create_host_path: false
+  kamailio:
+    volumes:
+      - type: bind
+        source: /etc/exaconnect/voice-approved
+        target: /exacarib/voice-approved
+        read_only: true
+        bind:
+          create_host_path: false

@@ -117,6 +117,41 @@ def pbx_authorise_platform(
         return pbx.authorise_platform(conn, tenant, link, frm, to, call)
 
 
+@public.get("/authorise-v2", response_class=PlainTextResponse)
+def pbx_authorise_v2(
+    tenant: str = Query("", max_length=40),
+    ext: str = Query("", max_length=20),
+    fwd: str = Query("", max_length=20),
+    to: str = Query("", max_length=40),
+    call: str = Query("", max_length=80),
+    x_exa_pbx_auth: str | None = Header(default=None),
+) -> str:
+    """The signed controller chooses a fixed carrier media mode for this call."""
+    try:
+        pbx.check(x_exa_pbx_auth, tenant, ext, fwd, to, call)
+    except VoiceError as error:
+        raise HTTPException(error.code, str(error)) from error
+    with db.tx() as conn:
+        return pbx.authorise(conn, tenant, ext, fwd, to, call, media_v2=True)
+
+
+@public.get("/authorise-platform-v2", response_class=PlainTextResponse)
+def pbx_authorise_platform_v2(
+    tenant: str = Query("", max_length=40),
+    link: str = Query("", max_length=40),
+    frm: str = Query("", alias="from", max_length=20),
+    to: str = Query("", max_length=40),
+    call: str = Query("", max_length=80),
+    x_exa_pbx_auth: str | None = Header(default=None),
+) -> str:
+    try:
+        pbx.check(x_exa_pbx_auth, tenant, link, frm, to, call)
+    except VoiceError as error:
+        raise HTTPException(error.code, str(error)) from error
+    with db.tx() as conn:
+        return pbx.authorise_platform(conn, tenant, link, frm, to, call, media_v2=True)
+
+
 @public.get("/ring", response_class=PlainTextResponse)
 def pbx_ring(
     tenant: str = Query("", max_length=40),

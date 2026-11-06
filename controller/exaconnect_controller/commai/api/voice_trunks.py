@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictBool
 
 from ... import db
 from ...api.deps import UserDep
@@ -33,6 +33,7 @@ class TrunkIn(BaseModel):
     host: str | None = Field(default=None, max_length=253)
     port: int | None = Field(default=None, ge=1, le=65535)
     transport: str | None = Field(default=None, pattern="^(udp|tcp|tls)$")
+    srtp_required: StrictBool = False
     prefix: str | None = Field(default=None, max_length=10)
     max_channels: int | None = Field(default=None, ge=1, le=10000)
     allow_ips: list[str] | None = Field(default=None, max_length=32)
@@ -78,14 +79,14 @@ def overview(customer_id: str, user: UserDep) -> dict:
 def add_trunk(customer_id: str, body: TrunkIn, user: UserDep) -> dict:
     with db.tx() as conn, errors():
         _admin(conn, user, customer_id)
-        return trunks.save_trunk(conn, customer_id, body.model_dump(exclude_none=True), user.actor)
+        return trunks.save_trunk(conn, customer_id, body.model_dump(exclude_unset=True), user.actor)
 
 
 @router.patch("/trunks/{trunk_id}")
 def change_trunk(customer_id: str, trunk_id: str, body: TrunkIn, user: UserDep) -> dict:
     with db.tx() as conn, errors():
         _admin(conn, user, customer_id)
-        return trunks.save_trunk(conn, customer_id, body.model_dump(exclude_none=True), user.actor, trunk_id)
+        return trunks.save_trunk(conn, customer_id, body.model_dump(exclude_unset=True), user.actor, trunk_id)
 
 
 @router.delete("/trunks/{trunk_id}", status_code=204)

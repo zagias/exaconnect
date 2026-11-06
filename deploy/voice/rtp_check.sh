@@ -39,13 +39,22 @@ chmod 644 "$rtp_tmp/tls/server.key"
 docker run -d --name "$rtp_kam" --network "$rtp_net" --network-alias kamailio --entrypoint /bin/sh \
   -v "$PWD/kamailio/kamailio.cfg:/etc/kamailio/kamailio.cfg:ro" \
   -v "$PWD/kamailio/tls.cfg:/etc/kamailio/tls.cfg:ro" \
+  -v "$PWD/kamailio/start.sh:/exacarib-start.sh:ro" \
   -v "$rtp_tmp/local.cfg:/etc/kamailio/kamailio-local.cfg:ro" \
   -v "$rtp_tmp/tls:/etc/kamailio/tls:ro" -v "$rtp_tmp/exacarib:/exacarib:ro" \
   -v "$rtp_tmp/start:/ci:ro" "$KAM_IMAGE" \
-  -c 'until [ -f /ci/ready ]; do sleep 1; done; exec kamailio -DD -E -f /etc/kamailio/kamailio.cfg' >/dev/null
+  -c 'until [ -f /ci/ready ]; do sleep 1; done; exec /bin/sh /exacarib-start.sh' >/dev/null
 rtp_kam_ip=$(docker inspect "$rtp_kam" --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
 sed "s/203.0.113.10/$rtp_kam_ip/g" kamailio/kamailio-local.cfg.example >"$rtp_tmp/local.cfg"
 touch "$rtp_tmp/start/ready"
+# Initialise the real startup watcher's legacy path before the media driver
+# installs its local carrier lists. No synthetic htable override is used.
+for _ in $(seq 15); do
+  python3 voice/sip_probe.py "$rtp_kam_ip" 5060 >"$rtp_tmp/start/answer" || true
+  grep -q "^SIP/2.0 403" "$rtp_tmp/start/answer" && break
+  sleep 1
+done
+grep -q "^SIP/2.0 403" "$rtp_tmp/start/answer"
 cp freeswitch/sip_profiles/external/exacarib_sip.kamailio.xml.example "$rtp_tmp/external/exacarib_sip.xml"
 # The production config normally detects its local interface using the route
 # table. This deliberately route-less network supplies that address explicitly.

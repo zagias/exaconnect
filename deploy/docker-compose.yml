@@ -37,6 +37,10 @@ services:
       EXA_LLM_API_KEY: ${EXA_LLM_API_KEY:-}
       EXA_COMMAI_AI_TEST_MODE: ${EXA_COMMAI_AI_TEST_MODE:-0}
       EXA_LLM_MODEL: ${EXA_LLM_MODEL:-deepseek-ai/DeepSeek-V4-Flash}
+      # Optional Hub-only connection. Empty retains the global provider.
+      EXA_ASSISTANT_LLM_API_KEY: ${EXA_ASSISTANT_LLM_API_KEY:-}
+      EXA_ASSISTANT_LLM_BASE_URL: ${EXA_ASSISTANT_LLM_BASE_URL:-}
+      EXA_ASSISTANT_LLM_MODEL: ${EXA_ASSISTANT_LLM_MODEL:-}
       EXA_NHC_URL: ${EXA_NHC_URL-https://www.nhc.noaa.gov/CurrentStorms.json}
       EXA_USGS_URL: ${EXA_USGS_URL-https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_day.geojson}
       EXA_GDACS_URL: ${EXA_GDACS_URL-https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH}

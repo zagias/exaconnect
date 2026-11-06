@@ -194,3 +194,71 @@ def test_controller_does_not_follow_redirects_or_expose_provider_body():
             assert "SECRET" not in str(error.value)
 
     asyncio.run(run())
+
+
+@pytest.mark.parametrize("failure", ["greeting", "turn", "transfer_timeout", "hangup_timeout", "end_timeout", "close"])
+def test_provider_and_cleanup_failures_are_bounded_and_never_retry_a_transfer(failure):
+    """A timed-out REFER is unknown, not permission to issue a second REFER."""
+    paths = []
+    cancelled = set()
+
+    async def hang(label):
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.add(label)
+
+    async def handler(request):
+        assert request.headers["Authorization"] == "Bearer one-call-only"
+        paths.append(request.url.path.rsplit("/", 1)[-1])
+        if request.url.path.endswith("turns"):
+            raise httpx.ReadTimeout("PRIVATE-PROVIDER-BODY", request=request)
+        if request.method == "GET":
+            return httpx.Response(200, json={"handed_over": failure != "turn"})
+        if request.url.path.endswith("handover"):
+            if failure == "transfer_timeout":
+                await hang("transfer")
+            return httpx.Response(502, text="PRIVATE-PROVIDER-BODY")
+        if request.url.path.endswith("end") and failure == "end_timeout":
+            await hang("end")
+        return httpx.Response(200, json={})
+
+    async def run():
+        http, lifecycle, audio = await setup(handler)
+        lifecycle.limits = worker.Limits(
+            poll_s=0.005, silence_s=0.5, duration_s=1, speech_s=0.03, transfer_s=0.03, cleanup_s=0.03
+        )
+        if failure == "greeting":
+
+            async def fail_say(_):
+                raise RuntimeError("PRIVATE-PROVIDER-BODY")
+
+            audio.say = fail_say
+        if failure == "turn":
+            audio.after_say = lambda _: lifecycle.transcript("A fictional request")
+        if failure == "hangup_timeout":
+            audio.hangup = lambda: hang("hangup")
+        if failure == "close":
+
+            async def fail_close():
+                audio.closed = True
+                raise RuntimeError("PRIVATE-PROVIDER-BODY")
+
+            audio.close = fail_close
+        async with http:
+            result = await asyncio.wait_for(lifecycle.run("Hello"), 0.6)
+        assert result["transfer_state"] == "unconfirmed"
+        assert paths.count("handover") == 1 and paths.count("end") == 1
+        assert "PRIVATE" not in str(result) and audio.closed
+        if failure == "greeting" or failure == "turn":
+            assert result["reason"] == "service_failure"
+        if failure == "transfer_timeout":
+            assert "transfer" in cancelled
+        if failure == "hangup_timeout":
+            assert "hangup" in cancelled
+        else:
+            assert audio.hungup
+        if failure == "end_timeout":
+            assert "end" in cancelled
+
+    asyncio.run(run())

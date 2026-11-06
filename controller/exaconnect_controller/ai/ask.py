@@ -177,6 +177,93 @@ def ask(question: str, context: dict, *, api_key: str, base_url: str, model: str
     return chat(SYSTEM, user, api_key=api_key, base_url=base_url, model=model, timeout_s=timeout_s)
 
 
+OPENAI_BASE_URL = "https://api.openai.com/v1"
+OPENAI_ASSISTANT_MODEL = "gpt-6.1-sol"
+OPENAI_MAX_OUTPUT_TOKENS = 1400
+MAX_RESPONSE_BYTES = 2_000_000
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def _openai_response(system: str, user: str, *, api_key: str, model: str, max_tokens: int, timeout_s: float) -> str:
+    """One stateless text response; no tools, retries, redirects or provider failover."""
+    if type(max_tokens) is not int or not 16 <= max_tokens <= OPENAI_MAX_OUTPUT_TOKENS:
+        raise AskError("The assistant's output limit is invalid.")
+    if not 0 < timeout_s <= 60:
+        raise AskError("The assistant's request timeout is invalid.")
+    body = {
+        "model": model,
+        "instructions": system,
+        "input": user,
+        "max_output_tokens": max_tokens,
+        "reasoning": {"effort": "low"},
+        "store": False,
+    }
+    request = urllib.request.Request(
+        OPENAI_BASE_URL + "/responses",
+        data=json.dumps(body).encode(),
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        method="POST",
+    )
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
+    try:
+        with opener.open(request, timeout=timeout_s) as response:
+            if response.geturl() != request.full_url or not 200 <= response.status < 300:
+                raise AskError("The AI service sent an unexpected response.")
+            raw = response.read(MAX_RESPONSE_BYTES + 1)
+        if len(raw) > MAX_RESPONSE_BYTES:
+            raise AskError("The AI service response exceeded its size limit.")
+        out = json.loads(raw)
+    except urllib.error.HTTPError as error:
+        log.warning("OpenAI endpoint answered %s", error.code)
+        raise AskError(f"The AI service answered {error.code}. Try again shortly.") from None
+    except (urllib.error.URLError, TimeoutError, OSError) as error:
+        log.warning("OpenAI endpoint unreachable: %s", type(error).__name__)
+        raise AskError("The AI service could not be reached. Try again shortly.") from None
+    except (ValueError, UnicodeError):
+        raise AskError("The AI service sent an answer in an unexpected shape.") from None
+    if (
+        not isinstance(out, dict)
+        or out.get("status") != "completed"
+        or out.get("error") is not None
+        or out.get("incomplete_details") is not None
+        or not isinstance(out.get("output"), list)
+        or len(out["output"]) > 16
+    ):
+        raise AskError("The AI service did not complete an answer. No changes were made.")
+    parts = []
+    messages = 0
+    for item in out["output"]:
+        if not isinstance(item, dict):
+            raise AskError("The AI service sent an answer in an unexpected shape.")
+        if item.get("type") == "reasoning":
+            continue
+        messages += 1
+        if (
+            messages > 1
+            or item.get("type") != "message"
+            or item.get("role") != "assistant"
+            or item.get("status") != "completed"
+            or not isinstance(item.get("content"), list)
+        ):
+            raise AskError("The AI service sent an answer in an unexpected shape.")
+        for content in item["content"]:
+            if (
+                not isinstance(content, dict)
+                or content.get("type") != "output_text"
+                or not isinstance(content.get("text"), str)
+            ):
+                raise AskError("The AI service did not return a usable text answer.")
+            parts.append(content["text"])
+    text = "\n".join(parts).strip()
+    if not text:
+        raise AskError("The AI service did not return a usable text answer.")
+    return text
+
+
 def chat(
     system: str,
     user: str,
@@ -188,7 +275,9 @@ def chat(
     temperature: float = 0.2,
     timeout_s: float = 60,
 ) -> str:
-    """One chat completion from the configured OpenAI-compatible endpoint."""
+    """Exact OpenAI uses Responses; other endpoints retain their wire contract."""
+    if base_url.rstrip("/") == OPENAI_BASE_URL:
+        return _openai_response(system, user, api_key=api_key, model=model, max_tokens=max_tokens, timeout_s=timeout_s)
     body = {
         "model": model,
         "temperature": temperature,

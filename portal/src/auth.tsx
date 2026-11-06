@@ -26,8 +26,8 @@ export const useAuth = () => useContext(AuthContext);
  * The session is an HttpOnly cookie; who is signed in comes from /auth/me. */
 export function AuthGate({
   children,
-  product = "Connect",
-  intro = "Your sites, paths and routing decisions in one place.",
+  product = "Hub",
+  intro = "Use your work email to continue.",
 }: {
   children: ReactNode;
   /** The app named beside the logo on the sign-in card. */
@@ -38,6 +38,7 @@ export function AuthGate({
   const [checking, setChecking] = useState(true);
   // The session couldn't be checked because there is no network: say so instead of asking to sign in.
   const [offline, setOffline] = useState(false);
+  const [sessionError, setSessionError] = useState<string | null>(null);
   const offlineRef = useRef(offline);
   offlineRef.current = offline;
 
@@ -49,11 +50,13 @@ export function AuthGate({
           if (cancelled) return;
           setUser(u);
           setOffline(false);
+          setSessionError(null);
         })
         .catch((e) => {
           if (cancelled) return;
           setUser(null);
           setOffline(!(e instanceof ApiError));
+          setSessionError(e instanceof ApiError && e.status !== 401 ? "We couldn't check your session. Try again." : null);
         })
         .finally(() => !cancelled && setChecking(false));
     };
@@ -107,6 +110,8 @@ export function AuthGate({
       <p className="signin-checking" role="status">
         Checking your session…
       </p>
+    ) : sessionError ? (
+      <p className="signin-checking" role="status">{sessionError}{" "}<button className="link" onClick={() => window.dispatchEvent(new Event("exa-auth"))}>Try again</button></p>
     ) : offline ? (
       <p className="signin-checking" role="status">
         You're offline. {product} will carry on when you're back online.{" "}
@@ -118,23 +123,23 @@ export function AuthGate({
       <SignIn intro={product === "Connect" ? "Use your work email to continue." : intro} />
     );
 
-    if (product === "Connect")
+    if (product === "Connect" || product === "Hub")
       return (
         <main className="signin-page signin-page-connect" id="main">
-          <aside className="connect-signin-story" aria-label="XaKore Connect">
+          <aside className="connect-signin-story" aria-label="XaKore Hub">
             <a className="connect-signin-wordmark" href="https://xakore.com/" aria-label="XaKore home">
               <img src="/brand/xakore-wordmark-red-reversed.svg" alt="XaKore" width={188} height={50} />
             </a>
             <div className="connect-signin-proposition">
-              <span className="connect-signin-label">XaKore Connect</span>
-              <h2>Your network.<br /><span>In view.</span></h2>
-              <p>Review site performance, set traffic priorities and see the reasons behind routing decisions.</p>
+              <span className="connect-signin-label">XaKore Hub</span>
+              <h2>Your business.<br /><span>Connected.</span></h2>
+              <p>Open Connect, Jibsy and your organisation's settings from one workspace.</p>
             </div>
             <a className="connect-signin-public-link" href="https://xakore.com/">Visit XaKore</a>
           </aside>
           <div className="connect-signin-panel">
             <div className="connect-signin-form">
-              <span className="connect-signin-label">Your Connect account</span>
+              <span className="connect-signin-label">Sign in to XaKore Hub</span>
               {entry}
             </div>
             <a className="connect-signin-help" href="https://xakore.com/contact/">Contact XaKore</a>

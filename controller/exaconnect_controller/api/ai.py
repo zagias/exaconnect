@@ -4,7 +4,8 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import replace
+import re
+from dataclasses import dataclass, field, replace
 from typing import Literal
 from uuid import UUID
 
@@ -14,6 +15,7 @@ from pydantic import BaseModel, Field
 from .. import audit, db
 from ..ai import act, guidance, hazards, hub, runner, storms
 from ..ai import ask as ask_mod
+from ..ai.brief import PlanningBrief
 from .deps import VIEWER_ONLY, AdminDep, UserDep, can_manage_org, check_customer, check_product, require_org_manager
 
 router = APIRouter(tags=["ai"])
@@ -73,6 +75,50 @@ def _network_access(user) -> tuple[bool, bool]:
     return read, write
 
 
+@dataclass(frozen=True)
+class _AssistantLLM:
+    api_key: str = field(repr=False)
+    base_url: str
+    model: str
+    provider: str | None
+    unavailable_reason: str | None
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self.api_key) and self.unavailable_reason is None
+
+
+def _assistant_llm(settings) -> _AssistantLLM:
+    """Resolve a whole Hub connection, never borrow global credentials for an override."""
+    values = tuple(getattr(settings, "assistant_llm_" + name, "") or "" for name in ("api_key", "base_url", "model"))
+    if any(values):
+        if not all(isinstance(value, str) and value for value in values):
+            return _AssistantLLM("", "", "", None, "The assistant's AI connection is incomplete.")
+        key, base, model = values
+        if (
+            base.rstrip("/") != ask_mod.OPENAI_BASE_URL
+            or model != ask_mod.OPENAI_ASSISTANT_MODEL
+            or any(char.isspace() for char in key)
+        ):
+            return _AssistantLLM("", "", "", None, "The assistant's AI connection is not supported.")
+        return _AssistantLLM(key, ask_mod.OPENAI_BASE_URL, model, "openai", None)
+    key, base, model = settings.llm_api_key, settings.llm_base_url, settings.llm_model
+    provider = (
+        "openai"
+        if base.rstrip("/") == ask_mod.OPENAI_BASE_URL
+        else "deepinfra"
+        if base.rstrip("/") == "https://api.deepinfra.com/v1/openai"
+        else "compatible"
+    )
+    return _AssistantLLM(
+        key,
+        base,
+        model,
+        provider if key else None,
+        None if key else "The assistant is not connected to an AI service yet.",
+    )
+
+
 def _hub_context(conn, customer_id, user, settings) -> dict:
     from ..commai import access
 
@@ -91,10 +137,12 @@ def _hub_context(conn, customer_id, user, settings) -> dict:
     out = hub.context(
         conn, customer_id, user, connect_read=read, connect_write=write, jibsy_diagnostics=can_check_jibsy
     )
+    connection = _assistant_llm(settings)
     out.update(
-        ask_enabled=bool(settings.llm_api_key),
-        ask_unavailable_reason=None if settings.llm_api_key else "The assistant is not connected to an AI service yet.",
-        model=settings.llm_model if settings.llm_api_key else None,
+        ask_enabled=connection.enabled,
+        ask_unavailable_reason=connection.unavailable_reason,
+        model=connection.model if connection.enabled else None,
+        provider=connection.provider,
     )
     return ask_mod._jsonable(out)
 
@@ -112,16 +160,18 @@ def assistant_context(request: Request, user: UserDep, customer_id: str | None =
 @router.get("/ai/status")
 def status(request: Request, user: UserDep) -> dict:
     s = request.app.state.settings
+    connection = _assistant_llm(s)
     may_ask = user.role != "carrier" and (user.scopes is None or "connect" in user.scopes)
     unavailable = None
     if not may_ask:
         unavailable = "Asking the network assistant is not available with this account's access."
-    elif not s.llm_api_key:
-        unavailable = "The network assistant is not connected to an AI service yet."
+    elif not connection.enabled:
+        unavailable = connection.unavailable_reason
     return {
-        "ask_enabled": bool(s.llm_api_key) and may_ask,
+        "ask_enabled": connection.enabled and may_ask,
         "ask_unavailable_reason": unavailable,
-        "model": s.llm_model if s.llm_api_key else None,
+        "model": connection.model if connection.enabled else None,
+        "provider": connection.provider,
         "storm_watch": bool(s.nhc_url),
         "hazard_watch": runner.hazard_watch_on(s),
     }
@@ -217,6 +267,7 @@ class AskIn(BaseModel):
     # The last few turns, so "yes, do that" follows on from the answer before it.
     history: list[Turn] = Field(default_factory=list, max_length=act.MAX_HISTORY)
     scope: Literal["account", "connect"] = "account"
+    brief: PlanningBrief | None = None
 
 
 @router.post("/ai/ask")
@@ -235,8 +286,9 @@ async def _answer(body: AskIn, user, request: Request, *, shared_mode: bool) -> 
     s = request.app.state.settings
     if user.role == "carrier":
         raise HTTPException(403, "Not available for this account.")
-    if not s.llm_api_key:
-        raise HTTPException(503, "Ask your network is switched off: no AI service key is configured.")
+    if body.brief is not None and not shared_mode:
+        raise HTTPException(400, "Open XaKore assistant to review a website brief.")
+    site_request = guidance.site_intent(body.question) if shared_mode else None
     customer_id = _customer(user, body.customer_id)
     network_read, network_write = _network_access(user)
     include_network = not shared_mode or body.scope == "connect"
@@ -246,13 +298,64 @@ async def _answer(body: AskIn, user, request: Request, *, shared_mode: bool) -> 
     # sending a question/history to an external model service.
     from ..commai.automation.assistant import NO_SECRETS, SECRET_HINT
 
-    if any(SECRET_HINT.search(text) for text in [body.question, *[t.q + "\n" + t.a for t in body.history]]):
+    brief_texts = body.brief.texts() if body.brief else []
+    brief_sensitive = any(
+        re.search(r"(?i)\b(?:\d[ -]?){13,19}\b|\bprivate[_ -]?key\s*(?:is\b|[:=])\s*\S+", text) for text in brief_texts
+    )
+    supplied_text = [body.question, *[t.q + "\n" + t.a for t in body.history], *brief_texts]
+    if brief_sensitive or any(SECRET_HINT.search(text) for text in supplied_text):
         return {
             "answer": NO_SECRETS,
             "plan": None,
             "model": "rules",
             "based_on": {"decisions": 0, "events": 0, "insights": 0, "sites": 0, "sources": []},
         }
+
+    if site_request is not None:
+        if not network_read:
+            raise HTTPException(403, "Network data is not available with this account's product access and scope.")
+
+        def read_site_context():
+            with db.tx() as conn:
+                conn.execute("SET TRANSACTION READ ONLY")
+                org = conn.execute("SELECT name, example FROM customers WHERE id = %s", (customer_id,)).fetchone()
+                if org is None:
+                    raise HTTPException(404, "Customer not found.")
+                context = ask_mod.build_context(conn, customer_id) if site_request == "status" else {}
+                context["account"] = {"example": bool(org.get("example")), "organisation": org.get("name")}
+                return context
+
+        site_context = await asyncio.to_thread(read_site_context)
+        answer = (
+            "\n\n".join(
+                guidance.example_note(site_context)
+                + [
+                    "Do you mean getting disconnected sites reporting again, "
+                    "or recovering deleted site records or configuration?",
+                    "Nothing has been changed or restored.",
+                ]
+            )
+            if site_request == "restore"
+            else guidance.site_status_answer(site_context)
+        )
+        return {
+            "answer": answer,
+            "plan": None,
+            "model": "rules",
+            "answer_scope": "connect" if site_request == "status" else body.scope,
+            "based_on": {
+                "decisions": 0,
+                "events": 0,
+                "insights": 0,
+                "sites": len(site_context.get("sites", [])),
+                "sources": ["network_snapshot" if site_request == "status" else "organisation_access"],
+                "grounding": "verified_read_only_status",
+            },
+        }
+
+    connection = _assistant_llm(s)
+    if not connection.enabled:
+        raise HTTPException(503, connection.unavailable_reason)
 
     def prepare():
         with db.tx() as conn:
@@ -278,6 +381,10 @@ async def _answer(body: AskIn, user, request: Request, *, shared_mode: bool) -> 
             return context, act.config(conn, customer_id) if include_network else {}
 
     context, config = await asyncio.to_thread(prepare)
+    if body.brief is not None:
+        # Keep the current tenant's evidence authoritative. Imported requirements
+        # do not add products, prices, permissions, site IDs or execution rights.
+        context["visitor_requirements"] = body.brief.context()
     config["assistant_permissions"] = {
         "can_apply_changes": network_write and include_network,
         "can_change_shadow_mode": can_manage_org(user) and network_write and include_network,
@@ -287,9 +394,9 @@ async def _answer(body: AskIn, user, request: Request, *, shared_mode: bool) -> 
             ask_mod.chat,
             hub.SYSTEM + "\n" + act.ACTION_SYSTEM if shared_mode else act.SYSTEM,
             act.prompt(body.question, {**context, "configuration": config}, [t.model_dump() for t in body.history]),
-            api_key=s.llm_api_key,
-            base_url=s.llm_base_url,
-            model=s.llm_model,
+            api_key=connection.api_key,
+            base_url=connection.base_url,
+            model=connection.model,
             max_tokens=1400,
             temperature=0.1,
         )
@@ -300,8 +407,13 @@ async def _answer(body: AskIn, user, request: Request, *, shared_mode: bool) -> 
     if shared_mode and (not include_network or not network_write):
         actions = []
     grounding = None
+    selection = None
     if shared_mode:
         answer, actions, grounding = guidance.render(text, answer, actions, context, body.scope)
+        if grounding == "verified_advisory_selection":
+            details = guidance.selection_metadata(text)
+            if details["normalised"]:
+                selection = details
 
     def propose():
         with db.tx() as conn:
@@ -317,7 +429,8 @@ async def _answer(body: AskIn, user, request: Request, *, shared_mode: bool) -> 
     return {
         "answer": answer,
         "plan": plan,
-        "model": s.llm_model,
+        "model": connection.model,
+        "provider": connection.provider,
         "based_on": {
             "decisions": len(context.get("routing_decisions_last_7_days_newest_first", [])),
             "events": len(context.get("events_last_24h_newest_first", [])),
@@ -325,6 +438,7 @@ async def _answer(body: AskIn, user, request: Request, *, shared_mode: bool) -> 
             "sites": len(context.get("sites", [])),
             "sources": context.get("sources", ["tenant_network_snapshot"]),
             **({"grounding": grounding} if grounding else {}),
+            **({"advice_selection": selection} if selection else {}),
         },
     }
 

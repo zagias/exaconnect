@@ -19,7 +19,7 @@ from typing import Any
 
 from psycopg.types.json import Jsonb
 
-from .. import inbox, jobs
+from .. import entitlements, inbox, jobs
 from ..ai import voice as ai_voice
 from . import livekit, pbx_runtime
 from . import provider as providers
@@ -50,7 +50,8 @@ def pbx_receipt(conn, body: dict, authorization: str | None) -> dict:
     ).fetchone()
     if claimed is None:
         raise VoiceError("The PBX runtime receipt has already been used.", 409)
-    # CVE/GHSA-xjxm-9qx6-w3fj: REFER variable injection is fixed in 1.11.2.
+    # REFER injection requires 1.11.2; SIP MESSAGE API injection also requires
+    # 1.11.3 (GHSA-xjxm-9qx6-w3fj, GHSA-mg63-h38w-8p9p).
     # Unknown versions fail closed; the running binary's version is checked
     # here independently of the probe's transfer-enabled observation.
     _, secure = pbx_runtime.version(body["version"])
@@ -68,10 +69,10 @@ def pbx_receipt(conn, body: dict, authorization: str | None) -> dict:
 
 def require_pbx(conn) -> None:
     row = conn.execute(
-        """SELECT 1 FROM voice_ai_phone_pbx_runtime WHERE instance_id = 'main'
+        """SELECT version FROM voice_ai_phone_pbx_runtime WHERE instance_id = 'main'
            AND version_secure AND transfer_enabled AND expires_at > now()"""
     ).fetchone()
-    if row is None:
+    if row is None or not pbx_runtime.version(row["version"])[1]:
         raise VoiceError("A fresh patched PBX transfer runtime check is required.", 503)
 
 
@@ -147,6 +148,11 @@ def start(conn, body: dict) -> dict:
     # the worker cannot select a tenant by posting an arbitrary telephone number.
     num = livekit.business_for(conn, attrs.get("sip.trunkPhoneNumber", ""))
     cid = num["customer_id"]
+    # The acceptance path intentionally precedes the operational lease, but it
+    # must never bypass an explicit business-module revocation. Missing rows
+    # retain the existing legacy/default entitlement behaviour.
+    if not all(entitlements.enabled(conn, cid, module) for module in ("voice", "ai_agents")):
+        raise VoiceError("This business does not have the telephone AI modules enabled.", 403)
     tenant = domain(cid).split(".")[0]
     if (
         attrs.get("exa.customer_id") != str(cid)

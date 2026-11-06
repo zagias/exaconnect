@@ -27,6 +27,7 @@ from .test_commai_channels import Visitor, _widget_key
 def test_phone_credentials_do_not_enable_an_unfinished_worker(monkeypatch):
     for name in livekit.SETTINGS:
         monkeypatch.setenv(name, "configured-for-test")
+    monkeypatch.setenv("EXA_LIVEKIT_URL", "ws://livekit:7880")
     status = livekit.status()
     assert status["configured"] is True
     assert status["phone_ready"] is False

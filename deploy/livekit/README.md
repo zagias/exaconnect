@@ -9,9 +9,12 @@ fallbacks in place until the operational acceptance below passes.
 The voice compose profile is opt-in. Starting services or supplying keys does
 not enable telephone AI. Readiness requires all of:
 
-- A trusted, fresh PBX runtime receipt showing FreeSWITCH >= 1.11.2 and actual
+- A trusted, fresh PBX runtime receipt showing FreeSWITCH >= 1.11.3 and actual
   transfer support enabled. Older and unknown versions fail closed because of
-  GHSA-xjxm-9qx6-w3fj. The receipt expires after five minutes.
+  GHSA-xjxm-9qx6-w3fj (REFER) and GHSA-mg63-h38w-8p9p (MESSAGE).
+  The receipt expires after five minutes. Startup disables both transfers and
+  inbound SIP MESSAGE chat on affected/unknown builds; this is mitigation,
+  not a substitute for the patched binary or telephone acceptance.
 - A measured TTS-to-STT random phrase loopback from the configured speech
   adapters, refreshed within 75 seconds.
 - A random phrase played through the real LiveKit room and repeated by the
@@ -27,6 +30,12 @@ receipt reports `accepted` and `human_answered: false`: SIP peer completion
 alone does not prove that a person, rather than voicemail, answered.
 
 ## Settings
+
+Voice admins can read `/api/v1/commai/customers/{customer_id}/voice/phone/setup`.
+It separates operator setup from business AI settings, owned numbers and call
+rules, and explains expired or lab-only evidence. This read makes no provider
+request, creates no credentials, and never refreshes a readiness lease. Saved
+AI rules continue to use their configured fallback until call admission passes.
 
 Read secrets from environment or a git-ignored `.env`; never commit them.
 

@@ -39,12 +39,14 @@ def gate(monkeypatch):
         speech_fresh=True,
         transfer_fresh=True,
         pbx_fresh=True,
+        pbx_version="1.11.3",
         lab_only=False,
         queries=[],
         transactions=0,
         profile_present=True,
         profile={"ai": {"enabled": True}},
         model_available=True,
+        revoked_module=None,
     )
 
     class Result:
@@ -87,10 +89,13 @@ def gate(monkeypatch):
                 assert "NOT lab_only" in sql and "expires_at > now()" in sql
                 assert "speech_verified_at >" in sql and "transfer_verified_at >" in sql
                 assert "voice_ai_phone_pbx_runtime" in sql
+                assert "e.customer_id = voice_ai_phone_runtime.customer_id" in sql
+                assert "e.module IN ('voice', 'ai_agents') AND NOT e.enabled" in sql
                 assert params == (CUSTOMER, CUSTOMER)  # no global readiness query
                 ready = all((state.lease_fresh, state.speech_fresh, state.transfer_fresh, state.pbx_fresh))
                 ready = ready and not state.lab_only and state.evidence_customer == CUSTOMER
-                return Result([{"ok": 1}] if ready else [])
+                ready = ready and state.revoked_module is None
+                return Result([{"version": state.pbx_version}] if ready else [])
             raise AssertionError("Unexpected SQL in the read-only call gate")
 
     connection = Connection()
@@ -109,6 +114,7 @@ def gate(monkeypatch):
     monkeypatch.setenv(pbx.SECRET_ENV, SECRET)
     for name in livekit.SETTINGS:
         monkeypatch.setenv(name, "configured-but-never-contacted-for-this-test")
+    monkeypatch.setenv("EXA_LIVEKIT_URL", "ws://livekit:7880")
     app = FastAPI()
     app.include_router(voice_pbx.public, prefix="/api/v1/commai")
     with TestClient(app) as client:
@@ -139,6 +145,20 @@ def test_any_expired_readiness_evidence_refuses_the_bridge(gate, expired):
     setattr(gate, expired, False)
     response = _request(gate)
     assert response.status_code == 200 and response.text == "NO"
+
+
+@pytest.mark.parametrize("version", ["1.11.2", "1.10.12", "1.11.3-rc1", "unknown"])
+def test_older_controllers_secure_boolean_cannot_bypass_the_current_binary_floor(gate, version):
+    gate.pbx_version = version
+    # Simulate a fresh receipt whose version_secure field was computed before
+    # the stronger baseline. Current admission must parse the version again.
+    assert _request(gate).text == "NO"
+
+
+@pytest.mark.parametrize("module", ["voice", "ai_agents"])
+def test_module_revocation_blocks_call_admission_despite_fresh_operational_evidence(gate, module):
+    gate.revoked_module = module
+    assert _request(gate).text == "NO"
 
 
 @pytest.mark.parametrize("mismatch", ["owned_number", "evidence", "tenant"])

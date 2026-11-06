@@ -527,6 +527,7 @@ export const TABS: Record<string, [string, string, string?][]> = {
   "/commai/voice": [
     ["/commai/voice", "People and numbers", "phone system extensions sites"],
     ["/commai/voice/routing", "Call routing", "ivr hunt groups opening hours"],
+    ["/commai/voice/ai", "Telephone AI", "setup readiness speech phone handover fallback"],
     ["/commai/voice/changes", "Scheduled, history and bulk"],
     ["/commai/voice/access", "Access", "permissions"],
     ["/commai/voice/orders", "Orders"],

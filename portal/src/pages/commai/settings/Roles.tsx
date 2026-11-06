@@ -44,7 +44,7 @@ export default function Roles({ base }: { base: string }) {
   const act = useAction();
   const [draft, setDraft] = useState<{ id?: string; name: string; description: string; permissions: string[] } | null>(null);
   const [assign, setAssign] = useState({ user_id: "", role_id: "", team_id: "" });
-  if (!r.data) return <ErrorNote error={r.error} />;
+  if (!r.data) return <><ErrorNote error={r.error} />{r.error ? <button className="button secondary" onClick={r.reload}>Try again</button> : <p className="muted">Loading roles…</p>}</>;
   const d = r.data;
   const label = (k: string) => d.permissions.find((p) => p.key === k)?.label ?? k;
 

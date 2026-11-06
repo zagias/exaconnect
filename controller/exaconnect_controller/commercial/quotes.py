@@ -17,6 +17,7 @@ from __future__ import annotations
 import datetime as dt
 import html
 import re
+import uuid
 from decimal import Decimal
 from typing import Any
 
@@ -26,7 +27,7 @@ from psycopg.types.json import Jsonb
 from .. import audit
 from ..billing.core import BillingError, dec, money_text
 from ..metering.core import money
-from . import catalogue, rating
+from . import catalogue, planning, rating
 
 OPEN = ("draft", "pending_approval", "approved", "sent")
 EDITABLE = ("draft", "pending_approval", "approved")
@@ -131,6 +132,7 @@ def price_line(
     raw: dict,
     staff: bool,
     on: dt.date | None = None,
+    planning_origin: bool = False,
 ) -> dict:
     """One quote line priced: list amount, term and manual discounts, the amount,
     and the rating engine's working. Usage lines are priced at the expected
@@ -141,6 +143,8 @@ def price_line(
     item = catalogue.get_item(conn, raw.get("item") or raw.get("code") or raw.get("item_id") or "")
     if not item["active"]:
         raise BillingError(f"{item['name']} is no longer sold.", 409)
+    if planning_origin:
+        planning.explicit_line(raw, item)
     qty = dec(raw.get("quantity") if raw.get("quantity") not in (None, "") else 1)
     if qty <= 0 or qty > 1_000_000:
         raise BillingError(f"{item['name']}: the quantity must be above 0.")
@@ -161,6 +165,8 @@ def price_line(
         price_id = row["id"]
     else:
         price = catalogue.plan_price(conn, customer_id, item, on)
+        if planning_origin and catalogue.plan_for(conn, customer_id, item, on).get("example"):
+            raise BillingError("This plan is example data. XaKore must agree real pricing.", 409)
         if price["currency"] != currency:
             raise BillingError(
                 f"{item['name']} is priced in {price['currency']} on the {price['plan']} price list. "
@@ -168,6 +174,8 @@ def price_line(
                 409,
             )
         price_id = None
+    if planning_origin and (item["example"] or price.get("example")):
+        raise BillingError("Example items and prices cannot be added to a planning quote.", 409)
     rated = rating.rate(price, qty)
     term_pct = rating.term_discount_pct(price, term_months) if item["charge_type"] == "recurring" else Decimal(0)
     amount = rating.discounted(rated["amount"], term_pct, pct)
@@ -215,13 +223,23 @@ def quote_totals(lines: list[dict], term_months: int) -> dict:
 def preview(conn: psycopg.Connection, customer_id: Any, values: dict, staff: bool) -> dict:
     """Price lines without saving anything (the quote builder's live total)."""
     head = _clean_head(values, None)
-    lines = [price_line(conn, customer_id, head["currency"], head["term_months"], x, staff) for x in _raw_lines(values)]
+    source = planning.clean_source(values["planning_source"]) if values.get("planning_source") is not None else None
+    lines = [
+        price_line(
+            conn, customer_id, head["currency"], head["term_months"], x, staff, planning_origin=source is not None
+        )
+        for x in _raw_lines(values)
+    ]
     return {
         **head,
         "lines": lines,
         **quote_totals(lines, head["term_months"]),
         "needs_approval": any(x["needs_approval"] for x in lines),
         "example": any(x["example"] for x in lines),
+        "planning_source": source,
+        "design_review": planning.review_state({**head, "customer_id": customer_id, "planning_source": source}, lines),
+        "pricing_complete": bool(lines),
+        "pricing_status": "priced" if lines else "pending",
     }
 
 
@@ -311,14 +329,44 @@ def _jsonable(v: Any) -> Any:
 
 
 def create(conn: psycopg.Connection, customer_id: Any, values: dict, actor: str, staff: bool) -> dict:
+    source = planning.clean_source(values["planning_source"]) if values.get("planning_source") is not None else None
+    creation_key = values.get("creation_key")
+    request_hash = None
+    if source is not None:
+        try:
+            creation_key = uuid.UUID(str(creation_key))
+        except (ValueError, TypeError, AttributeError) as exc:
+            raise BillingError("A planning draft needs a UUID creation key.") from exc
+        request_hash = planning.request_hash(values, source)
+        conn.execute(
+            "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", (f"planning:{customer_id}:{creation_key}",)
+        )
+        prior = conn.execute(
+            "SELECT id, creation_request_hash FROM quotes WHERE customer_id = %s AND creation_key = %s",
+            (customer_id, creation_key),
+        ).fetchone()
+        if prior:
+            if prior["creation_request_hash"] != request_hash:
+                raise BillingError("This creation key already saved a different draft. Start a new draft.", 409)
+            return get(conn, prior["id"], customer_id)
+    elif creation_key is not None:
+        raise BillingError("A creation key is only used with a planning brief.")
     cust = _customer(conn, customer_id)
     head = _clean_head(values, None)
-    lines = [price_line(conn, customer_id, head["currency"], head["term_months"], x, staff) for x in _raw_lines(values)]
+    lines = [
+        price_line(
+            conn, customer_id, head["currency"], head["term_months"], x, staff, planning_origin=source is not None
+        )
+        for x in _raw_lines(values)
+    ]
     totals = quote_totals(lines, head["term_months"])
+    # Database guard intentionally blocks legacy create/copy after a code-only rollback.
+    conn.execute("SELECT set_config('xakore.quote_write_protocol', 'design_review_v1', true)")
     row = conn.execute(
         """INSERT INTO quotes (number, customer_id, title, currency, term_months, valid_until, notes, one_off_total,
-                               monthly_total, contract_total, needs_approval, example, created_by)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING *""",
+                               monthly_total, contract_total, needs_approval, example, created_by,
+                               planning_source, creation_key, creation_request_hash)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING *""",
         (
             _number(conn, "Q", "quotes"),
             customer_id,
@@ -333,6 +381,9 @@ def create(conn: psycopg.Connection, customer_id: Any, values: dict, actor: str,
             any(x["needs_approval"] for x in lines),
             any(x["example"] for x in lines),
             actor,
+            Jsonb(source) if source is not None else None,
+            creation_key,
+            request_hash,
         ),
     ).fetchone()
     _write_lines(conn, row["id"], lines)
@@ -399,6 +450,9 @@ def get(conn: psycopg.Connection, quote_id: Any, customer_id: Any | None = None)
         "usage_estimate": money(usage),
         "lines": out_lines,
         "order": order,
+        "design_review": planning.review_state(q, out_lines),
+        "pricing_complete": bool(lines),
+        "pricing_status": "priced" if lines else "pending",
     }
 
 
@@ -423,7 +477,26 @@ def list_quotes(
             continue
         if not visible(conn, r, staff):
             continue
-        out.append({**r, "state": s, "state_label": STATUS_LABELS[s]})
+        out.append(
+            {
+                **r,
+                "state": s,
+                "state_label": STATUS_LABELS[s],
+                "pricing_complete": bool(r["line_count"]),
+                "pricing_status": "priced" if r["line_count"] else "pending",
+            }
+        )
+    planning_ids = [r["id"] for r in out if r.get("planning_source") is not None]
+    by_quote = {}
+    if planning_ids:
+        for line in conn.execute(
+            """SELECT l.*, i.fulfilment FROM quote_lines l JOIN catalogue_items i ON i.id = l.item_id
+               WHERE l.quote_id = ANY(%s) ORDER BY l.quote_id, l.position""",
+            (planning_ids,),
+        ).fetchall():
+            by_quote.setdefault(line["quote_id"], []).append(line)
+    for row in out:
+        row["design_review"] = planning.review_state(row, by_quote.get(row["id"], []))
     return out
 
 
@@ -449,14 +522,27 @@ def update(
         raise BillingError("Quote not found.", 404)
     if q["status"] not in EDITABLE:
         raise BillingError(f"This quote is {STATUS_LABELS[q['status']].lower()} and can't be changed. Copy it.", 409)
+    source = q.get("planning_source")
+    if "planning_source" in values:
+        if (values["planning_source"] is None) != (source is None):
+            raise BillingError("The original brief cannot be added or removed here. Create a new planning draft.", 409)
+        if source is not None and planning.clean_source(values["planning_source"]) != source:
+            raise BillingError("The original brief is preserved. Create a new draft from the revised brief.", 409)
     head = _clean_head(values, q)
     raw = _raw_lines(values) if "lines" in values else _stored_raw(conn, q["id"])
-    lines = [price_line(conn, q["customer_id"], head["currency"], head["term_months"], x, staff) for x in raw]
+    lines = [
+        price_line(
+            conn, q["customer_id"], head["currency"], head["term_months"], x, staff, planning_origin=source is not None
+        )
+        for x in raw
+    ]
     totals = quote_totals(lines, head["term_months"])
     conn.execute(
         """UPDATE quotes SET title = %s, currency = %s, term_months = %s, valid_until = %s, notes = %s,
              one_off_total = %s, monthly_total = %s, contract_total = %s, needs_approval = %s, example = %s,
              status = 'draft', approved_by = NULL, approved_at = NULL, approval_note = NULL, updated_at = now()
+             , design_review_digest = NULL, design_reviewed_by = NULL, design_reviewed_at = NULL,
+             design_review_note = NULL
            WHERE id = %s""",
         (
             head["title"],
@@ -508,6 +594,11 @@ def copy(conn: psycopg.Connection, quote_id: Any, actor: str, staff: bool, custo
             "term_months": q["term_months"],
             "notes": q["notes"],
             "lines": raw,
+            **(
+                {"planning_source": q["planning_source"], "creation_key": uuid.uuid4()}
+                if q.get("planning_source") is not None
+                else {}
+            ),
         },
         actor,
         staff,
@@ -560,6 +651,7 @@ def send(conn: psycopg.Connection, quote_id: Any, actor: str, staff: bool, custo
     if not staff and not _customer_made(conn, q):
         raise BillingError("Quote not found.", 404)
     _open_check(q, "draft", "approved")
+    planning.require_review(get(conn, q["id"]))
     if q["status"] == "draft" and q["needs_approval"]:
         raise BillingError("Some discounts are above what the items allow. Ask for approval first.", 409)
     if not conn.execute("SELECT 1 FROM quote_lines WHERE quote_id = %s", (q["id"],)).fetchone():
@@ -579,6 +671,7 @@ def accept(conn: psycopg.Connection, quote_id: Any, name: str, actor: str, custo
 
     q = _row(conn, quote_id, customer_id, lock=True)
     _open_check(q, "sent")
+    planning.require_review(get(conn, q["id"]))
     name = _text(name, 120)
     if len(name) < 2:
         raise BillingError("Type your full name to accept the quote.")
@@ -590,6 +683,28 @@ def accept(conn: psycopg.Connection, quote_id: Any, name: str, actor: str, custo
     audit.record(conn, actor, "quote.accept", q["number"], q["customer_id"], {"name": name})
     order = orders.create_from_quote(conn, q["id"], actor)
     return {"quote": get(conn, q["id"]), "order": order}
+
+
+def design_review(conn, quote_id: Any, digest: str, note: str, actor: str) -> dict:
+    """Staff attests the commercial/technical scope only; never sends or orders."""
+    q = _row(conn, quote_id, lock=True)
+    _open_check(q, *EDITABLE)
+    if q.get("planning_source") is None:
+        raise BillingError("This quote has no planning brief to review.", 409)
+    current = get(conn, q["id"])
+    if digest != current["design_review"]["current_digest"]:
+        raise BillingError("This scope or price changed. Reload and review the current draft.", 409)
+    planning.reviewable(current)
+    note = str(note).strip()
+    if not 10 <= len(note) <= 1000:
+        raise BillingError("Record a review note between 10 and 1,000 characters.")
+    conn.execute(
+        """UPDATE quotes SET design_review_digest = %s, design_reviewed_by = %s, design_reviewed_at = now(),
+             design_review_note = %s, updated_at = now() WHERE id = %s""",
+        (digest, actor, note, q["id"]),
+    )
+    audit.record(conn, actor, "quote.design_review", q["number"], q["customer_id"], {"digest": digest, "note": note})
+    return get(conn, q["id"])
 
 
 def decline(conn: psycopg.Connection, quote_id: Any, reason: str, actor: str, customer_id: Any = None) -> dict:
@@ -636,6 +751,23 @@ def document_html(q: dict) -> str:
     cur = q["currency"]
     rows = []
     for x in q["lines"]:
+        scope_html = ""
+        if q.get("planning_source") is not None:
+            labels = {
+                "locations": "New site names",
+                "location": "Location",
+                "carrier": "Carrier",
+                "underlay_type": "Link type",
+                "note": "Fulfilment note",
+            }
+            config_rows = []
+            for key, value in (x.get("config") or {}).items():
+                text = ", ".join(map(str, value)) if isinstance(value, list) else str(value)
+                config_rows.append(f"<div>{e(labels.get(key, key))}: {e(text)}</div>")
+            scope_html = (
+                f"<b>{e(x['name'])}</b><div>Catalogue item: {e(x['code'])}</div>"
+                f"<div>Quantity: {e(units(dec(x['quantity']), x['unit']))}</div>" + "".join(config_rows)
+            )
         disc = []
         if dec(x["term_discount_pct"]) > 0:
             disc.append(f"{rating._text(dec(x['term_discount_pct']))}% term")
@@ -643,7 +775,7 @@ def document_html(q: dict) -> str:
             disc.append(f"{rating._text(dec(x['discount_pct']))}%")
         when = {"recurring": "Monthly", "one_off": "Once", "usage": "By use (estimate)"}[x["charge_type"]]
         rows.append(
-            f"<tr><td>{e(x['description'])}<div class=m>{e(x['price_text'])}</div></td><td>{when}</td>"
+            f"<tr><td>{scope_html}{e(x['description'])}<div class=m>{e(x['price_text'])}</div></td><td>{when}</td>"
             f"<td class=n>{money_text(x['list_amount'])}</td><td class=n>{e(', '.join(disc) or '-')}</td>"
             f"<td class=n>{money_text(x['amount'])}</td></tr>"
         )
@@ -652,6 +784,25 @@ def document_html(q: dict) -> str:
         f"<p>Accepted by {e(q['accepted_name'])} on {q['accepted_at']:%d %B %Y}.</p>" if q.get("accepted_at") else ""
     )
     usage = f", about {e(cur)} {money_text(q['usage_estimate'])} a month" if dec(q["usage_estimate"]) > 0 else ""
+    source = q.get("planning_source")
+    planning_notes = ""
+    if source is not None:
+        review = q.get("design_review", {}).get("status", "pending")
+        facts = "".join(f"<li><b>{e(x['label'])}:</b> {e(x['value'])}</li>" for x in source["facts"])
+        gaps = "".join(f"<li>{e(x)}</li>" for x in source["gaps"])
+        planning_notes = (
+            f"<h2>Planning scope</h2><p>Visitor requirements; not verified account facts. "
+            f"Design review: {e(review)}.</p><ul>{facts}</ul>"
+            + (f"<h3>Open questions</h3><ul>{gaps}</ul>" if gaps else "")
+        )
+    totals_html = (
+        "<p><b>Pricing pending — no price agreed.</b> This scope draft is awaiting priced items and XaKore review.</p>"
+        if source is not None and not q["lines"]
+        else f"<p>One-off: <b>{e(cur)} {money_text(q['one_off_total'])}</b>. "
+        f"Monthly: <b>{e(cur)} {money_text(q['monthly_total'])}</b>. "
+        f"Contract value over {q['term_months']} months: <b>{e(cur)} {money_text(q['contract_total'])}</b> "
+        f"(usage is billed as used{usage}). Tax is added on each invoice.</p>"
+    )
     return f"""<!doctype html><html lang=en><head><meta charset=utf-8><title>Quote {e(q["number"])}</title>
 <style>{DOC_CSS}</style></head><body>
 <div class=eyebrow>ExaCarib quote</div><h1>{e(q["number"])}{(": " + e(q["title"])) if q["title"] else ""}</h1>
@@ -659,8 +810,5 @@ def document_html(q: dict) -> str:
 Status: {e(q["state_label"])}.</p>
 <table><thead><tr><th>Item</th><th>Charged</th><th class=n>List ({e(cur)})</th><th class=n>Discount</th>
 <th class=n>Price ({e(cur)})</th></tr></thead><tbody>{"".join(rows)}</tbody></table>
-<p>One-off: <b>{e(cur)} {money_text(q["one_off_total"])}</b>. Monthly: <b>{e(cur)} {money_text(q["monthly_total"])}</b>.
-Contract value over {q["term_months"]} months: <b>{e(cur)} {money_text(q["contract_total"])}</b>
-(usage is billed as used{usage}).
-Tax is added on each invoice.</p>
+{totals_html}{planning_notes}
 {("<p>" + e(q["notes"]) + "</p>") if q["notes"] else ""}{accepted}</body></html>"""

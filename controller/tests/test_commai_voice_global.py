@@ -603,7 +603,7 @@ def test_livekit_controller_contract_requires_measured_speech_and_real_scoped_tr
     monkeypatch.setenv("EXA_PBX_SECRET", "pbx-runtime-secret")
     receipt = {
         "instance_id": "main",
-        "version": "1.11.2-release",
+        "version": "1.11.3-release",
         "transfer_enabled": True,
         "checked_at": dt.datetime.now(dt.UTC).isoformat(),
         "nonce": str(uuid4()),

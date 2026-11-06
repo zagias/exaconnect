@@ -69,10 +69,11 @@ export interface Plan {
 export interface AssistantAnswer {
   answer: string;
   plan: Plan | null;
+  answer_scope?: "account" | "connect";
   model?: string | null;
   based_on?: {
     sites?: number; decisions?: number; events?: number; insights?: number; sources?: string[];
-    grounding?: "reviewed_typed_proposal" | "verified_advisory_selection" | "unverified_advice_replaced_with_grounded_facts";
+    grounding?: "reviewed_typed_proposal" | "verified_advisory_selection" | "unverified_advice_replaced_with_grounded_facts" | "verified_read_only_status";
   };
 }
 

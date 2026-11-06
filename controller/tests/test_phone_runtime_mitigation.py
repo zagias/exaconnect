@@ -23,7 +23,7 @@ STATUS = (
 )
 
 
-def profiles(param='<param name="disable-transfer" value="true"/>'):
+def profiles(param='<param name="disable-transfer" value="true"/><param name="enable-chat" value="false"/>'):
     return {
         f"/etc/freeswitch/sip_profiles/{name}.xml": f'<profile name="{name}"><settings>{param}</settings></profile>'
         for name in ("internal", "external")
@@ -40,8 +40,8 @@ def test_unpatched_running_binary_has_direct_disabled_profile_proof():
     assert result["running_version"] == "1.10.12-release+git~20240802T210227Z~a88d069d6f"
     assert not result["version_secure"] and not result["guard_transfer_enabled"]
     assert result["loaded_profiles"] == [
-        {"name": "external", "disable_transfer": True},
-        {"name": "internal", "disable_transfer": True},
+        {"name": "external", "disable_transfer": True, "disable_chat": True},
+        {"name": "internal", "disable_transfer": True, "disable_chat": True},
     ]
 
 
@@ -64,6 +64,42 @@ def test_unknown_binary_stays_unsafe_and_must_disable_transfers():
     assert result["running_version"] == "unknown" and not result["version_secure"]
     with pytest.raises(check.CheckError, match="reports SIP transfers enabled"):
         check.validate("unrecognised version", "unknown\ntrue\n", STATUS, profiles())
+
+
+@pytest.mark.parametrize(
+    "chat",
+    [
+        "",
+        '<param name="enable-chat" value="true"/>',
+        '<!-- <param name="enable-chat" value="false"/> -->',
+        '<param name="enable-chat" value="false"/><param name="enable-chat" value="true"/>',
+    ],
+)
+def test_refer_mitigation_alone_cannot_claim_message_protection(chat):
+    with pytest.raises(check.CheckError, match="inbound SIP chat"):
+        check.validate(
+            "1.11.2", "1.11.2\nfalse\n", STATUS, profiles('<param name="disable-transfer" value="true"/>' + chat)
+        )
+
+
+def test_patched_binary_does_not_allow_unsafe_chat_api_opt_in():
+    with pytest.raises(check.CheckError, match="chat API"):
+        check.validate(
+            "1.11.3", "1.11.3\ntrue\n", STATUS, profiles('<param name="enable-chat-api-proto" value="true"/>')
+        )
+
+
+@pytest.mark.parametrize("version", ["1.11.2", "unknown", "1.11.3-rc1"])
+def test_existing_pbx_receipts_cannot_keep_an_outdated_secure_flag(version):
+    class Connection:
+        def execute(self, *_):
+            return self
+
+        def fetchone(self):
+            return {"version": version}
+
+    with pytest.raises(phone_worker.VoiceError, match="patched PBX"):
+        phone_worker.require_pbx(Connection())
 
 
 def test_guard_receipt_belongs_to_running_binary_and_all_loaded_profiles_are_present():

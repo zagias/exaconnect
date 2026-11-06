@@ -64,6 +64,28 @@ def claims(header):
     return json.loads(base64.urlsafe_b64decode(body + "=="))
 
 
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://user:private@livekit",
+        "http://[invalid",
+        "http://livekit:70000",
+        "file:///private",
+        "http://livekit?private=query",
+        "http://livekit/unsupported-prefix",
+        "http://livekit\n",
+    ],
+)
+def test_invalid_media_server_root_refuses_before_transport(monkeypatch, url):
+    for name in livekit.SETTINGS:
+        monkeypatch.setenv(name, "fixture")
+    monkeypatch.setenv("EXA_LIVEKIT_URL", url)
+    assert not livekit.valid_url() and not livekit.phone_ready()
+    with pytest.raises(VoiceError, match="URL is invalid") as error:
+        livekit.sip_participant("room", "person", "call")
+    assert error.value.code == 503 and "private" not in str(error.value)
+
+
 def test_transfer_checks_actual_sip_call_and_uses_scoped_room_and_sip_grants(control):
     requests, _ = control
     assert livekit.transfer("real-room", "sip-person", "actual-call", "sip:internal-only@pbx") == {

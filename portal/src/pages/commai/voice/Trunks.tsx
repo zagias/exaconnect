@@ -16,6 +16,8 @@ export interface Trunk {
   host: string;
   port: number;
   transport: string;
+  srtp_required?: boolean;
+  secure_ingress_ready?: boolean;
   prefix: string;
   max_channels: number;
   allow_ips: string[];
@@ -76,7 +78,7 @@ function health(t: Trunk) {
   return <span className={`pill small ${HEALTH[t.health] ?? "off"}`}>{t.health === "unknown" ? "Not checked yet" : t.health === "up" ? "Up" : t.health === "down" ? "Down" : "Degraded"}</span>;
 }
 
-const BLANK = { name: "", adapter: "sip", host: "", port: "5060", transport: "udp", prefix: "", allow_ips: "" };
+const BLANK = { name: "", adapter: "sip", host: "", port: "5060", transport: "udp", srtp_required: false, prefix: "", allow_ips: "" };
 
 export default function Trunks({ base, v }: { base: string; v: VoiceOverview }) {
   const view = useApi<TrunksView>(`${base}/voice/trunks`, 30_000);
@@ -97,6 +99,7 @@ export default function Trunks({ base, v }: { base: string; v: VoiceOverview }) 
         host: form.host,
         port: Number(form.port) || undefined,
         transport: form.transport,
+        srtp_required: form.srtp_required,
         prefix: form.prefix,
         allow_ips: form.allow_ips.split(/[\s,]+/).filter(Boolean),
       };
@@ -108,7 +111,7 @@ export default function Trunks({ base, v }: { base: string; v: VoiceOverview }) 
     });
   };
   const edit = (t: Trunk) => {
-    setForm({ id: t.id, name: t.name, adapter: t.adapter, host: t.adapter === "sip" ? t.host : "", port: String(t.port), transport: t.transport, prefix: t.prefix, allow_ips: t.allow_ips.join(", ") });
+    setForm({ id: t.id, name: t.name, adapter: t.adapter, host: t.adapter === "sip" ? t.host : "", port: String(t.port), transport: t.transport, srtp_required: t.srtp_required ?? false, prefix: t.prefix, allow_ips: t.allow_ips.join(", ") });
     setOpen(true);
   };
   const patch = (t: Trunk, body: Record<string, unknown>) =>
@@ -140,6 +143,7 @@ export default function Trunks({ base, v }: { base: string; v: VoiceOverview }) 
         note={<span className="muted small">Bring your own carrier: calls from each location try its primary trunk, then its secondary, then your default, then XaKore's carriers.</span>}
       >
         <ErrorNote error={act.error} />
+        <p className="small muted">The operator must activate incoming routing changes before the number is moved.</p>
         {d.trunks.length === 0 ? (
           <p className="muted">No trunks of your own yet. Your calls go out through XaKore's carriers.</p>
         ) : (
@@ -158,6 +162,7 @@ export default function Trunks({ base, v }: { base: string; v: VoiceOverview }) 
                   <td>
                     {t.name} {t.adapter === "simulated" && <span className="tag">Simulated</span>}
                     <div className="muted small mono">{t.adapter === "sip" ? `${t.host}:${t.port} ${t.transport}` : "test trunk, no carrier"}</div>
+                    {t.srtp_required && <p className="small">Encrypted audio required. Protected inbound setup is not verified; keep the current number route until the operator completes acceptance.</p>}
                   </td>
                   <td>{health(t)}</td>
                   <td className="small mono">{t.allow_ips.join(", ") || <span className="muted">Its host only</span>}</td>
@@ -228,6 +233,11 @@ export default function Trunks({ base, v }: { base: string; v: VoiceOverview }) 
                   </select>
                 </label>
                 <label>
+                  <input type="checkbox" checked={form.srtp_required} disabled={form.transport !== "tls" && !form.srtp_required} onChange={(e) => setForm({ ...form, srtp_required: e.target.checked })} />
+                  Require encrypted audio (SRTP)
+                </label>
+                <p className="small muted">Requires TLS. Saving this policy does not verify carrier calls. Protected inbound routing is currently blocked.</p>
+                <label>
                   Carrier signalling addresses
                   <input value={form.allow_ips} placeholder="203.0.113.10, 203.0.113.0/28" onChange={(e) => setForm({ ...form, allow_ips: e.target.value })} />
                 </label>
@@ -237,7 +247,7 @@ export default function Trunks({ base, v }: { base: string; v: VoiceOverview }) 
                 </label>
               </>
             )}
-            <button className="button" disabled={act.busy}>
+            <button className="button" disabled={act.busy || (form.srtp_required && (form.transport !== "tls" || form.adapter !== "sip"))}>
               {form.id ? "Save trunk" : "Add trunk"}
             </button>
             <button type="button" className="button secondary" onClick={() => setOpen(false)}>

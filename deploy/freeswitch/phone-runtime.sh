@@ -1,5 +1,6 @@
 #!/bin/sh
-# GHSA-xjxm-9qx6-w3fj: <=1.11.1 must reject SIP REFER. No override switch.
+# GHSA-xjxm-9qx6-w3fj and GHSA-mg63-h38w-8p9p: require >=1.11.3.
+# Older/unknown builds disable SIP REFER and inbound MESSAGE chat. No override.
 # guard needs only BusyBox applets. Signed probes additionally need Python 3,
 # or curl + openssl; their absence leaves telephone AI readiness unavailable.
 # These commands run inside the PBX container, never against a Docker socket.
@@ -83,7 +84,7 @@ parse_version() {
 
 patched() {
   printf '%s\n' "$1" | awk -F '[.+ -]' '
-    { exit !(($1+0 > 1) || ($1+0 == 1 && ($2+0 > 11 || ($2+0 == 11 && $3+0 >= 2)))) }
+    { exit !(($1+0 > 1) || ($1+0 == 1 && ($2+0 > 11 || ($2+0 == 11 && $3+0 >= 3)))) }
   '
 }
 
@@ -108,7 +109,7 @@ runtime_version() (
 )
 
 # This intentionally supports the shipped, line-oriented profile XML. Any
-# ambiguous/multiline transfer parameter or settings element fails closed.
+# ambiguous/multiline security parameter or settings element fails closed.
 # Comments are ignored for validation and preserved in the rewritten file.
 profile_xml() {
   awk -v mode="$1" '
@@ -143,9 +144,24 @@ profile_xml() {
         if (live ~ /value="true"/) disabled=1
         if (mode == "disable") next
       }
+      if (live ~ /enable-chat-api-proto/) {
+        if (!inside || live !~ /^[ \t]*<param[ \t]+name="enable-chat-api-proto"[ \t]+value="(true|false)"[ \t]*\/>[ \t]*$/) bad=1
+        api_proto_seen=1
+        if (live ~ /value="true"/) disabled=1
+        if (mode == "disable") next
+      } else if (live ~ /enable-chat/) {
+        if (!inside || live !~ /^[ \t]*<param[ \t]+name="enable-chat"[ \t]+value="(true|false)"[ \t]*\/>[ \t]*$/) bad=1
+        if (mode == "disable") next
+      }
       if (live ~ /<\/settings/) {
         if (live !~ /^[ \t]*<\/settings>[ \t]*$/ || !inside || ++closed != 1) bad=1
-        if (mode == "disable") print "    <param name=\"disable-transfer\" value=\"true\"/>"
+        if (mode == "disable") {
+          print "    <param name=\"disable-transfer\" value=\"true\"/>"
+          # GHSA-mg63-h38w-8p9p: authentication alone does not prevent API
+          # dispatch through inbound MESSAGE on <=1.11.2. Disable chat itself.
+          print "    <param name=\"enable-chat\" value=\"false\"/>"
+          if (api_proto_seen) print "    <param name=\"enable-chat-api-proto\" value=\"false\"/>"
+        }
         inside=0
       }
       if (mode == "disable") print $0
@@ -189,7 +205,7 @@ guard() {
         tmp=$(mktemp "$profile.phone-runtime.XXXXXX") || return 1
         if ! cp -p "$profile" "$tmp"; then rm -f "$tmp"; return 1; fi
         if ! profile_xml disable "$profile" > "$tmp"; then
-          rm -f "$tmp"; fail "could not safely disable transfers in a SIP profile"; return 1
+          rm -f "$tmp"; fail "could not safely disable transfers and inbound SIP chat in a profile"; return 1
         fi
         # Replacing only after complete validation avoids a partially written XML
         # file. Failure (including a read-only mount) stops the PBX entrypoint.

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, expect, it, vi } from "vitest";
 import { PeopleAndNumbers, Routing } from "../pages/commai/voice/PhoneSystem";
@@ -22,10 +22,21 @@ it("keeps local phone setup available without offering fictional number purchase
   expect(screen.queryByText(/phase 3|Simulated provider/)).toBeNull();
 });
 
-it("does not present unfinished telephone AI as a working call destination", () => {
-  render(<MemoryRouter><Routing v={voice()} propose={vi.fn()} /></MemoryRouter>);
-  expect(screen.getByText(/Telephone AI is not available yet/)).toBeTruthy();
-  expect(screen.queryByRole("button", { name: "Check rule" })).toBeNull();
+it("lets admins prepare reviewed rules while unfinished telephone AI still uses its fallback", () => {
+  const propose = vi.fn();
+  const fetch = vi.spyOn(globalThis, "fetch");
+  render(<MemoryRouter><Routing v={voice()} propose={propose} /></MemoryRouter>);
+  expect(screen.getByText(/Saved rules use their fallback until telephone AI checks pass/)).toBeTruthy();
+  const rules = within(screen.getByRole("heading", { name: "AI agent rules" }).closest("section.card")! as HTMLElement);
+  fireEvent.change(rules.getByLabelText("Name"), { target: { value: "Enquiries" } });
+  fireEvent.change(rules.getByLabelText("When"), { target: { value: "always" } });
+  fireEvent.click(rules.getByRole("button", { name: "Prepare rule" }));
+  expect(propose).toHaveBeenCalledWith([{ op: "save_ai_rule", name: "Enquiries", condition: "always", fallback: "voicemail", enabled: true }], "prepare rule Enquiries");
+  expect(fetch).not.toHaveBeenCalled();
+  expect((rules.getByRole("option", { name: "Ring group" }) as HTMLOptionElement).disabled).toBe(true);
+  expect((rules.getByRole("option", { name: "Queue" }) as HTMLOptionElement).disabled).toBe(true);
+  expect(Array.from(document.querySelectorAll<HTMLOptionElement>('option[value="ai"]')).every((option) => option.disabled)).toBe(true);
+  expect(screen.getByRole("link", { name: "View telephone AI setup and readiness" }).getAttribute("href")).toBe("/commai/voice/ai");
 });
 
 it("gates the number-search screen on provider readiness", () => {

@@ -73,7 +73,7 @@ export default function Security({ base }: { base: string }) {
     sso_logout: boolean;
     thresholds: Record<string, number>;
   } | null>(null);
-  if (!s.data) return <ErrorNote error={s.error} />;
+  if (!s.data) return <><ErrorNote error={s.error} />{s.error ? <button className="button secondary" onClick={s.reload}>Try again</button> : <p className="muted">Loading security settings…</p>}</>;
   const d = s.data;
   const f = draft ?? {
     require_two_step: d.require_two_step,

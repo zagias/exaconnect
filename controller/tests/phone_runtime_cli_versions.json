@@ -1,14 +1,20 @@
 [
   {
     "command": "binary",
+    "stdout": "FreeSWITCH version: 1.11.2-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit (-release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit)\n",
+    "normalised": "1.11.2-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit (-release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit)",
+    "secure": false
+  },
+  {
+    "command": "binary",
     "stdout": "FreeSWITCH version: 1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit (-release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit)\n",
     "normalised": "1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit (-release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit)",
     "secure": false
   },
   {
     "command": "binary",
-    "stdout": "FreeSWITCH version: 1.11.2-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit (-release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit)\n",
-    "normalised": "1.11.2-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit (-release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit)",
+    "stdout": "FreeSWITCH version: 1.11.3-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit (-release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit)\n",
+    "normalised": "1.11.3-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit (-release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit)",
     "secure": true
   },
   {
@@ -19,13 +25,13 @@
   },
   {
     "command": "binary",
-    "stdout": "FreeSWITCH version: 1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit (-release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit)\n1.11.2\n",
+    "stdout": "FreeSWITCH version: 1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit (-release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit)\n1.11.3\n",
     "normalised": "unknown",
     "secure": false
   },
   {
     "command": "binary",
-    "stdout": "FreeSWITCH version: 1.11.2-rc1\n",
+    "stdout": "FreeSWITCH version: 1.11.3-rc1\n",
     "normalised": "unknown",
     "secure": false
   },
@@ -37,8 +43,8 @@
   },
   {
     "command": "fs_cli",
-    "stdout": "FreeSWITCH Version 1.11.2-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit (-release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit)\n\n",
-    "normalised": "1.11.2-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit (-release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit)",
+    "stdout": "FreeSWITCH Version 1.11.3-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit (-release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit)\n\n",
+    "normalised": "1.11.3-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit (-release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit)",
     "secure": true
   },
   {
@@ -49,13 +55,13 @@
   },
   {
     "command": "fs_cli",
-    "stdout": "FreeSWITCH Version 1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit (-release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit)\n\n1.11.2\n",
+    "stdout": "FreeSWITCH Version 1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit (-release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit)\n\n1.11.3\n",
     "normalised": "unknown",
     "secure": false
   },
   {
     "command": "fs_cli",
-    "stdout": "FreeSWITCH Version 1.11.2-rc1\n\n",
+    "stdout": "FreeSWITCH Version 1.11.3-rc1\n\n",
     "normalised": "unknown",
     "secure": false
   }

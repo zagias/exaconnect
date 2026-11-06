@@ -11,6 +11,7 @@ from rtp_check import (
     carries_test_tone,
     encode_ulaw,
     isolated_vars,
+    legacy_gate_open,
     media_address,
     wait_for_call,
 )
@@ -37,6 +38,18 @@ class MediaOracleTests(unittest.TestCase):
 
 
 class OriginateFixtureTests(unittest.TestCase):
+    def test_rpc_listening_does_not_imply_the_voice_policy_is_ready(self):
+        reply = "{\n item: {\n  name: gate\n  value: open\n  flags: 2\n  expire: NEVER\n }\n}\n"
+        self.assertTrue(legacy_gate_open(reply))
+        for unsafe in (
+            reply.replace("value: open", "value: closed"),
+            reply.replace("name: gate", "name: unrelated"),
+            reply.replace("value: open", "value: open\n  value: closed"),
+            "500: Key name doesn't exist in htable.",
+            "open",
+        ):
+            self.assertFalse(legacy_gate_open(unsafe))
+
     def test_internal_network_sets_explicit_address_before_production_variables(self):
         source = '<include>\n<X-PRE-PROCESS cmd="set" data="domain=$${local_ip_v4}"/>\n</include>'
         result = isolated_vars(source)

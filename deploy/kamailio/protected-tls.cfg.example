@@ -1,0 +1,22 @@
+# Append bound sections to existing tls.cfg, preserving its public domains.
+# Key/certificate issuance and peer trust installation are operator-owned.
+# Each peer file trusts ONLY that dedicated private peer certificate/anchor.
+[server:@SBC_IP@:5091]
+method = TLSv1.2+
+verify_certificate = yes
+require_certificate = yes
+verify_depth = 1
+ca_list = /etc/kamailio/protected-tls/pbx-peer.pem
+certificate = /etc/kamailio/protected-tls/sbc.crt
+private_key = /etc/kamailio/protected-tls/sbc.key
+
+[client:any]
+server_id = protected-pbx
+server_name = jibsy-pbx.internal
+method = TLSv1.2+
+verify_certificate = yes
+require_certificate = yes
+verify_depth = 1
+ca_list = /etc/kamailio/protected-tls/pbx-peer.pem
+certificate = /etc/kamailio/protected-tls/sbc.crt
+private_key = /etc/kamailio/protected-tls/sbc.key

@@ -88,7 +88,7 @@ def version(value: str) -> tuple[str, bool]:
         elif human not in {prefix + " " + bits for prefix in suffixes}:
             return "unknown", False
     numbers = tuple(int(match[name]) for name in ("major", "minor", "patch"))
-    return normalised, numbers >= (1, 11, 2)
+    return normalised, numbers >= (1, 11, 3)
 
 
 def cli_record(value: str, *, fs_cli: bool) -> str:
@@ -163,7 +163,18 @@ def validate(
             raise CheckError(
                 "An affected or unknown PBX profile does not disable SIP transfers"
             )
-        parsed[name] = disabled
+        chat = settings[0].findall("param[@name='enable-chat']")
+        chat_disabled = len(chat) == 1 and chat[0].get("value") == "false"
+        if not patched and not chat_disabled:
+            raise CheckError(
+                "An affected or unknown PBX profile does not disable inbound SIP chat"
+            )
+        proto = settings[0].findall("param[@name='enable-chat-api-proto']")
+        if patched and (len(proto) > 1 or (proto and proto[0].get("value") != "false")):
+            raise CheckError(
+                "A patched PBX profile unsafely enables or ambiguously configures the SIP chat API"
+            )
+        parsed[name] = {"disable_transfer": disabled, "disable_chat": chat_disabled}
     if not active.issubset(parsed):
         raise CheckError(
             "A loaded Sofia profile is missing from the validated on-disk configuration"
@@ -173,9 +184,7 @@ def validate(
         "guard_version": guarded,
         "version_secure": patched,
         "guard_transfer_enabled": guard_lines[1] == "true",
-        "loaded_profiles": [
-            {"name": name, "disable_transfer": parsed[name]} for name in sorted(active)
-        ],
+        "loaded_profiles": [{"name": name, **parsed[name]} for name in sorted(active)],
     }
 
 

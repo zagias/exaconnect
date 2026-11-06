@@ -35,7 +35,7 @@ from psycopg.types.json import Jsonb
 
 from ... import audit
 from .. import golive, jobs
-from . import billing, signalling
+from . import billing, protected_ingress, signalling, trunk_media
 from . import provider as providers
 from .common import VoiceError, digits, money, month_start, next_month, q2, q4, s
 from .files import write_files
@@ -397,11 +397,27 @@ def route_keys(conn, cid: Any, number: str, voice_user_id: Any = None) -> list[s
     from . import trunks
 
     own = trunks.route(conn, cid, number, voice_user_id)
+    if own is not None and own.get("media_policy_error"):
+        raise trunk_media.PolicyError(own["media_policy_error"])
     if own is not None and not own["single_provider"]:
         return own["route"]
     if not any_enabled(conn, cid):
         return None
     return plan(conn, cid, number)["route"]
+
+
+def media_policy(conn, cid: Any, keys: list[str] | None) -> str:
+    """Resolve the exact authorised route, never a worker or caller supplied mode."""
+    if not keys:
+        return trunk_media.LEGACY
+    rows = conn.execute(
+        "SELECT key, customer_id, adapter, outbound FROM voice_carriers WHERE key = ANY(%s)", (keys,)
+    ).fetchall()
+    if {row["key"] for row in rows} != set(keys) or any(
+        row["customer_id"] is not None and str(row["customer_id"]) != str(cid) for row in rows
+    ):
+        raise trunk_media.PolicyError("The authorised carrier route is no longer available to this business.")
+    return trunk_media.candidates(rows)
 
 
 def connect(conn: psycopg.Connection, cid: Any, call_id: str, number: str, route: list[str]) -> dict:
@@ -577,6 +593,7 @@ def render_kamailio(conn: psycopg.Connection) -> dict:
         "address.list": address_list(conn),
         "platforms.list": platforms.kamailio_list(conn),
     }
+    files.update(protected_ingress.edge_files(conn, files["address.list"]))
     root = os.environ.get("EXA_KAMAILIO_DIR", "")
     if root:
         write_files(files, root)

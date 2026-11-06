@@ -13,6 +13,7 @@ from __future__ import annotations
 import datetime as dt
 import re
 import uuid
+from dataclasses import replace
 from decimal import Decimal
 from typing import Any
 
@@ -23,7 +24,7 @@ from pydantic import BaseModel, Field
 from ... import audit, db
 from ...api.deps import UserDep
 from .. import access
-from ..voice import billing, bulk, carriers, config, freeswitch, livekit, perms, provisioning, selfservice
+from ..voice import billing, bulk, carriers, config, freeswitch, livekit, perms, phone_setup, provisioning, selfservice
 from ..voice import provider as providers
 from ..voice.common import VoiceError, month_start, now, policy, set_policy
 from .common import errors
@@ -56,6 +57,24 @@ def _admin(conn, user, cid) -> None:
 
 
 # ---- overview and settings -------------------------------------------------------------
+
+
+@router.get("/voice/phone/setup")
+def phone_setup_status(customer_id: str, user: UserDep) -> dict:
+    """Configuration and existing evidence only; never contacts a provider."""
+    access.check(user, customer_id, "commai:read")
+    with db.tx() as conn:
+        _admin(conn, user, customer_id)
+        can_manage_agent = False
+        try:
+            # Evaluate the actual AI-settings permission, not the voice page's
+            # read permission or a team-filtered grant. Do not mutate UserDep.
+            ai_user = replace(user, path=f"/api/v1/commai/customers/{customer_id}/ai/profile", query_team=None)
+            access.check(ai_user, customer_id, "commai:admin")
+            can_manage_agent = access.seat(conn, user, customer_id) != "internal"
+        except HTTPException:
+            pass
+        return phone_setup.snapshot(conn, customer_id, can_manage_agent=can_manage_agent)
 
 
 @router.get("/voice")

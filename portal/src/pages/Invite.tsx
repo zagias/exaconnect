@@ -80,13 +80,26 @@ export default function InvitePage({ token }: { token: string }) {
 
   const wrongAccount = me && info && me.email.toLowerCase() !== info.email;
 
+  const switchAccount = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api<void>("/auth/logout", { method: "POST" });
+      setMe(null);
+      signInFirst();
+    } catch {
+      setError("We couldn't sign you out. Try again; your invitation is still here.");
+      setBusy(false);
+    }
+  };
+
   return (
     <main className="signin-page" id="main">
       <div className="signin-box">
         <div className="signin-brand">
           <img className="wm-light" src="/brand/xakore-wordmark-red.svg" alt="XaKore" width={168} height={45} />
           <img className="wm-dark" src="/brand/xakore-wordmark-red-reversed.svg" alt="XaKore" width={168} height={45} />
-          <span className="signin-product">Connect</span>
+          <span className="signin-product">Hub</span>
         </div>
         <section className="card signin" aria-labelledby="invite-title">
           <h1 id="invite-title">{joined ? "You're in" : "Join an organisation"}</h1>
@@ -96,6 +109,7 @@ export default function InvitePage({ token }: { token: string }) {
             </p>
           )}
           {!info && !error && <p className="signin-checking" role="status">Checking your invitation…</p>}
+          {!info && error && <p className="signin-intro">Ask the person who invited you for a fresh link. <a href="/">Return to sign in</a>.</p>}
 
           {joined && (
             <>
@@ -125,10 +139,12 @@ export default function InvitePage({ token }: { token: string }) {
               )}
 
               {me && wrongAccount && (
-                <p className="signin-intro">
-                  You're signed in as <strong>{me.email}</strong>. Sign out, then open this link again and sign in as{" "}
-                  {info.email}.
-                </p>
+                <>
+                  <p className="signin-intro">You're signed in as <strong>{me.email}</strong>. This invitation is for {info.email}.</p>
+                  <button className="button" type="button" disabled={busy} onClick={() => void switchAccount()}>
+                    {busy ? "Signing out…" : "Sign in with the invited email"}
+                  </button>
+                </>
               )}
 
               {me === null && (info.has_account || info.sso_required) && (

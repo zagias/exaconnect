@@ -1,4 +1,5 @@
-import { Route, Routes } from "react-router-dom";
+import { Link, Route, Routes } from "react-router-dom";
+import { EmptyState } from "../../ui";
 import AiAgents from "./AiAgents";
 import Approvals from "./Approvals";
 import Bill from "./Bill";
@@ -56,6 +57,7 @@ export default function Jibsy() {
       <Route path="/approvals" element={<Approvals />} />
       <Route path="/bill" element={<Bill />} />
       <Route path="/support" element={<SupportQueue />} />
+      <Route path="*" element={<EmptyState title="Jibsy page not found" action={<Link className="button" to="/commai">Go to Inbox</Link>}>This address does not match a Jibsy page. Choose a section from the menu or return to your inbox.</EmptyState>} />
     </Routes>
     </I18nProvider>
   );

@@ -311,7 +311,12 @@ def authorise(
     stop = fraud.check(conn, customer_id, d, voice_user_id=voice_user_id, from_number=from_number)
     if stop:
         return {**stop, "route": None}
-    route = carriers.route_keys(conn, customer_id, d, voice_user_id)
+    from . import trunk_media
+
+    try:
+        route = carriers.route_keys(conn, customer_id, d, voice_user_id)
+    except trunk_media.PolicyError as error:
+        return refused("media_policy_mismatch", str(error))
     if route == []:
         return {**refused("no_carrier", "No carrier can take calls to this destination right now."), "route": []}
     return {"allowed": True, "reason": "", "route": route}
