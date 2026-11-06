@@ -144,6 +144,7 @@ def test_lists_never_include_another_organisation(client, world):
         "/api/v1/commai/internal/voice/authorise",
         "/api/v1/commai/internal/voice/authorise-v2",
         "/api/v1/commai/internal/voice/authorise-platform",
+        "/api/v1/commai/internal/voice/authorise-platform-v2",
         "/api/v1/commai/internal/voice/phone-authorise",
         "/api/v1/commai/internal/voice/ring",
     }
