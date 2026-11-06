@@ -39,5 +39,6 @@
     <param name="tls-verify-depth" value="1"/>
     <param name="disable-transfer" value="true"/>
     <param name="enable-chat" value="false"/>
+    <param name="enable-chat-api-proto" value="false"/>
   </settings>
 </profile>

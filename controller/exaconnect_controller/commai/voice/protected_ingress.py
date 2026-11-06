@@ -77,14 +77,20 @@ def describe(number: dict, carrier: dict | None) -> dict | None:
             str(net) for net in sorted(parsed, key=lambda net: (net.version, int(net.network_address), net.prefixlen))
         ]
         body = {
-            "schema": SCHEMA, "customer_id": str(number["customer_id"]),
-            "number_id": str(number["id"]), "did": e164,
-            "target_type": number.get("target_type"), "target_id": str(number.get("target_id") or ""),
-            "carrier_id": str(carrier["id"]), "carrier_key": carrier["key"],
+            "schema": SCHEMA,
+            "customer_id": str(number["customer_id"]),
+            "number_id": str(number["id"]),
+            "did": e164,
+            "target_type": number.get("target_type"),
+            "target_id": str(number.get("target_id") or ""),
+            "carrier_id": str(carrier["id"]),
+            "carrier_key": carrier["key"],
             "carrier_set": carrier["set_id"],
             "destination": destination,
             "origin_auth": "private_header_sha256_v1",
-            "sources": sources, "media": trunk_media.SRTP_REQUIRED, "transport": "tls",
+            "sources": sources,
+            "media": trunk_media.SRTP_REQUIRED,
+            "transport": "tls",
         }
         revision = digest(body)
         # Separate from groups 1/2; reject collisions across the full snapshot.
@@ -114,7 +120,9 @@ def _number_rows(conn, *, customer_id=None, e164=None) -> list[dict]:
                   c.outbound AS carrier_outbound, c.inbound AS carrier_inbound
            FROM voice_numbers n LEFT JOIN voice_carriers c
              ON c.key = n.carrier AND c.customer_id = n.customer_id AND c.platform IS NULL
-           WHERE n.status = 'active'""" + extra + " ORDER BY n.e164",
+           WHERE n.status = 'active'"""
+        + extra
+        + " ORDER BY n.e164",
         tuple(params),
     ).fetchall()
 
@@ -145,17 +153,21 @@ def edge_files(conn, legacy_addresses: str) -> dict[str, str]:
             for source in policy["sources"]:
                 net = ipaddress.ip_network(source)
                 addresses += f"{group} {net.network_address} {net.prefixlen} 0 protected\n"
-        entries.append({
-            "did": did, "tenant": domain(row["customer_id"]).split(".")[0],
-            "state": policy["state"] if policy else "legacy",
-            "revision": policy["revision"] if policy else "LEGACY",
-            "group": policy.get("group", 0) if policy else 0,
-            "sources": policy.get("sources", []) if policy else [],
-            "carrier_set": policy.get("carrier_set", 0) if policy else 0,
-            "destination": policy.get("destination", "") if policy else "",
-        })
+        entries.append(
+            {
+                "did": did,
+                "tenant": domain(row["customer_id"]).split(".")[0],
+                "state": policy["state"] if policy else "legacy",
+                "revision": policy["revision"] if policy else "LEGACY",
+                "group": policy.get("group", 0) if policy else 0,
+                "sources": policy.get("sources", []) if policy else [],
+                "carrier_set": policy.get("carrier_set", 0) if policy else 0,
+                "destination": policy.get("destination", "") if policy else "",
+            }
+        )
     body = {
-        "schema": SCHEMA, "entries": entries,
+        "schema": SCHEMA,
+        "entries": entries,
         "address_sha256": hashlib.sha256(addresses.encode()).hexdigest(),
     }
     manifest = {**body, "revision": digest(body)}
@@ -191,10 +203,7 @@ def render_owned_public(data: dict) -> str:
             f'  <extension name="owned-{state}-{did[1:]}">',
             f'    <condition field="destination_number" expression={q(expression)}>',
         ]
-        out += (
-            ['      <action application="hangup" data="CALL_REJECTED"/>']
-            if policy else _route_actions(data, number)
-        )
+        out += ['      <action application="hangup" data="CALL_REJECTED"/>'] if policy else _route_actions(data, number)
         out += ["    </condition>", "  </extension>"]
     return "\n".join([*out, "</include>", ""])
 
@@ -214,9 +223,11 @@ def render_private(data: dict) -> str:
         out += [
             f'  <extension name="protected-in-{digits}">',
             f'    <condition field="destination_number" expression={q(expression)}/>',
-            f'    <condition field={q(_fs("sip_h_" + HEADER))} expression={q("^" + revision + "$")}>',
+            f"    <condition field={q(_fs('sip_h_' + HEADER))} expression={q('^' + revision + '$')}>",
             f'      <action application="set" data={q("rtp_secure_media_inbound=mandatory:" + trunk_media.SUITE)}/>',
-            *_route_actions(data, number), "    </condition>", "  </extension>",
+            *_route_actions(data, number),
+            "    </condition>",
+            "  </extension>",
         ]
     out += ["</include>", ""]
     return "\n".join(out)

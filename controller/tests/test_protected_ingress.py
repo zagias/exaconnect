@@ -1,4 +1,5 @@
 """Offline policy/render/activation checks. These do not qualify native SIP/TLS."""
+
 from __future__ import annotations
 
 import importlib.util
@@ -33,8 +34,13 @@ NUMBER = "+18685550100"
 
 def carrier(**updates):
     value = {
-        "id": "carrier-id", "key": "owned", "customer_id": CID, "platform": None,
-        "adapter": "sip", "enabled": True, "set_id": 7,
+        "id": "carrier-id",
+        "key": "owned",
+        "customer_id": CID,
+        "platform": None,
+        "adapter": "sip",
+        "enabled": True,
+        "set_id": 7,
         "outbound": {"host": "carrier.example", "transport": "tls", "srtp_required": True},
         "inbound": {"allow_ips": ["192.0.2.0/25", "2001:db8::1/128"]},
     }
@@ -44,8 +50,13 @@ def carrier(**updates):
 
 def number(**updates):
     value = {
-        "id": "number-id", "customer_id": CID, "e164": NUMBER, "source": "trunk",
-        "carrier": "owned", "target_type": "user", "target_id": "staff-user",
+        "id": "number-id",
+        "customer_id": CID,
+        "e164": NUMBER,
+        "source": "trunk",
+        "carrier": "owned",
+        "target_type": "user",
+        "target_id": "staff-user",
     }
     value.update(updates)
     return value
@@ -60,12 +71,20 @@ def connection(rows):
     return SimpleNamespace(execute=lambda *_: SimpleNamespace(fetchall=lambda: deepcopy(rows)))
 
 
-@pytest.mark.parametrize("change", [
-    {"customer_id": OTHER}, {"platform": "teams"}, {"adapter": "simulated"}, {"enabled": False},
-    {"set_id": None}, {"inbound": {"allow_ips": []}}, {"inbound": {"allow_ips": ["0.0.0.0/0"]}},
-    {"outbound": {"transport": "udp", "srtp_required": True}},
-    {"outbound": {"transport": "tls", "srtp_required": "false"}},
-])
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"customer_id": OTHER},
+        {"platform": "teams"},
+        {"adapter": "simulated"},
+        {"enabled": False},
+        {"set_id": None},
+        {"inbound": {"allow_ips": []}},
+        {"inbound": {"allow_ips": ["0.0.0.0/0"]}},
+        {"outbound": {"transport": "udp", "srtp_required": True}},
+        {"outbound": {"transport": "tls", "srtp_required": "false"}},
+    ],
+)
 def test_invalid_or_other_owner_policy_cannot_become_legacy(change):
     assert ingress.describe(number(), carrier(**change))["state"] == "blocked"
 
@@ -83,9 +102,12 @@ def test_revision_is_canonical_and_binds_target_and_carrier_set():
     assert a["group"] not in (1, 2)
     assert ingress.describe(number(target_id="someone-else"), carrier())["revision"] != a["revision"]
     assert ingress.describe(number(), carrier(set_id=8))["revision"] != a["revision"]
-    assert ingress.describe(
-        number(), carrier(outbound={"host": "different.example", "transport": "tls", "srtp_required": True})
-    )["revision"] != a["revision"]
+    assert (
+        ingress.describe(
+            number(), carrier(outbound={"host": "different.example", "transport": "tls", "srtp_required": True})
+        )["revision"]
+        != a["revision"]
+    )
 
 
 def test_actual_gather_selects_and_maps_dispatcher_set_into_protected_descriptor(monkeypatch):
@@ -127,22 +149,31 @@ def prepared(tmp_path, monkeypatch):
     n, c = number(), carrier()
     n["protected_ingress"] = ingress.describe(n, c)
     data = {
-        "numbers": [n], "tenant": TENANT, "domain": domain(CID), "ai_rules": [],
+        "numbers": [n],
+        "tenant": TENANT,
+        "domain": domain(CID),
+        "ai_rules": [],
     }
     files = ingress.edge_files(connection([row()]), "# group ip mask port tag\n1 192.0.2.0 25 0 carrier\n")
     for name, content in files.items():
         (policy_dir / name).write_text(content)
     for name, content in (
-        ("owned-public.xml", ingress.render_owned_public(data)), ("protected.xml", ingress.render_private(data)),
-        ("dialplan.xml", f'<include><context name="{TENANT}"><extension name="inbound">'
-         f'<condition><action application="transfer" data="200 XML {TENANT}"/>'
-         f'<action application="bridge" data="loopback/+18685550199/{TENANT}"/>'
-         f'<action application="set" data="force_transfer_context={TENANT}"/>'
-         f'<action application="ivr" data="{TENANT}_menu_300"/>'
-         f'<action application="set" data="signed_url=controller?tenant={TENANT}"/>'
-         '</condition></extension></context></include>'),
-        ("ivr.xml", f'<include><menu name="{TENANT}_menu_300">'
-         f'<entry param="transfer 200 XML {TENANT}"/></menu></include>'),
+        ("owned-public.xml", ingress.render_owned_public(data)),
+        ("protected.xml", ingress.render_private(data)),
+        (
+            "dialplan.xml",
+            f'<include><context name="{TENANT}"><extension name="inbound">'
+            f'<condition><action application="transfer" data="200 XML {TENANT}"/>'
+            f'<action application="bridge" data="loopback/+18685550199/{TENANT}"/>'
+            f'<action application="set" data="force_transfer_context={TENANT}"/>'
+            f'<action application="ivr" data="{TENANT}_menu_300"/>'
+            f'<action application="set" data="signed_url=controller?tenant={TENANT}"/>'
+            "</condition></extension></context></include>",
+        ),
+        (
+            "ivr.xml",
+            f'<include><menu name="{TENANT}_menu_300"><entry param="transfer 200 XML {TENANT}"/></menu></include>',
+        ),
     ):
         (directory / name).write_text(content)
     peers = tmp_path / "peers.json"
@@ -150,8 +181,14 @@ def prepared(tmp_path, monkeypatch):
     revision = json.loads(files["protected-ingress.json"])["revision"]
     bundle = loader.prepare(policy_dir, fs_dir, peers, approved, revision)
     return SimpleNamespace(
-        root=approved, bundle=bundle, policy_dir=policy_dir, fs_dir=fs_dir,
-        peers=peers, revision=revision, number=n, data=data,
+        root=approved,
+        bundle=bundle,
+        policy_dir=policy_dir,
+        fs_dir=fs_dir,
+        peers=peers,
+        revision=revision,
+        number=n,
+        data=data,
     )
 
 
@@ -162,9 +199,10 @@ def test_exact_owner_snapshot_yields_distinct_protected_source_group(prepared):
     assert entry["sources"] == ["192.0.2.0/25", "2001:db8::1/128"]
     assert entry["carrier_set"] == 7
     assert not (prepared.root / "current").exists()  # preparing never activates
-    assert loader.prepare(
-        prepared.policy_dir, prepared.fs_dir, prepared.peers, prepared.root, prepared.revision
-    ) == prepared.bundle
+    assert (
+        loader.prepare(prepared.policy_dir, prepared.fs_dir, prepared.peers, prepared.root, prepared.revision)
+        == prepared.bundle
+    )
 
 
 def test_approved_generation_freezes_routing_not_signed_tenant_fields(prepared):
@@ -177,7 +215,7 @@ def test_approved_generation_freezes_routing_not_signed_tenant_fields(prepared):
     assert f"force_transfer_context={frozen}" in context
     assert f"{frozen}_menu_300" in context
     assert f"signed_url=controller?tenant={TENANT}" in context
-    assert f'XML {frozen}' in (prepared.bundle / "ivr/routes.xml").read_text()
+    assert f"XML {frozen}" in (prepared.bundle / "ivr/routes.xml").read_text()
     assert f"exa-in-{NUMBER[1:]} XML {frozen}" in (prepared.bundle / "protected/routes.xml").read_text()
 
 
@@ -292,6 +330,7 @@ def test_private_profile_retains_refer_and_message_restrictions_and_is_unpublish
     profile = XML.parse(SOURCE / "deploy/freeswitch/sip_profiles/protected.xml.example")
     params = {node.get("name"): node.get("value") for node in profile.findall(".//settings/param")}
     assert params["disable-transfer"] == "true" and params["enable-chat"] == "false"
+    assert params["enable-chat-api-proto"] == "false"
     assert params["tls-only"] == "true" and params["tls-verify-in-subjects"] == "jibsy-sbc.internal"
     ports = (SOURCE / "deploy/voice/ports.yml").read_text()
     assert "5091:" not in ports and "5092:" not in ports
@@ -303,15 +342,18 @@ def test_operator_approval_directory_requires_root_identity(tmp_path, monkeypatc
         loader.operator_root(tmp_path)
 
 
-@pytest.mark.parametrize("values,tls,source_allowed,accepted", [
-    (["1" * 64], True, True, True),
-    ([], True, True, False),
-    (["1" * 64, "1" * 64], True, True, False),
-    (["2" * 64], True, True, False),
-    (["1" * 64], False, True, False),
-    (["1" * 64], True, False, False),
-    (["short"], True, True, False),
-])
+@pytest.mark.parametrize(
+    "values,tls,source_allowed,accepted",
+    [
+        (["1" * 64], True, True, True),
+        ([], True, True, False),
+        (["1" * 64, "1" * 64], True, True, False),
+        (["2" * 64], True, True, False),
+        (["1" * 64], False, True, False),
+        (["1" * 64], True, False, False),
+        (["short"], True, True, False),
+    ],
+)
 def test_trunk_origin_claim_contract(values, tls, source_allowed, accepted):
     stored = origin_auth.verifier(7, "1" * 64)  # public synthetic test value, never a real token
     assert origin_auth.accepts(stored, 7, values, tls=tls, source_allowed=source_allowed) is accepted
