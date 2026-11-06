@@ -59,6 +59,15 @@ def isolated_vars(source: str) -> str:
     )
 
 
+def legacy_gate_open(reply: str) -> bool:
+    """A listening RPC socket precedes the startup watcher's route readiness."""
+    if len(reply) > 2000 or "item:" not in reply:
+        return False
+    names = re.findall(r'(?m)^\s*name:\s*"?([^"\s]+)"?\s*$', reply)
+    values = re.findall(r'(?m)^\s*value:\s*"?([^"\s]+)"?\s*$', reply)
+    return names == ["gate"] and values == ["open"]
+
+
 def wait_for_call(endpoint, before: set[str], process, label: str, timeout: float = 10):
     """Do not hide the failed originate or a rejected SDP behind a generic timeout."""
     output = None
@@ -316,6 +325,11 @@ def main():
 
     def ready():
         eventually(lambda: rpc("core.uptime"), "Kamailio readiness", 30)
+        eventually(
+            lambda: legacy_gate_open(rpc("htable.get", "protectedin", "gate")),
+            "Kamailio voice policy readiness",
+            30,
+        )
         eventually(lambda: fs("status").startswith("UP"), "FreeSWITCH readiness", 120)
         eventually(
             lambda: re.search(
