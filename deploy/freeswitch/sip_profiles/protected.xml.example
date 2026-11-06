@@ -1,0 +1,43 @@
+<!--
+  Unapplied private carrier profile. Bind exact reviewed private peer addresses.
+  Never publish 5092. agent.pem has CN=jibsy-pbx.internal and SAN=PBX_IP.
+  cafile.pem trusts ONLY the dedicated SBC peer, never public CA roots.
+  The existing runtime guard must cover this fifth profile before activation.
+-->
+<profile name="exacarib-protected">
+  <gateways>
+    <gateway name="exacarib_sip_protected">
+      <param name="username" value="exacarib"/>
+      <param name="password" value="not-used"/>
+      <param name="realm" value="jibsy-sbc.internal"/>
+      <param name="proxy" value="@SBC_IP@:5091;transport=tls"/>
+      <param name="register" value="false"/>
+      <param name="register-transport" value="tls"/>
+      <param name="caller-id-in-from" value="true"/>
+    </gateway>
+  </gateways>
+  <settings>
+    <param name="sip-ip" value="@PBX_IP@"/>
+    <param name="rtp-ip" value="@PBX_IP@"/>
+    <param name="ext-rtp-ip" value="$${external_rtp_ip}"/>
+    <param name="dialplan" value="XML"/>
+    <param name="context" value="exacarib-protected"/>
+    <param name="auth-calls" value="false"/>
+    <param name="disable-register" value="true"/>
+    <param name="apply-inbound-acl" value="exacarib-protected-sbc"/>
+    <param name="inbound-late-negotiation" value="true"/>
+    <param name="inbound-codec-prefs" value="PCMU,PCMA"/>
+    <param name="outbound-codec-prefs" value="PCMU,PCMA"/>
+    <param name="tls" value="true"/>
+    <param name="tls-only" value="true"/>
+    <param name="tls-sip-port" value="5092"/>
+    <param name="tls-cert-dir" value="/etc/freeswitch/protected-tls"/>
+    <param name="tls-version" value="tlsv1.2"/>
+    <param name="tls-verify-policy" value="all|subjects_in"/>
+    <param name="tls-verify-in-subjects" value="jibsy-sbc.internal"/>
+    <param name="tls-verify-date" value="true"/>
+    <param name="tls-verify-depth" value="1"/>
+    <param name="disable-transfer" value="true"/>
+    <param name="enable-chat" value="false"/>
+  </settings>
+</profile>

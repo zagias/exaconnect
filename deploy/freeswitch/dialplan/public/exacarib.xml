@@ -1,4 +1,6 @@
 <!-- Jibsy voice (ADR 0021): inbound numbers into each business's context. -->
 <include>
+  <!-- Owned trunks use only the reviewed immutable local routing generation. -->
+  <X-PRE-PROCESS cmd="include" data="/exacarib/voice-approved/current/public/routes.xml"/>
   <X-PRE-PROCESS cmd="include" data="/exacarib/freeswitch/*/public.xml"/>
 </include>

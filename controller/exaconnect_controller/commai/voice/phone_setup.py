@@ -8,15 +8,16 @@ separately from fresh operational proof and a person answering.
 from __future__ import annotations
 
 import os
-import re
 from typing import Any
 
 from .. import entitlements, inbox
 from . import livekit, pbx_runtime
+from .common import valid_handover_host
 
 
 def snapshot(conn, customer_id: Any, *, can_manage_agent: bool = False) -> dict:
     components = []
+    handover = valid_handover_host(os.environ.get("EXA_PHONE_HANDOVER_HOST", ""))
 
     def add(id, status, title, detail, action, responsibility, setup_action=None, **evidence):
         components.append(
@@ -44,6 +45,19 @@ def snapshot(conn, customer_id: Any, *, can_manage_agent: bool = False) -> dict:
         "Ask the operator to configure the private LiveKit server and worker credentials.",
         "operator",
         missing=missing,
+    )
+
+    voice_entitled = entitlements.enabled(conn, customer_id, "voice")
+    add(
+        "voice_access",
+        "configured" if voice_entitled else "blocked",
+        "Voice access",
+        "Voice access is enabled for this business."
+        if voice_entitled
+        else "Voice access is disabled for this business, even if recent speech evidence exists.",
+        "Review Voice access in Apps & plans with the operator.",
+        "business",
+        setup_action="apps_plans" if not voice_entitled else None,
     )
 
     row = conn.execute("SELECT config FROM commai_settings WHERE customer_id = %s", (customer_id,)).fetchone()
@@ -85,8 +99,6 @@ def snapshot(conn, customer_id: Any, *, can_manage_agent: bool = False) -> dict:
         setup_action="call_routing" if routing["active_numbers"] else "numbers",
     )
 
-    host = os.environ.get("EXA_PHONE_HANDOVER_HOST", "")
-    handover = bool(re.fullmatch(r"[A-Za-z0-9.-]+(?::[0-9]{1,5})?", host))
     add(
         "handover",
         "configured" if handover else "missing",
@@ -113,15 +125,48 @@ def snapshot(conn, customer_id: Any, *, can_manage_agent: bool = False) -> dict:
         if pbx["fresh"]
         else "expired"
     )
+    if not pbx:
+        pbx_detail = (
+            "The PBX has no trusted runtime receipt; its patched version and transfer availability are unverified."
+        )
+        pbx_action = (
+            "Ask the operator to restore the signed PBX runtime probe and review its observed version and policy."
+        )
+    elif not secure:
+        pbx_detail = (
+            "The recorded PBX version is unsupported or cannot be verified as patched. "
+            "Disabling transfers on an affected version is mitigation only."
+        )
+        pbx_action = (
+            "Ask the operator to upgrade FreeSWITCH to a supported patched release "
+            "and restore the signed runtime probe."
+        )
+    elif not pbx["transfer_enabled"]:
+        pbx_detail = (
+            "The recorded PBX version is patched, but its receipt reports transfers disabled. "
+            "Telephone AI remains blocked by transfer policy."
+        )
+        pbx_action = (
+            "Ask the operator to review the transfer policy and refresh the signed runtime probe; "
+            "keep the current restriction until reviewed."
+        )
+    elif not pbx["fresh"]:
+        pbx_detail = (
+            "The recorded PBX version is patched and allowed transfers, but its runtime receipt has expired. "
+            "Current availability is unverified."
+        )
+        pbx_action = (
+            "Ask the operator to refresh the signed PBX runtime probe and confirm the existing transfer policy."
+        )
+    else:
+        pbx_detail = "A fresh trusted PBX receipt permits transfers."
+        pbx_action = "Keep the signed PBX runtime probe current and retain the approved transfer policy."
     add(
         "pbx",
         pbx_status,
         "Patched phone system",
-        "A fresh trusted PBX receipt permits transfers."
-        if pbx_ok
-        else "A fresh trusted receipt must show a supported patched PBX with transfers available. "
-        "Disabling transfers on an affected version is mitigation only.",
-        "Ask the operator to upgrade FreeSWITCH to a supported patched release and restore the signed runtime probe.",
+        pbx_detail,
+        pbx_action,
         "operator",
         **({k: pbx[k] for k in ("version", "checked_at", "expires_at")} if pbx else {}),
     )
@@ -164,6 +209,7 @@ def snapshot(conn, customer_id: Any, *, can_manage_agent: bool = False) -> dict:
     # requires the business's own configuration to be usable. Never writes a lease.
     ready = (
         media_configured
+        and voice_entitled
         and assistant_ok
         and has_routing
         and handover

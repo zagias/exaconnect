@@ -25,7 +25,6 @@ import hashlib
 import hmac
 import json
 import os
-import re
 import time
 import urllib.error
 import urllib.parse
@@ -35,7 +34,7 @@ from typing import Any
 import psycopg
 
 from . import pbx_runtime
-from .common import VoiceError, digits
+from .common import VoiceError, digits, valid_handover_host
 
 SETTINGS = ("EXA_LIVEKIT_URL", "EXA_LIVEKIT_API_KEY", "EXA_LIVEKIT_API_SECRET", "EXA_LIVEKIT_AGENT_SECRET")
 
@@ -273,7 +272,7 @@ def handover_target(conn: psycopg.Connection, customer_id: Any) -> str:
     worker and model never supply an arbitrary destination or external number.
     """
     host = os.environ.get("EXA_PHONE_HANDOVER_HOST", "")
-    if not re.fullmatch(r"[A-Za-z0-9.-]+(?::[0-9]{1,5})?", host):
+    if not valid_handover_host(host):
         raise VoiceError("The internal phone handover route is not configured.", 503)
     rule = conn.execute(
         "SELECT 1 FROM voice_ai_rules WHERE customer_id = %s AND enabled LIMIT 1", (customer_id,)

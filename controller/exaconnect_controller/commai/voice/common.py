@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import datetime as dt
+import ipaddress
+import re
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
@@ -17,6 +19,25 @@ MILLI = Decimal("0.0001")
 
 class VoiceError(InboxError):
     """A voice request the service refuses; `code` maps to an HTTP status."""
+
+
+def valid_handover_host(value: str) -> bool:
+    """Validate a private SIP ingress host and optional port, without resolving it."""
+    if not isinstance(value, str) or not value or not value.isascii() or len(value) > 259:
+        return False
+    host, separator, port = value.partition(":")
+    if separator and (not re.fullmatch(r"[0-9]{1,5}", port) or not 1 <= int(port) <= 65535):
+        return False
+    if not host or len(host) > 253:
+        return False
+    if re.fullmatch(r"[0-9.]+", host):
+        # Do not reinterpret malformed or abbreviated numeric IPv4 as DNS.
+        try:
+            ipaddress.IPv4Address(host)
+        except ipaddress.AddressValueError:
+            return False
+        return True
+    return all(re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?", label) for label in host.split("."))
 
 
 def money(value: Any) -> Decimal:

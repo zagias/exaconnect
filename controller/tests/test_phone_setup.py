@@ -26,6 +26,7 @@ def setup(monkeypatch):
         profile={"config": {"ai": {"enabled": True}}},
         model=True,
         entitled=True,
+        voice_entitled=True,
         routing={"active_numbers": 2, "routed_numbers": 1},
         pbx={
             "version": "1.11.3",
@@ -62,8 +63,8 @@ def setup(monkeypatch):
                 return Result(state.pbx)
             assert params[0] in (CID, OTHER)
             if "commai_entitlements" in sql:
-                assert params == (params[0], "ai_agents")
-                return Result({"enabled": state.entitled})
+                assert params[1] in ("voice", "ai_agents")
+                return Result({"enabled": state.voice_entitled if params[1] == "voice" else state.entitled})
             if "commai_settings" in sql:
                 return Result(state.profile if params[0] == CID else None)
             if "voice_numbers" in sql:
@@ -100,6 +101,82 @@ def test_complete_setup_is_scoped_and_never_claims_a_human_answered(setup):
     assert state.queries  # Every result came from reads, not a configured flag.
 
 
+def test_revoked_voice_access_cannot_borrow_fresh_speech_evidence(setup):
+    state, conn = setup
+    state.voice_entitled = False
+    out = phone_setup.snapshot(conn, CID, can_manage_agent=True)
+    assert not out["ready"] and out["blockers"] == ["voice_access"]
+    components = {component["id"]: component for component in out["components"]}
+    assert components["voice_access"]["status"] == "blocked"
+    assert components["voice_access"]["setup_action"] == "apps_plans"
+    assert "disabled" in components["voice_access"]["detail"]
+    assert components["assistant"]["status"] == "configured"
+    assert components["speech_transfer"]["status"] == "verified"
+    assert out["can_manage_agent"]  # Voice revocation does not revoke the separate AI permission.
+    assert any(params == (CID, "voice") for _, params in state.queries)
+
+
+@pytest.mark.parametrize("fresh", [True, False])
+def test_patched_pbx_with_transfers_disabled_requests_policy_review(setup, fresh):
+    state, conn = setup
+    state.pbx.update(transfer_enabled=False, fresh=fresh)
+    out = phone_setup.snapshot(conn, CID)
+    pbx = next(component for component in out["components"] if component["id"] == "pbx")
+    assert not out["ready"] and pbx["status"] == "blocked"
+    assert "patched" in pbx["detail"] and "transfers disabled" in pbx["detail"]
+    assert "review the transfer policy" in pbx["next_action"]
+    assert "keep the current restriction" in pbx["next_action"]
+    assert "upgrade" not in pbx["next_action"].lower()
+
+
+def test_expired_patched_pbx_receipt_requests_probe_refresh(setup):
+    state, conn = setup
+    state.pbx["fresh"] = False
+    out = phone_setup.snapshot(conn, CID)
+    pbx = next(component for component in out["components"] if component["id"] == "pbx")
+    assert not out["ready"] and pbx["status"] == "expired"
+    assert "expired" in pbx["detail"] and "unverified" in pbx["detail"]
+    assert "refresh the signed PBX runtime probe" in pbx["next_action"]
+    assert "upgrade" not in pbx["next_action"].lower()
+
+
+@pytest.mark.parametrize("version", ["1.10.12", "1.11.2", "unknown"])
+def test_unsafe_pbx_receipt_requests_upgrade(setup, version):
+    state, conn = setup
+    state.pbx["version"] = version
+    out = phone_setup.snapshot(conn, CID)
+    pbx = next(component for component in out["components"] if component["id"] == "pbx")
+    assert not out["ready"] and pbx["status"] == "blocked"
+    assert "upgrade FreeSWITCH" in pbx["next_action"]
+
+
+@pytest.mark.parametrize("host", ["pbx..internal", "256.1.2.3", "127.1", "pbx:65536", "pbx:0", "pbx@other"])
+def test_invalid_handover_host_is_an_honest_setup_blocker(setup, monkeypatch, host):
+    _, conn = setup
+    monkeypatch.setenv("EXA_PHONE_HANDOVER_HOST", host)
+    out = phone_setup.snapshot(conn, CID)
+    assert not out["ready"] and out["blockers"] == ["handover"]
+    handover = next(component for component in out["components"] if component["id"] == "handover")
+    assert handover["status"] == "missing" and "invalid" in handover["detail"]
+
+
+def test_setup_validates_handover_host_before_its_diagnostic_reads(setup, monkeypatch):
+    state, conn = setup
+    monkeypatch.setenv("EXA_PHONE_HANDOVER_HOST", "pbx:65536")
+    validate = phone_setup.valid_handover_host
+    validated = []
+
+    def checked(host):
+        assert not state.queries
+        validated.append(host)
+        return validate(host)
+
+    monkeypatch.setattr(phone_setup, "valid_handover_host", checked)
+    out = phone_setup.snapshot(conn, CID)
+    assert validated == ["pbx:65536"] and out["blockers"] == ["handover"]
+    assert state.queries  # Other components still report their own read-only diagnostics.
+
+
 @pytest.mark.parametrize(
     "failure",
     [
@@ -108,6 +185,7 @@ def test_complete_setup_is_scoped_and_never_claims_a_human_answered(setup):
         "profile_off",
         "no_model",
         "no_module",
+        "no_voice_module",
         "no_did",
         "no_rule",
         "no_handover",
@@ -136,6 +214,8 @@ def test_configuration_and_lab_flags_cannot_promote_readiness(setup, monkeypatch
         state.model = False
     elif failure == "no_module":
         state.entitled = False
+    elif failure == "no_voice_module":
+        state.voice_entitled = False
     elif failure == "no_did":
         state.routing = {"active_numbers": 0, "routed_numbers": 0}
     elif failure == "no_rule":

@@ -41,7 +41,7 @@ import psycopg
 from psycopg.types.json import Jsonb
 
 from ... import audit
-from . import carriers, emergency, freeswitch, signalling
+from . import carriers, emergency, freeswitch, signalling, trunk_media
 from .common import VoiceError, digits
 
 SIM_FAIL = ("", "refuse", "down")
@@ -77,6 +77,8 @@ def _out(t: dict) -> dict:
         "host": o.get("host", ""),
         "port": o.get("port", 5060),
         "transport": o.get("transport", "udp"),
+        "srtp_required": o.get("srtp_required", False),
+        "secure_ingress_ready": False,
         "prefix": o.get("prefix", ""),
         "max_channels": o.get("max_channels", 30),
         "allow_ips": (t["inbound"] or {}).get("allow_ips", []),
@@ -109,6 +111,8 @@ def _clean(body: dict, old: dict | None) -> dict:
     transport = get("transport", "udp")
     if transport not in ("udp", "tcp", "tls"):
         raise VoiceError("Transport is udp, tcp or tls.", 422)
+    srtp_required = body.get("srtp_required", cur.get("srtp_required", False))
+    trunk_media.mode({"srtp_required": srtp_required, "transport": transport}, adapter)
     try:
         port = int(get("port", 5061 if transport == "tls" else 5060))
         max_channels = int(get("max_channels", 30))
@@ -140,6 +144,7 @@ def _clean(body: dict, old: dict | None) -> dict:
             "host": host or f"{_slug(name)}.trunk.example",  # a simulated trunk needs no real host
             "port": port,
             "transport": transport,
+            "srtp_required": srtp_required,
             "max_channels": max_channels,
             "prefix": digits(str(get("prefix", ""))),
             **({"sim_fail": sim_fail} if sim_fail else {}),
@@ -219,6 +224,8 @@ def save_trunk(conn: psycopg.Connection, cid: Any, body: dict, actor: str, trunk
         audit.record(conn, actor, "commai.voice.trunk_change", row["key"], cid, {"name": v["name"]})
     carriers.ensure_health_loop(conn)
     carriers.render_kamailio(conn)  # Kamailio's trunk and allow-lists follow
+    if v["outbound"]["srtp_required"] or (old and (old["outbound"] or {}).get("srtp_required", False) is not False):
+        freeswitch.render_business(conn, cid)
     return _out(row)
 
 
@@ -370,12 +377,15 @@ def route(conn: psycopg.Connection, cid: Any, number: str, voice_user_id: Any = 
         wanted += [(f"Primary for {loc['name']}", lt["primary_trunk_id"])]
         wanted += [(f"Secondary for {loc['name']}", lt["secondary_trunk_id"])]
     wanted.append(("Organisation default", st["default_trunk_id"]))
-    steps, seen = [], set()
+    steps, seen, candidate_rows = [], set(), []
     for role, tid in wanted:
         if not tid or str(tid) in seen:
             continue
         seen.add(str(tid))
         t = conn.execute("SELECT * FROM voice_carriers WHERE id = %s", (tid,)).fetchone()
+        if t is None or str(t["customer_id"]) != str(cid) or t["platform"] is not None:
+            raise trunk_media.PolicyError("A configured trunk is not owned by this business.")
+        candidate_rows.append(t)
         reason = ""
         if not t["enabled"]:
             reason = "Switched off."
@@ -413,11 +423,22 @@ def route(conn: psycopg.Connection, cid: Any, number: str, voice_user_id: Any = 
                     "reason": c["reason"],
                 }
             )
+    media_error = None
+    try:
+        media_mode = trunk_media.candidates(candidate_rows)
+        if media_mode == trunk_media.SRTP_REQUIRED and st["exacarib_fallback"]:
+            raise trunk_media.PolicyError(
+                "Encrypted trunks cannot fall back to carriers with an unspecified media policy."
+            )
+    except trunk_media.PolicyError as error:
+        media_error = str(error)
+        note = media_error
     return {
         "location": loc["name"] if loc else None,
         "steps": steps,
         "route": route_keys + [k for k in exacarib if k not in route_keys],
         "note": note,
+        "media_policy_error": media_error,
         # No trunk of its own can take the call and ExaCarib has no carriers switched on:
         # the single provider takes it, as for an organisation without trunks.
         "single_provider": single and not route_keys,

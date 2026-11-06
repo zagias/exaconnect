@@ -1,0 +1,4 @@
+<!-- Merge inside existing acl.conf.xml network-lists; preserve other ACLs. -->
+<list name="exacarib-protected-sbc" default="deny">
+  <node type="allow" cidr="@SBC_IP@/32"/>
+</list>
